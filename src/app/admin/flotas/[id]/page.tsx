@@ -25,6 +25,7 @@ import { Ficha360, encabezadoFicha } from './ficha';
 import { GestionPlan } from './gestion-plan';
 import { AvisoPlanEnPausa } from '../../../dashboard/aviso-plan-en-pausa';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,6 +38,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * y "no se pudo leer" son afirmaciones distintas.
  */
 export default async function PaginaFicha({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ seccion?: string }> }) {
+  const { t } = await getT('admin_flotas');
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   const { id } = await params;
@@ -48,6 +50,7 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
   // SeccionInterruptores lo exige — así que vive aquí, con acceso a `id`
   // por closure, y no en ficha.tsx, que es puro presentacional).
   async function accionInterruptorPipeline(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t } = await getT('admin_flotas');
     'use server';
     // RE-GATEO: el action es un endpoint público en la práctica — el layout
     // solo protegió el render (mismo patrón que observabilidad/page.tsx).
@@ -59,24 +62,25 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
     try {
       if (operacion === 'apagar') await apagarPipelineDeTenant(id, pipeline, motivo, userId);
       else if (operacion === 'encender') await encenderPipelineDeTenant(id, pipeline, userId);
-      else return { error: 'Operación desconocida.' };
+      else return { error: t('flotas.operacion_desconocida') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, `${operacion} el pipeline ${pipeline}`) };
     }
     revalidatePath(`/admin/flotas/${id}`);
     return {
       ok: operacion === 'apagar'
-        ? `${etiquetaInterruptor(idCrudo)} APAGADO para esta flota. Quedó firmado en la bitácora.`
-        : `${etiquetaInterruptor(idCrudo)} encendido para esta flota.`,
+        ? t('flotas.apagado_para_esta_flota', { idCrudo: etiquetaInterruptor(idCrudo) })
+        : t('flotas.encendido_para_esta_flota', { idCrudo: etiquetaInterruptor(idCrudo) }),
     };
   }
 
   // A5-01: el interruptor `agente_chofer_habilitado` (0859). SOLO superadmin (re-gateado aquí: la acción es un endpoint), con motivo y bitácora.
   async function accionAgenteChofer(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t } = await getT('admin_flotas');
     'use server';
     const { userId } = await requireSuperadmin();
     const operacion = String(fd.get('operacion') ?? '');
-    if (operacion !== 'habilitar' && operacion !== 'deshabilitar') return { error: 'Operación desconocida.' };
+    if (operacion !== 'habilitar' && operacion !== 'deshabilitar') return { error: t('flotas.operacion_desconocida') };
     try {
       await fijarAgenteChoferHabilitado(id, operacion === 'habilitar', String(fd.get('motivo') ?? ''), userId);
     } catch (e) {
@@ -85,8 +89,8 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
     revalidatePath(`/admin/flotas/${id}`);
     return {
       ok: operacion === 'habilitar'
-        ? 'Agente 5 HABILITADO para esta flota: ya puede escribirle a sus choferes (con sus demás compuertas). Quedó firmado en la bitácora.'
-        : 'Agente 5 deshabilitado para esta flota: no le escribe a ningún chofer. Quedó firmado en la bitácora.',
+        ? t('flotas.agente_5_habilitado_para')
+        : t('flotas.agente_5_deshabilitado_para'),
     };
   }
 
@@ -94,7 +98,7 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
   const ficha = await getFichaCliente(id).catch(() => 'error' as const);
   if (ficha === null) notFound();
   if (ficha === 'error') {
-    return <PantallaFicha titulo="Cliente" apoyo="No se pudo leer la ficha."><EstadoError reintentar>No se pudo leer la ficha del cliente: la base no respondió.</EstadoError></PantallaFicha>;
+    return <PantallaFicha titulo={t('flotas.cliente')} apoyo={t('flotas.no_se_pudo_leer')}><EstadoError reintentar>{t('flotas.no_se_pudo_leer_2')}</EstadoError></PantallaFicha>;
   }
 
   // Sección aparte, resiliente por su lado: sin la 0297 aplicada, o con la
@@ -127,11 +131,12 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
     ),
   };
 
-  const enc = encabezadoFicha(ficha);
+  const enc = encabezadoFicha(ficha, t);
   return (
     <PantallaFicha {...enc}>
     <AvisoPlanEnPausa tenantId={id} />
     <Ficha360
+      t={t}
       f={ficha} seccionInicial={seccion}
       personas={personasTodas === null ? null : personasTodas.personas.filter((p) => p.tenantId === id)}
       accesoLegible={personasTodas?.accesoLegible ?? false}
@@ -149,4 +154,7 @@ function PantallaFicha({ titulo, apoyo, acciones, children }: { titulo: string; 
   return <MarcoPagina area="Negocio" titulo={titulo} apoyo={apoyo} acciones={acciones}>{children}</MarcoPagina>;
 }
 
-export const metadata: Metadata = { title: 'Flota' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_flotas');
+  return { title: t('flotas.flota') };
+}

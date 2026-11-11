@@ -21,11 +21,13 @@ import { VistasAprobaciones, type VistaAprobaciones } from './vistas';
 import { leerEsperadas, leerParametrosLote } from './lote-parametros';
 import '../bandeja.css';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 const VISTAS: readonly VistaAprobaciones[] = ['aprobar', 'enviar', 'historial'];
 
 export default async function PaginaAprobaciones({ searchParams }: { searchParams: Promise<{ vista?: string }> }) {
+  const { t } = await getT('admin_inicio');
   await requireSuperadmin();
   const sp = (await searchParams) ?? {};
   const inicial: VistaAprobaciones = VISTAS.find((v) => v === sp.vista) ?? 'aprobar';
@@ -46,6 +48,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   ]);
 
   async function accionResolver(_previo: ResultadoPieza, fd: FormData): Promise<ResultadoPieza> {
+  const { t } = await getT('admin_inicio');
     'use server';
     const s = await requireSuperadmin();
     const id = String(fd.get('pieza') ?? '');
@@ -56,30 +59,31 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
         // A37-S05-08: con el modo edición activo el campo SÍ viaja; si llega vacío NO se aprueba el
         // borrador original (el operador pudo borrarlo para neutralizar el correo): se rechaza con error.
         if (fd.has('cuerpoEditado') && !edicion) {
-          return { error: 'El cuerpo editado está vacío: escribe el texto que debe salir, o rechaza la pieza. No se aprobó nada.' };
+          return { error: t('aprobaciones.el_cuerpo_editado_esta') };
         }
         await aprobarPieza(id, s.userId, edicion || undefined);
         revalidatePath('/admin/aprobaciones');
-        return { ok: edicion ? 'Aprobada con tu edición — esa versión es la que sale.' : 'Aprobada tal cual. El envío es el paso siguiente, abajo.' };
+        return { ok: edicion ? t('aprobaciones.aprobada_con_tu_edicion') : t('aprobaciones.aprobada_tal_cual_el') };
       }
       if (operacion === 'rechazar') {
         await rechazarPieza(id, s.userId, String(fd.get('motivo') ?? ''));
         revalidatePath('/admin/aprobaciones');
-        return { ok: 'Rechazada con motivo — quedó en la bitácora.' };
+        return { ok: t('aprobaciones.rechazada_con_motivo_quedo') };
       }
-      return { error: 'Esa operación no existe: aprobar o rechazar, ni una más.' };
+      return { error: t('aprobaciones.esa_operacion_no_existe') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, operacion === 'rechazar' ? 'rechazar la pieza' : 'aprobar la pieza') };
     }
   }
 
   async function accionEnviar(_previo: ResultadoPieza, fd: FormData): Promise<ResultadoPieza> {
+  const { t } = await getT('admin_inicio');
     'use server';
     const s = await requireSuperadmin();
     try {
       const r = await enviarPiezaPorCorreo(String(fd.get('pieza') ?? ''), s.userId);
       revalidatePath('/admin/aprobaciones');
-      return { ok: `Enviada a ${r.destinatario} — Resend la aceptó (${r.providerId}) y el contacto quedó en el historial del prospecto.` };
+      return { ok: t('aprobaciones.enviada_a_resend_la', { destinatario: r.destinatario, providerId: r.providerId }) };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'enviar la pieza') };
     }
@@ -88,14 +92,15 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   // A36-R11-01: salida del callejón del envío ambiguo. Quien aprieta el botón
   // afirma que verificó en Resend que el correo NO salió.
   async function accionLiberar(_previo: ResultadoPieza, fd: FormData): Promise<ResultadoPieza> {
+  const { t } = await getT('admin_inicio');
     'use server';
     const s = await requireSuperadmin();
     try {
       const r = await liberarEnvioAmbiguo(String(fd.get('pieza') ?? ''), s.userId);
       revalidatePath('/admin/aprobaciones');
       return r.reservaLiberada
-        ? { ok: 'Liberada: vuelve a «Aprobadas por enviar» y se puede reintentar (misma llave de idempotencia).' }
-        : { ok: 'Liberada, pero NO se pudo borrar su reserva de cadencia: el reintento puede rebotar hasta pasadas 48 h. Avisa a soporte.' };
+        ? { ok: t('aprobaciones.liberada_vuelve_a_aprobadas') }
+        : { ok: t('aprobaciones.liberada_pero_no_se') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'liberar el envío ambiguo') };
     }
@@ -119,23 +124,24 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   }
 
   async function accionVaciarLote(_previo: ResultadoVaciado, fd: FormData): Promise<ResultadoVaciado> {
+  const { t } = await getT('admin_inicio');
     'use server';
     const s = await requireSuperadmin();
     try {
       const params = leerParametrosLote(fd);
       normalizarParametros(params);
       const esperadas = leerEsperadas(fd);
-      if (esperadas === null) return { error: 'Falta la cifra contada: cuenta primero y confirma sobre ese conteo. No se archivó nada.' };
+      if (esperadas === null) return { error: t('aprobaciones.falta_la_cifra_contada') };
       // Re-cuenta en el servidor: si la bandeja cambió desde que se contó, NO se ejecuta a ciegas.
       const ahora = await contarVencidas(params);
       if (ahora.enElLote !== esperadas) {
-        return { error: `La bandeja cambió: contaste ${esperadas} y ahora el lote sería de ${ahora.enElLote}. Vuelve a contar. No se archivó nada.` };
+        return { error: t('aprobaciones.la_bandeja_cambio_contaste', { esperadas, enElLote: ahora.enElLote }) };
       }
       const r = await vaciarVencidas(s.userId, { ...params, dryRun: false });
       revalidatePath('/admin/aprobaciones');
-      const resto = r.restantes > 0 ? ` Quedan ${r.restantes} vencidas para otro lote.` : '';
-      const bitacora = r.bitacoraEscrita === false ? ' OJO: el lote se archivó pero la bitácora no pudo escribirse; avisa a soporte.' : ' Quedó firmado en la bitácora.';
-      return { ok: `Archivadas ${r.resueltas} piezas vencidas.${resto}${bitacora}` };
+      const resto = r.restantes > 0 ? t('aprobaciones.quedan_vencidas_para_otro', { restantes: r.restantes }) : '';
+      const bitacora = r.bitacoraEscrita === false ? t('aprobaciones.ojo_el_lote_se') : t('aprobaciones.quedo_firmado_en_la');
+      return { ok: t('aprobaciones.archivadas_piezas_vencidas', { resueltas: r.resueltas, resto, bitacora }) };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'archivar las piezas vencidas') };
     }
@@ -147,12 +153,12 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
         titulo={r.ok !== null ? `${titulo} (${r.ok.length})` : titulo}
         estado={r.error !== null ? 'error' : r.ok !== null && r.ok.length === 0 ? 'vacio' : 'ok'}
         mensaje={r.error !== null
-          ? 'No se pudo leer ESTA bandeja — no significa que esté vacía. La otra bandeja lee por su lado.'
-          : urgenteBandeja ? 'Nada urgente esperando' : 'Nada pendiente'}
+          ? t('aprobaciones.no_se_pudo_leer')
+          : urgenteBandeja ? t('aprobaciones.nada_urgente_esperando') : t('aprobaciones.nada_pendiente')}
         detalle={urgenteBandeja
-          ? 'Así debe verse casi siempre: lo urgente se resuelve en minutos.'
-          : 'Las piezas llegan aquí cuando un agente redacta algo que necesita tu aprobación.'}
-        acciones={urgenteBandeja ? <StatusChip tono="warn">SLA en minutos</StatusChip> : undefined}
+          ? t('aprobaciones.asi_debe_verse_casi')
+          : t('aprobaciones.las_piezas_llegan_aqui')}
+        acciones={urgenteBandeja ? <StatusChip tono="warn">{t('aprobaciones.sla_en_minutos')}</StatusChip> : undefined}
       >
         <div className="bj-cola">
           {r.ok?.map((p) => <FormaPieza key={p.id} pieza={p} accion={accionResolver} />)}
@@ -164,12 +170,12 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   const porAprobar = (
     <>
       {estadoBandeja?.frenaAlRunner && (
-        <Aviso tono="error" titulo="La bandeja está frenando a los agentes.">
-          Con {estadoBandeja.pendientes} piezas pendientes el runner no fabrica más: aprobar es humano. Resuelve las piezas o limpia las vencidas abajo.
+        <Aviso tono="error" titulo={t('aprobaciones.la_bandeja_esta_frenando')}>
+          Con {estadoBandeja.pendientes}  {t('aprobaciones.piezas_pendientes_el_runner')}
         </Aviso>
       )}
-      {bandeja('Urgente — respuesta a ads y SLA en minutos', urgente, true)}
-      {bandeja('Normal — prospección y contenido (20-40/día)', normal, false)}
+      {bandeja(t('aprobaciones.urgente_respuesta_a_ads'), urgente, true)}
+      {bandeja(t('aprobaciones.normal_prospeccion_y_contenido'), normal, false)}
       <LimpiezaLote contar={accionContarLote} vaciar={accionVaciarLote} bandeja={estadoBandeja} />
     </>
   );
@@ -179,10 +185,10 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   // prospecto RECIBIÓ — el id del proveedor es la prueba de salida; delivery/bounce es la capa siguiente, declarada.
   const paraEnviar = (
     <Tarjeta
-      titulo={porEnviar !== null ? `Aprobadas por enviar (${porEnviar.length})` : 'Aprobadas por enviar'}
+      titulo={porEnviar !== null ? t('aprobaciones.aprobadas_por_enviar', { length: porEnviar.length }) : t('aprobaciones.aprobadas_por_enviar_2')}
       estado={porEnviar === null ? 'error' : porEnviar.length === 0 ? 'vacio' : 'ok'}
-      mensaje={porEnviar === null ? 'No se pudo leer la cola de salida — no significa que esté vacía.' : 'Nada aprobado esperando envío'}
-      detalle="Las piezas aprobadas que salen por correo aparecen aquí; el resto de los tipos son informes y terminan al aprobarse."
+      mensaje={porEnviar === null ? t('aprobaciones.no_se_pudo_leer_2') : t('aprobaciones.nada_aprobado_esperando_envio')}
+      detalle={t('aprobaciones.las_piezas_aprobadas_que')}
     >
       <div className="bj-cola">
         {porEnviar?.map((p) => <FormaEnvio key={p.id} pieza={p} accion={accionEnviar} />)}
@@ -193,15 +199,15 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   const historial = (
     <>
       <Tarjeta
-        titulo="Últimas resueltas"
+        titulo={t('aprobaciones.ultimas_resueltas')}
         estado={resueltas === null ? 'error' : resueltas.length === 0 ? 'vacio' : 'ok'}
-        mensaje={resueltas === null ? 'No se pudo leer el historial — no significa que esté vacío.' : 'Aún no se resuelve ninguna pieza'}
+        mensaje={resueltas === null ? t('aprobaciones.no_se_pudo_leer_3') : t('aprobaciones.aun_no_se_resuelve')}
       >
         <div className="bj-cola">
           {resueltas?.map((p) => (
             <div key={p.id} className="bj-item__fila">
               <StatusChip tono={p.estado === 'aprobado' ? 'ok' : 'bad'}>
-                {p.estado === 'aprobado' ? (p.cuerpoFinal ? 'Aprobada con edición' : 'Aprobada') : 'Rechazada'}
+                {p.estado === 'aprobado' ? (p.cuerpoFinal ? t('aprobaciones.aprobada_con_edicion') : t('aprobaciones.aprobada')) : 'Rechazada'}
               </StatusChip>
               <span>{p.titulo}</span>
               <span className="bj-item__meta">{p.agente}</span>
@@ -210,7 +216,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
                 p.providerMessageId
                   ? <span className="bj-sub" data-tono="ok">enviada {fechaHoraMx(p.enviadoEn)}</span>
                   // La inconsistencia VISIBLE: enviada estampada sin prueba del proveedor (el proceso murió entre envío y guardado).
-                  : <span className="bj-sub" data-tono="warn">enviada SIN prueba del proveedor — revisar</span>
+                  : <span className="bj-sub" data-tono="warn">{t('aprobaciones.enviada_sin_prueba_del')}</span>
               )}
               {/* A36-R11-01: el motivo («AMBIGUO… verificar en Resend») se ve también con enviado_en puesto, y hay salida:
                   confirmar que NO salió y reintentar. */}
@@ -220,7 +226,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
               {p.enviadoEn && !p.providerMessageId && p.envioError?.startsWith('AMBIGUO') && (
                 <FormaLiberarAmbiguo pieza={p} accion={accionLiberar} />
               )}
-              {!p.enviadoEn && p.envioError && <span className="bj-sub" data-tono="bad">envío falló: reintentable</span>}
+              {!p.enviadoEn && p.envioError && <span className="bj-sub" data-tono="bad">{t('aprobaciones.envio_fallo_reintentable')}</span>}
             </div>
           ))}
         </div>
@@ -233,7 +239,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   );
 
   return (
-    <MarcoPagina titulo="Aprobaciones" apoyo="Lo que los agentes redactan y espera tu firma antes de salir.">
+    <MarcoPagina titulo={t('aprobaciones.aprobaciones')} apoyo={t('aprobaciones.lo_que_los_agentes')}>
       <VistasAprobaciones
         inicial={inicial}
         conteos={{
@@ -245,11 +251,14 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
         historial={historial}
       />
       <Aviso tono="info">
-        El candado es de la base de datos, no de esta pantalla: es imposible que cualquier código envíe una pieza no aprobada,
-        y cada resolución queda firmada por quien la tomó. Rechazar exige motivo — un rechazo sin motivo es una pieza que se vuelve a proponer igual.
+        
+        {t('aprobaciones.el_candado_es_de')}
       </Aviso>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Aprobaciones' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_inicio');
+  return { title: t('aprobaciones.aprobaciones') };
+}

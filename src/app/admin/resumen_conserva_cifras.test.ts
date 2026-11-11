@@ -1,6 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- lee archivos fuente del propio repo */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { admin_inicio } from '@/lib/i18n/es/admin_inicio';
 import { fileURLToPath } from 'node:url';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -18,8 +19,10 @@ describe('el Resumen conserva lo de Ejecutivo y Analítica', () => {
   it('MRR: lee getMrr(), con la meta de $1,000,000 y la leyenda de plan sin precio', () => {
     expect(LECTURAS).toMatch(/getMrr\(\)/);
     expect(CONSOLA).toMatch(/mrr\.totalMxn/);
-    expect(CONSOLA).toMatch(/meta \$1,000,000/);
-    expect(CONSOLA).toMatch(/no tiene precio configurado/);
+    // Los rótulos viven en el diccionario es (admin_inicio); el código solo apunta a su clave.
+    expect(admin_inicio['consola.mrr_meta_1_000']).toMatch(/meta \$1,000,000/);
+    expect(admin_inicio['consola.algun_plan_activo_no']).toMatch(/no tiene precio configurado/);
+    expect(CONSOLA).toMatch(/consola\.mrr_meta_1_000/);
   });
   it('MRR caído no se pinta como 0: la lectura que falla es una cifra en error', () => {
     expect(CONSOLA).toMatch(/mrr === null\s*\?\s*\{ etiqueta: 'MRR', valor: null, \.\.\.ERROR_CIFRA/);
@@ -34,7 +37,8 @@ describe('el Resumen conserva lo de Ejecutivo y Analítica', () => {
     expect(LECTURAS).toMatch(/getResumenNegocio\(undefined, VENTANA_FACTURAS_DIAS\)/);
   });
   it('el rótulo de la ventana es verdad: dice los mismos días que se piden', () => {
-    expect(CONSOLA).toMatch(/últimos \$\{VENTANA_FACTURAS_DIAS\} días/);
+    expect(admin_inicio['consola.facturas_procesadas_por_dia']).toMatch(/últimos \{VENTANA_FACTURAS_DIAS\} días/);
+    expect(CONSOLA).toMatch(/consola\.facturas_procesadas_por_dia', \{ VENTANA_FACTURAS_DIAS \}/);
   });
   it('el costo de IA histórico y por día sigue en el Resumen', () => {
     expect(MANDO).toMatch(/r\.costoIaUsd/);

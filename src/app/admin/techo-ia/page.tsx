@@ -7,6 +7,7 @@ import { usd } from '@/lib/utils';
 import { EstadoError } from '../ui/kit';
 import { guardarTechoIa } from './acciones';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -37,6 +38,7 @@ const MENSAJE_ERROR: Record<string, string> = {
 };
 
 export default async function TechoIaPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+  const { t } = await getT('admin_dinero');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const sp = await searchParams;
@@ -46,14 +48,14 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   } catch {
     datos = null;
   }
-  if (datos === null) return <PantallaTecho><EstadoError mensaje="No se pudo leer la lista de flotas ni sus techos — la base no respondió. Esto NO significa que no haya techos: la IA sigue frenada por el techo que cada flota ya tiene." /></PantallaTecho>;
+  if (datos === null) return <PantallaTecho><EstadoError mensaje={t('techo_ia.no_se_pudo_leer')} /></PantallaTecho>;
 
   const columnas: ColumnaBase<FilaTechoIa>[] = [
-    { id: 'flota', titulo: 'Flota', principal: true, celda: (f) => f.nombre },
-    { id: 'techo', titulo: 'Techo que aplica', alinear: 'der', celda: (f) => <span className="tabular">{usd(f.topeUsd)}</span> },
-    { id: 'origen', titulo: 'Origen', celda: (f) => <StatusChip tono={ORIGEN[f.origen].tono}>{ORIGEN[f.origen].rotulo}</StatusChip> },
+    { id: 'flota', titulo: t('techo_ia.flota'), principal: true, celda: (f) => f.nombre },
+    { id: 'techo', titulo: t('techo_ia.techo_que_aplica'), alinear: 'der', celda: (f) => <span className="tabular">{usd(f.topeUsd)}</span> },
+    { id: 'origen', titulo: t('techo_ia.origen'), celda: (f) => <StatusChip tono={ORIGEN[f.origen].tono}>{ORIGEN[f.origen].rotulo}</StatusChip> },
     {
-      id: 'hoy', titulo: 'Hoy', alinear: 'der',
+      id: 'hoy', titulo: t('techo_ia.hoy'), alinear: 'der',
       celda: (f) => f.usadoHoyUsd === null ? (
         <span className="text-muted">sin medir</span>
       ) : (
@@ -66,7 +68,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
       ),
     },
     {
-      id: 'declarar', titulo: 'Declarar techo',
+      id: 'declarar', titulo: t('techo_ia.declarar_techo'),
       celda: (f) => (
         <form action={guardarTechoIa} className="flex items-center gap-1.5">
           <input type="hidden" name="tenantId" value={f.tenantId} />
@@ -76,7 +78,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
             defaultValue={f.declaradoUsd === null ? '' : String(f.declaradoUsd)}
             placeholder="sin declarar"
             className="rv-ctl tabular w-28"
-            title={f.declaradoUsd !== null ? 'Déjalo vacío y guarda para quitar la declaración.' : undefined}
+            title={f.declaradoUsd !== null ? t('techo_ia.dejalo_vacio_y_guarda') : undefined}
           />
           <Boton type="submit" variante="secondary" tamano="sm">{f.declaradoUsd === null ? 'Fijar' : 'Cambiar'}</Boton>
         </form>
@@ -89,7 +91,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
       {sp.ok && MENSAJE_OK[sp.ok] && <Aviso tono="ok">{MENSAJE_OK[sp.ok]}</Aviso>}
       {sp.error && MENSAJE_ERROR[sp.error] && <Aviso tono="error">{MENSAJE_ERROR[sp.error]}</Aviso>}
 
-      <Tarjeta titulo="Cómo se decide el techo de una flota">
+      <Tarjeta titulo={t('techo_ia.como_se_decide_el')}>
         <p className="m-0 text-[13px] text-muted">
           1) el que declares aquí; 2) si no hay, el que le toca por el tamaño de su plan; 3) si tampoco, el piso global de{' '}
           <span className="tabular">{usd(datos.pisoUsd)}</span> al día. Pasado el techo, la IA de esa flota se frena hasta el día siguiente
@@ -97,22 +99,22 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
           para apagar la IA de una flota usa el interruptor, no un techo de cero.
         </p>
         {datos.gastoIlegible && (
-          <Aviso tono="warn">El gasto de hoy no se pudo leer ahora mismo: la columna «Hoy» queda en blanco, que NO significa cero.</Aviso>
+          <Aviso tono="warn">{t('techo_ia.el_gasto_de_hoy')}</Aviso>
         )}
         {datos.truncado && (
-          <p className="m-0 text-[13px] text-muted">Hay más flotas de las que caben en esta pantalla; se muestran las primeras por nombre.</p>
+          <p className="m-0 text-[13px] text-muted">{t('techo_ia.hay_mas_flotas_de')}</p>
         )}
       </Tarjeta>
 
-      <Tarjeta titulo="Flotas">
+      <Tarjeta titulo={t('techo_ia.flotas')}>
         <TablaBase
-          etiqueta="Techo de gasto de IA por flota"
+          etiqueta={t('techo_ia.techo_de_gasto_de')}
           columnas={columnas}
           filas={datos.filas}
           idFila={(f) => f.tenantId}
           altoMaximo={false}
           tarjetaMovil
-          vacio={{ titulo: 'Sin flotas', texto: 'Todavía no hay flotas dadas de alta.' }}
+          vacio={{ titulo: t('techo_ia.sin_flotas'), texto: t('techo_ia.todavia_no_hay_flotas') }}
         />
       </Tarjeta>
     </PantallaTecho>
@@ -123,4 +125,7 @@ function PantallaTecho({ children }: { children: ReactNode }) {
   return <MarcoPagina titulo="Techo diario de IA — por flota">{children}</MarcoPagina>;
 }
 
-export const metadata: Metadata = { title: 'Techo de IA' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_dinero');
+  return { title: t('techo_ia.techo_de_ia') };
+}

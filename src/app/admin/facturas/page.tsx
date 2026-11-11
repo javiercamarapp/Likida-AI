@@ -9,6 +9,7 @@ import { BotonExportarFacturas } from './boton-exportar';
 import { leerFiltros, rangoAlReves } from './filtros';
 import '../dinero.css';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -38,6 +39,7 @@ function celdaCfdi(f: FacturaSaasFila) {
 }
 
 export default async function FacturasPage({ searchParams }: { searchParams: Promise<{ estado?: string; desde?: string; hasta?: string }> }) {
+  const { t } = await getT('admin_dinero');
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   const filtros = leerFiltros((await searchParams) ?? {});
@@ -54,70 +56,71 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
   const suma = (pred: (f: FacturaSaasFila) => boolean) => filas.filter(pred).reduce((s, f) => s + f.monto, 0);
   const cuenta = (pred: (f: FacturaSaasFila) => boolean) => filas.filter(pred).length;
   const completa = lectura !== null && !recortada;
-  const errorCifra = (etiqueta: string) => ({ etiqueta, valor: null, estado: 'error' as const, mensaje: recortada ? 'La lista está recortada: no se suma un total parcial.' : 'No se pudo leer las facturas.', reintentar: true });
+  const errorCifra = (etiqueta: string) => ({ etiqueta, valor: null, estado: 'error' as const, mensaje: recortada ? t('facturas.la_lista_esta_recortada') : t('facturas.no_se_pudo_leer'), reintentar: true });
 
   return (
     <MarcoPagina
-      titulo="Facturación"
-      apoyo="Las mensualidades que Likida emitió a sus flotas, su pago y su CFDI, con exportación para el contador."
+      titulo={t('facturas.facturacion')}
+      apoyo={t('facturas.las_mensualidades_que_likida')}
       acciones={<BotonExportarFacturas estado={filtros.estado} desde={filtros.desde} hasta={filtros.hasta} deshabilitado={alReves || lectura === null || (completa && filas.length === 0)} />}
     >
-      {alReves ? <Aviso tono="warn" titulo="El rango está al revés">La fecha «desde» es posterior a «hasta», así que no puede haber facturas. Corrige las fechas.</Aviso> : null}
+      {alReves ? <Aviso tono="warn" titulo={t('facturas.el_rango_esta_al')}>{t('facturas.la_fecha_desde_es')}</Aviso> : null}
       {recortada ? (
-        <Aviso tono="warn" titulo={`Se muestran ${numero(filas.length)} de ${numero(lectura!.total)} facturas`}>
-          La lista está recortada y las más antiguas no aparecen. Acota con las fechas; la exportación se niega a entregar un archivo parcial.
+        <Aviso tono="warn" titulo={t('facturas.se_muestran_de_facturas', { length: numero(filas.length), lectura: numero(lectura!.total) })}>
+          
+          {t('facturas.la_lista_esta_recortada_2')}
         </Aviso>
       ) : null}
 
-      <BarraFiltros accion="/admin/facturas" enLinea etiqueta="Filtrar facturas" nActivos={nFiltros} limpiarHref="/admin/facturas">
+      <BarraFiltros accion="/admin/facturas" enLinea etiqueta={t('facturas.filtrar_facturas')} nActivos={nFiltros} limpiarHref="/admin/facturas">
         <FiltroOpciones
-          etiqueta="Estado" nombre="estado" valor={filtros.estado ?? ''}
+          etiqueta={t('facturas.estado')} nombre="estado" valor={filtros.estado ?? ''}
           opciones={[{ valor: 'pendiente', rotulo: 'Pendiente' }, { valor: 'pagada', rotulo: 'Pagada' }, { valor: 'fallida', rotulo: 'Fallida' }, { valor: 'cancelada', rotulo: 'Cancelada' }]}
         />
-        <FiltroFecha nombre="desde" etiqueta="Periodo desde" valor={filtros.desde} />
-        <FiltroFecha nombre="hasta" etiqueta="Periodo hasta" valor={filtros.hasta} />
+        <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} />
+        <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} />
       </BarraFiltros>
 
-      <TiraCifras etiqueta="Facturas de la mensualidad" items={[
+      <TiraCifras etiqueta={t('facturas.facturas_de_la_mensualidad')} items={[
         completa
-          ? { etiqueta: 'Facturado', valor: suma((f) => f.estado !== 'cancelada'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado !== 'cancelada'))} facturas, sin contar canceladas.` }
+          ? { etiqueta: t('facturas.facturado'), valor: suma((f) => f.estado !== 'cancelada'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado !== 'cancelada'))} facturas, sin contar canceladas.` }
           : errorCifra('Facturado'),
         completa
-          ? { etiqueta: 'Cobrado', valor: suma((f) => f.estado === 'pagada'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado === 'pagada'))} pagadas.`, tono: 'ok' }
+          ? { etiqueta: t('facturas.cobrado'), valor: suma((f) => f.estado === 'pagada'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado === 'pagada'))} pagadas.`, tono: 'ok' }
           : errorCifra('Cobrado'),
         completa
-          ? { etiqueta: 'Por cobrar', valor: suma((f) => f.estado === 'pendiente' || f.estado === 'fallida'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado === 'pendiente' || f.estado === 'fallida'))} pendientes o fallidas.`, tono: cuenta((f) => f.estado === 'pendiente' || f.estado === 'fallida') > 0 ? 'warn' : undefined }
-          : errorCifra('Por cobrar'),
+          ? { etiqueta: t('facturas.por_cobrar'), valor: suma((f) => f.estado === 'pendiente' || f.estado === 'fallida'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado === 'pendiente' || f.estado === 'fallida'))} pendientes o fallidas.`, tono: cuenta((f) => f.estado === 'pendiente' || f.estado === 'fallida') > 0 ? 'warn' : undefined }
+          : errorCifra(t('facturas.por_cobrar')),
         completa
-          ? { etiqueta: 'Pagadas sin CFDI', valor: cuenta((f) => f.estado === 'pagada' && !f.cfdiUuid), nota: 'Cobradas pero sin timbrar: es lo primero que preguntará el contador.', tono: cuenta((f) => f.estado === 'pagada' && !f.cfdiUuid) > 0 ? 'warn' : 'ok' }
-          : errorCifra('Pagadas sin CFDI'),
+          ? { etiqueta: t('facturas.pagadas_sin_cfdi'), valor: cuenta((f) => f.estado === 'pagada' && !f.cfdiUuid), nota: t('facturas.cobradas_pero_sin_timbrar'), tono: cuenta((f) => f.estado === 'pagada' && !f.cfdiUuid) > 0 ? 'warn' : 'ok' }
+          : errorCifra(t('facturas.pagadas_sin_cfdi')),
       ]} />
 
       {lectura === null && !alReves ? (
-        <EstadoError reintentar>No se pudieron leer las facturas. Esto NO quiere decir que no haya ninguna: quiere decir que no se sabe.</EstadoError>
+        <EstadoError reintentar>{t('facturas.no_se_pudieron_leer')}</EstadoError>
       ) : (
-        <Tarjeta titulo="Facturas" estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={nFiltros > 0 ? 'Ninguna factura con ese filtro' : 'Aún no hay facturas'}
-          detalle={nFiltros > 0 ? 'Quita el filtro o cambia el rango de fechas.' : 'Aparecen aquí en cuanto se emite la primera mensualidad desde Planes y cobro.'}>
+        <Tarjeta titulo={t('facturas.facturas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={nFiltros > 0 ? t('facturas.ninguna_factura_con_ese') : t('facturas.aun_no_hay_facturas')}
+          detalle={nFiltros > 0 ? t('facturas.quita_el_filtro_o') : t('facturas.aparecen_aqui_en_cuanto')}>
           <TablaBase
-            etiqueta="Facturas de la mensualidad" idFila={(f) => f.id} tarjetaMovil densa filas={filas}
+            etiqueta={t('facturas.facturas_de_la_mensualidad')} idFila={(f) => f.id} tarjetaMovil densa filas={filas}
             columnas={[
-              { id: 'flota', titulo: 'Flota', principal: true, celda: (f) => f.tenantNombre },
-              { id: 'periodo', titulo: 'Periodo', celda: (f) => `${f.periodoInicio} a ${f.periodoFin}` },
-              { id: 'estado', titulo: 'Estado', celda: (f) => <StatusChip tono={TONO[f.estado] ?? 'neutral'}>{ROTULO[f.estado] ?? f.estado}</StatusChip> },
+              { id: 'flota', titulo: t('facturas.flota'), principal: true, celda: (f) => f.tenantNombre },
+              { id: 'periodo', titulo: t('facturas.periodo'), celda: (f) => `${f.periodoInicio} a ${f.periodoFin}` },
+              { id: 'estado', titulo: t('facturas.estado'), celda: (f) => <StatusChip tono={TONO[f.estado] ?? 'neutral'}>{ROTULO[f.estado] ?? f.estado}</StatusChip> },
               {
-                id: 'total', titulo: 'Total', alinear: 'der',
+                id: 'total', titulo: t('facturas.total'), alinear: 'der',
                 celda: (f) => (
                   <>
                     {mxn(f.monto)}
-                    <span className="adm-din-sub">{f.subtotal === null || f.iva === null ? 'sin desglose: no se puede timbrar' : `${mxn(f.subtotal)} + IVA ${mxn(f.iva)}`}</span>
+                    <span className="adm-din-sub">{f.subtotal === null || f.iva === null ? t('facturas.sin_desglose_no_se') : `${mxn(f.subtotal)} + IVA ${mxn(f.iva)}`}</span>
                   </>
                 ),
               },
               {
-                id: 'pago', titulo: 'Pago',
+                id: 'pago', titulo: t('facturas.pago'),
                 celda: (f) => (f.pagadaEn
-                  ? <>{fechaMx(f.pagadaEn)}<span className="adm-din-sub">{f.referenciaBanco ? `Ref. ${f.referenciaBanco}` : 'sin referencia del banco'}</span></>
-                  : <>—<span className="adm-din-sub">{f.referencia ? `Ref. de pago ${f.referencia}` : ''}</span></>),
+                  ? <>{fechaMx(f.pagadaEn)}<span className="adm-din-sub">{f.referenciaBanco ? `Ref. ${f.referenciaBanco}` : t('facturas.sin_referencia_del_banco')}</span></>
+                  : <>—<span className="adm-din-sub">{f.referencia ? t('facturas.ref_de_pago', { referencia: f.referencia }) : ''}</span></>),
               },
               { id: 'cfdi', titulo: 'CFDI', celda: celdaCfdi },
             ]}
@@ -125,15 +128,17 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
         </Tarjeta>
       )}
 
-      <Disclosure titulo="Qué incluye y qué falta" resumen="Exportación y XML o PDF">
+      <Disclosure titulo={t('facturas.que_incluye_y_que')} resumen="Exportación y XML o PDF">
         <p className="adm-din-nota">
-          El archivo del contador trae una fila por factura con el desglose del IVA, la referencia del banco y el UUID del CFDI; un dato que la factura no tiene sale vacío.
-          Cada exportación queda asentada en la bitácora con quién la pidió y con qué filtros. Los archivos XML y PDF de cada CFDI se descargan hoy desde el panel del proveedor de
-          timbrado: aquí solo se enseña el UUID y la liga de verificación del SAT. Reenviar o cancelar un CFDI desde esta pantalla todavía no existe.
+          
+          {t('facturas.el_archivo_del_contador')}
         </p>
       </Disclosure>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Facturas' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_dinero');
+  return { title: t('facturas.facturas') };
+}
