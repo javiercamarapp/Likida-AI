@@ -331,14 +331,14 @@ for (const id of IDENTIDADES) {
 
     test('(g2) las casillas de la matriz caen bajo la cabecera de su columna', async ({ page }) => {
       await page.goto(`${id.ruta}?seccion=configuracion`);
-      const cabeceras = page.locator('table.av-matriz thead th');
+      const cabeceras = page.locator('#contenido-principal table thead th');
       await expect(cabeceras).toHaveCount(4);
       const centros: number[] = [];
       for (let c = 1; c < 4; c++) {
         const b = (await cabeceras.nth(c).boundingBox())!;
         centros.push(b.x + b.width / 2);
       }
-      const filasMatriz = page.locator('table.av-matriz tbody tr');
+      const filasMatriz = page.locator('#contenido-principal table tbody tr');
       const n = await filasMatriz.count();
       expect(n).toBeGreaterThan(0);
       for (let r = 0; r < n; r++) {
