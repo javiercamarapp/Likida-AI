@@ -8,7 +8,7 @@ import {
   type ConversacionActiva,
 } from '@/lib/admin/negocio';
 import { MessageCircle, Search } from 'lucide-react';
-import { Boton, BotonEnlace, EstadoVacio, Tarjeta } from '../../ui-v2/componentes';
+import { BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, Tarjeta } from '../../ui-v2/componentes';
 import { BarList, type PropsCifra } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FilaConversacion } from './hilo';
@@ -102,11 +102,15 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
         )}
       </Tarjeta>
 
-      <EstadoVacio titulo="Fuera de alcance hoy">
-        Colas (activas/necesitan humano/escaladas/resueltas), búsqueda full-text, handoff a un humano — el bot de Likida es una máquina de estados determinística (foto→OCR→confirmar→liquidar), no un agente conversacional abierto que se pueda &quot;atorar&quot; y necesite ese patrón. Antes de construirlo hay que decidir si de verdad aplica.
-        <br /><br />
-        Volumen por canal, heatmap hora×día, histograma de mensajes por conversación — con 1 tenant y pocos días de historia no dicen nada real todavía.
-      </EstadoVacio>
+      {/* Lo que NO se sabe va en su caja punteada, DENTRO de una tarjeta y a la izquierda (Rovaq «Qué no se sabe»), no como un párrafo centrado suelto. */}
+      <Tarjeta titulo="Qué no se sabe" className="adm-nosabe">
+        <p>
+          Colas (activas/necesitan humano/escaladas/resueltas), búsqueda full-text, handoff a un humano — el bot de Likida es una máquina de estados determinística (foto→OCR→confirmar→liquidar), no un agente conversacional abierto que se pueda &quot;atorar&quot; y necesite ese patrón. Antes de construirlo hay que decidir si de verdad aplica.
+        </p>
+        <p>
+          Volumen por canal, heatmap hora×día, histograma de mensajes por conversación — con 1 tenant y pocos días de historia no dicen nada real todavía.
+        </p>
+      </Tarjeta>
     </PantallaConversaciones>
   );
 }
@@ -122,15 +126,9 @@ function PantallaConversaciones({ filtros, cifras, etiquetaCifras, children }: {
  */
 function CajaBusqueda({ q }: { q: string }) {
   return (
-    <form className="flex items-center gap-2" method="GET" role="search">
-      <Search width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
-      <input
-        type="text" name="q" defaultValue={q} placeholder="Buscar por teléfono…" aria-label="Buscar por teléfono"
-        className="rv-ctl min-w-0 flex-1"
-      />
-      <Boton type="submit" variante="secondary" tamano="sm">Buscar</Boton>
-      {q && <BotonEnlace href="/admin/conversaciones" variante="ghost" tamano="sm">Limpiar</BotonEnlace>}
-    </form>
+    <BarraFiltros accion="/admin/conversaciones" enLinea buscar etiqueta="Buscar conversaciones" limpiarHref="/admin/conversaciones" nActivos={q ? 1 : 0}>
+      <FiltroBusqueda nombre="q" valor={q} placeholder="Buscar por teléfono…" etiqueta="Buscar por teléfono" maxLength={40} />
+    </BarraFiltros>
   );
 }
 
