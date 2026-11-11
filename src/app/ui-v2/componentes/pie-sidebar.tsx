@@ -44,8 +44,6 @@ export interface AvisosPie { href: string; pendientes?: number | null; urgente?:
 
 export interface AccesoPie { href: string; texto: string; Icono: ComponentType<{ width?: number; height?: number; strokeWidth?: number; 'aria-hidden'?: boolean }> }
 
-const TOPE_VISIBLE = 99;
-
 /** El texto de «Avisos» para lectores de pantalla y tooltip. `null` = «sin dato», nunca «0». Sin traductor, en español. */
 export function etiquetaAvisos(a: Pick<AvisosPie, 'pendientes' | 'urgente'>, tr: TraductorShell = TRADUCTOR_ES): string {
   if (a.pendientes === undefined) return tr.t('pie.avisos.titulo');
