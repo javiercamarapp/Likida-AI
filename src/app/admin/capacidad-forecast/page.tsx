@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 const HORIZONTES = ['7', '14', '30'] as const;
 
-export default async function CapacidadForecastPage({ searchParams }: { searchParams?: Promise<{ h?: string }> } = {}) {
+export default async function CapacidadForecastPage({ searchParams }: { searchParams?: Promise<{ h?: string }> }) {
   const { t, tp, idioma } = await getT('admin_sistema');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();

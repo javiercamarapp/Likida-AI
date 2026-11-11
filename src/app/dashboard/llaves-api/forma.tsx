@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useActionState } from 'react';
 import { Check, Copy, ShieldAlert } from 'lucide-react';
 import { Boton, BotonConfirmar, CampoSelect, CampoTexto, AvisoResultado, Icono, Tooltip, clasesBoton } from '@/app/ui-v2/componentes';
 // SOLO TIPOS de `llave-api-escritura.ts`: ese módulo importa `supabaseAdmin`,

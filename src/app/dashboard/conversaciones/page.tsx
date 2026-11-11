@@ -9,7 +9,7 @@ import { logger } from '@/lib/logger';
 import type { Metadata } from 'next';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { BarraFiltros, BotonEnlace, EstadoError, EstadoVacio, FiltroBusqueda, Icono } from '@/app/ui-v2/componentes';
+import { BarraFiltros, BotonEnlace, EstadoError, EstadoVacio, FiltroBusqueda } from '@/app/ui-v2/componentes';
 import { TarjetaTabla } from '../bloque';
 import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
