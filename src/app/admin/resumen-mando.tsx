@@ -7,7 +7,9 @@ import {
 import { agentePorId } from '@/lib/likida/agentes/notificaciones';
 import { NOMBRE_NIVEL } from '@/lib/likida/agentes/autonomia';
 import { ahoraMs } from '@/lib/saludo';
-import { calidadAgentes, costoIaMes, despliegues, entradaSemaforo, entradaTuTurno, parados, resumenNegocio, slos } from './resumen-lecturas';
+import { getT } from '@/lib/i18n/servidor';
+import { QuemaSlo } from './quema-slo';
+import { quema, calidadAgentes, costoIaMes, despliegues, entradaSemaforo, entradaTuTurno, parados, resumenNegocio, slos } from './resumen-lecturas';
 import './resumen.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -138,7 +140,7 @@ export async function BloqueCalidad() {
 
 /** 6. Plataforma y qué cambió: plegado, para correlacionar causas. */
 export async function BloquePlataforma() {
-  const [s, d] = await Promise.all([slos(), despliegues()]);
+  const [s, d, q, { t: tMon }] = await Promise.all([slos(), despliegues(), quema(), getT('monitoreo')]);
   return (
     <Disclosure titulo="Plataforma y qué cambió" resumen={d.estado === 'ok' ? `${d.anotaciones.length} despliegues en 30 días` : 'despliegues sin medir'}>
       <h3 className="rv-recuadro-tit__texto">Objetivos de servicio</h3>
@@ -155,6 +157,7 @@ export async function BloquePlataforma() {
           ))}
         </ul>
       )}
+      <QuemaSlo evaluaciones={q} t={tMon} />
       <h3 className="rv-recuadro-tit__texto">Despliegues recientes</h3>
       {d.estado === 'ok' ? (
         <ul className="adm-res-lista">

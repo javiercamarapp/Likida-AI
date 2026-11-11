@@ -9,6 +9,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { redisConfigurado } from '@/lib/ratelimit';
 import { CRONS, detalleLatidos } from '@/lib/admin/salud';
+import { getT } from '@/lib/i18n/servidor';
+import { QuemaSlo, leerQuema } from '../quema-slo';
 import { getSLOs } from '@/lib/admin/slo';
 import { logger } from '@/lib/logger';
 import { BotonEnlace, MarcoPagina, EstadoVacio } from '../../ui-v2/componentes';
@@ -204,12 +206,14 @@ export default async function SaludSistemaPage() {
   const salud = envHealth();
   const falta = faltantes();
   // Las cuatro lecturas caen cada una por su lado y NINGUNA tumba la pantalla: una fuente ciega se dice «sin dato», nunca un cero.
-  const [supabase, latidos, slos, panorama] = await Promise.all([
+  const [supabase, latidos, slos, panorama, quemaSlo] = await Promise.all([
     medirSupabase(),
     detalleLatidos().catch((e: unknown) => { logger.error('admin.salud.latidos', { err: e instanceof Error ? e.message : String(e) }); return null; }),
     getSLOs().catch((e: unknown) => { logger.error('admin.salud.slos', { err: e instanceof Error ? e.message : String(e) }); return null; }),
     obtenerPanoramaAccion().catch(() => null),
+    leerQuema(),
   ]);
+  const { t: tMon } = await getT('monitoreo');
   const lista = latidos === null ? null : CRONS.map((c) => ({ cron: c, l: latidos[c] }));
   const relojes = lista === null ? null : resumenRelojes(lista);
   const relojesMalos = relojes === null ? 0 : new Set([...relojes.sinLatir, ...relojes.conFallo]).size;
@@ -292,6 +296,8 @@ export default async function SaludSistemaPage() {
           </ul>
         </section>
       ) : null}
+
+      <section className="adm-sis-bloque"><QuemaSlo evaluaciones={quemaSlo} t={tMon} /></section>
 
       <section className="adm-sis-bloque" aria-labelledby="piezas-sistema">
         <h2 className="adm-sis-titulo" id="piezas-sistema">Cada pieza, medida o declarada sin medir</h2>

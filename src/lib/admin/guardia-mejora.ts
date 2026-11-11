@@ -42,3 +42,5 @@ export function lineasDeQuemaNueva(ev: ReadonlyArray<EvaluacionQuema>, previo: Q
   const nuevas = ev.filter((e) => e.nivel === 'pagina' && previo[e.clave] !== 'pagina');
   return agruparAlertas({ items: [], ciegas: [], quema: nuevas }).map((g) => lineaDeGrupo(g, ultimoCambio));
 }
+
+export const resumenQuema = (n: number): string => `${n} grupo(s) de quema del presupuesto de error`;

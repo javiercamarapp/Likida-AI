@@ -4,7 +4,7 @@ import { COMPONENTES_ESTADO, detalleLatidos, leerLatido, puertaCron, purgarObser
 import { componentesDesdeHealth, componentesDesdeLatidos, esVentanaDeMantenimiento, medicionVacia, sondearHealth, sondeoCiego } from '@/lib/admin/estado';
 import { alertasIaDeDetalle, alertasIaEncendidas, correrAlertasIa } from '@/lib/admin/alertas-ia';
 import { lineasAgrupadas } from '@/lib/admin/agrupar-alertas';
-import { evaluarQuemaSegura, lineasDeQuemaNueva, quemaCompacta, quemaDeDetalle, ultimoCambioVisto } from '@/lib/admin/guardia-mejora';
+import { evaluarQuemaSegura, lineasDeQuemaNueva, resumenQuema, quemaCompacta, quemaDeDetalle, ultimoCambioVisto } from '@/lib/admin/guardia-mejora';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { conRelojDuro } from '../_reloj_duro';
 import { appUrl } from '@/lib/env';
@@ -281,7 +281,7 @@ export async function GET(req: Request) {
         let aviso = true;
         if (nuevas.length > 0) {
           aviso = await alertarOperador('guardia.quema_slo', {
-            codigo: 'guardia_quema_slo', cual: huellaDeClave(nuevas.join('\n')), resumen: `${nuevas.length} grupo(s) de quema del presupuesto de error`,
+            codigo: 'guardia_quema_slo', cual: huellaDeClave(nuevas.join('\n')), resumen: resumenQuema(nuevas.length),
             ...Object.fromEntries(nuevas.slice(0, 4).map((l, i) => [`quema_${i + 1}`, l])),
           });
         }
