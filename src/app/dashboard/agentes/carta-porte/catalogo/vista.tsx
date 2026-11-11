@@ -13,12 +13,13 @@ import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDe
 import { Aviso, BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
 import {
-  Aviso as AvisoV2, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, EstadoError, EstadoVacio, Icono, Tarjeta,
+  Aviso as AvisoV2, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, EstadoError, Icono, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { VacioAgente } from '../../vacio-agente';
 
 /**
  * LA PANTALLA «CATÁLOGO DEL CLIENTE» (T-A3-22): lo que el agente aprende UNA vez de cada cliente y usa en cada documento.
@@ -140,9 +141,9 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
       ) : undefined}>
       <div className="rv-cp__pila">
         {filas.length === 0 ? (
-          <p className="rv-cp__nota">{tx('rest.todavia_no_hay_nada_aqui')}</p>
+          <VacioAgente titulo={tx('rest.todavia_no_hay_nada_aqui')} />
         ) : visibles.length === 0 ? (
-          <p className="rv-cp__nota">{tx('rest.ninguna_fila_coincide_con', { filtro })}</p>
+          <VacioAgente titulo={tx('rest.ninguna_fila_coincide_con', { filtro })} />
         ) : (
           <ul className="rv-cp__filas">
             {visibles.slice(0, FILAS_VISIBLES).map((f, i) => (
@@ -256,14 +257,14 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
       titulo={tx('rest.catalogo_del_cliente')}
       apoyo={tx('rest.lo_que_el_agente_aprende_una')}
       acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte')}</BotonEnlace>}
-      filtros={(
+      filtros={clientes.length === 0 ? undefined : (
         <div className="rv-cp__pila" role="group" aria-label={tx('vigia.vista.cliente')}>
           {clientes.length > 8 && (
             <div className="rv-cp__form">
               <CampoTexto id="cat-buscar-cliente" etiqueta={tx('rest.buscar_cliente')} value={buscar} onChange={(e) => setBuscar(e.target.value)} autoComplete="off" />
             </div>
           )}
-          {clientes.length === 0 ? <p className="rv-cp__nota">{tx('rest.aun_no_hay_clientes_en_tu')}</p> : (
+          {(
             <ul className="rv-cp__acciones">
               {clientesVisibles.map((c) => (
                 <li key={c.id}>
@@ -288,15 +289,25 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
       ] : undefined}
       etiquetaCifras={tx('rest.catalogo_del_cliente')}
     >
+      {/* Rovaq: el vacío es la caja punteada DENTRO de una tarjeta, nunca una línea suelta. */}
+      {clientes.length === 0 && (
+        <Tarjeta titulo={tx('rest.catalogo_del_cliente')} info="carta_porte_catalogo.productos">
+          <VacioAgente titulo={tx('rest.aun_no_hay_clientes_en_tu')} />
+        </Tarjeta>
+      )}
       <Importador ver={ver} importar={acciones.importar} />
 
       {elegido === null ? (
-        clientes.length > 0 && <p className="rv-cp__nota">{tx('rest.elige_un_cliente_para_ver_y')}</p>
+        clientes.length > 0 && (
+          <Tarjeta titulo={tx('rest.catalogo_del_cliente')} info="carta_porte_catalogo.productos">
+            <VacioAgente titulo={tx('rest.elige_un_cliente_para_ver_y')} />
+          </Tarjeta>
+        )
       ) : lecturaFallida || catalogo === null ? (
         <EstadoError reintentar>{tx('rest.no_se_pudo_leer_el_catalogo', { nombre: elegido.nombre })}</EstadoError>
       ) : (
         <>
-          {vacio && <EstadoVacio titulo={tx('rest.aun_sin_catalogo')} contenido>{fraseSinCatalogo(tx)}</EstadoVacio>}
+          {vacio && <VacioAgente titulo={tx('rest.aun_sin_catalogo')}>{fraseSinCatalogo(tx)}</VacioAgente>}
           <Numero fila={catalogo.numero} clienteId={elegido.id} ver={ver} acciones={acciones} />
           <Tabla tipo="producto" titulo={tx('rest.productos')} filas={catalogo.productos} clienteId={elegido.id} ver={ver} acciones={acciones} />
           <Tabla tipo="parte" titulo={tx('rest.remitentes_y_destinatarios')} filas={catalogo.partes} clienteId={elegido.id} ver={ver} acciones={acciones} />

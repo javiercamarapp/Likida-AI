@@ -393,6 +393,7 @@ export const resto = {
   'op.cerrar': 'Cerrar',
   'op.cl.nueva_tarifa': 'Nueva tarifa',
   'op.cl.nuevo_cliente': 'Nuevo cliente',
+  'op.cl.alcance': 'Todos los clientes y tarifas',
   'op.cl.cartera': 'Cartera de clientes',
   'op.cl.k.sin_cliente': 'Viajes sin cliente',
   'op.cl.k.sin_cliente.nota': 'Sin cliente no hay margen por cliente',
@@ -1297,4 +1298,6 @@ export const resto = {
   'e26b.vend_vivos_nota': 'prospectos abiertos, sin ganar ni perder',
   'e26b.vend_ganados_nota': 'prospectos que ya son clientes',
   'e26b.vend_propuesta_nota': 'en la etapa de propuesta o de piloto',
+  'r4.vend_area': 'Ventas',
+  'r4.vend_apoyo': 'Tu cartera de prospectos por etapa, lo que cuenta de tu comisión y lo que sigue.',
 } as const;

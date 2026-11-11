@@ -267,8 +267,10 @@ export default async function CombustibleCasetasPage({
             <BarList etiqueta={tr('combustibleCasetas.page.gastoPorConcepto')} items={itemsConcepto} formato={mxn} />
           </Tarjeta>
         ),
-        <Tarjeta key="d" titulo={tr('combustibleCasetas.page.repartoDelGasto')} contenida>
+        <Tarjeta key="d" titulo={tr('combustibleCasetas.page.repartoDelGasto')}>
           <DonaMini etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} gajos={itemsConcepto.map((i) => ({ etiqueta: i.etiqueta, valor: i.valor }))} formato="mxn" />
+          {/* Rovaq (Brechas «Por canal»): la dona lleva debajo su lista de barras y llena el alto de la tarjeta vecina. */}
+          <BarList etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} items={itemsConcepto} formato={mxn} />
         </Tarjeta>,
       ] : [
         <Tarjeta key="v" titulo={tr('combustibleCasetas.page.gastoPorConcepto')} estado="vacio" mensaje={tr('combustibleCasetas.page.faltaMasDeUn')} detalle={tr('combustibleCasetas.page.haceFaltaMasDe')} iconoVacio={Fuel} contenida />,

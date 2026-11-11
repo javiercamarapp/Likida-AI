@@ -15,7 +15,7 @@ import { CajonAlta, FormaCliente, FormaTarifa, type AccionForma, type OpcionModo
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra, CajonVistaRapida } from '@/app/ui-v2/esqueletos';
 import {
-  Aviso, BotonEnlace, EstadoError, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta,
+  Aviso, BarraPeriodo, BotonEnlace, EstadoError, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import '../caja-vacia.css';
@@ -78,6 +78,7 @@ export function VistaClientes({
           <BotonEnlace href={hrefNuevo('cliente')} variante="primary">{t('op.cl.nuevo_cliente')}</BotonEnlace>
         </>
       ) : undefined}
+      filtros={panel === null ? undefined : <BarraPeriodo etiqueta={t('op.cl.cartera')} chips={[{ id: 'alcance', etiqueta: t('op.cl.alcance') }]} />}
       avisos={avisos}
       cifras={cifras}
       etiquetaCifras={t('op.cl.cartera')}
@@ -97,17 +98,17 @@ export function VistaClientes({
             <p className="rv-cl__pie">{t('op.tu_rol_ve_esta_pantalla_pero')}</p>
           )}
           {puedeEditar && sp.nuevo === 'cliente' && (
-            <CajonAlta titulo={t('op.dar_de_alta_un_cliente')} hrefCerrar={hrefSinNuevo}>
-              <FormaCliente accion={guardarCliente} idPrefijo="alta-cliente" inicial={{ nombre: '', rfc: '', contacto: '', correo: '', telefono: '', diasCredito: '', activo: true }} />
+            <CajonAlta titulo={t('op.dar_de_alta_un_cliente')} hrefCerrar={hrefSinNuevo} idPrefijo="alta-cliente">
+              <FormaCliente accion={guardarCliente} idPrefijo="alta-cliente" enCajon inicial={{ nombre: '', rfc: '', contacto: '', correo: '', telefono: '', diasCredito: '', activo: true }} />
             </CajonAlta>
           )}
           {puedeEditar && sp.nuevo === 'tarifa' && (
-            <CajonAlta titulo={t('op.agregar_una_tarifa')} hrefCerrar={hrefSinNuevo} ancho="xl">
+            <CajonAlta titulo={t('op.agregar_una_tarifa')} hrefCerrar={hrefSinNuevo} ancho="xl" idPrefijo="alta-tarifa">
               {panel.clientes.length === 0 ? (
                 <p className="rv-cl__nota">{t('op.puedes_capturar_tarifas_de_lista_sin')}</p>
               ) : null}
               <FormaTarifa
-                accion={guardarTarifa} idPrefijo="alta-tarifa"
+                accion={guardarTarifa} idPrefijo="alta-tarifa" enCajon
                 buscarCliente={buscarCliente} totalClientes={totalClientes}
                 modos={modos}
                 inicial={{
@@ -305,7 +306,7 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
 
         {panel.clientes.length === 0 ? (
           <div className="rv-caja-vacia"><EstadoVacio icono={Handshake} contenido titulo={t('op.sin_clientes_todavia')}
-            accion={puedeEditar ? <BotonEnlace href={urlRegistro(RUTA, sufijo, { nuevo: 'cliente' })} variante="primary">{t('op.cl.nuevo_cliente')}</BotonEnlace> : undefined}>{t('op.por_eso_likida_ve_lo_que')}</EstadoVacio></div>
+            accion={puedeEditar ? <BotonEnlace href={urlRegistro(RUTA, sufijo, { nuevo: 'cliente' })} variante="suave">{t('op.cl.nuevo_cliente')}</BotonEnlace> : undefined}>{t('op.por_eso_likida_ve_lo_que')}</EstadoVacio></div>
         ) : (
           <TablaBase<ClienteConMetricas> etiqueta={t('op.clientes_y_su_rfc')} columnas={columnas} filas={pagClientes.filas}
             idFila={(c) => c.id} tarjetaMovil
@@ -448,7 +449,7 @@ function BloqueTarifas({
 
         {panel.tarifas.length === 0 ? (
           <div className="rv-caja-vacia"><EstadoVacio icono={Route} contenido titulo={t('op.sin_tarifas_capturadas')}
-            accion={puedeEditar ? <BotonEnlace href={urlRegistro(RUTA, sufijo, { nuevo: 'tarifa' })} variante="primary">{t('op.cl.nueva_tarifa')}</BotonEnlace> : undefined}>{t('op.con_al_menos_una_likida_puede')}</EstadoVacio></div>
+            accion={puedeEditar ? <BotonEnlace href={urlRegistro(RUTA, sufijo, { nuevo: 'tarifa' })} variante="suave">{t('op.cl.nueva_tarifa')}</BotonEnlace> : undefined}>{t('op.con_al_menos_una_likida_puede')}</EstadoVacio></div>
         ) : (
           <TablaBase<TarifaRow> etiqueta={t('op.rutas_por_cliente')} columnas={columnas} filas={pagTarifas.filas}
             idFila={(t) => t.id} tarjetaMovil

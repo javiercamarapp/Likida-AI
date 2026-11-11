@@ -22,3 +22,8 @@
 .rv-timb__filtro { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* Acciones de la cabecera de la ficha: 32 px / 13 px (Rovaq), no los 28 / 12 de las acciones de tabla. */
 [data-ui="v2"] .rv-marco:has(.rv-timb__paso) .rv-encabezado__acciones .rv-btn { min-height: 32px; padding: 6px 12px; font-size: var(--t-body, 13px); }
+/* Nota de método de la cola: ancho de lectura de ~670 px (Rovaq), no todo el ancho. */
+[data-ui="v2"] .rv-esq__tabla-pie:has(.rv-timb__nota) { max-width: 670px; }
+.rv-timb__nota { font-size: var(--t-small, 12px); color: var(--muted); }
+/* Ficha: la columna de pasos mide ~780 px (Rovaq «Flujo por pasos»), no los 1220 de la página. */
+[data-ui="v2"] .rv-esq--ficha .rv-timb__paso { max-width: 780px; }

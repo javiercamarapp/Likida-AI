@@ -395,6 +395,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.cerrar': 'Close',
   'op.cl.nueva_tarifa': 'New rate',
   'op.cl.nuevo_cliente': 'New client',
+  'op.cl.alcance': 'All customers and rates',
   'op.cl.cartera': 'Client portfolio',
   'op.cl.k.sin_cliente': 'Trips without a client',
   'op.cl.k.sin_cliente.nota': 'Without a client there is no per-client margin',
@@ -1299,4 +1300,6 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'e26b.vend_vivos_nota': 'open prospects, not won or lost yet',
   'e26b.vend_ganados_nota': 'prospects that became customers',
   'e26b.vend_propuesta_nota': 'at the proposal or pilot stage',
+  'r4.vend_area': 'Sales',
+  'r4.vend_apoyo': 'Your prospect pipeline by stage, what counts toward your commission and what comes next.',
 };

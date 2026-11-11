@@ -22,7 +22,7 @@ import { Declaracion15 } from './declaracion-15';
 import { etiquetaInterruptor } from '../../observabilidad/etiquetas';
 import { getPlanes } from '@/lib/saas/suscripcion';
 import { accionGestionarPlan } from '../acciones-plan';
-import { Ficha360, encabezadoFicha, cifrasFicha, chipsFicha } from './ficha';
+import { Ficha360, encabezadoFicha, cifrasFicha } from './ficha';
 import { GestionPlan } from './gestion-plan';
 import { AvisoPlanEnPausa } from '../../../dashboard/aviso-plan-en-pausa';
 
@@ -138,7 +138,7 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
 
   const enc = encabezadoFicha(ficha, t);
   return (
-    <PantallaFicha {...enc} area={t('ficha.eyebrow')} chips={chipsFicha(ficha)} etiquetaChips={t('ficha.chips')} formaCifras="tarjetas" cifras={cifrasFicha(ficha, t, { personas: personasTodas === null ? null : personasTodas.personas.filter((p) => p.tenantId === id), casillas: arranque?.casillas ?? null })} etiquetaCifras={t('flotas_ficha.resumen_de', { nombre: ficha.tenant.nombre })}>
+    <PantallaFicha {...enc} area={t('ficha.eyebrow')} formaCifras="tarjetas" cifras={cifrasFicha(ficha, t, { personas: personasTodas === null ? null : personasTodas.personas.filter((p) => p.tenantId === id), casillas: arranque?.casillas ?? null })} etiquetaCifras={t('flotas_ficha.resumen_de', { nombre: ficha.tenant.nombre })}>
     <AvisoPlanEnPausa tenantId={id} />
     <Ficha360
       t={t}

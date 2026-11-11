@@ -1118,7 +1118,7 @@ export const operacion = {
   'cli.f.opcional': 'Opcional',
   'cli.f.rfc.ayuda': 'Se le revisa el dígito verificador. Es el RFC con el que le vas a facturar.',
   'cli.f.credito': 'Días de crédito',
-  'cli.f.credito.ph': 'Déjalo vacío si no hay crédito pactado',
+  'cli.f.credito.ph': 'Vacío = sin crédito',
   'cli.f.credito.ayuda': 'Vacío = sin condiciones pactadas (sus facturas no llevan fecha de vencimiento). Un 0 significa contado.',
   'cli.f.contacto': 'Contacto',
   'cli.f.contacto.ph': 'Quién autoriza pagos',

@@ -101,3 +101,15 @@ div[data-ui="v2"].rv-pub .rv-pub__lista { margin-top: 24px; }
   [data-ui="v2"] .rv-estado__disp { min-width: 0; }
   [data-ui="v2"] .rv-estado__pista { min-width: 0; }
 }
+
+/* ── Piel `documento` de las páginas legales con huella (/terminos, /privacidad, /aviso/[tenant]) en la misma familia que el resto de las públicas ──
+ * El texto del documento NO cambia (la huella lo hashea): el logo es una máscara CSS sin texto (`content: ''`), el nombre del documento (que el DOM
+ * trae como rótulo) se pinta como el título 20/600 de `access-flow`, y el h1 «Likida» queda solo para lectores de pantalla. */
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) > header { display: flex; flex-direction: column; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) > header::before {
+  content: ''; order: 0; display: block; width: 112px; height: 22px; margin-bottom: 24px; background: var(--ink);
+  -webkit-mask: url('/brand/likida-logo-horizontal-positivo.svg') left center / contain no-repeat; mask: url('/brand/likida-logo-horizontal-positivo.svg') left center / contain no-repeat;
+}
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__rotulo { order: 1; font-family: var(--font-display), var(--font-sans-ui), sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; text-transform: none; color: var(--ink); }
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo { order: 2; position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__apoyo { order: 3; margin-top: 8px; }

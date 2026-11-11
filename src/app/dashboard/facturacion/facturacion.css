@@ -22,3 +22,11 @@
 [data-ui="v2"] .rv-fact__datos .rv-sis__campo { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; padding: 7px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
 [data-ui="v2"] .rv-fact__datos .rv-sis__campo:last-child { border-bottom: 0; }
 [data-ui="v2"] .rv-fact__datos .rv-sis__valor { text-align: right; }
+
+/* Vista rápida (Rovaq 06c): cuadrícula de cifras con divisores y acción primaria en el pie. */
+.rv-fact__vr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; border: 1px solid var(--ui-border, var(--line)); border-radius: 8px; background: var(--ui-border, var(--line)); overflow: hidden; }
+.rv-fact__vr > div { display: flex; flex-direction: column-reverse; gap: 2px; padding: 10px 12px; background: var(--ui-surface, var(--surface)); min-width: 0; }
+.rv-fact__vr > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.rv-fact__vr dt { font-size: var(--t-small, 12px); font-weight: 500; color: var(--muted); }
+.rv-fact__vr dd { margin: 0; font-size: var(--t-section, 16px); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); overflow-wrap: anywhere; }
+.rv-fact__vr-pie { display: flex; justify-content: flex-end; gap: 8px; width: 100%; }

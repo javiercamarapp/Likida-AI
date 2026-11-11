@@ -44,7 +44,7 @@ const sinCrudos = (html: string) => {
   // toda <table> vive dentro de una TablaBase (región `rv-tb__region`)
   expect((html.match(/<table\b/g) ?? []).length).toBe((html.match(/rv-tb__region/g) ?? []).length);
   expect(html).not.toMatch(/ style="/);
-  for (const m of html.matchAll(/<button\b[^>]*>/g)) expect(m[0], 'un <button> sin clase del sistema').toContain('rv-btn');
+  for (const m of html.matchAll(/<button\b[^>]*>/g)) expect(m[0], 'un <button> sin clase del sistema').toMatch(/rv-btn|rv-seg__btn/);
 };
 
 describe('/admin/qa — pantallas con piezas del sistema', () => {

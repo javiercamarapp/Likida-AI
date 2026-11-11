@@ -133,20 +133,10 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
         <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
       </Bloque>
 
+      {/* Las cuatro tarjetas de atención diaria: si TODAS están vacías se dicen una sola vez en una caja punteada (Rovaq: un solo `ac-vacio`),
+          no cuatro tarjetas altas con el mismo vacío. Si alguna tiene datos, cada una conserva su tarjeta. */}
       <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la')} esqueleto={<EsqTablaV2 />}>
-        <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
-      </Bloque>
-
-      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_las')} esqueleto={<EsqTablaV2 />}>
-        <BloqueExcepciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
-      </Bloque>
-
-      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_las_2')} esqueleto={<EsqTablaV2 />}>
-        <BloqueConversaciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
-      </Bloque>
-
-      <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_3')} esqueleto={<EsqTablaV2 />}>
-        <BloqueBitacora datos={datos} />
+        <BloqueActividad datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
       </Bloque>
 
       {/* A quién avisa, correos de respaldo, clientes autorizados y límites: se configuran una vez, así que van plegados y la página no pasa
@@ -211,12 +201,41 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
         { etiqueta: tx('vigia.vista.sin_respuesta_sla_min', { sla: numero(sla) }), info: 'vigia.sin_respuesta', valor: numero(vencidas), nota: tx('vigia.vista.esperan_mas_de_lo_permitido'), tono: vencidas > 0 ? 'bad' : undefined },
         { etiqueta: tx('vigia.vista.molestos_o_escalados'), info: 'vigia.molestos_escalados', valor: numero(molestasOEscaladas), nota: tx('vigia.vista.requieren_a_una_persona'), tono: molestasOEscaladas > 0 ? 'bad' : undefined },
       ])} />
-      <p className="rv-vg__nota">
-        {tx('vigia.vista.tiempo_de_primera_respuesta', { v0: ' ', v1: d.respuesta.muestra === 0
-          ? tx('vigia.vista.sin_datos_todavia_aun_no')
-          : tx('vigia.vista.mediana_y_promedio_medido_sobre', { v0: duracion(d.respuesta.medianaMin ?? 0), v1: duracion(d.respuesta.promedioMin ?? 0), muestra: numero(d.respuesta.muestra) }) })}
-      </p>
+      {d.respuesta.muestra > 0 && (
+        <p className="rv-vg__nota">
+          {tx('vigia.vista.tiempo_de_primera_respuesta', { v0: ' ', v1: tx('vigia.vista.mediana_y_promedio_medido_sobre', { v0: duracion(d.respuesta.medianaMin ?? 0), v1: duracion(d.respuesta.promedioMin ?? 0), muestra: numero(d.respuesta.muestra) }) })}
+        </p>
+      )}
     </div>
+  );
+}
+
+/** ¿Están vacías las cuatro tarjetas de atención diaria? PURA: la misma condición que usa cada bloque para pintar su vacío. */
+export function actividadVacia(d: Pick<DatosTablero, 'pendientes' | 'conversaciones' | 'fallidos' | 'eventos'>, slaMin: number, ahoraMs: number): boolean {
+  const sinExcepciones = d.fallidos.length === 0 && !d.conversaciones.some((c) => motivosDeExcepcion(c, slaMin, ahoraMs).length > 0);
+  return d.pendientes.length === 0 && sinExcepciones && d.conversaciones.length === 0 && d.eventos.length === 0;
+}
+
+export async function BloqueActividad({ datos: p, ahoraMs, puedeDecidir, acciones, standby = false }: { datos: Promise<DatosTablero>; ahoraMs: number; puedeDecidir: boolean; acciones: AccionesVigia; standby?: boolean }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
+  const d = await p;
+  if (actividadVacia(d, d.config.slaRespuestaMin, ahoraMs)) {
+    return (
+      <Tarjeta titulo={tx('f26d4.vigia.atencion_del_dia')} info="vigia.cola_aprobacion">
+        <VacioAgente icono={Inbox} titulo={tx('f26d4.vigia.sin_nada_que_atender')}>
+          {tx('f26d4.vigia.sin_nada_que_atender_detalle')}{d.respuesta.muestra === 0 ? ` ${tx('f26d4.vigia.sin_tiempo_de_respuesta')}` : ''}
+        </VacioAgente>
+      </Tarjeta>
+    );
+  }
+  return (
+    <>
+      <BloqueAprobacion datos={p} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
+      <BloqueExcepciones datos={p} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
+      <BloqueConversaciones datos={p} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
+      <BloqueBitacora datos={p} />
+    </>
   );
 }
 

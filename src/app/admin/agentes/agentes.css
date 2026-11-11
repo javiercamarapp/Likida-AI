@@ -40,3 +40,6 @@
   .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub) td > * { max-width: 100%; min-width: 0; }
   .rv-agente-sub { overflow-wrap: anywhere; }
 }
+
+/* F26 ronda 4: el vacío dentro de una tarjeta va punteado (Rovaq `ac-vacio`: 1 px, radio 8, 20×14). */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }

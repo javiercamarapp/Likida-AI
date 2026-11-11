@@ -244,3 +244,44 @@
 /* Popups de Leaflet: el cromo del popup toma las superficies del sistema (claro y oscuro) en vez del blanco de la librería. */
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
 .cer-pop .cer-punto { background: var(--etapa); }
+
+/* ═══ Ronda 4 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   UNA tarjeta de mapa (radio 12): cabecera con pista y sello, mapa con +/−/⤢ y, dentro de la misma tarjeta, el ranking. */
+.cer-mapacard { padding: 0; gap: 0; overflow: hidden; }
+.cer-mapacard__cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.cer-sello { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-micro); color: var(--muted); }
+.cer-sello .rv-kpi__punto { margin-right: 0; }
+.cer-mapacard .cer-barra__resumen { flex: 1 1 200px; }
+.cer-mapacard .cer-cuerpo { gap: 0; }
+.cer-mapacard .cer-zona { border: 0; border-radius: 0; height: calc(100dvh - 20rem); min-height: 440px; }
+.cer-mapacard .cer-zona:fullscreen { height: 100vh; }
+.cer-mapacard .cer-rank { padding: 14px; gap: 0; border-left: 1px solid var(--line); }
+@media (max-width: 1099px) { .cer-mapacard .cer-rank { border-left: 0; border-top: 1px solid var(--line); } .cer-mapacard .cer-zona { min-height: 360px; height: 60dvh; } }
+@media (min-width: 1100px) { .cer-mapacard .cer-rank { height: calc(100dvh - 20rem); min-height: 440px; } }
+/* Los bloques del ranking ya no son tarjetas dentro de la tarjeta: se separan con un filete. */
+.cer-mapacard .cer-rank__bloque { background: transparent; border: 0; border-radius: 0; padding: 0 0 14px; }
+.cer-mapacard .cer-rank__bloque + .cer-rank__bloque { padding-top: 14px; border-top: 1px solid var(--line); }
+/* Controles de zoom: 32 px, borde punteado, esquina superior izquierda del mapa. */
+.cer-zoom { position: absolute; left: 12px; top: 12px; z-index: 15; display: flex; flex-direction: column; gap: 6px; }
+@media (min-width: 1900px) { .cer-zoom { left: 332px; } }
+[data-ui="v2"] .rv-btn.cer-zoom__btn { width: 32px; min-height: 32px; height: 32px; padding: 0; justify-content: center; background: var(--surface); border: 1px dotted var(--input); border-radius: 8px; }
+[data-ui="v2"] .rv-btn.cer-zoom__btn:hover { background: var(--canvas); }
+/* Familias de luces: la FORMA (llena, anillo, discontinua) distingue lo que dos grises no separan. */
+.cer-pin[data-familia="cierre"] { fill: var(--ink); }
+.cer-pin[data-familia="avanzado"] { fill: color-mix(in srgb, var(--ink) 62%, var(--surface)); }
+.cer-pin[data-familia="contacto"] { fill: var(--surface); stroke: var(--ink); }
+.cer-pin[data-familia="nuevo"] { fill: color-mix(in srgb, var(--ink) 24%, var(--surface)); }
+.cer-pin[data-familia="caida"] { fill: var(--surface); stroke: var(--muted); stroke-dasharray: 1.2 0.9; }
+.cer-punto[data-familia="cierre"] { background: var(--ink); }
+.cer-punto[data-familia="avanzado"] { background: color-mix(in srgb, var(--ink) 62%, var(--surface)); }
+.cer-punto[data-familia="contacto"] { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.cer-punto[data-familia="nuevo"] { background: color-mix(in srgb, var(--ink) 24%, var(--surface)); }
+.cer-punto[data-familia="caida"] { background: var(--surface); box-shadow: none; border: 1.5px dashed var(--muted); }
+.cer-familias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cer-familias li { display: flex; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); }
+.cer-familias li span { flex: 1; min-width: 0; }
+.cer-familias li b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Segunda fila: embudo y tabla equivalente con el mismo alto (la tabla desplaza dentro de su tarjeta). */
+.cer-fila-baja { align-items: start; }
+.cer-fila-baja > .rv-tarjeta { height: auto; }
+.cer-tabla-estados .rv-tabla { max-height: 340px; }

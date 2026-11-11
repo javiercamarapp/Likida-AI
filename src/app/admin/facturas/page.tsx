@@ -6,6 +6,7 @@ import { listarFacturasSaas, type FacturaSaasFila } from '@/lib/saas/transferenc
 import { Aviso, BarraFiltros, BotonEnlace, Disclosure, EstadoError, FiltroFecha, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { BotonExportarFacturas } from './boton-exportar';
 import { leerFiltros, rangoAlReves } from './filtros';
@@ -95,8 +96,8 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
             etiqueta={t('facturas.estado')} nombre="estado" valor={filtros.estado ?? ''}
             opciones={[{ valor: 'pendiente', rotulo: 'Pendiente' }, { valor: 'pagada', rotulo: 'Pagada' }, { valor: 'fallida', rotulo: 'Fallida' }, { valor: 'cancelada', rotulo: 'Cancelada' }]}
           />
-          <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} />
-          <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} />
+          <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} className="adm-fecha-es" />
+          <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} className="adm-fecha-es" />
         </BarraFiltros>
       )}
       avisos={(
@@ -112,7 +113,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
         </>
       )}
       etiquetaCifras={t('facturas.facturas_de_la_mensualidad')}
-      cifras={uniformes(cifras)}
+      cifras={observadas(uniformes(cifras), t('a1r4.observado'))}
       vistaRapida={sel ? (
         <CajonVistaRapida
           titulo={sel.tenantNombre} subtitulo={t('facturas.vr_subtitulo', { n: posicion + 1, total: filas.length })} hrefCerrar={hrefCerrar}

@@ -20,3 +20,6 @@
 .rv-mp__forma { display: grid; gap: 0; padding-top: 12px; border-top: 1px solid var(--line); }
 .rv-mp__datos { gap: 0; }
 .rv-mp__valor { font-size: var(--t-body); color: var(--ink); overflow-wrap: anywhere; text-align: right; }
+/* Peligro con su borde de peligro (Rovaq: rgba(172,36,64,.24)), no el borde de tinta que `filas-ctl.css` pone a todo envío de 32 px. */
+[data-ui="v2"] form button[type="submit"].rv-btn--danger.inline-flex.h-8 { border-color: color-mix(in srgb, var(--bad) 24%, transparent); }
+[data-ui="v2"] form button[type="submit"].rv-btn--danger.inline-flex.h-8:hover { border-color: var(--bad); }

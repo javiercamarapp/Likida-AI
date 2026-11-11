@@ -113,6 +113,8 @@ export function PaginaLegal({
       enlaces={sitio ? undefined : ENLACES_LEGALES}
       documento={!sitio}
     >
+      {/* Marca de la piel `documento` para el CSS (logo arriba y el nombre del documento como título visible): un div vacío, sin atributos con texto, así la huella del documento no cambia. */}
+      {sitio ? null : <div className="rv-legal__doc" aria-hidden="true" />}
       {aviso}
 
       {sitio ? (

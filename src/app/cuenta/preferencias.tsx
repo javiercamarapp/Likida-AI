@@ -29,7 +29,7 @@ export function PreferenciasCuenta({ idiomaActivo, textos }: { idiomaActivo: Idi
     <div className="rv-cuenta__prefs">
       <div className="rv-cuenta__fila">
         <p>{textos.idioma}</p>
-        <SegmentedControl<Idioma> etiqueta={textos.idioma} tamano="sm" valor={idiomaActivo} onChange={(v) => { void cambiarIdioma(v); }}
+        <SegmentedControl<Idioma> etiqueta={textos.idioma} valor={idiomaActivo} onChange={(v) => { void cambiarIdioma(v); }}
           opciones={[
             { valor: 'es', etiqueta: textos.es },
             { valor: 'en', etiqueta: idiomaElegible('en') ? textos.en : textos.enProximamente, deshabilitada: !idiomaElegible('en') },
@@ -37,7 +37,7 @@ export function PreferenciasCuenta({ idiomaActivo, textos }: { idiomaActivo: Idi
       </div>
       <div className="rv-cuenta__fila">
         <p>{textos.tema}</p>
-        <SegmentedControl<Tema> etiqueta={textos.tema} tamano="sm" valor={tema} onChange={elegir}
+        <SegmentedControl<Tema> etiqueta={textos.tema} valor={tema} onChange={elegir}
           opciones={OPCIONES_TEMA.map((o) => ({ valor: o.valor, etiqueta: rotuloTema[o.valor] }))} />
       </div>
       <p className="rv-sr" role="status">{fallo ? textos.fallo : ''}</p>

@@ -38,3 +38,19 @@
    compartida lo pinta con borde solo en la variante `contenido`; mientras no se unifique allí (pedido_compartido: componentes.css `.rv-vacio`),
    esta regla evita los dos vacíos distintos en la misma página (p. ej. «Facturado por mes» sin borde y «Por cobrar» punteado). */
 [data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* Formulario a todo el ancho de su tarjeta (Rovaq: filas rótulo-control, nunca una columna de 340 px con la otra mitad vacía):
+   los campos se reparten en columnas de ≥220 px; avisos y botón ocupan la fila completa. */
+[data-ui="v2"] .adm-din-forma--ancha { max-width: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: start; }
+[data-ui="v2"] .adm-din-forma--ancha > :is(.rv-aviso, [role="alert"], [role="status"], div:last-child, .rv-campo--casilla) { grid-column: 1 / -1; }
+[data-ui="v2"] .adm-din-rejilla--compacta { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
+/* Campo de fecha vacío: el navegador pinta «mm/dd/yyyy» en inglés aunque la interfaz esté en español. Sin fecha elegida se muestra «—»
+   (sin filtro); al enfocar o con fecha, el editor nativo vuelve. (pedido_compartido: un chip de rango «1 ago – 20 sep» en FiltroFecha.) */
+[data-ui="v2"] .adm-fecha-es:not([data-activo]) { position: relative; }
+[data-ui="v2"] .adm-fecha-es:not([data-activo]) input:not(:focus)::-webkit-datetime-edit { opacity: 0; }
+[data-ui="v2"] .adm-fecha-es:not([data-activo]):not(:focus-within) input { color: transparent; }
+[data-ui="v2"] .adm-fecha-es:not([data-activo]):not(:focus-within)::after { content: "—"; position: absolute; left: 10px; bottom: 6px; color: var(--muted); pointer-events: none; }
+/* Fila cuyas tarjetas miden lo que dice su contenido (un vacío de una línea no se estira al alto del formulario vecino). */
+[data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > .rv-tarjeta { height: auto; }

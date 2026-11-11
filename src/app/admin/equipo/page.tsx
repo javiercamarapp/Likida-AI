@@ -5,8 +5,8 @@ import { getPersonas, ordenarPorJerarquia, type Persona } from '@/lib/admin/pers
 import { bajaPersonalLikidaHabilitada } from '@/lib/auth/baja_acceso';
 import { nombreDeRol, ROTULOS_ROL } from '@/lib/auth/roles';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, Tarjeta } from '../../ui-v2/componentes';
-import { EsqueletoConfiguracion, FilaConfig } from '../../ui-v2/esqueletos';
+import { BarraFiltros, BotonEnlace, EstadoError, FilaTarjetas, FiltroBusqueda, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { FilaConfig } from '../../ui-v2/esqueletos';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { FormaNuevoAcceso } from '../usuarios/nuevo/forma-nuevo-acceso';
 import { CambiarRol } from './cambiar-rol';
@@ -53,16 +53,20 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
   const flotaId = uno(sp.flota);
   const abrir = uno(sp.abrir);
 
-  // Equipo es CONFIGURACIÓN (Rovaq CF «Equipo»): sin eyebrow, secciones de ≤780 px con filas rótulo-control, y la tabla de integrantes al final.
-  const marco = (secciones: React.ComponentProps<typeof EsqueletoConfiguracion>['secciones'], extra: { avisos?: React.ReactNode } = {}) => (
-    <EsqueletoConfiguracion titulo={t('equipo.equipo')} apoyo={t('equipo.quien_puede_entrar_con')} secciones={secciones} {...extra} />
+  // Equipo (Rovaq CF «Equipo», 1500 px): sin eyebrow; «Invitar integrante» (8) junto a «Qué puede hacer cada rol» (4) y, debajo, «Integrantes y
+  // accesos» a todo el ancho. Ya no es una columna de 780 px con media pantalla vacía a la derecha.
+  const marco = (cuerpo: React.ReactNode, extra: { avisos?: React.ReactNode } = {}) => (
+    <MarcoPagina className="rv-esq" titulo={t('equipo.equipo')} apoyo={t('equipo.quien_puede_entrar_con')}>
+      {extra.avisos ? <div className="rv-esq__avisos">{extra.avisos}</div> : null}
+      {cuerpo}
+    </MarcoPagina>
   );
 
   let lectura: Awaited<ReturnType<typeof getPersonas>>;
   try {
     lectura = await getPersonas();
   } catch {
-    return marco([{ id: 'integrantes', titulo: t('equipo.personas', { flotaId: '' }), contenido: <EstadoError reintentar>{t('equipo.no_se_pudo_leer')}</EstadoError> }]);
+    return marco(<Tarjeta titulo={t('equipo.personas', { flotaId: '' })}><EstadoError reintentar>{t('equipo.no_se_pudo_leer')}</EstadoError></Tarjeta>);
   }
   const todas = ordenarPorJerarquia(lectura.personas);
   const nombreFlota = flotaId ? todas.find((p) => p.tenantId === flotaId)?.tenantNombre ?? null : null;
@@ -135,51 +139,50 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
 
   const roles = Object.entries(ROTULOS_ROL).filter(([rol]) => rol !== 'operador');
 
-  return marco([
-    ...(gestion ? [{ id: 'gestion', titulo: t('equipo_gestion_persona.gestionar_a', { nombre: seleccionada?.nombre ?? seleccionada?.email ?? '' }), contenido: gestion }] : []),
-    {
-      id: 'invitar', titulo: t('equipo.invitar_integrante'),
-      descripcion: t('equipo.invitar_ayuda'),
-      contenido: <FormaNuevoAcceso flotas={flotas} preseleccion={flotas.some((f) => f.id === flotaId) ? flotaId : ''} t={t} />,
-    },
-    {
-      id: 'roles', titulo: t('equipo.que_puede_hacer_cada'),
-      contenido: (
-        <>
+  const cuerpoPersonas = todas.length === 0 ? (
+    <Tarjeta titulo={t('equipo.sin_personas_con_cuenta')} estado="vacio" mensaje={t('equipo.sin_personas_con_cuenta')} detalle={t('equipo.da_de_alta_a')} />
+  ) : (
+    <>
+      <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta={t('equipo.filtros_del_equipo')} nActivos={nActivos}
+        limpiarHref="/admin/equipo" ocultos={[...(estado !== 'todas' ? [['estado', estado] as [string, string]] : []), ...(flotaId ? [['flota', flotaId] as [string, string]] : [])]}>
+        <FiltroOpciones etiqueta={t('equipo.estado')} valor={estado} porDefecto="todas"
+          opciones={estados(t).map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
+        <FiltroBusqueda nombre="q" valor={q} placeholder={t('equipo.nombre_correo_rol_o')} etiqueta={t('equipo.buscar_persona')} />
+      </BarraFiltros>
+      <TablaLista
+        etiqueta={t('equipo.personas_con_acceso')} columnas={columnas} filas={filas} idFila={(p) => p.id}
+        base="/admin/equipo" params={sp} orden="local" paginacion={{ tamano: 25 }}
+        vacio={{ titulo: t('equipo.ninguna_persona_coincide'), texto: t('equipo.cambia_o_quita_los') }}
+      />
+      {!lectura.accesoLegible && <p className="rv-esq__fila-ayuda">{t('equipo.no_se_pudo_leer_3')}</p>}
+      <p className="rv-esq__fila-ayuda">{numero(filas.length)} de {numero(todas.length)} personas.</p>
+    </>
+  );
+
+  return marco(
+    <>
+      {gestion ? <Tarjeta titulo={t('equipo_gestion_persona.gestionar_a', { nombre: seleccionada?.nombre ?? seleccionada?.email ?? '' })}>{gestion}</Tarjeta> : null}
+      <FilaTarjetas variante="8-4" className="adm-fila-alto-contenido">
+        <Tarjeta titulo={t('equipo.invitar_integrante')}>
+          <p className="adm-tarjeta-desc">{t('equipo.invitar_ayuda')}</p>
+          <FormaNuevoAcceso flotas={flotas} preseleccion={flotas.some((f) => f.id === flotaId) ? flotaId : ''} t={t} />
+        </Tarjeta>
+        <Tarjeta titulo={t('equipo.que_puede_hacer_cada')}>
           {roles.map(([rol, r]) => <FilaConfig key={rol} rotulo={r.nombre} ayuda={r.detalle} />)}
           <p className="rv-esq__fila-ayuda">{t('equipo.el_chofer_no_tiene')}</p>
-        </>
-      ),
-    },
+        </Tarjeta>
+      </FilaTarjetas>
+      <Tarjeta titulo={t('equipo.personas', { flotaId: flotaId && nombreFlota ? `: ${nombreFlota}` : '' })}>
+        <p className="adm-tarjeta-desc">{resumenEquipo}</p>
+        {cuerpoPersonas}
+      </Tarjeta>
+    </>,
     {
-      id: 'integrantes',
-      titulo: t('equipo.personas', { flotaId: flotaId && nombreFlota ? `: ${nombreFlota}` : '' }),
-      descripcion: resumenEquipo,
-      contenido: todas.length === 0 ? (
-        <Tarjeta titulo={t('equipo.sin_personas_con_cuenta')} estado="vacio" mensaje={t('equipo.sin_personas_con_cuenta')} detalle={t('equipo.da_de_alta_a')} />
-      ) : (
-        <>
-          <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta={t('equipo.filtros_del_equipo')} nActivos={nActivos}
-            limpiarHref="/admin/equipo" ocultos={[...(estado !== 'todas' ? [['estado', estado] as [string, string]] : []), ...(flotaId ? [['flota', flotaId] as [string, string]] : [])]}>
-            <FiltroOpciones etiqueta={t('equipo.estado')} valor={estado} porDefecto="todas"
-              opciones={estados(t).map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
-            <FiltroBusqueda nombre="q" valor={q} placeholder={t('equipo.nombre_correo_rol_o')} etiqueta={t('equipo.buscar_persona')} />
-          </BarraFiltros>
-          <TablaLista
-            etiqueta={t('equipo.personas_con_acceso')} columnas={columnas} filas={filas} idFila={(p) => p.id}
-            base="/admin/equipo" params={sp} orden="local" paginacion={{ tamano: 25 }}
-            vacio={{ titulo: t('equipo.ninguna_persona_coincide'), texto: t('equipo.cambia_o_quita_los') }}
-          />
-          {!lectura.accesoLegible && <p className="rv-esq__fila-ayuda">{t('equipo.no_se_pudo_leer_3')}</p>}
-          <p className="rv-esq__fila-ayuda">{numero(filas.length)} de {numero(todas.length)} personas.</p>
-        </>
-      ),
-    },
-  ], {
     avisos: flotaId ? (
       <p>{t('equipo.solo_la_flota')} {nombreFlota ?? 'elegida'}. <Link href={quitar({ flota: null, abrir: null })}>{t('equipo.ver_todas')}</Link></p>
     ) : null,
-  });
+    },
+  );
 }
 
 export async function generateMetadata(): Promise<Metadata> {
