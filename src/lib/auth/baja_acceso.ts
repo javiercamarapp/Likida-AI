@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
 import { logger } from '@/lib/logger';
 import { anotarAccionAdmin, type ActorAdmin } from '@/lib/admin/acciones_riesgo';
@@ -35,10 +35,6 @@ export function bajaPersonalLikidaHabilitada(): boolean {
 export const ROLES_PERSONAL_LIKIDA = ['superadmin', 'vendedor'] as const;
 export type RolPersonalLikida = (typeof ROLES_PERSONAL_LIKIDA)[number];
 
-export const MENSAJE_APAGADA =
-  'Dar de baja o reactivar al personal de Likida todavía no está habilitado: queda pendiente de la revisión del dueño '
-  + '(se enciende con LIKIDA_BAJA_PERSONAL_LIKIDA=activo).';
-
 interface FilaPersonal { id: string; rol: string; activo: boolean; tenant_id: string | null }
 
 export interface ResultadoBajaLikida {
@@ -52,17 +48,17 @@ export interface ResultadoBajaLikida {
 }
 
 function exigirUuid(id: string): void {
-  if (!esUuidValido(id)) throw new DatoInvalido('No se reconoce esa cuenta. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(id)) throw datoInvalido('usuarios_escri.no_se_reconoce_esa_cuenta');
 }
 
 async function leerPersonal(usuarioId: string): Promise<FilaPersonal & { rol: RolPersonalLikida }> {
   const { data, error } = await acotada(supabaseAdmin().from('app_user')
     .select('id, rol, activo, tenant_id').eq('id', usuarioId).maybeSingle(), 'baja_acceso.leer');
   if (error) throw new Error(`baja_acceso.leer: ${error.message}`);
-  if (!data) throw new DatoInvalido('No se reconoce esa cuenta. Recarga la pantalla.');
+  if (!data) throw datoInvalido('baja_acceso.no_se_reconoce_esa_cuenta');
   const esLikida = !data.tenant_id && (ROLES_PERSONAL_LIKIDA as readonly string[]).includes(String(data.rol));
   if (!esLikida) {
-    throw new DatoInvalido('Esa cuenta es de una flota, no del personal de Likida: se gestiona desde la gestión de personas de Equipo.');
+    throw datoInvalido('baja_acceso.esa_cuenta_es_de_una');
   }
   return { id: String(data.id), rol: data.rol as RolPersonalLikida, activo: data.activo !== false, tenant_id: null };
 }
@@ -77,9 +73,6 @@ async function superadminsActivos(excluyendo?: string): Promise<number> {
   return Array.isArray(data) ? data.length : 0;
 }
 
-const MSG_ULTIMO = 'Es el único superadmin activo: dar de alta a otro superadmin antes de revocarlo. Likida no puede quedarse sin operador.';
-const MSG_UNO_MISMO = 'No puedes darte de baja a ti mismo: pídeselo a otro superadmin.';
-const MSG_CONFLICTO = 'Esa cuenta cambió mientras tanto. Recarga la pantalla y vuelve a intentarlo.';
 
 /** ¿La RPC de la migración 1000 todavía no existe en esta base? (PostgREST: PGRST202 / "Could not find the function"; Postgres: 42883). */
 function rpcNoExiste(error: { code?: string; message?: string }): boolean {
@@ -88,11 +81,11 @@ function rpcNoExiste(error: { code?: string; message?: string }): boolean {
 }
 
 export async function darDeBajaPersonalLikida(usuarioId: string, actor: ActorAdmin): Promise<ResultadoBajaLikida> {
-  if (!bajaPersonalLikidaHabilitada()) throw new DatoInvalido(MENSAJE_APAGADA);
+  if (!bajaPersonalLikidaHabilitada()) throw datoInvalido('baja_acceso.apagada');
   exigirUuid(usuarioId);
-  if (usuarioId === actor.userId) throw new DatoInvalido(MSG_UNO_MISMO);
+  if (usuarioId === actor.userId) throw datoInvalido('baja_acceso.uno_mismo');
   const objetivo = await leerPersonal(usuarioId);
-  if (!objetivo.activo) throw new DatoInvalido('Esa cuenta ya está dada de baja.');
+  if (!objetivo.activo) throw datoInvalido('usuarios_escri.esa_cuenta_ya_esta_dada');
 
   let candado: 'rpc' | 'aplicacion' = 'rpc';
   const { data: veredicto, error } = await acotada(
@@ -103,11 +96,11 @@ export async function darDeBajaPersonalLikida(usuarioId: string, actor: ActorAdm
   } else if (error) {
     throw new Error(`baja_acceso.rpc: ${error.message}`);
   } else if (veredicto === 'ultimo_superadmin') {
-    throw new DatoInvalido(MSG_ULTIMO);
+    throw datoInvalido('baja_acceso.ultimo');
   } else if (veredicto === 'uno_mismo') {
-    throw new DatoInvalido(MSG_UNO_MISMO);
+    throw datoInvalido('baja_acceso.uno_mismo');
   } else if (veredicto !== 'ok') {
-    throw new DatoInvalido(MSG_CONFLICTO);
+    throw datoInvalido('baja_acceso.conflicto');
   }
 
   // La revocación REAL (misma que `desactivarUsuario`): sin el ban, la cookie sigue refrescándose. Best-effort DESPUÉS de la fila: si
@@ -132,13 +125,13 @@ export async function darDeBajaPersonalLikida(usuarioId: string, actor: ActorAdm
 
 /** Camino de respaldo (sin la migración 1000): cuenta, escribe condicionado, RECUENTA y revierte si dejó a Likida sin superadmin. */
 async function bajaDesdeAplicacion(objetivo: { rol: RolPersonalLikida }, usuarioId: string, actorId: string): Promise<void> {
-  if (objetivo.rol === 'superadmin' && (await superadminsActivos(usuarioId)) === 0) throw new DatoInvalido(MSG_ULTIMO);
+  if (objetivo.rol === 'superadmin' && (await superadminsActivos(usuarioId)) === 0) throw datoInvalido('baja_acceso.ultimo');
 
   const { data, error } = await acotada(supabaseAdmin().from('app_user')
     .update({ activo: false, desactivado_en: new Date().toISOString(), desactivado_por: actorId })
     .eq('id', usuarioId).is('tenant_id', null).eq('activo', true).select('id'), 'baja_acceso.escribir');
   if (error) throw new Error(`baja_acceso.escribir: ${error.message}`);
-  if (!Array.isArray(data) || data.length === 0) throw new DatoInvalido(MSG_CONFLICTO);
+  if (!Array.isArray(data) || data.length === 0) throw datoInvalido('baja_acceso.conflicto');
 
   if (objetivo.rol === 'superadmin') {
     let quedan = 0;
@@ -150,7 +143,7 @@ async function bajaDesdeAplicacion(objetivo: { rol: RolPersonalLikida }, usuario
       const { error: errRev } = await supabaseAdmin().from('app_user')
         .update({ activo: true, desactivado_en: null, desactivado_por: null }).eq('id', usuarioId).is('tenant_id', null);
       if (errRev) logger.error('baja_likida.reversion_fallo', { usuario: usuarioId, err: errRev.message });
-      throw new DatoInvalido(MSG_ULTIMO);
+      throw datoInvalido('baja_acceso.ultimo');
     }
   }
 }
@@ -162,16 +155,16 @@ export interface ResultadoReactivacionLikida {
 }
 
 export async function reactivarPersonalLikida(usuarioId: string, actor: ActorAdmin): Promise<ResultadoReactivacionLikida> {
-  if (!bajaPersonalLikidaHabilitada()) throw new DatoInvalido(MENSAJE_APAGADA);
+  if (!bajaPersonalLikidaHabilitada()) throw datoInvalido('baja_acceso.apagada');
   exigirUuid(usuarioId);
   const objetivo = await leerPersonal(usuarioId);
-  if (objetivo.activo) throw new DatoInvalido('Esa cuenta ya está activa.');
+  if (objetivo.activo) throw datoInvalido('usuarios_escri.esa_cuenta_ya_esta_activa');
 
   const { data, error } = await acotada(supabaseAdmin().from('app_user')
     .update({ activo: true, desactivado_en: null, desactivado_por: null })
     .eq('id', usuarioId).is('tenant_id', null).eq('activo', false).select('id'), 'baja_acceso.reactivar');
   if (error) throw new Error(`baja_acceso.reactivar: ${error.message}`);
-  if (!Array.isArray(data) || data.length === 0) throw new DatoInvalido('Esa cuenta ya estaba activa. Recarga la pantalla.');
+  if (!Array.isArray(data) || data.length === 0) throw datoInvalido('usuarios_escri.esa_cuenta_ya_estaba_activa');
 
   let accesoRestaurado = true;
   try {

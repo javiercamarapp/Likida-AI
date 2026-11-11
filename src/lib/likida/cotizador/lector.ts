@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { conteo, traerTodo } from '../pg';
 import { acotada } from '../presupuesto';
 import { round2, hoyMx } from '@/lib/formato';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { normalizarPlaza, tarifaSugerida, type TarifaRow, type ModoTarifa } from '../clientes';
 import { politicasDetencion } from '../estadias/lector';
 import {
@@ -72,16 +72,16 @@ export async function guardarConfigCotizador(
   ];
   for (const [nombre, valor, min, max] of rangos) {
     if (valor !== null && (!Number.isFinite(valor) || valor < min || valor > max)) {
-      throw new DatoInvalido(`El ${nombre} no es un número razonable.`);
+      throw datoInvalido('lector.el_no_es_un_numero', { nombre });
     }
   }
   if (v.factorRegresoVacio !== null
     && (!Number.isFinite(v.factorRegresoVacio) || v.factorRegresoVacio < 1 || v.factorRegresoVacio > 3)) {
-    throw new DatoInvalido('El factor de regreso vacío va de 1 (regreso cargado) a 3.');
+    throw datoInvalido('lector.el_factor_de_regreso_vacio');
   }
   if (v.margenObjetivoPct !== null
     && (!Number.isFinite(v.margenObjetivoPct) || v.margenObjetivoPct < 0 || v.margenObjetivoPct > 90)) {
-    throw new DatoInvalido('El margen objetivo va de 0 a 90%.');
+    throw datoInvalido('lector.el_margen_objetivo_va_de');
   }
   const { error } = await acotada(
     supabaseAdmin().from('cotizador_config').upsert({
@@ -315,18 +315,18 @@ export async function crearCotizacion(
 ): Promise<string> {
   const origen = n.origen.trim();
   const destino = n.destino.trim();
-  if (!origen || !destino) throw new DatoInvalido('La ruta necesita origen y destino.');
+  if (!origen || !destino) throw datoInvalido('lector.la_ruta_necesita_origen_y');
   if (n.km !== null && (!Number.isFinite(n.km) || n.km <= 0 || n.km >= 20000)) {
-    throw new DatoInvalido('Los km no son razonables (1–19,999).');
+    throw datoInvalido('lector.los_km_no_son_razonables');
   }
   if (n.dias !== null && (!Number.isFinite(n.dias) || n.dias <= 0 || n.dias > 60)) {
-    throw new DatoInvalido('Los días de viaje no son razonables (1–60).');
+    throw datoInvalido('lector.los_dias_de_viaje_no');
   }
   if (n.precio !== null && (!Number.isFinite(n.precio) || n.precio < 0)) {
-    throw new DatoInvalido('El precio no es un número razonable.');
+    throw datoInvalido('lector.el_precio_no_es_un');
   }
   if (n.casetasManual !== null && (!Number.isFinite(n.casetasManual) || n.casetasManual < 0)) {
-    throw new DatoInvalido('Las casetas capturadas no son un número razonable.');
+    throw datoInvalido('lector.las_casetas_capturadas_no_son');
   }
 
   // El cliente tiene que ser de esta flota — el <select> es UI, no servidor
@@ -338,7 +338,7 @@ export async function crearCotizacion(
       'cotizador.clientePropio',
     );
     if (error) throw new Error(`cotizador.clientePropio: ${error.message}`);
-    if (!data) throw new DatoInvalido('El cliente no pertenece a esta flota.');
+    if (!data) throw datoInvalido('lector.el_cliente_no_pertenece_a');
   }
 
   const [config, medidas, politicas, tarifas] = await Promise.all([
@@ -408,7 +408,7 @@ export async function marcarEnviada(tenantId: string, id: string): Promise<void>
     .eq('tenant_id', tenantId).eq('id', id).eq('estado', 'borrador')
     .select('id'), 'cotizador.enviada');
   if (error) throw new Error(`cotizador.enviada: ${error.message}`);
-  if (!data || data.length === 0) throw new DatoInvalido('Solo un borrador se puede marcar como enviada.');
+  if (!data || data.length === 0) throw datoInvalido('lector.solo_un_borrador_se_puede');
 }
 
 /**
@@ -429,7 +429,7 @@ export async function marcarPerdida(
     .select('id'), 'cotizador.perdida');
   if (error) throw new Error(`cotizador.perdida: ${error.message}`);
   if (!data || data.length === 0) {
-    throw new DatoInvalido('Esta cotización ya fue decidida (o no está viva).');
+    throw datoInvalido('lector.esta_cotizacion_ya_fue_decidida');
   }
 }
 
@@ -557,14 +557,14 @@ export async function convertirEnViaje(
     .select('origen, destino, km, precio, cliente_id, estado')
     .eq('tenant_id', tenantId).eq('id', id).maybeSingle(), 'cotizador.leer');
   if (errLee) throw new Error(`cotizador.leer: ${errLee.message}`);
-  if (!cot) throw new DatoInvalido('La cotización no existe en esta flota.');
+  if (!cot) throw datoInvalido('lector.la_cotizacion_no_existe_en');
   if (cot.precio === null) {
     // El CHECK `cotizacion_ganada_completa` (0051) lo rebotaría igual; aquí
     // se dice en palabras de pantalla ANTES de crear nada.
-    throw new DatoInvalido('Sin precio cotizado no hay viaje que crear: captura el precio primero.');
+    throw datoInvalido('lector.sin_precio_cotizado_no_hay');
   }
   if (cot.estado !== 'borrador' && cot.estado !== 'enviada') {
-    throw new DatoInvalido(`Una cotización ${cot.estado} ya no se convierte en viaje.`);
+    throw datoInvalido('lector.una_cotizacion_ya_no_se', { estado: cot.estado });
   }
 
   // EL CLAIM: gana exactamente uno.
@@ -576,7 +576,7 @@ export async function convertirEnViaje(
     .select('id'), 'cotizador.claim');
   if (errClaim) throw new Error(`cotizador.claim: ${errClaim.message}`);
   if (!claim || claim.length === 0) {
-    throw new DatoInvalido('Alguien ya está decidiendo esta cotización.');
+    throw datoInvalido('lector.alguien_ya_esta_decidiendo_esta');
   }
 
   // El instante ANTES del intento: la ventana en la que un viaje creado por
@@ -630,10 +630,7 @@ export async function convertirEnViaje(
       id, definitivo, verificado: existe !== null,
       err: e instanceof Error ? e.message : String(e),
     });
-    throw new DatoInvalido(
-      'No se pudo confirmar si el viaje se creó. La cotización queda marcada como «decidiéndose» a propósito: '
-      + 'busca el viaje en el Registro antes de volver a convertirla — si aparece, ya está hecho; si no, avisa a soporte para liberarla.',
-    );
+    throw datoInvalido('lector.no_se_pudo_confirmar_si');
   }
 
   const { error: errGana } = await acotada(supabaseAdmin().from('cotizacion')

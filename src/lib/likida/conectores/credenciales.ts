@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { cifrar, descifrar, pistasDe, cofreConfigurado } from './cofre';
 import { contextoCredencial } from './contexto_credencial';
 import { conectorPorId } from './registro';
@@ -76,20 +76,20 @@ export function validarUrlDeCredencial(clave: string, valor: string): void {
   try {
     u = new URL(valor);
   } catch {
-    throw new DatoInvalido(`El campo ${clave} no es una dirección válida. Se espera la dirección del portal de tu proveedor, con https:// al principio.`);
+    throw datoInvalido('credenciales.el_campo_no_es_una', { clave });
   }
   if (u.protocol !== 'https:') {
-    throw new DatoInvalido(`El campo ${clave} tiene que ir por https:// — por ${u.protocol.replace(':', '')} la credencial viajaría sin cifrar.`);
+    throw datoInvalido('credenciales.el_campo_tiene_que_ir', { clave, v: u.protocol.replace(':', '') });
   }
   if (u.username || u.password) {
-    throw new DatoInvalido(`El campo ${clave} no debe incluir usuario ni contraseña en la URL.`);
+    throw datoInvalido('credenciales.el_campo_no_debe_incluir', { clave });
   }
   // A37-S37-05: una llave pegada en `?key=...` o `#...` terminaría en las pistas y en el estado de la prueba, que se pintan en claro.
   if (u.search || u.hash) {
-    throw new DatoInvalido(`El campo ${clave} no debe llevar parámetros (?...) ni fragmento (#...): si el proveedor pide una llave, captúrala en el campo de la llave, no en la dirección.`);
+    throw datoInvalido('credenciales.el_campo_no_debe_llevar', { clave });
   }
   if (hostNoPublico(u.hostname)) {
-    throw new DatoInvalido(`El campo ${clave} apunta a una dirección de red interna (${u.hostname}). Se espera el portal público de tu proveedor.`);
+    throw datoInvalido('credenciales.el_campo_apunta_a_una', { clave, hostname: u.hostname });
   }
 }
 
@@ -111,15 +111,15 @@ function validarDireccionesSftp(conectorId: string, valores: Record<string, stri
   const claves = ['base_url', 'geocercas_url', 'cursos_url'].filter((k) => (valores[k] ?? '').toLowerCase().startsWith('sftp:'));
   if (claves.length === 0) return [];
   if ((valores.modo ?? '').trim() !== 'csv_sftp') {
-    throw new DatoInvalido('Una dirección sftp:// solo se admite con el modo csv_sftp; con los demás modos tiene que ir por https://.');
+    throw datoInvalido('credenciales.una_direccion_sftp_solo_se');
   }
   const cfg = leerConfigTablaPropia(valores);
-  if (!cfg.ok) throw new DatoInvalido(`La configuración SFTP no es válida: ${cfg.motivo}.`);
+  if (!cfg.ok) throw datoInvalido('credenciales.la_configuracion_sftp_no_es', { motivo: cfg.motivo });
   for (const k of claves) {
     const d = partirUrlSftp(valores[k]);
-    if ('error' in d) throw new DatoInvalido(`El campo ${k} ${d.error}.`);
+    if ('error' in d) throw datoInvalido('credenciales.el_campo', { k, error: d.error });
     if (hostNoPublico(d.ok.host)) {
-      throw new DatoInvalido(`El campo ${k} apunta a una dirección de red interna (${d.ok.host}). Se espera el servidor SFTP público de tu sistema.`);
+      throw datoInvalido('credenciales.el_campo_apunta_a_una_2', { k, host: d.ok.host });
     }
   }
   return claves;
@@ -134,9 +134,9 @@ function validarDireccionesSftp(conectorId: string, valores: Record<string, stri
 function validarServidorSql(conectorId: string, valores: Record<string, string>): void {
   if (conectorId !== PROVEEDOR_TABLA_PROPIA || (valores.modo ?? '').trim() !== 'sql_solo_lectura') return;
   const cfg = leerConfigTablaPropia(valores);
-  if (!cfg.ok) throw new DatoInvalido(`La configuración SQL no es válida: ${cfg.motivo}.`);
+  if (!cfg.ok) throw datoInvalido('credenciales.la_configuracion_sql_no_es', { motivo: cfg.motivo });
   if (cfg.config.modo === 'sql_solo_lectura' && hostNoPublico(cfg.config.conexion.host)) {
-    throw new DatoInvalido(`El campo sql_host apunta a una dirección de red interna (${cfg.config.conexion.host}). Se espera el servidor SQL público de tu sistema.`);
+    throw datoInvalido('credenciales.el_campo_sql_host_apunta', { host: cfg.config.conexion.host });
   }
 }
 
@@ -163,17 +163,15 @@ export async function guardarCredencial(
   if (!cofreConfigurado()) {
     // Se dice QUÉ falta, sin inventar un camino alterno: guardar en claro no
     // es una opción (ver `llave()` en cofre.ts).
-    throw new DatoInvalido(
-      'El cofre de credenciales no está configurado en este entorno (falta LIKIDA_COFRE_LLAVE, mínimo 32 caracteres). Sin él no se guardan accesos — guardarlos sin cifrar no es una opción.',
-    );
+    throw datoInvalido('credenciales.el_cofre_de_credenciales_no');
   }
 
   const conector = conectorPorId(conectorId);
-  if (!conector) throw new DatoInvalido('Ese sistema no está en el catálogo de conectores.');
+  if (!conector) throw datoInvalido('credenciales.ese_sistema_no_esta_en');
   if (conector.credenciales.length === 0) {
     // Los `por_archivo` y los sin API no piden nada: aceptarles un guardado
     // fingiría una conexión que ese camino no usa.
-    throw new DatoInvalido(`${conector.nombre} no pide credenciales — su camino de conexión no las usa.`);
+    throw datoInvalido('credenciales.no_pide_credenciales_su_camino', { nombre: conector.nombre });
   }
 
   // SOLO los campos declarados por el conector viajan al cofre. Un formulario
@@ -187,7 +185,7 @@ export async function guardarCredencial(
 
   const falta = faltantes(conector, limpios);
   if (falta.length > 0) {
-    throw new DatoInvalido(`Faltan datos para guardar ${conector.nombre}: ${falta.join(', ')}.`);
+    throw datoInvalido('credenciales.faltan_datos_para_guardar', { nombre: conector.nombre, v: falta.join(', ') });
   }
 
   // SEG-6: antes de cifrar. Una dirección interna guardada ya es el oráculo,
@@ -360,9 +358,7 @@ export async function leerCredencialVersionada(
     // Se dice qué pasó SIN reintentar ni adivinar: si el cofre no puede abrir
     // lo guardado, la credencial hay que capturarla de nuevo, y afirmar otra
     // cosa mandaría a buscar el problema al proveedor.
-    throw new DatoInvalido(
-      `No se pudo abrir la credencial guardada de ese sistema: ${e instanceof Error ? e.message : String(e)}. Suele significar que la llave del cofre cambió en este entorno; hay que capturar el acceso de nuevo.`,
-    );
+    throw datoInvalido('credenciales.no_se_pudo_abrir_la', { v: e instanceof Error ? e.message : String(e) });
   }
 }
 
@@ -414,10 +410,10 @@ export async function marcarProbada(
 
   if (error) throw new Error(`marcarProbada: ${error.message}`);
   if (versionProbada !== undefined && (!Array.isArray(data) || data.length === 0)) {
-    throw new DatoInvalido('La credencial de ese sistema cambió mientras se probaba: el resultado era de la anterior y no se selló. Vuelve a probar.');
+    throw datoInvalido('credenciales.la_credencial_de_ese_sistema');
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No hay una credencial activa de ese sistema en tu flota — no se pudo sellar el resultado de la prueba. Recarga la pantalla.');
+    throw datoInvalido('credenciales.no_hay_una_credencial_activa');
   }
 
   await anotar(tenantId, 'conector_credencial.probada', String((data[0] as { id: unknown }).id), {
@@ -546,7 +542,7 @@ export async function desactivarCredencial(
 
   if (error) throw new Error(`desactivarCredencial: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No hay una credencial activa de ese sistema en tu flota. Puede que ya estuviera desactivada — recarga la pantalla.');
+    throw datoInvalido('credenciales.no_hay_una_credencial_activa_2');
   }
 
   await anotar(tenantId, 'conector_credencial.desactivada', String((data[0] as { id: unknown }).id), { conectorId }, actor);

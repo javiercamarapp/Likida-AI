@@ -10,7 +10,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido } from './errores';
 import { parsearImporteMx, hoyMx } from '@/lib/formato';
 import { esUuidValido } from './intake/cfdi';
 import { acotada } from './presupuesto';
@@ -251,16 +251,16 @@ export function validarDeclaracion(crudo: { pisaFederal: string; radioKm: string
   if (crudo.pisaFederal === 'si') pisaFederal = true;
   else if (crudo.pisaFederal === 'no') pisaFederal = false;
   else if (crudo.pisaFederal === '') pisaFederal = null;
-  else throw new DatoInvalido('La declaración de tramo federal solo puede ser sí, no, o quedar sin declarar.');
+  else throw datoInvalido('carta_porte_da.la_declaracion_de_tramo_federal');
 
   let radioKm: number | null = null;
   const t = crudo.radioKm.trim();
   if (t !== '') {
     // A36-R01-02: lo ambiguo («50,000») se rechaza, no se lee como 50.
     radioKm = parsearImporteMx(t);
-    if (Number.isNaN(radioKm)) throw new DatoInvalido(`El radio tiene que ser un número de kilómetros. ${AYUDA_SEPARADOR}`);
+    if (Number.isNaN(radioKm)) throw datoInvalido('carta_porte_da.el_radio_tiene_que_ser', { AYUDA_SEPARADOR });
     if (!Number.isFinite(radioKm) || radioKm < 0 || radioKm >= 5000) {
-      throw new DatoInvalido('El radio tiene que estar entre 0 y 5,000 km. Recuerda: es el RADIO entre origen y destino final, no el odómetro.');
+      throw datoInvalido('carta_porte_da.el_radio_tiene_que_estar');
     }
     radioKm = Math.round(radioKm * 10) / 10;
   }
@@ -268,7 +268,7 @@ export function validarDeclaracion(crudo: { pisaFederal: string; radioKm: string
   // Un radio con "no pisa federal" declarado es una contradicción que después
   // nadie sabe leer: ¿midió y no pisa, o pisa y esto es el radio?
   if (pisaFederal === false && radioKm !== null) {
-    throw new DatoInvalido('Si la ruta no pisa tramo federal, no hay radio federal que declarar. Deja el radio vacío, o declara que sí pisa.');
+    throw datoInvalido('carta_porte_da.si_la_ruta_no_pisa');
   }
 
   return { pisaFederal, radioKm };
@@ -285,7 +285,7 @@ export async function declararCcp(
   d: DeclaracionCcp,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(viajeId)) throw new DatoInvalido('No se reconoce ese viaje. Recarga la pantalla.');
+  if (!esUuidValido(viajeId)) throw datoInvalido('carta_porte_da.no_se_reconoce_ese_viaje');
 
   const { data, error } = await acotada(supabaseAdmin().from('viaje').update({
     ccp_pisa_federal: d.pisaFederal,
@@ -294,7 +294,7 @@ export async function declararCcp(
 
   if (error) throw new Error(`declararCcp: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Ese viaje no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+    throw datoInvalido('carta_porte_da.ese_viaje_no_esta_en');
   }
 
   await anotarBitacora(
@@ -339,30 +339,30 @@ export function validarMercancia(crudo: {
   claveUnidad: string; pesoKg: string; materialPeligroso: string;
 }): MercanciaNueva {
   const descripcion = crudo.descripcion.trim();
-  if (descripcion === '') throw new DatoInvalido('La descripción de la mercancía es obligatoria — es lo mínimo que tu cliente te dio.');
-  if (descripcion.length > 500) throw new DatoInvalido('La descripción no puede pasar de 500 caracteres.');
+  if (descripcion === '') throw datoInvalido('carta_porte_da.la_descripcion_de_la_mercancia');
+  if (descripcion.length > 500) throw datoInvalido('carta_porte_da.la_descripcion_no_puede_pasar');
 
   const claveT = crudo.bienesTransp.trim();
   if (claveT !== '' && !CLAVE_PROD_RE.test(claveT)) {
-    throw new DatoInvalido('La clave de bienes transportados son 8 dígitos del catálogo c_ClaveProdServCP del SAT (p. ej. 10101500). Si tu cliente no te la ha dado, déjala vacía — no se inventa.');
+    throw datoInvalido('carta_porte_da.la_clave_de_bienes_transportados');
   }
 
   const cantidadLeida = numeroCapturable(crudo.cantidad.trim());
-  if (cantidadLeida === null) throw new DatoInvalido(`La cantidad tiene que ser un número mayor que cero. ${AYUDA_SEPARADOR}`);
+  if (cantidadLeida === null) throw datoInvalido('carta_porte_da.la_cantidad_tiene_que_ser', { AYUDA_SEPARADOR });
   const cantidad = cantidadLeida;
-  if ( cantidad <= 0 || cantidad >= 1e9) throw new DatoInvalido('La cantidad tiene que ser un número mayor que cero.');
+  if ( cantidad <= 0 || cantidad >= 1e9) throw datoInvalido('carta_porte_da.la_cantidad_tiene_que_ser_2');
 
   const unidadT = crudo.claveUnidad.trim().toUpperCase();
   if (unidadT !== '' && !CLAVE_UNIDAD_RE.test(unidadT)) {
-    throw new DatoInvalido('La clave de unidad son 2 o 3 caracteres del catálogo c_ClaveUnidad (p. ej. KGM kilogramo, H87 pieza, XBX caja).');
+    throw datoInvalido('carta_porte_da.la_clave_de_unidad_son');
   }
 
   let pesoKg: number | null = null;
   const pesoT = crudo.pesoKg.trim();
   if (pesoT !== '') {
     pesoKg = numeroCapturable(pesoT);
-    if (pesoKg === null) throw new DatoInvalido(`El peso tiene que ser un número de kilogramos mayor que cero. ${AYUDA_SEPARADOR}`);
-    if ( pesoKg <= 0 || pesoKg >= 1e9) throw new DatoInvalido('El peso tiene que ser un número de kilogramos mayor que cero.');
+    if (pesoKg === null) throw datoInvalido('carta_porte_da.el_peso_tiene_que_ser', { AYUDA_SEPARADOR });
+    if ( pesoKg <= 0 || pesoKg >= 1e9) throw datoInvalido('carta_porte_da.el_peso_tiene_que_ser_2');
     pesoKg = Math.round(pesoKg * 1000) / 1000;
   }
 
@@ -370,7 +370,7 @@ export function validarMercancia(crudo: {
   if (crudo.materialPeligroso === 'si') materialPeligroso = true;
   else if (crudo.materialPeligroso === 'no') materialPeligroso = false;
   else if (crudo.materialPeligroso === '') materialPeligroso = null;
-  else throw new DatoInvalido('Material peligroso solo puede ser sí, no, o quedar sin declarar.');
+  else throw datoInvalido('carta_porte_da.material_peligroso_solo_puede_ser');
 
   return {
     descripcion,
@@ -388,7 +388,7 @@ export async function guardarMercancia(
   m: MercanciaNueva,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(viajeId)) throw new DatoInvalido('No se reconoce ese viaje. Recarga la pantalla.');
+  if (!esUuidValido(viajeId)) throw datoInvalido('carta_porte_da.no_se_reconoce_ese_viaje');
 
   // El insert con tenant explícito: la FK compuesta (0204) rebota el cruce
   // de flotas aunque alguien mande un viaje_id ajeno.
@@ -404,7 +404,7 @@ export async function guardarMercancia(
   }).select('id'), 'guardarMercancia');
 
   if (error) {
-    if (error.code === '23503') throw new DatoInvalido('Ese viaje no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+    if (error.code === '23503') throw datoInvalido('carta_porte_da.ese_viaje_no_esta_en');
     throw new Error(`guardarMercancia: ${error.message}`);
   }
   const filaId = Array.isArray(data) && data.length > 0 ? String((data[0] as { id: unknown }).id) : null;
@@ -421,14 +421,14 @@ export async function borrarMercancia(
   mercanciaId: string,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(mercanciaId)) throw new DatoInvalido('No se reconoce ese renglón. Recarga la pantalla.');
+  if (!esUuidValido(mercanciaId)) throw datoInvalido('carta_porte_da.no_se_reconoce_ese_renglon');
 
   const { data, error } = await acotada(supabaseAdmin().from('viaje_mercancia')
     .delete().eq('id', mercanciaId).eq('tenant_id', tenantId)
     .select('viaje_id, descripcion'), 'borrarMercancia');
   if (error) throw new Error(`borrarMercancia: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Ese renglón no está en tu flota, o alguien ya lo borró. Recarga la pantalla.');
+    throw datoInvalido('carta_porte_da.ese_renglon_no_esta_en');
   }
   const fila = data[0] as { viaje_id: unknown; descripcion: unknown };
 
@@ -453,26 +453,26 @@ export function validarDatosCliente(crudo: {
   const cp = (v: string, lado: string): string | null => {
     const t = v.trim();
     if (t === '') return null;
-    if (!CP_RE.test(t)) throw new DatoInvalido(`El código postal de ${lado} son 5 dígitos.`);
+    if (!CP_RE.test(t)) throw datoInvalido('carta_porte_da.el_codigo_postal_de_son', { lado });
     return t;
   };
   const estado = (v: string): string | null => {
     const t = v.trim();
     if (t === '') return null;
-    if (t.length > 60) throw new DatoInvalido('El estado no puede pasar de 60 caracteres.');
+    if (t.length > 60) throw datoInvalido('carta_porte_da.el_estado_no_puede_pasar');
     return t;
   };
 
   const rfcT = crudo.rfcDestinatario.trim().toUpperCase();
   if (rfcT !== '' && !RFC_RE.test(rfcT)) {
-    throw new DatoInvalido('El RFC del destinatario son 12 o 13 caracteres (letras, números, Ñ y &), sin espacios ni guiones.');
+    throw datoInvalido('carta_porte_da.el_rfc_del_destinatario_son');
   }
 
   let transpInternac: boolean | null;
   if (crudo.transpInternac === 'si') transpInternac = true;
   else if (crudo.transpInternac === 'no') transpInternac = false;
   else if (crudo.transpInternac === '') transpInternac = null;
-  else throw new DatoInvalido('Transporte internacional solo puede ser sí, no, o quedar sin declarar.');
+  else throw datoInvalido('carta_porte_da.transporte_internacional_solo_puede_ser');
 
   return {
     origenCp: cp(crudo.origenCp, 'origen'),
@@ -490,7 +490,7 @@ export async function guardarDatosCliente(
   d: DatosClienteCcp,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(viajeId)) throw new DatoInvalido('No se reconoce ese viaje. Recarga la pantalla.');
+  if (!esUuidValido(viajeId)) throw datoInvalido('carta_porte_da.no_se_reconoce_ese_viaje');
 
   const { data, error } = await acotada(supabaseAdmin().from('viaje').update({
     ccp_origen_cp: d.origenCp,
@@ -503,7 +503,7 @@ export async function guardarDatosCliente(
 
   if (error) throw new Error(`guardarDatosCliente: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Ese viaje no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+    throw datoInvalido('carta_porte_da.ese_viaje_no_esta_en');
   }
 
   await anotarBitacora(
