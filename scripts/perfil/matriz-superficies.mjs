@@ -169,7 +169,14 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
   const mcpHerr = fuente('src/lib/mcp/herramientas.ts');
   const chatRoute = fuente('src/app/api/dashboard/chat/route.ts');
   const todoElMcpNiega = /perfilRestringido\(/.test(mcpRoute) && /perfilRestringido\(/.test(mcpHerr);
-  const chatNiega = !API_PERFIL_CINCO_AGENTES.dashboard.includes('chat') && /respuestaSiPerfilNiegaApi\(/.test(chatRoute);
+  // 11-nov: el chat se ABRE para el perfil, pero solo con la lista cerrada de herramientas (`HERRAMIENTAS_PERFIL_CINCO_AGENTES`),
+  // recortada en el analista (`perfilDeTenant` + `herramientaPermitidaEnPerfil`) y otra vez dentro del ejecutor.
+  const listaChatPerfil = (() => {
+    const m = /export const HERRAMIENTAS_PERFIL_CINCO_AGENTES[^=]*=\s*\[([\s\S]*?)\];/.exec(fuente('src/lib/likida/orquestador/permisos.ts'));
+    return m ? [...m[1].matchAll(/'([a-z_0-9]+)'/g)].map((x) => x[1]) : [];
+  })();
+  const analistaRecorta = /herramientasDelPerfil\(/.test(fuente('src/lib/agents/analista.ts')) && /herramientaPermitidaEnPerfil\(/.test(fuente('src/lib/agents/analista.ts'));
+  const chatAbierto = API_PERFIL_CINCO_AGENTES.dashboard.includes('chat');
 
   return elementos.map((e) => {
     let r;
@@ -230,10 +237,14 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
           : { veredicto: NO_CLASIFICADO, nota: 'el MCP no aplica perfilRestringido en endpoint y despacho' };
         break;
       case 'herramienta del chat':
+        if (!analistaRecorta) r = { veredicto: NO_CLASIFICADO, nota: 'el analista no recorta las herramientas por perfil' };
+        else if (listaChatPerfil.includes(e.id)) r = { veredicto: 'permitido', nota: 'herramienta de los cinco agentes: el chat «Pregunta a tus datos» la conserva bajo el perfil' };
+        else r = { veredicto: 'negado', nota: 'no está en HERRAMIENTAS_PERFIL_CINCO_AGENTES: ni se ofrece al modelo ni se ejecuta bajo el perfil' };
+        break;
       case 'analista del chat':
-        r = chatNiega
-          ? { veredicto: 'negado', nota: 'el chat (/api/dashboard/chat) está fuera de la lista y niega con respuestaSiPerfilNiegaApi' }
-          : { veredicto: NO_CLASIFICADO, nota: 'el chat no está negado por el perfil' };
+        r = chatAbierto && analistaRecorta && /respuestaSiPerfilNiegaApi\(/.test(chatRoute)
+          ? { veredicto: 'permitido', nota: 'el chat está abierto al perfil con herramientas recortadas; la ruta sigue validando sesión, rol, tenant y tope' }
+          : { veredicto: NO_CLASIFICADO, nota: 'el chat no está bien acotado bajo el perfil' };
         break;
       case "'use server'": {
         if (ACCIONES_GUIA[e.archivo]) { r = { veredicto: 'permitido', nota: ACCIONES_GUIA[e.archivo] }; break; }

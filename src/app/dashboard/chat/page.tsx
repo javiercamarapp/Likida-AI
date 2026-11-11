@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
+import { CATALOGO_CONSULTA } from './respuestas';
 import { getKpis, getAcreditables, type DashboardKpis, type Acreditables } from '@/lib/likida/analytics';
 import { ventanaLitrosElegibles } from '@/lib/likida/fiscal';
 import { hoyMx } from '@/lib/formato';
@@ -46,10 +48,14 @@ export default async function PaginaChat({
   // contestar con una cifra de "litros elegibles" que no coincidía con
   // ninguna otra pantalla del panel.
   const vl = ventanaLitrosElegibles(hoyMx(new Date(ahoraMs())));
+  // Flota con perfil (cinco_agentes, 11-nov): el chat se abre con lo de sus agentes. Lo fiscal (acreditables) NI SE LEE ni se ofrece
+  // como tema: las respuestas rápidas del navegador no pueden ser la puerta trasera de lo que la API ya recorta.
+  const perfil = await perfilDeTenant(tenantId);
   const [kpis, acred] = await Promise.all([
     getKpis(tenantId).catch((): DashboardKpis | null => null),
-    getAcreditables(tenantId, vl.dias).catch((): Acreditables | null => null),
+    perfil ? Promise.resolve<Acreditables | null>(null) : getAcreditables(tenantId, vl.dias).catch((): Acreditables | null => null),
   ]);
+  const temas = perfil ? CATALOGO_CONSULTA.filter((t) => t.categoria !== 'Fiscal y acreditables') : undefined;
 
   return (
     // `rv-chat-pagina`: la pantalla del agente llena el alto del marco SIN scroll de página (el hilo scrollea por dentro);
@@ -60,6 +66,7 @@ export default async function PaginaChat({
       <ChatFlota
         kpis={kpis}
         acred={acred}
+        temas={temas}
         cabecera={tenantNombre ? (
           <span className="rv-chat__cinta">viendo como superadmin · {tenantNombre}</span>
         ) : undefined}

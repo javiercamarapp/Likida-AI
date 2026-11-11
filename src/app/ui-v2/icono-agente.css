@@ -1,0 +1,30 @@
+/* ── IconoAgente: los cinco iconos SVG de los agentes (perfil cinco_agentes) ─────────────────────────────────────────────────
+   Estado base (sin movimiento / reduced-motion): el icono está COMPLETO y QUIETO; las piezas «vivo» no se pintan.
+   Todo movimiento vive bajo `prefers-reduced-motion: no-preference`: el trazo se dibuja al entrar (600 ms, una vez) y, con
+   `data-vivo`, una pieza propia se mueve 3 veces (700 ms). Nunca infinito (WCAG 2.2.2), solo opacidad, trazo y rotación. */
+.rv-ia { display: inline-block; flex: none; overflow: visible; vertical-align: middle; }
+.rv-ia__vivo { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .rv-ia .rv-ia__t { stroke-dasharray: 1; animation: rv-ia-traza 600ms var(--ui-ease, ease-out) both; }
+  .rv-ia .rv-ia__linea--2 { animation-delay: 80ms; }
+  .rv-ia .rv-ia__otro { animation-delay: 60ms; }
+
+  /* Corriendo: la pieza propia de cada agente. */
+  .rv-ia[data-vivo] .rv-ia__base { opacity: .4; }
+  .rv-ia[data-vivo] .rv-ia__viaja { opacity: 1; stroke-dasharray: .2 1; animation: rv-ia-viaja 700ms linear 3 both; }
+  .rv-ia[data-vivo] .rv-ia__balanza { transform-origin: 12px 5px; animation: rv-ia-balanza 700ms ease-in-out 3 both; }
+  .rv-ia[data-vivo] .rv-ia__linea { animation: rv-ia-linea 700ms ease-in-out 3 both; }
+  .rv-ia[data-vivo] .rv-ia__linea--2 { animation-delay: 120ms; }
+  .rv-ia[data-vivo] .rv-ia__otro { animation: rv-ia-otro 700ms ease-in-out 3 both; }
+  .rv-ia[data-vivo] .rv-ia__punto { animation: rv-ia-punto 700ms ease-in-out 3 both; }
+  .rv-ia[data-vivo] .rv-ia__punto--2 { animation-delay: 100ms; }
+  .rv-ia[data-vivo] .rv-ia__punto--3 { animation-delay: 200ms; }
+
+  @keyframes rv-ia-traza { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes rv-ia-viaja { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -1.2; } }
+  @keyframes rv-ia-balanza { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+  @keyframes rv-ia-linea { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+  @keyframes rv-ia-otro { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  @keyframes rv-ia-punto { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+}

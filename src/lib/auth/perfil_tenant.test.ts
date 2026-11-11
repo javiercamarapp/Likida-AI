@@ -102,7 +102,7 @@ describe('perfilDeTenant', () => {
 
 describe('exigirRutaDePerfil (páginas y server actions)', () => {
   it('sin perfil no hace nada, ni en una ruta de stand-by', async () => {
-    await m.exigirRutaDePerfil(SIN, '/dashboard/chat');
+    await m.exigirRutaDePerfil(SIN, '/dashboard/facturacion');
     expect(redirect).not.toHaveBeenCalled();
   });
   it('con perfil: una ruta permitida pasa', async () => {
@@ -113,7 +113,7 @@ describe('exigirRutaDePerfil (páginas y server actions)', () => {
   });
   it('con perfil: stand-by y rutas nuevas rebotan a /dashboard (que siempre está permitido: no hay bucle)', async () => {
     conPerfil();
-    for (const r of ['/dashboard/chat', '/dashboard/suscripcion', '/dashboard/politicas', '/dashboard/modulo-nuevo']) {
+    for (const r of ['/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/politicas', '/dashboard/modulo-nuevo']) {
       redirect.mockClear();
       await expect(m.exigirRutaDePerfil(CON, r)).rejects.toThrow('NEXT_REDIRECT');
       expect(redirect).toHaveBeenCalledWith('/dashboard');
@@ -123,11 +123,11 @@ describe('exigirRutaDePerfil (páginas y server actions)', () => {
 
 describe('apiDenegadaPorPerfil', () => {
   it('sin perfil nunca niega', async () => {
-    expect(await m.apiDenegadaPorPerfil(SIN, '/api/dashboard/chat')).toBe(false);
+    expect(await m.apiDenegadaPorPerfil(SIN, '/api/dashboard/archivo')).toBe(false);
   });
   it('con perfil niega lo no declarado y deja pasar lo declarado', async () => {
     conPerfil();
-    expect(await m.apiDenegadaPorPerfil(CON, '/api/dashboard/chat')).toBe(true);
+    expect(await m.apiDenegadaPorPerfil(CON, '/api/dashboard/archivo')).toBe(true);
     expect(await m.apiDenegadaPorPerfil(CON, '/api/v1/clientes')).toBe(true);
     expect(await m.apiDenegadaPorPerfil(CON, '/api/export/poliza')).toBe(true);
     expect(await m.apiDenegadaPorPerfil(CON, '/api/v1/peajes/desgloses')).toBe(false);
@@ -217,7 +217,7 @@ describe('exigirRutaDePerfil — el rol nomina (0949)', () => {
 
   it('sin perfil los demás roles pasan como siempre (nada cambia para ellos)', async () => {
     for (const rol of ['flota_admin', 'encargado', 'contador', 'superadmin', undefined]) {
-      await expect(m.exigirRutaDePerfil(SIN, '/dashboard/chat', rol)).resolves.toBeUndefined();
+      await expect(m.exigirRutaDePerfil(SIN, '/dashboard/facturacion', rol)).resolves.toBeUndefined();
     }
     expect(redirect).not.toHaveBeenCalled();
   });
@@ -227,7 +227,7 @@ describe('exigirRutaDePerfil — el rol nomina (0949)', () => {
     await expect(m.exigirRutaDePerfil(CON, '/dashboard/agentes/liquidacion', 'nomina')).resolves.toBeUndefined();
     await expect(m.exigirRutaDePerfil(CON, '/dashboard/agentes/peajes', 'nomina')).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenLastCalledWith('/dashboard/agentes/liquidacion');
-    await expect(m.exigirRutaDePerfil(CON, '/dashboard/chat', 'nomina')).rejects.toThrow('NEXT_REDIRECT');
+    await expect(m.exigirRutaDePerfil(CON, '/dashboard/facturacion', 'nomina')).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenLastCalledWith('/dashboard/agentes/liquidacion');
   });
 });

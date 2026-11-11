@@ -86,10 +86,15 @@ describe('matriz: lo permitido es exactamente la lista del perfil', () => {
     for (const c of ['vigia', 'conductor-hitos']) expect(permitidos, c).toContain(c);
   });
 
-  it('el MCP y el chat figuran negados por completo (todo o nada bajo el perfil)', () => {
-    for (const s of ['herramienta MCP', 'herramienta del chat', 'analista del chat']) {
-      expect(deSuperficie(s).filter((f) => f.veredicto !== 'negado'), s).toEqual([]);
-    }
+  it('el MCP figura negado por completo (todo o nada bajo el perfil)', () => {
+    expect(deSuperficie('herramienta MCP').filter((f) => f.veredicto !== 'negado')).toEqual([]);
+  });
+
+  it('el chat (abierto el 11-nov) solo conserva las herramientas de los cinco agentes; lo fiscal, el gasto y la cobranza figuran negados', () => {
+    const porId = new Map(deSuperficie('herramienta del chat').map((f) => [f.id, f.veredicto]));
+    for (const h of ['kpis_flota', 'liquidaciones_flota', 'consultar_carta_porte', 'estado_vigia', 'tablero_viajes', 'salud_agentes']) expect(porId.get(h), h).toBe('permitido');
+    for (const h of ['acreditables_periodo', 'motor_fiscal', 'serie_gasto', 'estado_cobranza', 'estado_autofactura', 'estado_buzon', 'top_rutas']) expect(porId.get(h), h).toBe('negado');
+    expect(deSuperficie('analista del chat').every((f) => f.veredicto === 'permitido')).toBe(true);
   });
 
   it('una página de dinero o fiscal figura negada', () => {

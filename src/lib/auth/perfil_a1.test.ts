@@ -153,7 +153,7 @@ describe('Ola 1 · A1: llaves-api, usuarios y patios bajo cinco_agentes', () => 
   });
 
   it('los módulos que el perfil debe ocultar SIGUEN ocultos (no se abrió nada más)', () => {
-    for (const ruta of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/sesiones-mcp', '/dashboard/configuracion', '/dashboard/politicas', '/dashboard/timbrado']) {
+    for (const ruta of ['/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/sesiones-mcp', '/dashboard/configuracion', '/dashboard/politicas', '/dashboard/timbrado']) {
       expect(puedeVerRuta('flota_admin', ruta, PERFIL), ruta).toBe(false);
       expect(puedeVerRuta('superadmin', ruta, PERFIL), ruta).toBe(false);
     }

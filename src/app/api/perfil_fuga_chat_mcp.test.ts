@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 // T-PER-04 · FUGA DEL CHAT «PREGUNTA A TUS DATOS» Y DEL MCP BAJO `cinco_agentes`.
 //
-// Contrato real (B1): una flota con perfil NO atiende el chat ni el MCP. Es más
+// CONTRATO ACTUAL: el chat se abrió el 11-nov (decisión D12 del dueño) con herramientas recortadas a las de los cinco agentes; el MCP sigue
+// negado por completo. Contrato original (B1): una flota con perfil NO atiende el chat ni el MCP. Es más
 // estricto que «intersección con la lista permitida» (la intersección queda
 // vacía), así que estas pruebas fijan que NINGUNA herramienta, ficha ni cifra
 // sale, ni siquiera de los módulos que sí son de los cinco agentes, y que el
@@ -73,7 +74,7 @@ vi.mock('@/lib/likida/seguridad_eventos', () => ({ registrarEventoSeguridad: asy
 vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: async () => undefined }));
 
 const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
-const { AREA_POR_HERRAMIENTA } = await import('@/lib/likida/orquestador/permisos');
+const { AREA_POR_HERRAMIENTA, HERRAMIENTAS_PERFIL_CINCO_AGENTES, herramientaPermitidaEnPerfil, herramientasDelPerfil } = await import('@/lib/likida/orquestador/permisos');
 const { catalogoHerramientas, despacharHerramienta } = await import('@/lib/mcp/herramientas');
 const { apiPermitidaEnPerfil, rutaPermitidaEnPerfil } = await import('@/lib/auth/visibilidad');
 
@@ -102,78 +103,57 @@ const preguntar = async (texto: string) => {
   })) as Promise<Response>;
 };
 
-const sinGastoNiDatos = () => {
-  expect(ejecutarAnalista).not.toHaveBeenCalled();
-  expect(registrarCosto).not.toHaveBeenCalled();
-  expect(guardarIntercambio).not.toHaveBeenCalled();
-  // lo único leído es el perfil: ningún dato de módulo (facturas, cobranza, viajes…)
-  expect(tablasLeidas.filter((t) => t !== 'tenant_perfil')).toEqual([]);
-};
 
-describe('chat «Pregunta a tus datos» bajo el perfil', () => {
-  it('«¿cuánto vale mi cartera por cobrar?» → módulo no activo (403), sin modelo, sin gasto, sin datos', async () => {
-    const res = await preguntar('¿cuánto vale mi cartera por cobrar?');
-    expect(res.status).toBe(403);
-    const cuerpo = await res.json();
-    expect(cuerpo.error).toMatch(/no está incluida en el plan de tu cuenta/);
-    expect(cuerpo.bloques).toBeUndefined();
-    expect(JSON.stringify(cuerpo)).not.toContain(FOLIO_SINTETICO);
-    sinGastoNiDatos();
-  });
-
-  it('la respuesta no es un stream de análisis: no hay NDJSON de pasos', async () => {
-    const res = await preguntar('dame mis facturas por cobrar');
-    expect(res.headers.get('content-type')).not.toMatch(/ndjson/);
-    sinGastoNiDatos();
-  });
-
-  it.each(['flota_admin', 'contador', 'encargado', 'superadmin'])('el rol %s tampoco la salta', async (r) => {
+describe('chat «Pregunta a tus datos» bajo el perfil (abierto el 11-nov, D12, con herramientas recortadas)', () => {
+  it.each(['flota_admin', 'contador', 'superadmin'])('el rol %s con perfil llega al analista (que recorta las herramientas) y responde por stream', async (r) => {
     rol = r;
-    const res = await preguntar('resumen fiscal del ejercicio');
-    expect(res.status).toBe(403);
-    expect(ejecutarAnalista).not.toHaveBeenCalled();
-  });
-
-  // Cada herramienta del chat (24): pedirla por nombre bajo el perfil no ofrece NINGUNA.
-  const herramientas = Object.keys(AREA_POR_HERRAMIENTA);
-  it('el catálogo del chat tiene herramientas (guarda de que el it.each no queda vacío)', () => {
-    expect(herramientas.length).toBeGreaterThanOrEqual(24);
-  });
-  it.each(herramientas)('herramienta «%s»: pedida por nombre, el chat con perfil no la ofrece ni invoca el modelo', async (h) => {
-    const res = await preguntar(`usa la herramienta ${h} y dime todo`);
-    expect(res.status).toBe(403);
-    sinGastoNiDatos();
-  });
-
-  it('CONTROL sin perfil: la misma pregunta llega al analista y responde como siempre', async () => {
-    tenantDeSesion = SIN;
-    const res = await preguntar('¿cuánto vale mi cartera por cobrar?');
+    const res = await preguntar('¿cuántas liquidaciones tengo por revisar?');
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/ndjson/);
     await res.text();
     expect(ejecutarAnalista).toHaveBeenCalledTimes(1);
+    // el rol y el tenant salen de la SESIÓN, no del cuerpo
+    expect((ejecutarAnalista.mock.calls as unknown as unknown[][])[0]?.[0]).toMatchObject({ tenantId: CON, usuario: { rol: r } });
   });
 
-  it('el historial del chat (lista y una conversación) también se niega, y sin perfil abre', async () => {
-    const { GET: lista } = await import('@/app/api/dashboard/conversaciones/route');
-    const { GET: una } = await import('@/app/api/dashboard/conversaciones/[id]/route');
-    const id = '11111111-1111-4111-8111-111111111111';
-    const llamarUna = () => una(reqNext(`http://x.test/api/dashboard/conversaciones/${id}`), { params: Promise.resolve({ id }) }) as Promise<Response>;
-    expect((await lista(reqNext('http://x.test/api/dashboard/conversaciones')) as Response).status).toBe(403);
-    const negada = await llamarUna();
-    expect(negada.status).toBe(403);
-    expect(JSON.stringify(await negada.json())).not.toContain(FOLIO_SINTETICO);
-    tenantDeSesion = SIN;
-    reiniciarCachePerfil();
-    expect((await llamarUna()).status).toBe(200);
-  });
-
-  it('falla cerrado: si el perfil no se puede leer y nunca se leyó, el chat se niega', async () => {
-    tenantDeSesion = SIN;
-    tablaIlegible = true;
+  it('un rol que no existe (sin área) sigue sin poder conversar: 403 sin modelo ni gasto', async () => {
+    rol = 'rol_inventado';
     const res = await preguntar('hola');
     expect(res.status).toBe(403);
     expect(ejecutarAnalista).not.toHaveBeenCalled();
+    expect(registrarCosto).not.toHaveBeenCalled();
+  });
+
+  // Cada herramienta del chat (24): bajo el perfil solo sobrevive la lista cerrada de los cinco agentes.
+  const herramientas = Object.keys(AREA_POR_HERRAMIENTA);
+  it('el catálogo del chat tiene herramientas (guarda de que el it.each no queda vacío)', () => {
+    expect(herramientas.length).toBeGreaterThanOrEqual(24);
+  });
+  it.each(herramientas)('herramienta «%s»: bajo el perfil %s', (h) => {
+    expect(herramientaPermitidaEnPerfil('cinco_agentes', h)).toBe(HERRAMIENTAS_PERFIL_CINCO_AGENTES.includes(h));
+    expect(herramientaPermitidaEnPerfil(null, h)).toBe(true); // sin perfil nada cambia
+  });
+  it('lo fiscal, el gasto, la cobranza, la autofactura, el buzón y la rentabilidad NO sobreviven al perfil; todo lo permitido existe', () => {
+    for (const h of ['acreditables_periodo', 'motor_fiscal', 'serie_gasto', 'top_rutas', 'duplicados_detectados', 'proyectar_serie', 'viajes_flota',
+      'estado_cobranza', 'estado_autofactura', 'estado_buzon', 'convenio_viaje', 'estado_jornada', 'escalar_a_persona']) {
+      expect(herramientaPermitidaEnPerfil('cinco_agentes', h), h).toBe(false);
+    }
+    for (const h of HERRAMIENTAS_PERFIL_CINCO_AGENTES) expect(herramientas, h).toContain(h);
+    // perfil desconocido: nada
+    expect(herramientasDelPerfil('otro', herramientas)).toEqual([]);
+  });
+
+  it('el historial del chat (lista y una conversación) se abre al perfil: sigue por usuario y tenant', async () => {
+    const { GET: lista } = await import('@/app/api/dashboard/conversaciones/route');
+    expect((await lista(reqNext('http://x.test/api/dashboard/conversaciones')) as Response).status).toBe(200);
+  });
+
+  it('falla cerrado: si el perfil no se puede leer y nunca se leyó, se asume el perfil restringido (el analista recorta las herramientas)', async () => {
+    tenantDeSesion = SIN;
+    tablaIlegible = true;
+    const { perfilDeTenant } = await import('@/lib/auth/perfil_tenant');
+    expect(await perfilDeTenant(SIN)).not.toBeNull();
+    expect(herramientaPermitidaEnPerfil(await perfilDeTenant(SIN), 'motor_fiscal')).toBe(false);
   });
 
   it('con valor previo «sin perfil», un bache de lectura NO recorta el chat de una flota normal', async () => {
@@ -185,12 +165,13 @@ describe('chat «Pregunta a tus datos» bajo el perfil', () => {
     expect(await perfilDeTenant(SIN, TTL_PERFIL_MS + 1)).toBeNull();
   });
 
-  it('el chat y su API están fuera de la lista de los cinco; una ruta de chat nueva sin clasificar se niega', () => {
-    expect(rutaPermitidaEnPerfil('cinco_agentes', '/dashboard/chat')).toBe(false);
-    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/chat')).toBe(false);
-    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/conversaciones')).toBe(false);
+  it('el chat y su historial están en la lista de los cinco; una ruta de chat nueva sin clasificar se niega', () => {
+    expect(rutaPermitidaEnPerfil('cinco_agentes', '/dashboard/chat')).toBe(true);
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/chat')).toBe(true);
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/conversaciones')).toBe(true);
     expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/chat-nuevo')).toBe(false);
-    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/chat/otra')).toBe(false);
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/chat/otra')).toBe(true); // mismo primer segmento
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/archivo')).toBe(false); // la ingesta de archivos sigue fuera
   });
 });
 
