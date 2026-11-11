@@ -6,7 +6,8 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getBorradorViaje } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
-import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, Chip } from '@/app/ui-v2/componentes';
+import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import { SeccionTimbrado } from './timbrar';
 
 export const dynamic = 'force-dynamic';
@@ -53,26 +54,30 @@ export default async function PaginaTimbradoViaje({
   const rotulo = v.folio ?? v.viajeId.slice(0, 8);
 
   return (
-    <MarcoPagina
+    <EsqueletoFicha
       area="Carta Porte"
       titulo={tr('timbrado.viajeId.page.tituloViaje', { rotulo })}
-      ancho="lectura"
-      apoyo={tr('timbrado.viajeId.page.mercanciaS', { v: v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('timbrado.viajeId.page.rutaSinCapturar'), v2: v.unidadEconomico ? ' ' + tr('timbrado.viajeId.page.unidadEco', { unidadEconomico: v.unidadEconomico }) : '', v3: numero(v.mercancias.length) })}
+      volver={{ href: `${RUTA}${sufijoTenant(sp)}`, etiqueta: tr('timbrado.viajeId.page.volverATimbrado') }}
       acciones={(
+        <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
+          {tr('timbrado.viajeId.page.verElBorradorCompleto')}
+        </BotonEnlace>
+      )}
+      chips={(
         <>
-          <BotonEnlace href={`${RUTA}${sufijoTenant(sp)}`} variante="ghost" tamano="sm">{tr('timbrado.viajeId.page.volverATimbrado')}</BotonEnlace>
-          <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
-            {tr('timbrado.viajeId.page.verElBorradorCompleto')}
-          </BotonEnlace>
+          <li><Chip>{v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('timbrado.viajeId.page.rutaSinCapturar')}</Chip></li>
+          <li><Chip>{tr('e26.timb_mercancias', { n: numero(v.mercancias.length) })}</Chip></li>
+          {v.unidadEconomico ? <li><Chip>{tr('e26.timb_unidad', { u: v.unidadEconomico })}</Chip></li> : null}
         </>
       )}
+      avisos={(
+        <Aviso tono="warn">
+          {tr('timbrado.viajeId.page.timbrarEmiteUnCfdi')}
+        </Aviso>
+      )}
     >
-      <Aviso tono="warn">
-        {tr('timbrado.viajeId.page.timbrarEmiteUnCfdi')}
-      </Aviso>
-
       <SeccionTimbrado v={v} searchParams={sp} />
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }
 

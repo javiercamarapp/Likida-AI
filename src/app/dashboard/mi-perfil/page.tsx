@@ -14,7 +14,8 @@ import AvatarUploader from '../../admin/mi-perfil/avatar-uploader';
 import { sufijoTenant } from '../sufijo';
 import { TablaClientesMcp } from '../sesiones-mcp/vista';
 import type { Metadata } from 'next';
-import { Aviso, Boton, BotonEnlace, CampoTexto, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, Boton, BotonEnlace, CampoTexto } from '@/app/ui-v2/componentes';
+import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
 import './mi-perfil.css';
 import { getT } from '@/lib/i18n/servidor';
 import { rico } from '@/lib/i18n/rico';
@@ -329,115 +330,114 @@ export default async function MiPerfilFlota({
     sp.exige === 'inscribir' || sp.exige === 'retar' || sp.exige === 'no_verificable' ? sp.exige : null;
 
   return (
-    <MarcoPagina titulo={t('cfg.mi_perfil')} ancho="lectura" apoyo={t('cfg.tu_foto_nombre_y_correo_y')}>
-      {sp.ok && OK[sp.ok] && <Aviso tono="ok">{OK[sp.ok]}</Aviso>}
-      {/* ── SEG-3 (auditoría 24): por qué te rebotaron aquí ──────────
-          Con `LIKIDA_SUPERADMIN_MFA=obligatorio`, la puerta de /admin y
-          la de /dashboard mandan al superadmin sin segundo factor a esta
-          pantalla (guard.ts). Sin este aviso el rebote sería un misterio:
-          clic en la consola, aterrizas en tu perfil, sin explicación. */}
-      {exigencia && <Aviso tono="error">{MSG_MFA_SUPERADMIN[exigencia]}</Aviso>}
-      {sp.error && ERROR[sp.error] && <Aviso tono="error">{ERROR[sp.error]}</Aviso>}
+    <EsqueletoConfiguracion
+      titulo={t('cfg.mi_perfil')} apoyo={t('cfg.tu_foto_nombre_y_correo_y')}
+      avisos={(
+        <>
+          {sp.ok && OK[sp.ok] && <Aviso tono="ok">{OK[sp.ok]}</Aviso>}
+          {/* SEG-3 (auditoría 24): por qué te rebotaron aquí. Con `LIKIDA_SUPERADMIN_MFA=obligatorio`, la puerta de /admin y la de /dashboard mandan al superadmin sin segundo factor a esta pantalla (guard.ts); sin este aviso el rebote sería un misterio. */}
+          {exigencia && <Aviso tono="error">{MSG_MFA_SUPERADMIN[exigencia]}</Aviso>}
+          {sp.error && ERROR[sp.error] && <Aviso tono="error">{ERROR[sp.error]}</Aviso>}
+        </>
+      )}
+      secciones={[
+        {
+          id: 'perfil', titulo: t('cfg.tu_perfil'),
+          contenido: (
+            <div className="rv-mp__pila">
+              <AvatarUploader nombre={s.nombre ?? 'Tú'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
 
-      <Tarjeta titulo={t('cfg.tu_perfil')}>
-        <div className="rv-mp__pila">
-          <AvatarUploader nombre={s.nombre ?? 'Tú'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
+              <form action={actualizarNombre} className="rv-mp__pila rv-mp__separador">
+                <CampoTexto etiqueta={t('llaves.nombre')} id="perfil-nombre" name="nombre" defaultValue={s.nombre ?? ''} required maxLength={80}
+                  ayuda={t('cfg.es_el_nombre_con_el_que')} />
+                <div><Boton type="submit" variante="primary" tamano="sm">{t('cfg.guardar_nombre')}</Boton></div>
+              </form>
 
-          <form action={actualizarNombre} className="rv-mp__pila rv-mp__separador">
-            <CampoTexto etiqueta={t('llaves.nombre')} id="perfil-nombre" name="nombre" defaultValue={s.nombre ?? ''} required maxLength={80}
-              ayuda={t('cfg.es_el_nombre_con_el_que')} />
-            <div><Boton type="submit" variante="primary">{t('cfg.guardar_nombre')}</Boton></div>
-          </form>
-
-          <dl className="rv-mp__datos rv-mp__separador">
-            <div>
-              <dt>{t('cfg.correo')}</dt>
-              <dd>{correoFalloLectura ? t('cfg.no_se_pudo_leer') : (fila?.email as string) ?? '—'}</dd>
+              <dl className="rv-mp__datos rv-mp__separador">
+                <div>
+                  <dt>{t('cfg.correo')}</dt>
+                  <dd>{correoFalloLectura ? t('cfg.no_se_pudo_leer') : (fila?.email as string) ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt>Rol</dt>
+                  <dd>{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
+                </div>
+              </dl>
+              <p className="rv-mp__nota">{t('cfg.correo_y_rol_no_se_editan')}</p>
             </div>
-            <div>
-              <dt>Rol</dt>
-              <dd>{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
+          ),
+        },
+        {
+          // SEGURIDAD: segundo factor TOTP (fase 7 enterprise). La política es incremental: inscribirlo es OPTAR por que las acciones sensibles exijan AAL2 (lib/auth/mfa.ts).
+          id: 'mfa', titulo: t('cfg.seguridad_segundo_factor'),
+          estado: { texto: mfa.inscrito ? t('e26.perfil_mfa_activo') : t('e26.perfil_mfa_inactivo'), tono: mfa.inscrito ? 'ok' : 'neutral' },
+          contenido: mfa.inscrito ? (
+            <div className="rv-mp__pila">
+              <p className="rv-mp__texto">{t('cfg.activo_las_acciones_sensibles_exigen_el')}</p>
+              <form action={verificarMfa} className="rv-mp__linea">
+                <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
+                <CampoTexto etiqueta={t('cfg.codigo_de_6_digitos')} etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
+                  className="rv-mp__codigo" claseControl="tabular" />
+                <Boton type="submit">{t('cfg.verificar_sesion')}</Boton>
+              </form>
+              <form action={quitarMfa} className="rv-mp__linea">
+                <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
+                <CampoTexto etiqueta={t('cfg.codigo_para_quitar_el_factor')} etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder={t('cfg.codigo')} required
+                  className="rv-mp__codigo-corto" claseControl="tabular" />
+                <Boton type="submit" variante="danger" tamano="sm">{t('cfg.quitar_el_factor_exige_el_codigo')}</Boton>
+              </form>
             </div>
-          </dl>
-          <p className="rv-mp__nota">{t('cfg.correo_y_rol_no_se_editan')}</p>
-        </div>
-      </Tarjeta>
-
-      {/* ── SEGURIDAD: segundo factor TOTP (fase 7 enterprise) ────────
-          La política es incremental: inscribirlo es OPTAR por que las
-          acciones sensibles exijan AAL2 (lib/auth/mfa.ts). ── */}
-      <Tarjeta titulo={t('cfg.seguridad_segundo_factor')} info="mi_perfil.segundo_factor">
-        {mfa.inscrito ? (
-          <div className="rv-mp__pila">
-            <p className="rv-mp__texto">{t('cfg.activo_las_acciones_sensibles_exigen_el')}</p>
-            <form action={verificarMfa} className="rv-mp__linea">
-              <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
-              <CampoTexto etiqueta={t('cfg.codigo_de_6_digitos')} etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
-                className="rv-mp__codigo" claseControl="tabular" />
-              <Boton type="submit">{t('cfg.verificar_sesion')}</Boton>
-            </form>
-            <form action={quitarMfa} className="rv-mp__linea">
-              <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
-              <CampoTexto etiqueta={t('cfg.codigo_para_quitar_el_factor')} etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder={t('cfg.codigo')} required
-                className="rv-mp__codigo-corto" claseControl="tabular" />
-              <Boton type="submit" variante="danger" tamano="sm">{t('cfg.quitar_el_factor_exige_el_codigo')}</Boton>
-            </form>
-          </div>
-        ) : qr ? (
-          <div className="rv-mp__pila">
-            <p className="rv-mp__texto">{t('cfg.escanea_el_codigo_con_tu_app')}</p>
-            {/* El SVG lo genera Supabase en el enroll — sin librerías. */}
-            <img src={qr.svg} alt={t('cfg.codigo_qr_del_segundo_factor')} width={168} height={168} className="rv-mp__qr" />
-            <p className="rv-mp__nota">{t('cfg.si_no_puedes_escanear')}{' '}{qr.secreto}</p>
-            <form action={verificarMfa} className="rv-mp__linea">
-              <input type="hidden" name="factorId" value={qr.factorId} />
-              <CampoTexto etiqueta={t('cfg.codigo_de_6_digitos')} etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
-                className="rv-mp__codigo" claseControl="tabular" />
-              <Boton type="submit" variante="primary">{t('cfg.activar')}</Boton>
-            </form>
-          </div>
-        ) : (
-          <div className="rv-mp__pila">
-            <p className="rv-mp__texto">{t('cfg.un_codigo_de_tu_telefono_ademas')}</p>
-            <div><BotonEnlace href={volverAMiPerfil(sufijo, 'mfa=inscribir')}>{t('cfg.activar_segundo_factor')}</BotonEnlace></div>
-          </div>
-        )}
-      </Tarjeta>
-
-      {/* ── SEGURIDAD: sesiones activas (FASE 1 · SEG-SESIONES) ──────
-          Cierra TODAS mis sesiones a la vez, en cualquier dispositivo
-          donde haya iniciado sesión — no solo esta pestaña. ── */}
-      <Tarjeta titulo={t('cfg.seguridad_sesiones_activas')} info="mi_perfil.sesiones">
-        <div className="rv-mp__pila">
-          <p className="rv-mp__texto">{t('cfg.si_crees_que_alguien_mas_entro')}</p>
-          <form action={cerrarTodasMisSesiones}>
-            <Boton type="submit" variante="danger" tamano="sm">{t('cfg.cerrar_sesion_en_todos_los_dispositivos')}</Boton>
-          </form>
-        </div>
-      </Tarjeta>
-
-      {/* ── SEGURIDAD: mis clientes MCP (H3, 29-ago-2026) ────────────
-          Lo que Claude o ChatGPT pueden leer de la flota EN MI NOMBRE.
-          Vive junto al segundo factor y no en otra pantalla porque es
-          la misma pregunta: ¿qué puede entrar a mi cuenta hoy? ── */}
-      <Tarjeta titulo={t('cfg.seguridad_clientes_mcp_conectados')} info="mi_perfil.clientes_mcp">
-        {mcp === null ? (
-          <p className="rv-mp__texto" data-tono="bad">{t('cfg.no_pude_leer_tus_conexiones_mcp')}</p>
-        ) : mcp.length === 0 ? (
-          <p className="rv-mp__texto">{t('cfg.no_tienes_ningun_cliente_mcp_conectado')}</p>
-        ) : (
-          <div className="rv-mp__pila">
-            <p className="rv-mp__texto">{rico(t('cfg.estos_clientes_strong_leen_strong_nunca'), { strong: (c) => <strong>{c}</strong> })}</p>
-            <TablaClientesMcp t={t} clientes={mcp} />
-            <form action={cortarMisSesionesMcp}>
-              {/* Lo que la función de la 0265 hace, dicho tal cual: corta
-                  TODOS, no uno. Un rótulo más fino prometería una
-                  precisión que la revocación por usuario no tiene. */}
-              <Boton type="submit" variante="danger" tamano="sm">{mcp.length === 1 ? t('cfg.cortar_este_acceso_no_hay_deshacer') : t('cfg.cortar_los_n_accesos_no_hay', { n: mcp.length })}</Boton>
-            </form>
-          </div>
-        )}
-      </Tarjeta>
-    </MarcoPagina>
+          ) : qr ? (
+            <div className="rv-mp__pila">
+              <p className="rv-mp__texto">{t('cfg.escanea_el_codigo_con_tu_app')}</p>
+              {/* El SVG lo genera Supabase en el enroll — sin librerías. */}
+              <img src={qr.svg} alt={t('cfg.codigo_qr_del_segundo_factor')} width={168} height={168} className="rv-mp__qr" />
+              <p className="rv-mp__nota">{t('cfg.si_no_puedes_escanear')}{' '}{qr.secreto}</p>
+              <form action={verificarMfa} className="rv-mp__linea">
+                <input type="hidden" name="factorId" value={qr.factorId} />
+                <CampoTexto etiqueta={t('cfg.codigo_de_6_digitos')} etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
+                  className="rv-mp__codigo" claseControl="tabular" />
+                <Boton type="submit" variante="primary">{t('cfg.activar')}</Boton>
+              </form>
+            </div>
+          ) : (
+            <div className="rv-mp__pila">
+              <p className="rv-mp__texto">{t('cfg.un_codigo_de_tu_telefono_ademas')}</p>
+              <div><BotonEnlace href={volverAMiPerfil(sufijo, 'mfa=inscribir')} tamano="sm">{t('cfg.activar_segundo_factor')}</BotonEnlace></div>
+            </div>
+          ),
+        },
+        {
+          // SEGURIDAD: sesiones activas (FASE 1 · SEG-SESIONES). Cierra TODAS mis sesiones a la vez, en cualquier dispositivo — no solo esta pestaña.
+          id: 'sesiones', titulo: t('cfg.seguridad_sesiones_activas'),
+          contenido: (
+            <div className="rv-mp__pila">
+              <p className="rv-mp__texto">{t('cfg.si_crees_que_alguien_mas_entro')}</p>
+              <form action={cerrarTodasMisSesiones}>
+                <Boton type="submit" variante="danger" tamano="sm">{t('cfg.cerrar_sesion_en_todos_los_dispositivos')}</Boton>
+              </form>
+            </div>
+          ),
+        },
+        {
+          // SEGURIDAD: mis clientes MCP (H3, 29-ago-2026). Lo que Claude o ChatGPT pueden leer de la flota EN MI NOMBRE; vive junto al segundo factor porque es la misma pregunta: ¿qué puede entrar a mi cuenta hoy?
+          id: 'mcp', titulo: t('cfg.seguridad_clientes_mcp_conectados'),
+          contenido: mcp === null ? (
+            <p className="rv-mp__texto" data-tono="bad">{t('cfg.no_pude_leer_tus_conexiones_mcp')}</p>
+          ) : mcp.length === 0 ? (
+            <p className="rv-mp__texto">{t('cfg.no_tienes_ningun_cliente_mcp_conectado')}</p>
+          ) : (
+            <div className="rv-mp__pila">
+              <p className="rv-mp__texto">{rico(t('cfg.estos_clientes_strong_leen_strong_nunca'), { strong: (c) => <strong>{c}</strong> })}</p>
+              <TablaClientesMcp t={t} clientes={mcp} />
+              <form action={cortarMisSesionesMcp}>
+                {/* Lo que la función de la 0265 hace, dicho tal cual: corta TODOS, no uno. Un rótulo más fino prometería una precisión que la revocación por usuario no tiene. */}
+                <Boton type="submit" variante="danger" tamano="sm">{mcp.length === 1 ? t('cfg.cortar_este_acceso_no_hay_deshacer') : t('cfg.cortar_los_n_accesos_no_hay', { n: mcp.length })}</Boton>
+              </form>
+            </div>
+          ),
+        },
+      ]}
+    />
   );
 }

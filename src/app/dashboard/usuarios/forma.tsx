@@ -54,26 +54,11 @@ export function FormaInvitar({ accion, roles }: {
         <CampoTexto etiqueta={t('cfg.nombre_opcional')} id="inv-nombre" name="nombre" maxLength={120}
           placeholder={t('cfg.como_quieres_verlo_en_la_lista')} />
 
-        <div>
-          {/* `contador` primero y por default: es el caso por el que existe
-              esta pantalla (D6). Arrancar en `flota_admin` repartiría control
-              total de la cuenta por pura inercia del que no cambia el select. */}
-          <CampoSelect etiqueta="Rol" id="inv-rol" name="rol" required defaultValue="contador">
-            {roles.map((r) => (
-              <option key={r.valor} value={r.valor}>{r.rotulo}</option>
-            ))}
-          </CampoSelect>
-          {/* La ayuda dice la VERDAD de visibilidad.ts, no marketing: qué ve
-              y qué NO ve cada rol es exactamente lo que el dueño necesita
-              saber antes de repartir accesos. */}
-          <div className="rv-usu__roles">
-            {roles.map((r) => (
-              <p key={r.valor}>
-                <strong>{r.rotulo}:</strong> {r.detalle}
-              </p>
-            ))}
-          </div>
-        </div>
+        <CampoSelect etiqueta="Rol" id="inv-rol" name="rol" required defaultValue="contador">
+          {roles.map((r) => (
+            <option key={r.valor} value={r.valor}>{r.rotulo}</option>
+          ))}
+        </CampoSelect>
 
         <CampoTexto etiqueta={t('cfg.whatsapp_opcional')} id="inv-telefono" name="telefono" maxLength={20}
           placeholder={t('cfg.10_digitos')} inputMode="tel" claseControl="cifra-mono"

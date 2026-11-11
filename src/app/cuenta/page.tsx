@@ -6,6 +6,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sufijoTenant } from '@/app/dashboard/sufijo';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
+import { Monograma } from '../ui-v2/componentes/monograma';
+import './cuenta.css';
+import { nombreDeRol } from '@/lib/auth/roles';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,14 +41,16 @@ export default async function Cuenta({
       acciones={
         <>
           <form action={cerrarSesion}>
-            <Boton type="submit" variante="primary">Cerrar sesión</Boton>
+            <Boton type="submit" variante="secondary" tamano="sm">Cerrar sesión</Boton>
           </form>
           <Link href={`/dashboard${sufijo}`} className="rv-pub__enlace">← Volver al panel</Link>
         </>
       }
     >
       <div className="rv-pub__tarjeta">
-        <dl className="rv-pub__dl">
+        {/* Tarjeta de cuenta (Rovaq): monograma de la persona y, bajo él, flota, usuario y rol en filas rótulo-valor. */}
+        <Monograma id={s.userId} nombre={s.nombre ?? (tenant?.nombre as string) ?? 'Likida'} tamano={40} />
+        <dl className="rv-pub__dl rv-cuenta__dl">
           <div>
             <dt>Flota</dt>
             <dd>{(tenant?.nombre as string) ?? '—'}</dd>
@@ -53,6 +58,10 @@ export default async function Cuenta({
           <div>
             <dt>Usuario</dt>
             <dd>{s.nombre ?? s.userId}</dd>
+          </div>
+          <div>
+            <dt>Rol</dt>
+            <dd>{nombreDeRol(s.rol)}</dd>
           </div>
         </dl>
       </div>

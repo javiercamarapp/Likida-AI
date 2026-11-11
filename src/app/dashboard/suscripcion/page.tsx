@@ -25,9 +25,10 @@ import { fechaMx } from '../formato';
 import { Uso, TarjetaPlan, InstruccionesTransferencia } from './vista';
 import type { Metadata } from 'next';
 import {
-  Aviso, CamposSistema, CampoSelect, CampoTexto, EstadoError, EstadoVacio, FormaConAviso, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  Aviso, CampoSelect, CampoTexto, EstadoError, EstadoVacio, FormaConAviso, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
+import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import './suscripcion.css';
 export async function generateMetadata(): Promise<Metadata> {
   const { t: tr } = await getT('dinero');
@@ -290,7 +291,15 @@ export default async function SuscripcionPage({
   ];
 
   return (
-    <MarcoPagina titulo={tr('suscripcion.page.planYFacturacion')} apoyo={tr('suscripcion.page.tuPlanDeLikida')} acciones={<>
+    <EsqueletoPortada titulo={tr('suscripcion.page.planYFacturacion')} apoyo={tr('suscripcion.page.tuPlanDeLikida')}
+      etiquetaCifras={tr('suscripcion.page.tuPlan')}
+      cifras={suscripcionCaida || suscripcion === null ? undefined : [
+        { etiqueta: 'Plan', valor: suscripcion.planNombre },
+        { etiqueta: tr('suscripcion.page.mensualidad'), valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? tr('suscripcion.page.sinPrecioConfigurado') : mxn(planActual.precioMensual) },
+        { etiqueta: 'Desde', valor: fechaMx(suscripcion.inicio) },
+        { etiqueta: tr('suscripcion.page.proximoCorte'), valor: suscripcion.periodoFin ? fechaMx(suscripcion.periodoFin) : tr('suscripcion.page.sinFechaDeCorte') },
+      ]}
+      acciones={<>
         {/* H8 (auditoría 24): aquí decía "Pago recibido" solo porque la URL traía `?ok=contratado` — un query string lo escribe cualquiera, no una lectura del cobro. El estado real se pinta con `pill` (lee `suscripcion.estado` de la base). */}
         {/* La fecha de corte ya pasó (DAT-40): una prueba con corte vencido se leía como cliente al corriente y nadie le cobraba nunca. Se DICE, no se apaga nada — el mismo criterio que el límite del plan. */}
         {suscripcion?.vencida && <StatusChip tono="warn">{tr('suscripcion.page.vencioEl', { v: fechaMx(suscripcion.periodoFin!) })}</StatusChip>}
@@ -328,23 +337,18 @@ export default async function SuscripcionPage({
         </Tarjeta>
       )}
 
-      {/* ── Estado ── */}
-      <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan">
-        {suscripcionCaida ? (
+      {/* ── Estado: las cifras del plan viven en la tira de arriba; aquí solo lo que NO hay (lectura caída o sin suscripción). ── */}
+      {suscripcionCaida ? (
+        <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan">
           <EstadoError reintentar>{tr('suscripcion.page.noSePudoLeer')}</EstadoError>
-        ) : suscripcion === null ? (
+        </Tarjeta>
+      ) : suscripcion === null ? (
+        <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan">
           <EstadoVacio titulo={tr('suscripcion.page.sinSuscripcionTodavia')} icono={CreditCard} contenido>
             {tr('suscripcion.page.estaFlotaTodaviaNo2')}
           </EstadoVacio>
-        ) : (
-          <CamposSistema etiqueta={tr('suscripcion.page.tuPlan')} campos={[
-            { etiqueta: 'Plan', valor: suscripcion.planNombre },
-            { etiqueta: tr('suscripcion.page.mensualidad'), valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? tr('suscripcion.page.sinPrecioConfigurado') : mxn(planActual.precioMensual) },
-            { etiqueta: 'Desde', valor: fechaMx(suscripcion.inicio) },
-            { etiqueta: tr('suscripcion.page.proximoCorte'), valor: suscripcion.periodoFin ? fechaMx(suscripcion.periodoFin) : tr('suscripcion.page.sinFechaDeCorte') },
-          ]} />
-        )}
-      </Tarjeta>
+        </Tarjeta>
+      ) : null}
 
       {/* ── Uso ── */}
       {uso && (
@@ -467,6 +471,6 @@ export default async function SuscripcionPage({
           )}
         </Aviso>
       )}
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }
