@@ -23,8 +23,8 @@ import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
 import {
   COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, desempacar,
-  esProspectoTerminal,
-  type DatosMapa, type Giro, type ProspectoMapa, type Tamano, type TextosProspecto,
+  esProspectoTerminal, limitesRampa, pasoDeRampa,
+  type DatosMapa, type Giro, type ProspectoMapa, type ResumenProspectos, type Tamano, type TextosProspecto,
 } from '@/lib/admin/prospectos-mapa-client';
 import { fechaHoraMx, numero, hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
@@ -32,7 +32,7 @@ import { useT } from '@/lib/i18n/proveedor';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import {
-  Boton, Campo, CampoSelect, Fieldset, Disclosure, Drawer, FilaTarjetas, Icono, SegmentedControl, Tarjeta, clasesBoton, cx,
+  Boton, Campo, CampoSelect, EsqTarjetaV2, Fieldset, Disclosure, Drawer, FilaTarjetas, Icono, SegmentedControl, Tarjeta, clasesBoton, cx,
 } from '../../ui-v2/componentes';
 import { BarList, TiraCifras } from '../../ui-v2/graficas';
 import { idsSinTextos } from './csv_prospectos';
@@ -200,22 +200,35 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
   );
 }
 
-export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estadoInicial?: string }) {
+export function Cerebro({ resumen = null, inicial, estadoInicial }: {
+  /** Lo único que viaja en el HTML (w15/perf): conteos agregados por estado y por etapa. Con él el mapa, el ranking y las cifras pintan al
+   *  instante, sin esperar los 33 mil prospectos. `null` = la lectura falló (la página lo avisa; aquí no se inventan cifras). */
+  resumen?: ResumenProspectos | null;
+  /** La cartera ya entregada (carga completa): sin ella el detalle se pide al montar, en segundo plano, por el latido de siempre. */
+  inicial?: DatosMapa;
+  estadoInicial?: string;
+}) {
   const reducido = usePrefersReducedMotion();
   const tr = useT('shell', shellEs);
   // ── LA CARTERA, LIGERA (FE-16) ───────────────────────────────────────────
   // Llega empacada en tuplas y sin los textos largos; se desempaca UNA vez.
   // `listaRef` es la misma lista, accesible desde los manejadores sin
   // arrastrar el valor viejo de un closure (el latido corre cada 5 min).
-  const [prospectos, setProspectos] = useState<ProspectoMapa[]>(() => inicial.filas.map(desempacar));
+  //
+  // w15/perf (punto 4): el HTML ya NO trae las 33 mil filas (2.3 MB y 25 s de pantalla blanca). Trae el resumen; el detalle (filtros,
+  // luces, fichas, CSV) se pide al montar por la misma ruta del latido y, mientras llega, lo que depende de él se DICE «cargando».
+  const [prospectos, setProspectos] = useState<ProspectoMapa[]>(() => (inicial ? inicial.filas.map(desempacar) : []));
+  const [listo, setListo] = useState<boolean>(Boolean(inicial));
+  const [cargando, setCargando] = useState(false);
+  const [errorCarga, setErrorCarga] = useState(false);
   const listaRef = useRef<ProspectoMapa[]>(prospectos);
   const ponerLista = useCallback((nueva: ProspectoMapa[]) => {
     listaRef.current = nueva;
     setProspectos(nueva);
   }, []);
-  const [generadoEn, setGeneradoEn] = useState(inicial.generadoEn);
+  const [generadoEn, setGeneradoEn] = useState(inicial?.generadoEn ?? resumen?.generadoEn ?? '');
   /** La marca de agua del delta: hasta aquí ya sabemos. */
-  const marca = useRef<string | null>(inicial.marca);
+  const marca = useRef<string | null>(inicial?.marca ?? null);
   const [seleccion, setSeleccion] = useState<EstadoGeo | null>(
     () => ESTADOS_GEO.find((e) => e.nombre === estadoInicial) ?? null,
   );
@@ -407,10 +420,12 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       const altas = llegaron.filter((p) => !conocidosYa.has(p.id)).reverse();
       siguiente = [...altas, ...antes.map((p) => cambios.get(p.id) ?? p)];
     }
+    // La PRIMERA entrega del detalle (venía vacío) no es «llegaron 33 mil nuevos»: se anotan como conocidos sin encender el destello.
+    const primera = antes.length === 0 && conocidos.current.size === 0;
     const nuevos = new Set(llegaron.filter((p) => !conocidos.current.has(p.id)).map((p) => p.id));
     llegaron.forEach((p) => conocidos.current.add(p.id));
     ponerLista(siguiente);
-    if (nuevos.size) setRecientes(nuevos);
+    if (nuevos.size && !primera) setRecientes(nuevos);
     return siguiente.length;
   }, [ponerLista]);
 
@@ -424,7 +439,29 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     return d.fallo ? null : d;
   }, []);
 
-  useEffect(() => arrancarLatido({
+  // El detalle de la cartera, a pedido: al montar (sin bloquear la primera pintura) y con «Reintentar» si falló.
+  const cargarDetalle = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(false);
+    try {
+      const d = await pedirMapa(null);
+      if (!d) throw new Error('sin detalle');
+      aplicar(d);
+      setListo(true);
+    } catch {
+      setErrorCarga(true);
+    } finally {
+      setCargando(false);
+    }
+  }, [aplicar, pedirMapa]);
+  const detalleSolicitado = useRef(false);
+  useEffect(() => {
+    if (listo || detalleSolicitado.current) return;
+    detalleSolicitado.current = true;
+    void cargarDetalle();
+  }, [listo, cargarDetalle]);
+
+  useEffect(() => (!listo ? undefined : arrancarLatido({
     intervaloMs: LATIDO_MS,
     ...visibilidadDelNavegador(),
     latir: async () => {
@@ -443,7 +480,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         }
       } catch { /* sin red: el mapa vigente sigue */ }
     },
-  }), [aplicar, pedirMapa]);
+  })), [listo, aplicar, pedirMapa]);
 
   const porEstado = useMemo(() => {
     const m = new Map<string, ProspectoMapa[]>();
@@ -457,11 +494,26 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     return m;
   }, [filtrados, ordenar]);
 
-  const sinPlaza = useMemo(() => filtrados.filter((p) => !p.entidad).length, [filtrados]);
-  const maxEstado = useMemo(() => Math.max(1, ...[...porEstado.values()].map((l) => l.length)), [porEstado]);
-  const conTelefono = useMemo(() => filtrados.filter((p) => p.telefono).length, [filtrados]);
-  const conDecisor = useMemo(() => filtrados.filter((p) => p.contacto).length, [filtrados]);
+  const sinPlazaDetalle = useMemo(() => filtrados.filter((p) => !p.entidad).length, [filtrados]);
+  const conTelefonoDetalle = useMemo(() => filtrados.filter((p) => p.telefono).length, [filtrados]);
+  const conDecisorDetalle = useMemo(() => filtrados.filter((p) => p.contacto).length, [filtrados]);
   const calientes = useMemo(() => filtrados.filter((p) => p.urgencia >= 70).length, [filtrados]);
+
+  // ── LAS CIFRAS: del resumen del servidor hasta que llega el detalle; después, de la cartera filtrada ──────────
+  // Mismo universo y misma definición de «vivo» (ver prospectos-mapa.ts › indiceProspectos): al llegar el detalle sin filtros, las cifras
+  // no cambian. Lo que SOLO el detalle sabe (urgentes: sale de las notas) se dice «cargando» y no se rellena con un cero.
+  const totalCifra = listo ? filtrados.length : resumen?.total ?? null;
+  const conTelefono = listo ? conTelefonoDetalle : resumen?.conTelefono ?? null;
+  const conDecisor = listo ? conDecisorDetalle : resumen?.conDecisor ?? null;
+  const sinPlaza = listo ? sinPlazaDetalle : resumen?.sinPlaza ?? 0;
+  /** Prospectos por estado de la república: lo que pinta el mapa de color y el ranking. */
+  const nPorEstado = useMemo(() => {
+    const m = new Map<string, number>();
+    if (listo) for (const [k, l] of porEstado) m.set(k, l.length);
+    else if (resumen) for (const [k, e] of Object.entries(resumen.porEntidad)) m.set(k, e.n);
+    return m;
+  }, [listo, porEstado, resumen]);
+  const maxEstado = useMemo(() => Math.max(1, ...nPorEstado.values()), [nPorEstado]);
 
   // ── LA CÁMARA LIBRE (orden 17-ago: "completamente fluido") ───────────────
   // La cámara vive en un ref y se aplica DIRECTO al <g> (sin re-render por
@@ -592,15 +644,38 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
   const porEtapa = useMemo(() => {
     const m = new Map<string, number>();
-    for (const p of filtrados) m.set(p.estado, (m.get(p.estado) ?? 0) + 1);
+    if (listo) for (const p of filtrados) m.set(p.estado, (m.get(p.estado) ?? 0) + 1);
+    else if (resumen) for (const [k, n] of Object.entries(resumen.porEtapa)) m.set(k, n);
     return m;
-  }, [filtrados]);
+  }, [listo, filtrados, resumen]);
   const itemsEmbudo = useMemo(() => ORDEN_EMBUDO.map((e) => ({
     clave: e, etiqueta: COLOR_EMBUDO[e].nombre, valor: porEtapa.get(e) ?? 0, texto: numero(porEtapa.get(e) ?? 0),
   })), [porEtapa]);
-  const itemsPlazas = useMemo(() => [...porEstado.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8)
-    .map(([nombre, lista]) => ({ clave: nombre, etiqueta: nombre, valor: lista.length, texto: numero(lista.length) })), [porEstado]);
+  // El ranking del panel lateral (como «Estados con más casos» de Rovaq): orden por prospectos, desempate por nombre (nunca un orden no único).
+  const ranking = useMemo(() => [...nPorEstado.entries()]
+    .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], 'es'))
+    .map(([nombre, n]) => ({ nombre, n, paso: pasoDeRampa(n, maxEstado) })), [nPorEstado, maxEstado]);
+  const itemsPlazas = useMemo(() => ranking.slice(0, 8)
+    .map(({ nombre, n }) => ({ clave: nombre, etiqueta: nombre, valor: n, texto: numero(n) })), [ranking]);
+  const limites = useMemo(() => limitesRampa(maxEstado), [maxEstado]);
+  /** El detalle del estado elegido para el panel lateral: del resumen (instantáneo) y, cuando llegó, de la cartera filtrada. */
+  const detalleSeleccion = seleccion
+    ? (listo
+      ? { n: listaSeleccion.length, tel: listaSeleccion.filter((p) => p.telefono).length, dec: listaSeleccion.filter((p) => p.contacto).length }
+      : resumen?.porEntidad[seleccion.nombre]
+        ? { n: resumen.porEntidad[seleccion.nombre].n, tel: resumen.porEntidad[seleccion.nombre].conTelefono, dec: resumen.porEntidad[seleccion.nombre].conDecisor }
+        : null)
+    : null;
+  const etapasSeleccion = seleccion
+    ? (listo
+      ? ORDEN_EMBUDO.map((e) => [e, listaSeleccion.filter((p) => p.estado === e).length] as const)
+      : ORDEN_EMBUDO.map((e) => [e, resumen?.porEntidad[seleccion.nombre]?.porEtapa[e] ?? 0] as const)).filter(([, n]) => n > 0)
+    : [];
 
+  /** Una cifra de la tira: sin lectura NO es un cero, es «no se pudo leer» (la página ya avisó de la avería). */
+  const cifra = (etiqueta: string, valor: number | null) => (valor === null
+    ? { etiqueta, valor: null, estado: 'error' as const, mensaje: tr.t('mapa.sinLectura') }
+    : { etiqueta, valor, conteo: true as const });
   const elegirEstado = (destino: EstadoGeo | null) => { setSeleccion(destino); volarA(destino); };
   const alPais = () => { setSeleccion(null); setCalles(false); volarA(null); };
   const enSeleccion = seleccion ? conCoords.filter((p) => p.entidad === seleccion.nombre).length : conCoords.length;
@@ -608,17 +683,22 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   return (
     <div className="cer-raiz">
       <TiraCifras etiqueta="Cartera filtrada" items={[
-        { etiqueta: 'Prospectos', valor: filtrados.length, conteo: true },
-        { etiqueta: 'Con teléfono', valor: conTelefono, conteo: true },
-        { etiqueta: 'Con decisor', valor: conDecisor, conteo: true },
-        { etiqueta: 'Urgentes', valor: calientes, conteo: true, nota: 'Urgencia de 70 % o más' },
+        cifra('Prospectos', totalCifra),
+        cifra('Con teléfono', conTelefono),
+        cifra('Con decisor', conDecisor),
+        {
+          etiqueta: 'Urgentes', nota: 'Urgencia de 70 % o más',
+          ...(listo
+            ? { valor: calientes, conteo: true as const }
+            : { valor: null, estado: 'vacio' as const, mensaje: errorCarga ? tr.t('mapa.errorCarga') : tr.t('mapa.cargando') }),
+        },
       ]} />
 
       {/* ── Herramientas del mapa ───────────────────────────────────────── */}
       <div className="cer-barra">
         <p className="cer-barra__resumen" aria-live="polite">
           {seleccion
-            ? `${seleccion.nombre}: ${numero(listaSeleccion.length)} prospectos`
+            ? `${seleccion.nombre}: ${numero(detalleSeleccion?.n ?? listaSeleccion.length)} prospectos`
             : 'Rueda para acercar, arrastra para moverte, toca un estado para volar a él. Se actualiza solo.'}
         </p>
         <div className="cer-barra__acciones">
@@ -626,11 +706,11 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             <Boton tamano="sm" icono={<Icono icono={Undo2} />} onClick={alPais} title="Volver al país">País</Boton>
           )}
           {/* Los dos atajos más pedidos: un clic, sin abrir el cajón. Mismo estado que los criterios de adentro. */}
-          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.soloDecisor} icono={<Icono icono={UserCheck} />}
+          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.soloDecisor} icono={<Icono icono={UserCheck} />} disabled={!listo}
             onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>Con decisor</Boton>
-          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.minUrgencia === 70} icono={<Icono icono={Flame} />}
+          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.minUrgencia === 70} icono={<Icono icono={Flame} />} disabled={!listo}
             onClick={() => setFiltros((f) => ({ ...f, minUrgencia: f.minUrgencia === 70 ? 0 : 70 }))}>Urgentes</Boton>
-          <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} onClick={() => setFiltrosAbiertos(true)}>
+          <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} disabled={!listo} onClick={() => setFiltrosAbiertos(true)}>
             Filtros{filtrosActivos ? ` · ${filtrosActivos}` : ''}
           </Boton>
           <Boton tamano="sm" onClick={alternarPantalla} title="Pantalla completa" icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />}>
@@ -639,7 +719,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         </div>
       </div>
 
-      {/* ── El mundo ─────────────────────────────────────────────────────── */}
+      {/* ── El mundo: el mapa de color (choropleth secuencial por estado) y, a su lado, el ranking ──────────────── */}
+      <div className="cer-cuerpo">
       <section ref={zonaRef} className="cer-zona" aria-label="Mapa de la cartera">
         {/* El ala izquierda: solo en pantallas anchas (1900 px o más); el embudo y los más cerrables VIVEN junto al país, sin taparlo. */}
         <aside className="cer-ala" aria-label="Embudo y más cerrables">
@@ -655,6 +736,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           </div>
           <div className="cer-ala__bloque cer-ala__bloque--lista">
             <h3 className="cer-ala__titulo">Más cerrables</h3>
+            {!listo && <p className="cer-ala__cerrable">{errorCarga ? tr.t('mapa.errorCarga') : tr.t('mapa.cargando')}</p>}
             {ordenados.slice(0, 7).map((p) => (
               <div key={p.id} className="cer-ala__cerrable">
                 <p>{p.empresa}</p>
@@ -674,11 +756,11 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             onClick={() => { if (arrastro.current) return; alPais(); }} />
           <g ref={gRef} className="cer-camara">
             {ESTADOS_GEO.map((e) => {
-              const lista = porEstado.get(e.nombre) ?? [];
+              const nEstado = nPorEstado.get(e.nombre) ?? 0;
               const activo = seleccion?.id === e.id;
               return (
                 <path key={e.id} d={e.path} className="cer-estado"
-                  data-nivel={Math.min(6, Math.round((lista.length / maxEstado) * 6))}
+                  data-paso={pasoDeRampa(nEstado, maxEstado)}
                   data-activo={activo || undefined}
                   data-sobre={(hover === e.id && !activo) || undefined}
                   data-apagado={(seleccion !== null && !activo) || undefined}
@@ -692,6 +774,18 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                     elegirEstado(activo ? null : e);
                   }}
                 />
+              );
+            })}
+            {/* Rótulos: el código del estado y su cifra EXACTA (el color nunca es la única señal); solo donde caben al zoom actual. */}
+            {ESTADOS_GEO.map((e) => {
+              const nEstado = nPorEstado.get(e.nombre) ?? 0;
+              if (nEstado === 0 || seleccion !== null || e.bw * camK < 30 || e.bh * camK < 20) return null;
+              const tam = 11 / camK;
+              return (
+                <text key={e.id} className="cer-rotulo" data-paso={pasoDeRampa(nEstado, maxEstado)} x={e.cx} y={e.cy} fontSize={tam} textAnchor="middle" aria-hidden="true">
+                  <tspan x={e.cx}>{e.id.slice(3)}</tspan>
+                  {e.bh * camK >= 36 && <tspan x={e.cx} dy={tam * 1.2}>{numero(nEstado)}</tspan>}
+                </text>
               );
             })}
             {/* Las luces: cada prospecto con coordenadas reales */}
@@ -708,15 +802,18 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         {hover && !seleccion && (() => {
           const e = ESTADOS_GEO.find((x) => x.id === hover)!;
           const lista = porEstado.get(e.nombre) ?? [];
+          const r = resumen?.porEntidad[e.nombre];
           return (
             <div className="cer-tip">
               <strong>{e.nombre}</strong>
-              <span>{lista.length} prospectos · {lista.filter((p) => p.telefono).length} con teléfono · {lista.filter((p) => p.urgencia >= 70).length} urgentes</span>
+              {listo
+                ? <span>{lista.length} prospectos · {lista.filter((p) => p.telefono).length} con teléfono · {lista.filter((p) => p.urgencia >= 70).length} urgentes</span>
+                : <span>{numero(r?.n ?? 0)} prospectos · {numero(r?.conTelefono ?? 0)} con teléfono</span>}
             </div>
           );
         })()}
 
-        {filtrados.length > conCoords.length && (
+        {listo && filtrados.length > conCoords.length && (
           <p className="cer-nota-sin-punto" role="status">{tr.tp('mapa.sinPunto', filtrados.length - conCoords.length)}</p>
         )}
         {lucesRecortadas && (
@@ -724,19 +821,12 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             Luces: las más calientes ({numero(pines.length)} de {numero(enSeleccion)}). Afina el filtro para verlas todas.
           </p>
         )}
-        {/* Leyenda del embudo */}
-        <div className="cer-leyenda" aria-label="Leyenda del embudo">
-          {ORDEN_EMBUDO.map((e) => (
-            <span key={e}><i className="cer-punto" data-etapa={e} aria-hidden="true" />{COLOR_EMBUDO[e].nombre}</span>
-          ))}
-        </div>
-
         {/* Los leads del estado: tarjetas flotando al lateral del país. El país respira entre ellas; solo la columna hace scroll. */}
         {seleccion && !calles && (
           <div className="cer-panel">
             <div className="cer-cabeza-panel">
               <strong>{seleccion.nombre}</strong>
-              <span>{numero(listaSeleccion.length)}</span>
+              <span>{numero(detalleSeleccion?.n ?? listaSeleccion.length)}</span>
               {listaSeleccion.some((p) => p.lat !== null) && (
                 <Boton tamano="sm" variante="primary" onClick={() => setCalles(true)}>Calles →</Boton>
               )}
@@ -745,7 +835,12 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               </Boton>
             </div>
             <div className="cer-lista">
-              {listaSeleccion.length === 0 ? (
+              {!listo ? (
+                <p className="cer-aviso-lista" role="status">
+                  {errorCarga ? tr.t('mapa.errorCarga') : tr.t('mapa.cargandoEstado', { estado: seleccion.nombre })}
+                  {errorCarga && <> <Boton tamano="sm" onClick={() => void cargarDetalle()} disabled={cargando}>{tr.t('mapa.reintentar')}</Boton></>}
+                </p>
+              ) : listaSeleccion.length === 0 ? (
                 <p className="cer-aviso-lista">El censo todavía no encuentra a nadie aquí; cuando un agente lo haga, aparece solo.</p>
               ) : (
                 <>
@@ -771,6 +866,64 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         )}
       </section>
 
+      {/* El ranking lateral (como «Estados con más casos» de Rovaq): barras con la cifra exacta, el estado elegido en detalle y la leyenda REAL
+          de la rampa (los límites salen de la misma función que pinta el mapa). */}
+      <aside className="cer-rank" aria-label={tr.t('mapa.rankingTitulo')}>
+        <div className="cer-rank__bloque">
+          <h3 className="cer-ala__titulo">{tr.t('mapa.rankingTitulo')}</h3>
+          {ranking.length === 0 ? (
+            <p className="cer-prospecto__tenue">{tr.t('mapa.rankingVacio')}</p>
+          ) : (
+            <ol className="cer-rank__lista">
+              {ranking.slice(0, 10).map((r) => {
+                const geo = ESTADOS_GEO.find((x) => x.nombre === r.nombre) ?? null;
+                return (
+                  <li key={r.nombre}>
+                    <button type="button" className="cer-rank__fila" aria-pressed={seleccion?.nombre === r.nombre} disabled={geo === null}
+                      onClick={() => { if (!geo) return; setCalles(false); setFiltrosAbiertos(false); elegirEstado(seleccion?.id === geo.id ? null : geo); }}>
+                      <span className="cer-rank__nombre">{r.nombre}</span>
+                      <svg className="cer-rank__pista" width="100%" height="6" aria-hidden="true">
+                        <rect className="cer-rank__barra" x="0" y="0" height="6" rx="3" width={`${Math.max(2, (r.n / maxEstado) * 100).toFixed(2)}%`} />
+                      </svg>
+                      <b>{numero(r.n)}</b>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+          <ul className="cer-rampa" aria-label={tr.t('mapa.leyendaTitulo')}>
+            {limites.map((l) => (
+              <li key={l.paso} data-paso={l.paso}><i aria-hidden="true" />{l.desde === l.hasta ? numero(l.desde) : `${numero(l.desde)}–${numero(l.hasta)}`}</li>
+            ))}
+          </ul>
+          <p className="cer-prospecto__tenue">{tr.t('mapa.sinPlaza', { n: numero(sinPlaza) })}</p>
+        </div>
+        {seleccion && detalleSeleccion && (
+          <div className="cer-rank__bloque cer-rank__det">
+            <h3 className="cer-ala__titulo">{seleccion.nombre}</h3>
+            <p className="cer-rank__cifra"><b>{numero(detalleSeleccion.n)}</b> {tr.t('mapa.prospectos')}</p>
+            <p className="cer-prospecto__tenue">{tr.t('mapa.detalleContacto', { tel: numero(detalleSeleccion.tel), dec: numero(detalleSeleccion.dec) })}</p>
+            {etapasSeleccion.map(([e, n]) => (
+              <div key={e} className="cer-ala__fila">
+                <i className="cer-punto" data-etapa={e} aria-hidden="true" />
+                <span>{COLOR_EMBUDO[e].nombre}</span>
+                <b>{numero(n)}</b>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="cer-rank__bloque">
+          <h3 className="cer-ala__titulo">{tr.t('mapa.lucesTitulo')}</h3>
+          <div className="cer-leyenda" aria-label="Leyenda del embudo">
+            {ORDEN_EMBUDO.map((e) => (
+              <span key={e}><i className="cer-punto" data-etapa={e} aria-hidden="true" />{COLOR_EMBUDO[e].nombre}</span>
+            ))}
+          </div>
+        </div>
+      </aside>
+      </div>
+
       {/* ── Lo que sigue del mapa ────────────────────────────────────────── */}
       <FilaTarjetas variante="6-6">
         <Tarjeta titulo="El embudo, en luces">
@@ -778,11 +931,12 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         </Tarjeta>
         <Tarjeta titulo="Dónde vive la cartera">
           <BarList etiqueta="Prospectos por estado" items={itemsPlazas} />
-          <p className="cer-prospecto__tenue">{numero(sinPlaza)} sin plaza conocida: se dice, no se les inventa estado.</p>
+          <p className="cer-prospecto__tenue">{tr.t('mapa.sinPlaza', { n: numero(sinPlaza) })}</p>
         </Tarjeta>
       </FilaTarjetas>
 
-      <Tarjeta titulo="Los 12 más cerrables del país" estado={ordenados.length === 0 ? 'vacio' : 'ok'} mensaje="Ningún prospecto pasa el filtro" detalle="Quita criterios del cajón de filtros para ver la cartera.">
+      <Tarjeta titulo="Los 12 más cerrables del país" estado={!listo ? 'cargando' : ordenados.length === 0 ? 'vacio' : 'ok'} esqueleto={<EsqTarjetaV2 alto={240} />}
+        mensaje="Ningún prospecto pasa el filtro" detalle="Quita criterios del cajón de filtros para ver la cartera.">
         <div className="cer-grid">
           {ordenados.slice(0, 12).map((p) => (
             <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} avisoIa={avisosIa.get(p.id) ?? null} />

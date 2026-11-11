@@ -19,6 +19,7 @@ type Registro = {
   payload: unknown;
   eq: Array<[string, unknown]>;
   is: Array<[string, unknown]>;
+  not: Array<[string, string, unknown]>;
   neq: Array<[string, unknown]>;
   dentro: Array<[string, unknown]>;
   select: string | null;
@@ -31,7 +32,7 @@ const llamadas: Registro[] = [];
 const respuestas = new Map<string, Array<{ data: unknown; error: { message: string } | null }>>();
 
 function builder(tabla: string) {
-  const r: Registro = { tabla, op: null, payload: null, eq: [], is: [], neq: [], dentro: [], select: null };
+  const r: Registro = { tabla, op: null, payload: null, eq: [], is: [], not: [], neq: [], dentro: [], select: null };
   llamadas.push(r);
   const responder = () => {
     const cola = respuestas.get(tabla);
@@ -47,6 +48,7 @@ function builder(tabla: string) {
   b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.is = (c: string, v: unknown) => { r.is.push([c, v]); return b; };
   b.neq = (c: string, v: unknown) => { r.neq.push([c, v]); return b; };
+  b.not = (c: string, op: string, v: unknown) => { r.not.push([c, op, v]); return b; };
   b.in = (c: string, v: unknown) => { r.dentro.push([c, v]); return b; };
   b.ilike = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.order = () => b;

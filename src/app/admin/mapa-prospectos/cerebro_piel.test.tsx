@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { COLOR_EMBUDO, type DatosMapa, type FilaCompacta } from '@/lib/admin/prospectos-mapa-client';
+import { COLOR_EMBUDO, type DatosMapa, type FilaCompacta, type ResumenProspectos } from '@/lib/admin/prospectos-mapa-client';
 import { emojis } from '../guardas/medir';
 import { Cerebro } from './cerebro';
 
@@ -85,5 +85,47 @@ describe('Cerebro: capacidades presentes en el render', () => {
 
   it('un solo h1 NO sale del Cerebro (lo pone el marco de la página)', () => {
     expect(html).not.toContain('<h1');
+  });
+});
+
+// ── w15/perf (puntos 4 y 15): con SOLO el resumen del servidor el Cerebro ya pinta el mapa de color, el ranking y las cifras ─────────────
+const resumen: ResumenProspectos = {
+  generadoEn: '2026-11-11T12:00:00.000Z', total: 130, conTelefono: 100, conDecisor: 40, sinPlaza: 10,
+  porEtapa: { nuevo: 100, contactado: 30 },
+  porEntidad: {
+    'Nuevo León': { n: 80, conTelefono: 70, conDecisor: 30, porEtapa: { nuevo: 60, contactado: 20 } },
+    Jalisco: { n: 40, conTelefono: 30, conDecisor: 10, porEtapa: { nuevo: 30, contactado: 10 } },
+  },
+};
+
+describe('Cerebro con SOLO el resumen (el detalle llega después)', () => {
+  const html = renderToStaticMarkup(<Cerebro resumen={resumen} />);
+
+  it('las cifras salen del resumen y las que solo el detalle sabe se dicen «cargando» (no un cero)', () => {
+    expect(html).toContain('130'); // prospectos
+    expect(html).toContain('Cargando el detalle de la cartera');
+    expect(html).not.toContain('Urgentes</span><span');
+  });
+
+  it('mapa de color: cada estado con prospectos lleva su paso de la rampa; el máximo, el más oscuro', () => {
+    expect(html).toContain('data-paso="5"'); // Nuevo León (el máximo)
+    expect(html).toMatch(/data-paso="[1-4]"/); // Jalisco (40 de 80: paso intermedio)
+  });
+
+  it('ranking lateral: estados con su cifra exacta, de más a menos, y la leyenda de la rampa con sus rangos reales', () => {
+    expect(html).toContain('Estados con más prospectos');
+    expect(html.indexOf('Nuevo León')).toBeLessThan(html.indexOf('Jalisco', html.indexOf('cer-rank__lista')));
+    expect(html).toContain('cer-rampa');
+    expect(html).toContain('10 sin plaza conocida');
+  });
+
+  it('los controles que dependen del detalle (filtros, atajos) esperan a que llegue', () => {
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>[^]*?Filtros/);
+  });
+
+  it('el HTML NO crece con la cartera: 130 o 33,148 prospectos pesan lo mismo (solo cambian unas cifras)', () => {
+    expect(html).not.toContain('Empresa 1');
+    const grande = renderToStaticMarkup(<Cerebro resumen={{ ...resumen, total: 33_148, conTelefono: 20_000, conDecisor: 9_000, sinPlaza: 500 }} />);
+    expect(Math.abs(grande.length - html.length)).toBeLessThan(500);
   });
 });

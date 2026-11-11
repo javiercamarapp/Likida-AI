@@ -732,7 +732,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 351;
 // w14/org (10-nov-2026): +1 llamada (2,558 -> 2,559), `dashboard/layout.tsx`: la lista de flotas (`tenant`: id, nombre; orden por nombre e id, limit 1000) que SOLO lee el superadmin para que el pie resuelva `?tenant=` (un layout no ve searchParams). Cruce intencional de superadmin; exención nominal en consultas_admin_filtran_tenant.
 // Entrega 4 (w15, 11-nov-2026): +6 llamadas (2,559 -> 2,565), todas de `lib/avisos/estado.ts` (ver el techo de archivos): leer las claves leídas, marcar/desmarcar (`rpc aviso_marcar`), leer y guardar
 // las preferencias por canal y leer y guardar el horario de silencio. Cada una con `usuario_id` + `ambito` de la sesión; las lecturas con límite y orden. Medidas con el guardián.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_565;
+// w15/perf (11-nov-2026): 2,565 → 2,566. UNA entrada nueva (`tablaProspecto()` en lib/admin/prospectos-mapa.ts) que sirve a las tres lecturas ligeras
+// con las que /admin/crecimiento, /admin/vendedores y /admin/mapa-prospectos dejan de bajar la tabla ancha (con `notas`) de 33 mil filas; sin archivos nuevos.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_566;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

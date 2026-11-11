@@ -135,3 +135,55 @@ export interface DetalleProspecto extends ProspectoMapa, TextosProspecto {
   creadoEn: string;
   personas: PersonaProspecto[];
 }
+
+// ── EL RESUMEN DEL SERVIDOR (w15/perf, punto 4) ─────────────────────────────
+// Lo único que viaja en el HTML de /admin/mapa-prospectos: conteos agregados, no 33 mil filas. UNA sola lectura
+// (`getResumenProspectos`) alimenta la pantalla de Ventas, el embudo de Crecimiento y la fuente de Adquisición, así que la cifra de
+// prospectos no puede leerse distinto entre pantallas.
+
+export interface ResumenEntidad {
+  n: number;
+  conTelefono: number;
+  conDecisor: number;
+  /** Conteo por valor persistido de `estado` (las llaves de COLOR_EMBUDO). */
+  porEtapa: Record<string, number>;
+}
+
+export interface ResumenProspectos {
+  generadoEn: string;
+  /** Prospectos vivos (sin duplicados): LA cifra de la cartera. */
+  total: number;
+  porEtapa: Record<string, number>;
+  conTelefono: number;
+  conDecisor: number;
+  /** Vivos cuya plaza no se sabe: se dicen, no se les inventa estado. */
+  sinPlaza: number;
+  porEntidad: Record<string, ResumenEntidad>;
+}
+
+/** Pasos de la rampa secuencial del choropleth (Rovaq usa 5). 0 = sin prospectos. */
+export const PASOS_RAMPA = 5;
+
+/**
+ * Paso 0..5 de un estado. La escala es de RAÍZ CUADRADA, no lineal: con 30 mil prospectos repartidos como están (dos o tres estados
+ * con miles y el resto con cientos) una escala lineal pinta 28 estados del mismo paso más claro y el mapa no distingue nada.
+ */
+export function pasoDeRampa(n: number, max: number): number {
+  if (!(n > 0) || !(max > 0)) return 0;
+  // Se decide contra los MISMOS límites que enseña la leyenda: dos cálculos del mismo corte se desfasan en el redondeo.
+  const limites = limitesRampa(max);
+  return limites.find((l) => n <= l.hasta)?.paso ?? PASOS_RAMPA;
+}
+
+/** Los límites REALES de cada paso (para la leyenda): un rótulo de leyenda tiene que ser verdad. */
+export function limitesRampa(max: number): Array<{ paso: number; desde: number; hasta: number }> {
+  if (!(max > 0)) return [];
+  const out: Array<{ paso: number; desde: number; hasta: number }> = [];
+  let previo = 0;
+  for (let paso = 1; paso <= PASOS_RAMPA; paso++) {
+    const hasta = paso === PASOS_RAMPA ? max : Math.floor((max * paso * paso) / (PASOS_RAMPA * PASOS_RAMPA));
+    if (hasta > previo) out.push({ paso, desde: previo + 1, hasta });
+    previo = Math.max(previo, hasta);
+  }
+  return out;
+}

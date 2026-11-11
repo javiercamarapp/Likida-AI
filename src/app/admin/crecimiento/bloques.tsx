@@ -6,13 +6,15 @@ import { listarCampanasConTotal, estadoIntegracionAds } from '@/lib/admin/campan
 import { ControlCampanas } from './campanas';
 import { accionPausarCampana, accionRefrescarGasto } from './acciones';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
-import { contarProspectosPorEstado, ESTADOS_PROSPECTO, COMISION_PRIMER_MES, COMISION_RECURRENTE } from '@/lib/likida/vendedores';
+import { ESTADOS_PROSPECTO, COMISION_PRIMER_MES, COMISION_RECURRENTE } from '@/lib/likida/vendedores';
+import { embudoCanonico, getResumenProspectos } from '@/lib/admin/prospectos-mapa';
 import { getEmbudoActivacion, getCohortesUso } from '@/lib/admin/instrumentacion';
 import { numero, fechaCorta, usd } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { getT } from '@/lib/i18n/servidor';
 import { AvisoCompacto, Aviso, Disclosure, FilaTarjetas, StatusChip, Tarjeta, TablaBase } from '../../ui-v2/componentes';
-import { BarList, Columnas, Embudo, TiraCifras } from '../../ui-v2/graficas';
+import { Columnas, Embudo, TiraCifras } from '../../ui-v2/graficas';
+import './embudo.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { trAdminDineroEs } from '@/lib/i18n/tr_admin';
@@ -24,7 +26,9 @@ import { trAdminDineroEs } from '@/lib/i18n/tr_admin';
 
 const resumenNegocio = cache(() => getResumenNegocio().catch(() => null));
 // El embudo de ADQUISICIÓN sí es real desde la 0105: cae por su lado a null y se DICE (un embudo vacío por base caída afirmaría que no hay pipeline).
-const prospectosPorEstado = cache(() => contarProspectosPorEstado().catch(() => null));
+// w15/perf (punto 6): el total y el conteo por etapa salen del RESUMEN compartido con Ventas y con Adquisición (una sola lectura de la
+// cartera viva), no de 15 conteos aparte con otra definición de «vivo»: 33,148 / 33,153 / 33,676 era lo que se leía antes.
+const prospectosPorEstado = cache(() => getResumenProspectos().then((r) => ({ total: r.total, porEstado: embudoCanonico(r) })).catch(() => null));
 // Costo por lead + alertas de adquisición (panel-de-adquisicion §2/§5): cae por su lado a null y se DICE.
 const adquisicionAdmin = cache(() => getAdquisicion(ahoraMs()).catch(() => null));
 // El control de campañas (0123, §4) — leer y pausar; jamás crear ni subir.
@@ -69,10 +73,30 @@ export async function BloqueEmbudoAdquisicion() {
     return <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion')} estado="vacio" mensaje={ta('crecimiento_bloques.sin_prospectos_en_el')} detalle={ta('crecimiento_bloques.aparecen_cuando_el_cerebro')} contenida />;
   }
   const { porEstado } = prospectos;
-  const embudo = ESTADOS_PROSPECTO.filter((e) => e.valor !== 'lost').map((e) => ({ clave: e.valor, etiqueta: e.rotulo, valor: porEstado[e.valor], texto: numero(porEstado[e.valor]) }));
+  // (16) Barras proporcionales y de color SOLO para las etapas con prospectos; las que valen 0 se dicen en UNA línea en vez de diez
+  // filas de «0» con 20 px de alto cada una sin señal visual.
+  const etapas = ESTADOS_PROSPECTO.filter((e) => e.valor !== 'lost').map((e) => ({ clave: e.valor, etiqueta: e.rotulo, valor: porEstado[e.valor] }));
+  const conGente = etapas.filter((e) => e.valor > 0);
+  const vacias = etapas.filter((e) => e.valor === 0);
+  const tope = Math.max(1, ...conGente.map((e) => e.valor));
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion_prospectos', { total: numero(prospectos.total) })}>
-      <BarList etiqueta={ta('crecimiento_bloques.prospectos_por_estado')} items={embudo} formato={numero} />
+      <ul className="crc-embudo" aria-label={ta('crecimiento_bloques.prospectos_por_estado')}>
+        {conGente.map((e) => (
+          <li key={e.clave} className="crc-embudo__fila" data-etapa={e.clave}>
+            <div className="crc-embudo__cab">
+              <span className="crc-embudo__etq"><i className="crc-embudo__punto" aria-hidden="true" />{e.etiqueta}</span>
+              <span className="crc-embudo__val">{numero(e.valor)}</span>
+            </div>
+            <svg className="crc-embudo__pista" width="100%" height="8" aria-hidden="true">
+              <rect className="crc-embudo__relleno" x="0" y="0" height="8" rx="4" width={`${Math.max(1, (e.valor / tope) * 100).toFixed(2)}%`} />
+            </svg>
+          </li>
+        ))}
+      </ul>
+      {vacias.length > 0 && (
+        <p className="adm-din-nota">{ta('crecimiento_bloques.sin_prospectos_todavia_en', { etapas: vacias.map((e) => e.etiqueta).join(', ') })}</p>
+      )}
       <p className="adm-din-nota">
         {porEstado.won > 0 ? ta('crecimiento_bloques.conversion_a_cierre_de', { won: porEstado.won, total: numero(prospectos.total) }) : ta('crecimiento_bloques.sin_cierres_todavia_la')}
         {porEstado.lost > 0 && ` ${numero(porEstado.lost)} perdidos.`}
