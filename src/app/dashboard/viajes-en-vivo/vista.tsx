@@ -1,4 +1,4 @@
-import { Aviso, BarraFiltros, BotonEnlace, Disclosure, FiltroInterruptor, FiltroOpciones, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Aviso, BarraFiltros, Boton, BotonEnlace, Disclosure, FiltroInterruptor, FiltroOpciones, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { MapPin, MapPinOff, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -157,7 +157,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
                   <form action={accion}>
                     {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
                     <input type="hidden" name="id" value={tarea.id} />
-                    <button type="submit" className="rv-btn rv-btn--secondary rv-btn--sm">{t('op.marcar_atendida')}</button>
+                    <Boton type="submit" tamano="sm">{t('op.marcar_atendida')}</Boton>
                   </form>
                 )}
               </li>

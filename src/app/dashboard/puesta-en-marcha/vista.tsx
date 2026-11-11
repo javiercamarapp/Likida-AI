@@ -5,10 +5,10 @@ import {
   AlertTriangle, Ban, Check, ChevronDown, CircleDashed, Clock3, Copy, FileUp, HelpCircle, Hourglass, Lock, Mail, User,
 } from 'lucide-react';
 import {
-  Aviso, Boton, BotonEnlace, Chip, Drawer, EncabezadoPagina, type TonoChip,
+  Aviso, Boton, BotonEnlace, Chip, Drawer, type TonoChip,
 } from '@/app/ui-v2/componentes';
 import { ProgresoAnillo } from '@/app/ui-v2/graficas';
-import { anclaTour, TourLanzador } from '@/app/ui-v2/movimiento/tour';
+import { anclaTour } from '@/app/ui-v2/movimiento/tour';
 import {
   armarPasosCincoAgentes, etiquetaGlobal, MOTIVO_MINIMO, ROTULO_ESTADO, RESPONSABLES_POR_OMISION,
   type Declaraciones, type EstadoAsistente, type IdPaso, type PasoAsistente, type Responsables, type SenalesAsistente,
@@ -50,7 +50,7 @@ function EstadoChip({ estado }: { estado: EstadoAsistente }) {
   );
 }
 
-function SoloV2({ children }: { children: React.ReactNode }) {
+export function SoloV2({ children }: { children: React.ReactNode }) {
   // El recorrido solo existe bajo la interfaz nueva: se confirma en el cliente, sin desajuste de hidratación.
   const v2 = useSyncExternalStore(() => () => {}, () => document.querySelector('[data-ui="v2"]') !== null, () => false);
   return v2 ? <>{children}</> : null;
@@ -86,12 +86,6 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
 
   return (
     <div className="rv-pem">
-      <EncabezadoPagina
-        titulo={t('cfg.puesta_en_marcha')}
-        idTitulo="puesta-titulo"
-        apoyo={t('op.deja_lista_tu_operacion_seis_pasos')}
-        acciones={<SoloV2><TourLanzador recorridoId="dueno.completo" etiqueta={t('op.ver_recorrido')} /></SoloV2>}
-      />
 
       {soloLectura && (
         <Aviso tono="info" className="rv-pem__aviso">{t('op.estas_viendo_esta_cuenta_como_superadmin')}</Aviso>
@@ -112,8 +106,8 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
           <ol className="rv-pem__lista" {...anclaTour('asistente.lista')}>
             {r.rutaCritica.map((p) => (
               <li key={p.id}>
-                <button
-                  type="button" className="rv-pem__item" data-activo={p.id === idActual || undefined}
+                <Boton
+                  variante="ghost" className="rv-pem__item !flex !h-auto !w-full !justify-start !whitespace-normal !text-left" data-activo={p.id === idActual || undefined}
                   aria-current={p.id === idActual ? 'step' : undefined}
                   onClick={() => setElegido(p.id)}
                   {...anclaTour(`asistente.paso-${p.id.replace('_', '-')}`)}
@@ -125,7 +119,7 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
                     <span className="rv-pem__item-titulo">{p.titulo}</span>
                     <span className="rv-pem__item-sub">{p.faltaDe ?? ROTULO_ESTADO[p.estado]}</span>
                   </span>
-                </button>
+                </Boton>
               </li>
             ))}
           </ol>
@@ -137,13 +131,13 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
             <ul className="rv-pem__lista">
               {r.despues.map((p) => (
                 <li key={p.id}>
-                  <button type="button" className="rv-pem__item" data-activo={p.id === idActual || undefined} aria-current={p.id === idActual ? 'step' : undefined} onClick={() => setElegido(p.id)}>
+                  <Boton variante="ghost" className="rv-pem__item !flex !h-auto !w-full !justify-start !whitespace-normal !text-left" data-activo={p.id === idActual || undefined} aria-current={p.id === idActual ? 'step' : undefined} onClick={() => setElegido(p.id)}>
                     <span className="rv-pem__num" data-estado={p.estado}><span aria-hidden="true">·</span></span>
                     <span className="rv-pem__item-texto">
                       <span className="rv-pem__item-titulo">{p.titulo}</span>
                       <span className="rv-pem__item-sub">{p.faltaDe ?? ROTULO_ESTADO[p.estado]}</span>
                     </span>
-                  </button>
+                  </Boton>
                 </li>
               ))}
             </ul>
@@ -239,7 +233,7 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
 
       {!soloLectura && paso.numero !== null && paso.estado !== 'listo' && (
         declaraciones.omitidos?.[paso.id] ? (
-          <p className="rv-pem__omitir">{t('op.omitido_por_ti', { v: declaraciones.omitidos[paso.id] ?? '' })}{' '}<button type="button" className="rv-pem__enlace" onClick={quitarOmitido}>{t('op.quitar')}</button></p>
+          <p className="rv-pem__omitir">{t('op.omitido_por_ti', { v: declaraciones.omitidos[paso.id] ?? '' })}{' '}<Boton variante="ghost" tamano="sm" onClick={quitarOmitido}>{t('op.quitar')}</Boton></p>
         ) : omitiendo ? (
           <form className="rv-pem__omitir-form" onSubmit={(e) => {
             e.preventDefault();
@@ -255,7 +249,7 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
             <Boton tamano="sm" variante="ghost" onClick={() => setOmitiendo(false)}>{t('op.cancelar')}</Boton>
           </form>
         ) : (
-          <button type="button" className="rv-pem__enlace" onClick={() => setOmitiendo(true)}>{t('op.omitir_este_paso')}</button>
+          <Boton variante="ghost" tamano="sm" onClick={() => setOmitiendo(true)}>{t('op.omitir_este_paso')}</Boton>
         )
       )}
 

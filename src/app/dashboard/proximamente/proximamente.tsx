@@ -24,7 +24,7 @@ export function Proximamente({ contenido, hrefResumen }: { contenido: ContenidoP
   return (
     <MarcoPagina area="Próximamente" titulo={contenido.nombre} idTitulo="proximamente-titulo" ancho="lectura"
       acciones={<Chip><Clock width={12} height={12} strokeWidth={2} aria-hidden="true" /> Próximamente</Chip>}>
-      <p className="text-[14px]" style={{ color: 'var(--muted)' }}>{contenido.queHara}</p>
+      <p className="text-[14px] text-[var(--muted)]">{contenido.queHara}</p>
       <section className="rv-tarjeta">
         <TituloRecuadro info="proximamente.que_hara">Qué hará por tu operación</TituloRecuadro>
         <ul className="space-y-1.5 text-[14px] list-disc pl-5">
