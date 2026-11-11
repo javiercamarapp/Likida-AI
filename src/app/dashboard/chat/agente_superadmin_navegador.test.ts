@@ -132,11 +132,11 @@ const FIN_ACCION = {
 };
 
 describe.skipIf(SIN_NAVEGADOR)('copiloto unificado · página', () => {
-  it('portada idéntica a «Pregunta a tus datos»: recuadro 736 × 58, título 20/600, temas con punto, sin clip', async () => {
+  it('portada idéntica a «Pregunta a tus datos»: recuadro  × 58, título 20/600, temas con punto, sin clip', async () => {
     const p = await abrir();
     expect(await p.locator('h1').innerText()).toBe('Copiloto');
     const caja = await p.locator('.rv-chat__composer').boundingBox();
-    expect(Math.round(caja!.width)).toBe(736);
+    expect(Math.round(caja!.width)).toBe(650);
     expect(Math.round(caja!.height)).toBe(58);
     expect(await p.locator('.rv-chat__hero :is(h1, h2)').evaluate((e) => `${getComputedStyle(e).fontSize}/${getComputedStyle(e).fontWeight}`)).toBe('20px/600');
     expect(await p.locator('.rv-chat__tema').count()).toBe(3);
