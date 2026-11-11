@@ -79,6 +79,7 @@ export const admin_agentes = {
   'agentes_acciones_agente.motivo': 'Motivo',
   'agentes_acciones_agente.por_que_se_enciende': 'Por qué se enciende',
   'agentes_acciones_agente.por_que_se_apaga': 'Por qué se apaga',
+  'agentes_acciones_agente.acciones_de': 'Acciones de {nombre}',
   'agentes_acciones_agente.configurar': 'Configurar {nombre}',
   'agentes_acciones_agente.solo_se_guarda_lo': 'Solo se guarda lo que cambies. Cada cambio queda en la bitácora con el antes, el después y tu motivo.',
   'agentes_acciones_agente.guardar_cambios': 'Guardar cambios',

@@ -81,6 +81,7 @@ export const admin_agentes: Record<keyof typeof admin_agentesEs, string> = {
   'agentes_acciones_agente.motivo': 'Reason',
   'agentes_acciones_agente.por_que_se_enciende': 'Why it is being turned on',
   'agentes_acciones_agente.por_que_se_apaga': 'Why it is being turned off',
+  'agentes_acciones_agente.acciones_de': 'Actions for {nombre}',
   'agentes_acciones_agente.configurar': 'Configure {nombre}',
   'agentes_acciones_agente.solo_se_guarda_lo': 'Only what you change is saved. Each change is logged with the before, the after and your reason.',
   'agentes_acciones_agente.guardar_cambios': 'Save changes',

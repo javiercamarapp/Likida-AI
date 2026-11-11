@@ -19,3 +19,7 @@
 @media (min-width: 768px) {
   .rv-tb table td { vertical-align: middle; }
 }
+
+/* Menú «⋯» de la fila (Rovaq: acciones por fila dentro de un menú, 28 px): la destructiva «Apagar» vive ahí, no como botón rojo por fila. */
+.rv-agente-menu-btn.rv-btn { width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; justify-content: center; }
+.rv-agente-menu-btn svg { width: 16px; height: 16px; }
