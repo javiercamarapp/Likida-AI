@@ -42,7 +42,7 @@ const FRENO_MS = 200;
 
 export function ComboCatalogo({
   tipo, name, buscar, etiquetaVacia, requerido = false, valorInicial = null,
-  textoInicial = '', total = null, className, estilo, autoComplete = 'off', 'aria-label': ariaLabel,
+  textoInicial = '', total = null, className, autoComplete = 'off', 'aria-label': ariaLabel,
   campoId, enBarra = false,
 }: {
   tipo: TipoCatalogo;
@@ -61,9 +61,6 @@ export function ComboCatalogo({
    *  pudo contar, y entonces no se afirma ninguna cifra. */
   total?: number | null;
   className?: string;
-  /** El `style` del input visible — los campos del panel pintan su fondo con
-   *  variables de marca (`var(--surface)`), no con clases. */
-  estilo?: React.CSSProperties;
   autoComplete?: string;
   'aria-label'?: string;
   /** `id` del input VISIBLE, para que el `<label htmlFor>` del host siga
@@ -143,23 +140,23 @@ export function ComboCatalogo({
         onFocus={() => { if (opciones.length === 0) pedir(texto); }}
         onChange={(e) => alEscribir(e.target.value)}
         className={enBarra ? 'border-0 bg-transparent' : className}
-        style={enBarra ? undefined : estilo} data-anillo={enBarra ? 'envolvente' : undefined}
+        data-anillo={enBarra ? 'envolvente' : undefined}
       />
       <datalist id={listaId}>
         {opciones.map((o) => <option key={o.id} value={o.etiqueta} />)}
       </datalist>
       {fallo ? (
-        <p className={enBarra ? 'rv-sr' : 'text-[11px] mt-1'} style={enBarra ? undefined : { color: 'var(--bad)' }} role={enBarra ? 'status' : undefined}>
+        <p className={enBarra ? 'rv-sr' : 'mt-1 text-[11px] text-[var(--bad)]'} role={enBarra ? 'status' : undefined}>
           No se pudo buscar en el catálogo — vuelve a escribir en un momento.
         </p>
       ) : sinResolver ? (
-        <p className={enBarra ? 'rv-sr' : 'text-[11px] mt-1'} style={enBarra ? undefined : { color: 'var(--warn)' }} role={enBarra ? 'status' : undefined}>
+        <p className={enBarra ? 'rv-sr' : 'mt-1 text-[11px] text-[var(--warn)]'} role={enBarra ? 'status' : undefined}>
           {ambiguo
             ? 'Hay varios con ese nombre: elige uno de la lista, con su teléfono o número.'
             : 'Elige uno de la lista: se guarda el registro, no el texto.'}
         </p>
       ) : total !== null && total > opciones.length && opciones.length > 0 ? (
-        <p className={enBarra ? 'rv-sr' : 'text-[11px] mt-1'} style={enBarra ? undefined : { color: 'var(--faint)' }}>
+        <p className={enBarra ? 'rv-sr' : 'mt-1 text-[11px] text-[var(--faint)]'}>
           {numero(opciones.length)} sugerencia{opciones.length === 1 ? '' : 's'} de {numero(total)} — escribe para acotar.
         </p>
       ) : null}

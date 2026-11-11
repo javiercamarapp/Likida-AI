@@ -93,7 +93,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
               Ofrecer una opción que la base rechaza es peor que no ofrecerla. */}
           <ComboCatalogo tipo="operador" name="operadorId" campoId="operadorId" buscar={buscarCatalogo} requerido
             aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
-            total={totalOperadores} className="w-full" estilo={{ background: 'var(--surface)' }} />
+            total={totalOperadores} className="w-full" />
           <span className="rv-campo__ayuda">
             {totalOperadores === 0
               ? 'Necesitas al menos un operador dado de alta: un viaje no puede existir sin quién lo maneje. El alta rápida está a la derecha.'
@@ -108,7 +108,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
             <label htmlFor="unidadId" className="rv-campo__etq">Unidad</label>
             <ComboCatalogo tipo="unidad" name="unidadId" campoId="unidadId" buscar={buscarCatalogo}
               aria-label="Unidad" etiquetaVacia="Sin asignar todavía"
-              total={totalUnidades} className="w-full cifra-mono" estilo={{ background: 'var(--surface)' }} />
+              total={totalUnidades} className="w-full cifra-mono" />
           </div>
         )}
       </div>
@@ -131,7 +131,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
               <label htmlFor="clienteId" className="rv-campo__etq">Cliente</label>
               <ComboCatalogo tipo="cliente" name="clienteId" campoId="clienteId" buscar={buscarCatalogo}
                 aria-label="Cliente" etiquetaVacia="Sin asignar todavía"
-                total={totalClientes} className="w-full" estilo={{ background: 'var(--surface)' }} />
+                total={totalClientes} className="w-full" />
             </div>
           )}
           <CampoTexto id="ingresoFlete" etiqueta="Ingreso del flete (MXN)" name="ingresoFlete" inputMode="decimal" placeholder="38,500" claseControl="cifra-mono"

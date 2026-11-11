@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { BotonEnlace, Icono } from '@/app/ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS ENLACES DE PÁGINA — UNO (W2 «producto», 1-oct-2026).
@@ -24,12 +24,13 @@ export function EnlacePagina({ href, direccion, etiqueta }: {
 }) {
   const texto = etiqueta ?? (direccion === 'siguiente' ? 'Siguiente' : direccion === 'inicio' ? 'Volver al inicio' : 'Anterior');
   return (
-    <Link href={href} rel={direccion === 'siguiente' ? 'next' : direccion === 'anterior' ? 'prev' : undefined}
-      className="rv-btn rv-btn--secondary" style={{ background: 'var(--surface)', outlineColor: 'var(--marca)' }}>
-      {direccion !== 'siguiente' && <ChevronLeft aria-hidden width={13} height={13} strokeWidth={1.75} />}
+    <BotonEnlace
+      href={href} rel={direccion === 'siguiente' ? 'next' : direccion === 'anterior' ? 'prev' : undefined} tamano="sm"
+      icono={direccion !== 'siguiente' ? <Icono icono={ChevronLeft} tam={14} /> : undefined}
+    >
       {texto}
-      {direccion === 'siguiente' && <ChevronRight aria-hidden width={13} height={13} strokeWidth={1.75} />}
-    </Link>
+      {direccion === 'siguiente' && <Icono icono={ChevronRight} tam={14} />}
+    </BotonEnlace>
   );
 }
 
