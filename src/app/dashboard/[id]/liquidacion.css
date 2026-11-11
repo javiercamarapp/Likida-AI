@@ -69,6 +69,11 @@
 /* Columna izquierda de la ficha (datos + acreditable): apila sus tarjetas a su alto natural, sin estirarse a la línea de tiempo vecina. */
 .rv-liq__col { display: grid; gap: var(--sp-gap, 12px); align-content: start; align-self: start; min-width: 0; }
 .rv-liq__col + .rv-tarjeta { align-self: start; }
+/* Acreditable a todo el ancho: datos a la izquierda y el reparto (deducible / laboral) a la derecha; sin reparto, una sola columna. */
+.rv-liq__acred .rv-tarjeta__cuerpo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px 32px; align-items: start; }
+.rv-liq__acred-datos { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.rv-liq__acred .rv-liq__sub { border-top: 0; padding-top: 0; }
+@media (max-width: 767.98px) { .rv-liq__acred .rv-liq__sub { border-top: 1px solid var(--line); padding-top: 10px; } }
 /* Fieldset plano: la semántica de grupo se conserva, el marco con muesca del navegador no. */
 [data-ui="v2"] .rv-fieldset.rv-liq__plano { padding: 0; gap: 6px; border: 0; border-radius: 0; background: transparent; }
 [data-ui="v2"] .rv-fieldset.rv-liq__plano > .rv-fieldset__leyenda { padding: 0; }
