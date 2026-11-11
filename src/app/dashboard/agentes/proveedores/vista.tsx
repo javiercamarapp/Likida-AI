@@ -109,7 +109,7 @@ export function VistaAgenteProveedores({
         </>} />
       ) : undefined}
     >
-      <div className="rv-ag-pila">
+      <div className="rv-ag-pila rv-ag-compacto">
         {/* La bandeja primero: es lo que se decide todos los días. Subir y el buzón son la puerta de entrada y van debajo, lado a lado. */}
       <Tarjeta titulo={tx('proveedores.vista.la_bandeja')} info="proveedores.bandeja">
         <p className="rv-prov__nota">{tx('proveedores.vista.pendientes_arriba_lo_decidido_queda')}</p>
