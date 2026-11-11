@@ -2051,4 +2051,12 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'e26b.arco_por_responder_nota': 'open requests without an answer',
   'e26b.arco_pronto_nota': 'about to run out of time',
   'e26b.arco_vencidas_nota': 'the response deadline has already passed',
+  'r4.rent_periodo': 'Trips period',
+  'r4.rent_p_todo': 'All',
+  'r4.rent_p_30d': '30 days',
+  'r4.rent_p_90d': '90 days',
+  'r4.rent_p_12m': '12 months',
+  'r4.rent_metodo': 'The period measures the trips in that window (margin, revenue and cost). Receivables are the current balance of all invoices and do not change with the period.',
+  'r4.timb_ir_hacerlo': 'Go do it',
+  'r4.pol_titulo': 'Spending policies',
 };

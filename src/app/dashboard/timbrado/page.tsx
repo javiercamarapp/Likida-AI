@@ -116,7 +116,7 @@ export default async function PaginaTimbrado({
         { etiqueta: tr('timbrado.page.bloqueados'), info: 'timbrado.bloqueados', valor: filas.filter((f) => f.timbre?.estado === 'pendiente').length, tono: filas.some((f) => f.timbre?.estado === 'pendiente') ? 'bad' : undefined },
       ] : undefined}
       etiquetaCifras={tr('timbrado.page.viajesEnLaCola')} selloCifras={selloHoy(tr('timbrado.page.selloCola'))}
-      pie={<>{visibles.length > 0 ? <>{tr('timbrado.page.primeroLoQuePide')}<br /></> : null}{tr('timbrado.page.estaColaListaLos')}</>}
+      pie={<span className="rv-timb__nota">{visibles.length > 0 ? <>{tr('timbrado.page.primeroLoQuePide')}<br /></> : null}{tr('timbrado.page.estaColaListaLos')}</span>}
     >
       {filas === null ? (
         <EstadoError>{tr('timbrado.page.noSePudoLeer')}</EstadoError>

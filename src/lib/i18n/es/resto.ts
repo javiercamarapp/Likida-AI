@@ -1298,4 +1298,6 @@ export const resto = {
   'e26b.vend_vivos_nota': 'prospectos abiertos, sin ganar ni perder',
   'e26b.vend_ganados_nota': 'prospectos que ya son clientes',
   'e26b.vend_propuesta_nota': 'en la etapa de propuesta o de piloto',
+  'r4.vend_area': 'Ventas',
+  'r4.vend_apoyo': 'Tu cartera de prospectos por etapa, lo que cuenta de tu comisión y lo que sigue.',
 } as const;

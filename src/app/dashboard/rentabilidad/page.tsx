@@ -4,6 +4,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getRentabilidad, getCobranza } from '@/lib/likida/comercial';
 import { VistaRentabilidad } from './vista';
+import { desdeDelPeriodo, periodoDe } from './periodo';
 import { sufijoTenant } from '../sufijo';
 import type { Metadata } from 'next';
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,7 +27,7 @@ export const dynamic = 'force-dynamic';
 export default async function PaginaRentabilidad({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; p?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; p?: string; periodo?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/rentabilidad', sp);
@@ -41,11 +42,14 @@ export default async function PaginaRentabilidad({
 
   // Cada bloque cae a su propio error honesto: una tabla ilegible no debe
   // tirar la página entera ni, peor, leerse como "no hay facturas".
+  // El periodo (30 d / 90 d / 12 m / todo) mueve la RENTABILIDAD (viajes del periodo, `p_desde` de la RPC). La cartera por cobrar es el saldo
+  // vigente de todas las facturas, no un flujo del periodo: la vista lo dice en su nota de método.
+  const periodo = periodoDe(sp.periodo);
   const [rentabilidad, cobranza] = await Promise.all([
-    getRentabilidad(tenantId).catch(() => null),
+    getRentabilidad(tenantId, desdeDelPeriodo(periodo)).catch(() => null),
     getCobranza(tenantId, { pagina }).catch(() => null),
   ]);
 
   const { t: tr } = await getT('dinero');
-  return <VistaRentabilidad tr={tr} rentabilidad={rentabilidad} cobranza={cobranza} sufijo={sufijoTenant(sp)} />;
+  return <VistaRentabilidad tr={tr} rentabilidad={rentabilidad} cobranza={cobranza} sufijo={sufijoTenant(sp)} periodo={periodo} />;
 }

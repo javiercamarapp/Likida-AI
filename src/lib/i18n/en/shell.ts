@@ -279,4 +279,5 @@ export const shell: Record<keyof typeof shellEs, string> = {
   'nav.n.vistas-de-rol': 'Role views',
   'nav.n.codigo': 'Code',
   'nav.n.ver-como-una-flota': 'View as a fleet',
+  'vendedor.prospectos': 'My prospects',
 };
