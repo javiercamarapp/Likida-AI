@@ -5,7 +5,8 @@ import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './conexiones.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
-import { ConectoresDetalle, estadoConector } from './conectores-detalle';
+import { ConectoresDetalle } from './conectores-detalle';
+import { estadoConector } from './estado-conector';
 
 /**
  * La pantalla de Conexiones (F7): cada renglón es un estado MEDIDO con su
