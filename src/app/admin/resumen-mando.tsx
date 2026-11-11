@@ -129,21 +129,28 @@ export async function BloqueCalidad() {
   const [cal, p] = await Promise.all([calidadAgentes(), parados()]);
   const filas = filasCalidad(cal ? cal.agentes : null, p ? p.parados : null, (id) => agentePorId(id)?.nombre ?? null);
   const ilegible = cal === null && p === null;
+  // 49 agentes «sin medir» no son una tabla: la consola enseña los primeros (los problemas van primero en `filasCalidad`) y manda al resto.
+  const MAX_FILAS = 8;
+  const visibles = filas.slice(0, MAX_FILAS);
   return (
-    <section aria-labelledby="res-calidad">
-      <h2 id="res-calidad" className="rv-recuadro-tit__texto">{ta('resumen_mando.operacion')}</h2>
+    <Tarjeta
+      titulo={ta('resumen_mando.operacion')}
+      acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/agentes">{ta('resumen_mando.ver_todo')}</BotonEnlace>}
+      elevar entra="tarjeta"
+    >
       {cal && cal.errores.length > 0 ? <AvisoCompacto tono="warn" resumen="Alguna fuente de calidad no se pudo leer: sus columnas dicen «sin dato», no cero." /> : null}
       <TablaBase
         etiqueta={ta('resumen_mando.calidad_de_los_agentes')}
         columnas={columnasCalidad(ta, tSis)}
-        filas={filas}
+        filas={visibles}
         idFila={(f) => f.agente}
         estado={ilegible ? 'error' : 'ok'}
         mensajeError="No disponible ahora. No es cero."
         vacio={{ titulo: ta('resumen_mando.sin_agentes_medidos'), texto: ta('resumen_mando.aparecen_aqui_cuando_corren') }}
-        densa tarjetaMovil
+        tarjetaMovil
       />
-    </section>
+      {filas.length > MAX_FILAS ? <p className="adm-res-pie">{numero(MAX_FILAS)} / {numero(filas.length)}</p> : null}
+    </Tarjeta>
   );
 }
 

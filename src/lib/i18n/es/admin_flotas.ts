@@ -47,6 +47,7 @@ export const admin_flotas = {
   'flotas_ficha.facturas_saas_de_la': 'Facturas SaaS de la flota',
   'flotas_ficha.periodo': 'Periodo',
   'flotas_ficha.monto': 'Monto',
+  'flotas_ficha.administrar_el_plan': 'Administrar el plan',
   'flotas_ficha.plan_de_esta_flota': 'Plan de esta flota',
   'flotas_ficha.arranque_de_la_flota': 'Arranque de la flota',
   'flotas_ficha.no_se_pudo_leer_3': 'No se pudo leer el arranque',

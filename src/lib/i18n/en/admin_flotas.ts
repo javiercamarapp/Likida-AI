@@ -49,6 +49,7 @@ export const admin_flotas: Record<keyof typeof admin_flotasEs, string> = {
   'flotas_ficha.facturas_saas_de_la': 'Fleet SaaS invoices',
   'flotas_ficha.periodo': 'Period',
   'flotas_ficha.monto': 'Amount',
+  'flotas_ficha.administrar_el_plan': 'Manage the plan',
   'flotas_ficha.plan_de_esta_flota': 'This fleet’s plan',
   'flotas_ficha.arranque_de_la_flota': 'Fleet onboarding',
   'flotas_ficha.no_se_pudo_leer_3': 'The onboarding could not be read',

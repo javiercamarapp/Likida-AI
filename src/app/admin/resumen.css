@@ -23,14 +23,26 @@
 /* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas (pf-tile). */
 [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1023.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 479.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 479.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+/* pf-tile de Rovaq: gap 16, padding 20, SIN filete, cifra 26/600. */
+[data-ui="v2"] .adm-res-tiles { gap: 16px; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi { padding: 20px; border-top-width: 0; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-weight: 600; }
+@media (max-width: 767px) { [data-ui="v2"] .adm-res-tiles .rv-kpi { padding: 12px; } }
+/* Aviso de acceso: banner blanco con escudo (Rovaq P1), no una franja gris. */
+[data-ui="v2"] .adm-acceso { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: var(--t-body, 13px); color: var(--ink); }
+[data-ui="v2"] .adm-acceso svg { flex: none; color: var(--ink); }
 
 /* Ficha 360 (Rovaq P2b): seis tarjetas de cifra en 3 columnas y secciones apiladas con título de 13/600 (ov-section-title). */
 [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1023.98px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 479.98px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: minmax(0, 1fr); } }
+/* Móvil 412: rejilla de 2 columnas (Rovaq), nunca una pila de tarjetas de 120 px. */
+@media (max-width: 479.98px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
 [data-ui="v2"] .adm-ficha-sec { display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 72px; }
-[data-ui="v2"] .adm-ficha-sec__t { margin: 0; font: 600 var(--t-body, 13px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
+/* El título de sección vive en la tarjeta; el h2 queda solo para lectores de pantalla y anclas (?seccion=). */
+[data-ui="v2"] .adm-ficha-sec__t { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+[data-ui="v2"] .adm-plan { display: flex; flex-direction: column; gap: 12px; }
+[data-ui="v2"] .adm-plan__fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* Botón de envío de FormaConAviso a la escala de Rovaq (32 px, 13/500, radio 8) mientras la pieza compartida conserva su Tailwind heredado
    (pedido_compartido: forma.tsx debe usar <Boton>). Solo dentro de `.adm-forma-fina`. */
