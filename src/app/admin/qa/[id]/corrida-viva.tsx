@@ -15,6 +15,7 @@
 // muerto sin escribir su aborto — nunca un spinner eterno con cara de avance.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, FileText, MessageCircle } from 'lucide-react';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
@@ -233,7 +234,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
       {/* ── El renglón resumen ────────────────────────────────────────── */}
       <TiraCifras
         etiqueta={tx('qa_corrida_viva.calidad')}
-        items={[
+        items={uniformes([
           {
             etiqueta: tx('salud_sistema.estado'), valor: pill.etiqueta, nota: corrida.motivo ?? undefined,
             tono: pill.estado === 'ok' || pill.estado === 'warn' || pill.estado === 'bad' ? pill.estado : undefined,
@@ -250,7 +251,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
             etiqueta: tx('qa_corrida_viva.flota_de_prueba'), valor: corrida.tenantNombre,
             nota: `${corrida.inicio ? tx('qa_corrida_viva.inicio', { v: fechaHoraMx(corrida.inicio, idioma) }) : tx('qa_corrida_viva.sin_arrancar')}${corrida.fin ? ` · ${tx('qa_corrida_viva.fin', { v: fechaHoraMx(corrida.fin, idioma) })}` : ''}`,
           },
-        ]}
+        ])}
       />
 
       {/* ── EL AVANCE DEL CARRIL COMPLETO ─────────────────────────────

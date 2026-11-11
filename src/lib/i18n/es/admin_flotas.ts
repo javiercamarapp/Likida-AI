@@ -330,4 +330,5 @@ export const admin_flotas = {
   'soporte.vistas_de_la_cola': 'Vistas de la cola de soporte',
   'soporte.nada_en_esta_vista': 'Ningún ticket en esta vista',
   'soporte.vista': 'Vista',
+  'a1r4.observado': 'Observado',
 } as const;

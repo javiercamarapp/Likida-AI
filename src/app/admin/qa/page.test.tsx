@@ -52,7 +52,7 @@ it('las cuatro fuentes en verde: cero errores, datos reales llegan a la pantalla
   dobles.leerManifiesto.mockResolvedValue({ ok: true, datos: [{ path: 'a.jpg' }] });
   dobles.firmarRutas.mockResolvedValue(new Map([['a.jpg', 'https://firmada/a.jpg']]));
   dobles.gastoTotalHoyUsd.mockResolvedValue({ ok: true, datos: 12.5 });
-  const pagina = await QaPage() as unknown as { props: PropsQa };
+  const pagina = await QaPage({}) as unknown as { props: PropsQa };
   expect(pagina.props.fotos).toEqual([{ path: 'a.jpg', url: 'https://firmada/a.jpg' }]);
   expect(pagina.props.gastoHoy).toBe(12.5);
   expect(pagina.props.bancoError).toBeNull();
@@ -62,7 +62,7 @@ it('el banco de fotos caído no vacía historial/gasto/lecturas — cada fuente 
   dobles.leerManifiesto.mockRejectedValueOnce(new Error('storage caído'));
   dobles.listarCorridas.mockResolvedValue({ ok: true, datos: [{ id: 'c-1' }] });
   dobles.gastoTotalHoyUsd.mockResolvedValue({ ok: true, datos: 5 });
-  const pagina = await QaPage() as unknown as { props: PropsQa };
+  const pagina = await QaPage({}) as unknown as { props: PropsQa };
   expect(pagina.props.fotos).toEqual([]);
   expect(pagina.props.bancoError).toContain('storage caído');
   expect(pagina.props.corridas).toEqual([{ id: 'c-1' }]);
@@ -72,7 +72,7 @@ it('el banco de fotos caído no vacía historial/gasto/lecturas — cada fuente 
 
 it('un `{ok:false}` propio de gastoTotalHoyUsd se distingue de "$0 real" — nunca se confunden', async () => {
   dobles.gastoTotalHoyUsd.mockResolvedValue({ ok: false, error: 'no se pudo leer el gasto del día' });
-  const pagina = await QaPage() as unknown as { props: PropsQa };
+  const pagina = await QaPage({}) as unknown as { props: PropsQa };
   expect(pagina.props.gastoHoy).toBeNull();
   expect(pagina.props.gastoError).toBe('no se pudo leer el gasto del día');
 });
@@ -82,7 +82,7 @@ it('las lecturas de OCR (Map) se serializan a objeto plano para viajar al client
     ok: true,
     datos: new Map([['foto-1', { corridaEn: '2026-01-01', modelo: 'gpt', medicion: {}, costoUsd: 0.01, motivo: null }]]),
   });
-  const pagina = await QaPage() as unknown as { props: PropsQa };
+  const pagina = await QaPage({}) as unknown as { props: PropsQa };
   expect(pagina.props.lecturasIniciales).toEqual({
     'foto-1': { corridaEn: '2026-01-01', modelo: 'gpt', medicion: {}, costoUsd: 0.01, motivo: null },
   });
@@ -91,7 +91,7 @@ it('las lecturas de OCR (Map) se serializan a objeto plano para viajar al client
 it('lecturas de OCR caídas no vacían el resto — fuente propia, mismo criterio', async () => {
   dobles.leerUltimasLecturas.mockRejectedValueOnce(new Error('caída'));
   dobles.listarCorridas.mockResolvedValue({ ok: true, datos: [{ id: 'c-1' }] });
-  const pagina = await QaPage() as unknown as { props: PropsQa };
+  const pagina = await QaPage({}) as unknown as { props: PropsQa };
   expect(pagina.props.lecturasIniciales).toEqual({});
   expect(pagina.props.lecturasError).toContain('caída');
   expect(pagina.props.corridas).toEqual([{ id: 'c-1' }]);

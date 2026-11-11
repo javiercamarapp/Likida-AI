@@ -116,4 +116,5 @@ export const avisos = {
   'e26b.avisos_sin_leer_nota': 'avisos sin leer',
   'e26b.avisos_cargados': 'Cargados',
   'e26b.avisos_cargados_nota': 'avisos que entran a la lista',
+  'a1r4.observado': 'Observado',
 } as const;

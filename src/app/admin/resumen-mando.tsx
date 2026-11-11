@@ -64,8 +64,9 @@ export async function BloqueTuTurno() {
     return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} estado="vacio" mensaje={ta('resumen_mando.nada_espera_tu_decision')} detalle={ta('resumen_mando.cuando_algo_necesite_tu')} />;
   }
   return (
-    <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/tu-turno">{ta('resumen_mando.ver_todo')}</BotonEnlace>}>
-      <ul className="adm-res-lista">
+    <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/tu-turno">{ta('a1r4.ver_todas')}</BotonEnlace>}>
+      <p className="adm-eyebrow">{ta('a1r4.eb_atencion')}</p>
+      <ul className="adm-res-lista adm-res-lista--tarjetas">
         {t.filas.map((f) => (
           <li key={f.clave} className="adm-res-fila">
             <div className="adm-res-fila__texto">
@@ -73,7 +74,7 @@ export async function BloqueTuTurno() {
               {f.detalle ? <span className="adm-res-fila__detalle">{f.detalle}</span> : null}
             </div>
             <StatusChip tono={f.urgencia === 'neutral' ? 'neutral' : f.urgencia}>{f.etiqueta}</StatusChip>
-            {f.href ? <BotonEnlace tamano="sm" variante="secondary" href={f.href}>{f.accion}</BotonEnlace> : <StatusChip tono="muted">{ta('resumen_mando.sin_pantalla')}</StatusChip>}
+            {f.href ? <Link className="adm-res-fila__ver" href={f.href}>{ta('a1r4.ver_detalle')}<span aria-hidden="true"> ›</span><span className="rv-sr"> · {f.accion}</span></Link> : <StatusChip tono="muted">{ta('resumen_mando.sin_pantalla')}</StatusChip>}
           </li>
         ))}
       </ul>
@@ -90,6 +91,7 @@ export async function BloqueCaja() {
   if (r === null && mes === null) return <Tarjeta titulo={ta('resumen_mando.costos')} estado="error" reintentar />;
   return (
     <Tarjeta titulo={ta('resumen_mando.costos')} elevar entra="tarjeta">
+      <p className="adm-eyebrow">{ta('a1r4.eb_dinero')}</p>
       <dl className="adm-res-pares">
         <dt>{mes ? ta('resumen_mando.gasto_de_ia_en', { etiquetaMes: mes.etiquetaMes }) : ta('resumen_mando.gasto_de_ia_del')}</dt>
         <dd>{mes ? usd(mes.mesUsd) : '—'}</dd>
@@ -135,9 +137,10 @@ export async function BloqueCalidad() {
   return (
     <Tarjeta
       titulo={ta('resumen_mando.operacion')}
-      acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/agentes">{ta('resumen_mando.ver_todo')}</BotonEnlace>}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/agentes">{ta('a1r4.ver_todas')}</BotonEnlace>}
       elevar entra="tarjeta"
     >
+      <p className="adm-eyebrow">{ta('a1r4.eb_calidad')}</p>
       {cal && cal.errores.length > 0 ? <AvisoCompacto tono="warn" resumen="Alguna fuente de calidad no se pudo leer: sus columnas dicen «sin dato», no cero." /> : null}
       <TablaBase
         etiqueta={ta('resumen_mando.calidad_de_los_agentes')}

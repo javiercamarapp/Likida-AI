@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -254,7 +255,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
       apoyo={t('aprobaciones.lo_que_los_agentes')}
       avisos={<Aviso tono="info">{t('aprobaciones.el_candado_es_de')}</Aviso>}
       etiquetaCifras={t('aprobaciones.kpi_etiqueta')}
-      cifras={[
+      cifras={uniformes([
         decidir === null
           ? { etiqueta: t('aprobaciones.kpi_por_decidir'), valor: null, estado: 'error', reintentar: true }
           : {
@@ -272,7 +273,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
         estadoBandeja === null || estadoBandeja === undefined
           ? { etiqueta: t('aprobaciones.kpi_bandeja'), valor: null, estado: 'error', reintentar: true }
           : { etiqueta: t('aprobaciones.kpi_bandeja'), valor: estadoBandeja.frenaAlRunner ? t('aprobaciones.kpi_frena') : t('aprobaciones.kpi_libre'), tono: estadoBandeja.frenaAlRunner ? 'bad' : 'ok' },
-      ]}
+      ])}
     >
       <PanelesAprobaciones conteos={conteos} porAprobar={porAprobar} porEnviar={paraEnviar} historial={historial} />
     </EsqueletoTablaMaestra>

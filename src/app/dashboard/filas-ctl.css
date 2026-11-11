@@ -25,4 +25,4 @@
 }
 
 /* El botón de envío de `FormaConAviso` (compartido, con `style=` propio) lleva el borde de 1 px de tinta de todo primario .rv-btn. */
-[data-ui="v2"] form button[type="submit"].inline-flex.h-8 { border: var(--borde-w, 1px) solid var(--btn-borde, var(--ink)); }
+[data-ui="v2"] form button[type="submit"].inline-flex.h-8:not(.rv-btn--danger) { border: var(--borde-w, 1px) solid var(--btn-borde, var(--ink)); }

@@ -106,7 +106,8 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         ocultos={ocultos}
         hrefMapa="/dashboard/mapa"
         totalEnCurso={totalEnCurso}
-        mapa={tablero.filas.length > 0 ? <MapaVivo viajes={dibujo.viajes} pines={dibujo.pines} /> : null}
+        // La tarjeta de mapa con su panel va SIEMPRE (plantilla MP): sin viajes dibuja su propio estado vacío, no desaparece.
+        mapa={<MapaVivo viajes={dibujo.viajes} pines={dibujo.pines} />}
         pregunta={conChat ? <PreguntaAlAsistente tenantParam={sp.tenant ?? null} /> : null}
         tareas={<TareasAbiertas t={tx} tareas={tareas} errorLectura={tareasConError} aviso={sp.atencion ?? null} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
         // A quién le llega el aviso de una tarea nueva (apagado por defecto): solo el dueño decide quién recibe los correos de la flota.

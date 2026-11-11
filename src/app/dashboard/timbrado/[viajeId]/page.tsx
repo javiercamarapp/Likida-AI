@@ -62,11 +62,6 @@ export default async function PaginaTimbradoViaje({
       titulo={tr('timbrado.viajeId.page.tituloViaje', { rotulo })}
       apoyo={tr('e26b.timb_apoyo')}
       volver={{ href: `${RUTA}${sufijoTenant(sp)}`, etiqueta: tr('timbrado.viajeId.page.volverATimbrado') }}
-      acciones={(
-        <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary">
-          {tr('timbrado.viajeId.page.verElBorradorCompleto')}
-        </BotonEnlace>
-      )}
       chips={(
         <>
           <li><Chip>{v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('timbrado.viajeId.page.rutaSinCapturar')}</Chip></li>
@@ -88,6 +83,11 @@ export default async function PaginaTimbradoViaje({
           <Chip tono={borradorListo ? 'ok' : 'warn'} tamano="estado">{borradorListo ? tr('e26b.timb_paso_hecho') : tr('e26b.timb_paso_revisar')}</Chip>
         </div>
         <p className="rv-esq__paso-quien">{borradorListo ? tr('e26b.timb_borrador_ok') : tr('e26b.timb_borrador_falta', { n: numero(v.borrador.faltantes.length + v.borrador.fallas.length) })}</p>
+        <div className="rv-esq__paso-acciones">
+          <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
+            {tr('r4.timb_ir_hacerlo')}
+          </BotonEnlace>
+        </div>
       </section>
       <SeccionTimbrado v={v} searchParams={sp} />
     </EsqueletoFicha>

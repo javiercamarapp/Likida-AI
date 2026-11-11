@@ -117,4 +117,5 @@ export const avisos: Record<keyof typeof avisosEs, string> = {
   'e26b.avisos_sin_leer_nota': 'unread alerts',
   'e26b.avisos_cargados': 'Loaded',
   'e26b.avisos_cargados_nota': 'alerts in the list',
+  'a1r4.observado': 'Observed',
 };

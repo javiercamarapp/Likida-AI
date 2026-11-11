@@ -378,4 +378,10 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'costos_facturacion.sin_facturas_emitidas': 'No invoices issued',
   'consumo.avisos_mas': '{n} more AI spend notices.',
   'consumo.ver_avisos': 'See the notices',
+  'a1r4.observado': 'Observed',
+  'a1r4.cr_prospectos': 'Prospects in pipeline',
+  'a1r4.cr_flotas_alta': 'Fleets signed up',
+  'a1r4.cr_de_pago': '{n} paying',
+  'a1r4.ver_cuales': 'See which ones ({n})',
+  'a1r4.techo_apoyo': 'How much each fleet can spend on AI per day, where its cap comes from and how much it has used today.',
 };

@@ -3,19 +3,19 @@ import { datosParaProveedor } from '@/lib/i18n/servidor';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import {
-  Aviso, BotonEnlace, CamposSistema, CampoFecha, CampoSelect, CampoTexto, EstadoError, EstadoVacio, Fieldset, FormaConAviso, Icono, StatusChip, TablaBase,
+  Aviso, BarraPeriodo, BotonEnlace, CamposSistema, CampoFecha, CampoSelect, CampoTexto, EstadoError, EstadoVacio, Fieldset, Icono, StatusChip, TablaBase,
   type AccionDeForma, type ColumnaBase, type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra, CajonVistaRapida } from '@/app/ui-v2/esqueletos';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
-import { CajonAlta } from '../clientes/forma';
+import { CajonAlta, FormaDeCajon } from '../clientes/forma';
 import { sufijoTenant } from '../sufijo';
 import { urlRegistro } from '../paginar-registro';
 import '../caja-vacia.css';
 import './cotizaciones.css';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { TriangleAlert } from 'lucide-react';
+import { FileText, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -272,6 +272,7 @@ export default async function PaginaCotizaciones({
           {tr('cotizaciones.page.sinDeclarar', { costosSinDeclarar })}. {tr('cotizaciones.page.loQueTuDeclaras')}
         </Aviso>
       ) : undefined}
+      filtros={panel ? <BarraPeriodo etiqueta={tr('cotizaciones.page.cotizaciones')} chips={[{ id: 'alcance', etiqueta: tr('cotizaciones.page.alcance') }]} /> : undefined}
       cifras={cifras}
       etiquetaCifras={tr('cotizaciones.page.cotizaciones')}
       pie={panel && cot.length > 0 ? tr('cotizaciones.page.pie', { n: numero(cot.length) }) : undefined}
@@ -280,7 +281,8 @@ export default async function PaginaCotizaciones({
         <EstadoError reintentar>{tr('cotizaciones.page.noSePudoLeer')}</EstadoError>
       ) : cot.length === 0 ? (
         <div className="rv-caja-vacia">
-          <EstadoVacio titulo={tr('cotizaciones.page.sinCotizaciones')}>{tr('cotizaciones.page.laPrimeraSeArma')}</EstadoVacio>
+          <EstadoVacio titulo={tr('cotizaciones.page.sinCotizaciones')} icono={FileText} pantalla
+            accion={<BotonEnlace href={hrefNuevo('cotizacion')} variante="suave">{tr('cotizaciones.page.nuevaCotizacion')}</BotonEnlace>}>{tr('cotizaciones.page.laPrimeraSeArma')}</EstadoVacio>
         </div>
       ) : (
         <TablaCotizaciones
@@ -310,9 +312,9 @@ export default async function PaginaCotizaciones({
       })()}
 
       {panel && sp.nuevo === 'costos' && (
-        <CajonAlta titulo={tr('cotizaciones.page.costosDeclaradosDeLa')} hrefCerrar={hrefSinNuevo}>
+        <CajonAlta titulo={tr('cotizaciones.page.costosDeclaradosDeLa')} hrefCerrar={hrefSinNuevo} idPrefijo="costos">
           <p className="rv-cot__nota">{tr('cotizaciones.page.loQueTuDeclaras')}</p>
-          <FormaConAviso accion={guardarConfig} boton="Guardar costos" columnas="md:grid-cols-1">
+          <FormaDeCajon accion={guardarConfig} boton="Guardar costos" idPrefijo="costos">
             <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.porKilometro')}>
               <div className="rv-forma__rejilla">
                 <CampoTexto id="dieselPorKm" name="dieselPorKm" etiqueta={tr('cotizaciones.page.dieselKm')} defaultValue={vInicial(c?.dieselPorKm)} ayuda={tr('cotizaciones.page.combustiblePorKmComo')} />
@@ -331,14 +333,14 @@ export default async function PaginaCotizaciones({
                 <CampoTexto id="margenObjetivoPct" name="margenObjetivoPct" etiqueta={tr('cotizaciones.page.markupObjetivoSobreEl')} defaultValue={vInicial(c?.margenObjetivoPct)} ayuda={tr('cotizaciones.page.precioSugeridoCosto1')} />
               </div>
             </Fieldset>
-          </FormaConAviso>
+          </FormaDeCajon>
         </CajonAlta>
       )}
 
       {panel && sp.nuevo === 'cotizacion' && (
-        <CajonAlta titulo={tr('cotizaciones.page.nuevaCotizacion')} hrefCerrar={hrefSinNuevo} ancho="xl">
+        <CajonAlta titulo={tr('cotizaciones.page.nuevaCotizacion')} hrefCerrar={hrefSinNuevo} ancho="xl" idPrefijo="cotizacion">
           <p className="rv-cot__nota">{tr('cotizaciones.page.siEstaRutaTiene')}</p>
-          <FormaConAviso accion={cotizar} boton="Cotizar" columnas="md:grid-cols-1">
+          <FormaDeCajon accion={cotizar} boton="Cotizar" idPrefijo="cotizacion">
             <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.ruta')}>
               <div className="rv-forma__rejilla">
                 <CampoSelect id="clienteId" name="clienteId" etiqueta={tr('cotizaciones.page.cliente')} defaultValue="">
@@ -358,7 +360,7 @@ export default async function PaginaCotizaciones({
                 <CampoFecha id="vigenteHasta" name="vigenteHasta" etiqueta={tr('cotizaciones.page.vigenteHasta')} />
               </div>
             </Fieldset>
-          </FormaConAviso>
+          </FormaDeCajon>
         </CajonAlta>
       )}
     </EsqueletoTablaMaestra>

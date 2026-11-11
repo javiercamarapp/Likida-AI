@@ -1,0 +1,14 @@
+/* Estado · lo propio de la tabla de servicios sobre `legal/publico-r2.css` (se importa DESPUÉS). Filas de ~50 px (la descripción de una línea más el semáforo),
+   no de 78: la disponibilidad no se parte en tres renglones. Rótulos de móvil a 12 px (nada por debajo de 12). */
+[data-ui="v2"] .rv-estado__tabla th[scope="row"] { padding: 6px 14px; line-height: 1.3; }
+[data-ui="v2"] .rv-estado__tabla td { padding: 6px 14px; }
+[data-ui="v2"] .rv-estado__nota { margin-top: 1px; line-height: 1.3; }
+@media (min-width: 820px) {
+  [data-ui="v2"] .rv-estado__tabla .rv-estado__disp { white-space: nowrap; }
+  [data-ui="v2"] .rv-estado__pista { min-width: 240px; }
+  [data-ui="v2"] .rv-estado__celda { height: 12px; }
+}
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-estado__etq { font-size: 12px; }
+  [data-ui="v2"] .rv-estado__tabla .rv-estado__disp { font-size: 12px; }
+}

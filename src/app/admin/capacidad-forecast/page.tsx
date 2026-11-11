@@ -9,6 +9,7 @@ import { proyectarCosto } from './proyeccion';
 import { BarraFiltros, EstadoVacio, FiltroOpciones, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
 import { AreaMini, type PropsCifra } from '../../ui-v2/graficas';
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -49,7 +50,7 @@ export default async function CapacidadForecastPage({ searchParams }: { searchPa
       : { etiqueta: tp('capacidad_forecast.costo_diario_promedio', proyeccion.diasVentana), valor: usd(proyeccion.promedioDiario) },
     proyeccion === null
       ? { etiqueta: t('capacidad_forecast.proyeccion_a_30_dias'), ...sinProy }
-      : { etiqueta: t('capacidad_forecast.proyeccion_a_30_dias'), valor: usd(proyeccion.proyeccionMensual) },
+      : { etiqueta: t('capacidad_forecast.proyeccion_a_30_dias'), valor: usd(proyeccion.proyeccionMensual), tipo: 'estimado' as const },
     unidades === null
       ? { etiqueta: t('capacidad_forecast.costo_ia_por_viaje'), valor: null, estado: 'error' as const, mensaje: t('capacidad_forecast.no_se_pudieron_leer_las_unidades') }
       : unidades.costoIaPorViaje === null
@@ -63,7 +64,7 @@ export default async function CapacidadForecastPage({ searchParams }: { searchPa
   return (
     <EsqueletoPanelCifras
       titulo={t('capacidad_forecast.capacidad_forecast')}
-      cifras={cifras}
+      cifras={observadas(cifras, t('a1r4.observado'))}
       variante="12"
       filtros={(
         <BarraFiltros accion="/admin/capacidad-forecast" enLinea etiqueta={t('capacidad_forecast.filtros_proyeccion')} nActivos={horizonte !== 30 ? 1 : 0} limpiarHref="/admin/capacidad-forecast">
@@ -104,7 +105,7 @@ export default async function CapacidadForecastPage({ searchParams }: { searchPa
                 ? <>{t('capacidad_forecast.costo_de_ia_medido_por_viaje', { usd: usd(unidades.costoIaPorViaje), numero: numero(unidades.muestraViajes, idioma) })}{unidades.muestraViajes < 30 ? t('capacidad_forecast.muestra_chica_apenas_indicativo') : ''}).</>
                 : <>{t('capacidad_forecast.sin_liquidaciones_en_30d_el_costo')}</>}
             </p>
-            <TablaBase
+            <TablaBase tarjetaMovil
               etiqueta={t('capacidad_forecast.proyeccion_de_capacidad_por_escenario')}
               columnas={columnasEscenario(unidades.costoIaPorViaje, t, idioma)}
               filas={ESCENARIOS_VIAJES_DIA}

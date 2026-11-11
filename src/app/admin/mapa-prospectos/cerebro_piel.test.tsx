@@ -47,11 +47,13 @@ describe('Cerebro: contrato visual', () => {
     expect(new Set(tintas).size).toBe(tintas.length);
   });
 
-  it('«lost» y «perdido» se rotulan igual y salen como UNA sola etapa en la leyenda', () => {
+  it('«lost» y «perdido» salen como UNA sola etapa en «El embudo, en luces»; la leyenda de las luces va por familias de forma distinta', () => {
     const html = renderToStaticMarkup(<Cerebro inicial={datos} />);
-    const leyenda = html.slice(html.indexOf('Leyenda del embudo'));
-    const bloque = leyenda.slice(0, leyenda.indexOf('</div>'));
-    expect(bloque.split('Perdido').length - 1).toBe(1);
+    const embudo = html.slice(html.indexOf('El embudo, en luces'));
+    expect(embudo.slice(0, embudo.indexOf('</section>')).split('Perdido').length - 1).toBe(1);
+    const leyenda = html.slice(html.indexOf('cer-familias'));
+    const bloque = leyenda.slice(0, leyenda.indexOf('</ul>'));
+    expect(bloque.match(/data-familia=/g)?.length).toBe(5);
   });
 
   it('el ala izquierda sigue existiendo y solo aparece desde 1900 px', () => {
