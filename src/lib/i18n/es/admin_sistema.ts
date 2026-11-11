@@ -1536,4 +1536,8 @@ export const admin_sistema = {
   'mcp_clientes.registrado': 'Registrado {fecha}. El nombre lo declaró quien se registró. Devolvería el código a:',
   'mcp_clientes.direccion_invalida': 'dirección inválida',
   'mcp_clientes.aprobar': 'Aprobar',
+  'conversaciones.apoyo': 'Los hilos de WhatsApp entre el bot y los choferes de todas las flotas.',
+  'conversaciones.mensajes_listados': 'Mensajes en las conversaciones listadas',
+  'conversaciones.listadas_n': '{n} conversaciones en la lista',
+  'conversaciones.vacio_detalle': 'Cuando un chofer escriba por WhatsApp, su conversación aparecerá aquí.',
 } as const;

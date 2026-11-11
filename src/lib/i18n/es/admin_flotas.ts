@@ -331,4 +331,9 @@ export const admin_flotas = {
   'soporte.nada_en_esta_vista': 'Ningún ticket en esta vista',
   'soporte.vista': 'Vista',
   'a1r4.observado': 'Observado',
+  'flotas.eb_nuevo_espacio': 'Nuevo espacio',
+  'flotas_ficha.eb_atencion': 'Atención',
+  'flotas_ficha.eb_corridas': 'Corridas',
+  'flotas_ficha.eb_datos': 'Datos',
+  'flotas_ficha.eb_tickets': 'Tickets',
 } as const;

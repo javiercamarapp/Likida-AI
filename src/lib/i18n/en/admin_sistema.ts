@@ -1538,4 +1538,8 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'mcp_clientes.registrado': 'Registered {fecha}. The name was declared by whoever registered. It would return the code to:',
   'mcp_clientes.direccion_invalida': 'invalid address',
   'mcp_clientes.aprobar': 'Approve',
+  'conversaciones.apoyo': 'WhatsApp threads between the bot and the drivers of every fleet.',
+  'conversaciones.mensajes_listados': 'Messages in the listed conversations',
+  'conversaciones.listadas_n': '{n} conversations in the list',
+  'conversaciones.vacio_detalle': 'When a driver writes on WhatsApp, the conversation will appear here.',
 };

@@ -67,5 +67,12 @@
 
 /* Fila 6-6 sin aire: cada tarjeta mide lo que dice su contenido y la pila de la derecha reparte el alto del embudo. */
 [data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > .rv-tarjeta { height: auto; }
 [data-ui="v2"] .adm-pila { display: flex; flex-direction: column; gap: var(--sp-gap, 12px); min-width: 0; }
-[data-ui="v2"] .adm-pila > .rv-tarjeta { height: auto; }
+[data-ui="v2"] .adm-pila > .rv-tarjeta { height: auto; align-self: stretch; width: 100%; }
+/* El agente asignador respira: botón, corridas y nota con separación propia; la nota al pie del embudo envuelve en vez de cortarse. */
+.ven-asignador { gap: 12px; }
+.ven-asignador .ven-corridas__error { max-width: 100%; }
+.ven-tarjeta__tenue--fino { white-space: normal; overflow: visible; text-overflow: clip; }
+/* La barra de filtros no lleva fondo propio (Rovaq FilterBar): se funde con el lienzo como en las demás páginas. */
+[data-ui="v2"] .ven-filtros .rv-filtros { background: transparent; }

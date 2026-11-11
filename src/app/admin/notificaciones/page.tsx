@@ -9,6 +9,7 @@ import { resolverBandeja } from '@/lib/avisos/bandeja';
 import { uniformes } from '../cifras-uniformes';
 import PaginaAvisos from '@/app/ui-v2/avisos/pagina-avisos';
 import { getT } from '@/lib/i18n/servidor';
+import '../resumen.css';
 
 export const dynamic = 'force-dynamic';
 
