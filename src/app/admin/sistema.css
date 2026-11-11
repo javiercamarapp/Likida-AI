@@ -75,3 +75,12 @@
 [data-ui="v2"] .adm-bit-chip__copiar { flex: none; height: 20px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; font: 500 11px/1 var(--font-sans-ui, inherit); color: var(--muted); cursor: pointer; }
 [data-ui="v2"] .adm-bit-chip__copiar:hover { background: var(--surface); color: var(--ink); }
 [data-ui="v2"] .adm-bit-chip__copiar:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+
+/* F26 ronda 5: filas de dos líneas (reloj + descripción, fecha + «hace») con 10 px de aire arriba y abajo, como Organizaciones de Rovaq (58 px). */
+@media (min-width: 820px) {
+  [data-ui="v2"] .rv-tl:has(.adm-sis-sub) .rv-tl__td { height: auto; min-height: 56px; padding-block: 10px; }
+  [data-ui="v2"] .rv-tb table:has(.adm-sis-sub, .rv-agente-sub) tbody :is(th, td) { height: auto; min-height: 56px; padding-block: 10px; }
+}
+
+/* F26 ronda 5: la tarjeta «contenida» de una fila de la rejilla no se estira a la altura de su vecina (la gráfica con su tabla abierta la dejaba alta y vacía). */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.adm-fase-tabla { height: auto; align-self: start; }

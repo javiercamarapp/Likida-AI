@@ -5,6 +5,8 @@ import AgenteConversacion from '../../dashboard/chat/agente-conversacion';
 import '../../ui-v2/graficas.css';
 import '../../ui-v2/movimiento.css';
 import '../../ui-v2/chat.css';
+// Medidas de la página de Rovaq /preguntale (736 px, descripción 13 px): las mismas que «Pregunta a tus datos».
+import '../../dashboard/chat/chat-pagina.css';
 
 export const dynamic = 'force-dynamic';
 

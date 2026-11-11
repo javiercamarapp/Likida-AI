@@ -67,7 +67,8 @@ beforeAll(async () => {
   const rollup = 'output' in salida ? salida.output : [];
   bundle = (rollup.find((o) => o.type === 'chunk') as { code: string }).code;
   const ui = join(SRC, 'app/ui-v2');
-  css = ['tokens.css', 'componentes.css', 'graficas.css', 'movimiento.css', 'overlay.css', 'chat.css'].map((f) => readFileSync(join(ui, f), 'utf8')).join('\n');
+  css = ['tokens.css', 'componentes.css', 'graficas.css', 'movimiento.css', 'overlay.css', 'chat.css'].map((f) => readFileSync(join(ui, f), 'utf8')).join('\n')
+    + '\n' + readFileSync(join(SRC, 'app/dashboard/chat/chat-pagina.css'), 'utf8');
 }, 180_000);
 afterAll(async () => { await browser?.close(); });
 
@@ -141,11 +142,11 @@ async function preguntar(p: Page, q: string) {
 const linea = (p: Page, o: unknown) => p.evaluate((x) => (window as unknown as { __flujo: { linea: (o: unknown) => void } }).__flujo.linea(x), o);
 
 describe.skipIf(SIN_NAVEGADOR)('chat · portada y medidas', () => {
-  it('portada: título, frase, recuadro de 650 × 58 y temas con sus tres preguntas; campo de puntos pintando', async () => {
+  it('portada: título, frase, recuadro de 736 × 58 y temas con sus tres preguntas; campo de puntos pintando', async () => {
     const p = await abrir(1440, 900);
     expect(await p.locator('h1').innerText()).toBe('Pregunta a tus datos');
     const caja = await p.locator('.rv-chat__composer').boundingBox();
-    expect(Math.round(caja!.width)).toBe(650);
+    expect(Math.round(caja!.width)).toBe(736);
     expect(Math.round(caja!.height)).toBe(58);
     expect(await p.locator('.rv-chat__tema').count()).toBe(3);
     expect(await p.locator('.rv-chat__q').count()).toBe(3);

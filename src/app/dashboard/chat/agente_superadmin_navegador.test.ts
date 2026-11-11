@@ -65,7 +65,8 @@ beforeAll(async () => {
   const rollup = 'output' in salida ? salida.output : [];
   bundle = (rollup.find((o) => o.type === 'chunk') as { code: string }).code;
   const ui = join(SRC, 'app/ui-v2');
-  css = ['tokens.css', 'componentes.css', 'graficas.css', 'movimiento.css', 'overlay.css', 'chat.css'].map((f) => readFileSync(join(ui, f), 'utf8')).join('\n');
+  css = ['tokens.css', 'componentes.css', 'graficas.css', 'movimiento.css', 'overlay.css', 'chat.css'].map((f) => readFileSync(join(ui, f), 'utf8')).join('\n')
+    + '\n' + readFileSync(join(SRC, 'app/dashboard/chat/chat-pagina.css'), 'utf8');
 }, 180_000);
 afterAll(async () => { await browser?.close(); });
 
@@ -105,7 +106,7 @@ async function abrir(opts: { panel?: boolean; convs?: unknown[]; respuestaAccion
   await p.route('http://admin.prueba/**', (r) => r.fulfill({
     contentType: 'text/html',
     body: `<!doctype html><html lang="es-MX" data-theme="light"><head><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{margin:0}:root{--font-sans-ui:system-ui,sans-serif}${css}</style></head>
-      <body><div data-ui="v2" class="tema-neutro" style="display:flex;height:100dvh"><div id="montaje" style="flex:1;display:flex;min-width:0;height:calc(100dvh - 2rem)"></div></div>
+      <body><div data-ui="v2" class="tema-neutro" style="display:flex;height:100dvh"><div id="montaje" class="rv-chat-pagina" style="flex:1;display:flex;min-width:0;height:calc(100dvh - 2rem)"></div></div>
       <script>${bundle.replace(/<\/script>/g, '<\\/script>')}</script></body></html>`,
   }));
   const errores: string[] = [];
@@ -131,11 +132,11 @@ const FIN_ACCION = {
 };
 
 describe.skipIf(SIN_NAVEGADOR)('copiloto unificado · página', () => {
-  it('portada idéntica a «Pregunta a tus datos»: recuadro 650 × 58, título 20/600, temas con punto, sin clip', async () => {
+  it('portada idéntica a «Pregunta a tus datos»: recuadro 736 × 58, título 20/600, temas con punto, sin clip', async () => {
     const p = await abrir();
     expect(await p.locator('h1').innerText()).toBe('Copiloto');
     const caja = await p.locator('.rv-chat__composer').boundingBox();
-    expect(Math.round(caja!.width)).toBe(650);
+    expect(Math.round(caja!.width)).toBe(736);
     expect(Math.round(caja!.height)).toBe(58);
     expect(await p.locator('.rv-chat__hero :is(h1, h2)').evaluate((e) => `${getComputedStyle(e).fontSize}/${getComputedStyle(e).fontWeight}`)).toBe('20px/600');
     expect(await p.locator('.rv-chat__tema').count()).toBe(3);

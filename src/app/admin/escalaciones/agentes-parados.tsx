@@ -116,7 +116,7 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, resumen
         </p>
       ) : (
         <>
-          <TablaBase etiqueta="Agentes que no corrieron" columnas={columnas} filas={filas} idFila={(p) => p.agente} densa />
+          <TablaBase etiqueta="Agentes que no corrieron" columnas={columnas} filas={filas} idFila={(p) => p.agente} densa tarjetaMovil />
           <p className="bj-nota">
         {parados.length > tope
           ? t('parados.se_listan', { tope: numero(tope), total: numero(parados.length) })

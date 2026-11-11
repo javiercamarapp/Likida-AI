@@ -87,7 +87,7 @@ export default async function AgenteOcrPage() {
         },
       }}
     >
-      <Tarjeta key="lee" titulo={t('agente_ocr.que_tan_bien_lee')} contenida
+      <Tarjeta key="lee" titulo={t('agente_ocr.que_tan_bien_lee')}
         acciones={precision === null || precision.global.exactitud === null ? <BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.abrir_calidad')}</BotonEnlace> : undefined}>
         {precision === null ? (
           <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.no_se_pudo_leer')}</b> {t('agente_ocr.sin_campos_medidos_no')}</p>

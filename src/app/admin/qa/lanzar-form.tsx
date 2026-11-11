@@ -11,13 +11,14 @@
 // para que el motivo sea idéntico al candado real.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { usdCorto } from './usd-corto';
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, Play, Trash2, Plus } from 'lucide-react';
 import { Aviso, Boton, Casilla, CampoTexto, Fieldset, Icono, Radio, Tarjeta, Tooltip } from '@/app/ui-v2/componentes';
 import '../qa/qa.css';
 import { escenarioPorId, ESCENARIOS_QA } from '@/lib/admin/qa-escenarios';
-import { usd, usd4 } from '@/lib/formato';
+import { usd } from '@/lib/formato';
 import {
   validarLanzar, carrilPara, MAX_FOTOS_CARRIL_RAPIDO, TECHO_PASADA_MS,
   type EscenarioId, type FotoBanco,
@@ -145,7 +146,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
   const validacion = validarLanzar(cuerpoLanzar);
   const motivoBloqueo =
     gastoError !== null ? t('qa_lanzar_form.no_se_pudo_leer_el_gasto')
-    : gastoHoyUsd !== null && gastoHoyUsd >= topeDiaUsd ? t('qa_lanzar_form.el_gasto_de_hoy_ya_toco', { usd4: usd4(gastoHoyUsd), usd: usd(topeDiaUsd) })
+    : gastoHoyUsd !== null && gastoHoyUsd >= topeDiaUsd ? t('qa_lanzar_form.el_gasto_de_hoy_ya_toco', { usd4: usdCorto(gastoHoyUsd), usd: usd(topeDiaUsd) })
     : bancoError !== null ? t('qa_banco_verdad.el_banco_de_fotos_no_se')
     : !validacion.ok ? validacion.error
     : null;
