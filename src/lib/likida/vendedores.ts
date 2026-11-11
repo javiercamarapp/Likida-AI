@@ -30,7 +30,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo, traerTodoEnParalelo } from './pg';
 import { acotada } from './presupuesto';
-import { DatoInvalido, datoInvalido, etiqueta } from './errores';
+import { datoInvalido, etiqueta } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { provisionarUsuario } from '@/lib/auth/provisionar';
 import { validarInvitacionVendedor } from '@/lib/auth/invitar';

@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { leerConfigSalida } from './salida_config';
 import * as repo from './repo';
 import type { DocumentoFila } from './repo';

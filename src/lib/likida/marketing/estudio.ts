@@ -31,7 +31,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { firmarRutas } from '@/lib/admin/qa-storage';
 
 export const BUCKET_HOOKS = 'marketing_hooks_video';
@@ -72,7 +72,7 @@ export interface UrlFirmadaSubida {
  *  Storage con ese token (ver el porqué al inicio del archivo). */
 export async function pedirUrlFirmadaHook(mime: string): Promise<UrlFirmadaSubida> {
   if (!MIME_VIDEO_HOOK.has(mime)) {
-    throw new DatoInvalido(`Ese tipo de archivo (${mime || 'desconocido'}) no es un video aceptado — manda mp4, mov o webm.`);
+    throw datoInvalido('estudio.video_no_aceptado', { mime: mime || 'desconocido' });
   }
   const path = `${crypto.randomUUID()}.${extDeVideo(mime)}`;
   const { data, error } = await supabaseAdmin().storage.from(BUCKET_HOOKS).createSignedUploadUrl(path);
@@ -167,7 +167,7 @@ export function esTipoReferencia(v: string): v is TipoReferencia {
  *  (el Server Action de la página) ya tiene el `File` en la mano. */
 export function validarFotoReferencia(mime: string, bytes: number): void {
   if (!MIME_IMAGEN_REFERENCIA.has(mime)) {
-    throw new DatoInvalido(`Ese tipo de imagen (${mime || 'desconocido'}) no se acepta — manda jpg, png o webp.`);
+    throw datoInvalido('estudio.imagen_no_aceptada', { mime: mime || 'desconocido' });
   }
   if (bytes > TOPE_IMAGEN_BYTES) {
     throw datoInvalido('estudio.la_foto_pesa_mas_de', { v: Math.round(TOPE_IMAGEN_BYTES / (1024 * 1024)) });

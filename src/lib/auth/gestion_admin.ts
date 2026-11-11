@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
 import { rateLimit } from '@/lib/ratelimit';
 import { anotarAccionAdmin, type ActorAdmin } from '@/lib/admin/acciones_riesgo';

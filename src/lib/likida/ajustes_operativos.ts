@@ -1,4 +1,4 @@
-import { DatoInvalido, datoInvalido, etiqueta } from './errores';
+import { datoInvalido, etiqueta } from './errores';
 import { parsearImporteMx } from '@/lib/formato';
 import type { LikidaConfig } from './config';
 

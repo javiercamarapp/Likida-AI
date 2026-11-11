@@ -4,7 +4,7 @@ import { appUrl } from '@/lib/env';
 import { mxn, round2, TOLERANCIA_ABONO_MXN } from '@/lib/formato';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora, type EntidadBitacora } from './bitacora_escritura';
-import { DatoInvalido, AbonoYaRegistrado, datoInvalido } from './errores';
+import { AbonoYaRegistrado, datoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { parseCfdiXml, leerPagosRep } from './intake/cfdi_xml';
 import { parseRepXml } from './intake/rep';

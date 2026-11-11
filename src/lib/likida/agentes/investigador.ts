@@ -29,7 +29,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { hostNoPublico } from '@/lib/http/destino_publico';
 import { httpsPublico } from '@/lib/http/https_publico';
 import { acotada } from '../presupuesto';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateStructured } from '@/lib/llm/openrouter';
 import { clasificarFalloModelo } from '@/lib/llm/fallo_modelo';

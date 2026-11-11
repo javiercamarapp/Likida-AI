@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from './presupuesto';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL DIRECTORIO DE EMERGENCIA (0198, Fase 5 — paso 3 del plano).

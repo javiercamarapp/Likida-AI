@@ -16,7 +16,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { traerTodo } from '@/lib/likida/pg';
 
 export interface Campana {

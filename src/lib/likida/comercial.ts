@@ -36,7 +36,7 @@ import { acotada } from './presupuesto';
 // cifra fiscal se lea diferente en dos pantallas, y eso se lee como dos
 // cálculos distintos.
 import { round2 } from '@/lib/formato';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 
 // ── Forma del jsonb: fail-closed ───────────────────────────────────────────
 

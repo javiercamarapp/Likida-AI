@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { logger } from '@/lib/logger';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STRIPE — lo que Likida le cobra a la flota.

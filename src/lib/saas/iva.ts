@@ -1,5 +1,6 @@
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { round2 } from '@/lib/formato';
+import { trMensajes } from '@/lib/i18n/mensajes_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DE QUÉ LADO DEL PRECIO ESTÁ EL IVA — el único sitio que lo decide.
@@ -71,11 +72,7 @@ export function etiquetaIva(criterio: CriterioIva): string {
 
 /** El mensaje que ve quien tiene que arreglarlo. Una sola redacción para las
  *  dos puertas (emitir y timbrar), porque la acción es la misma. */
-export const FALTA_CRITERIO_IVA =
-  'Este plan no declara si su precio INCLUYE el IVA o si el IVA va encima, así que no se sabe cuánto cobrar ni por ' +
-  'cuánto timbrar. Se arregla en Stripe: ponle al price `tax_behavior` en «inclusive» (el precio ya trae el IVA) o ' +
-  '«exclusive» (el IVA va aparte) y vuelve a guardar el price en Planes y precios. Emitir un CFDI por 16% de más es ' +
-  'irreversible, así que no se emite a ciegas.';
+export const FALTA_CRITERIO_IVA = trMensajes('es').t('iva.falta_criterio');
 
 /**
  * Parte un precio en subtotal + IVA, según el criterio declarado.
@@ -96,7 +93,7 @@ export function desglosarPrecio(precio: number, criterio: CriterioIva): Desglose
     throw datoInvalido('iva.el_precio_del_plan_no');
   }
   if (criterio === null || criterio === undefined) {
-    throw new DatoInvalido(FALTA_CRITERIO_IVA);
+    throw datoInvalido('iva.falta_criterio');
   }
 
   if (criterio === true) {

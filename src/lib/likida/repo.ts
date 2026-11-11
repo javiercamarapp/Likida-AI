@@ -17,7 +17,7 @@ import {
   declararUmbralPeaje, declararFacilidad15,
   regimenElegiblePorClave, REGIMENES_ELEGIBLES_15,
 } from './perfil/preguntas';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import type { CuadreParaResumen } from './cuadre/resumen';
 
 // El tope de consulta vive en `presupuesto.ts`, con `TOPE_CONSULTA_MS` y el

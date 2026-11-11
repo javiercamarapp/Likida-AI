@@ -30,7 +30,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { anotarBitacora } from './bitacora_escritura';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
 import { opcionesDeEnvio, textoRenderizado, PLANTILLA } from '@/lib/meta/plantillas_catalogo';

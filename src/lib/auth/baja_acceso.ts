@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
 import { logger } from '@/lib/logger';
 import { anotarAccionAdmin, type ActorAdmin } from '@/lib/admin/acciones_riesgo';

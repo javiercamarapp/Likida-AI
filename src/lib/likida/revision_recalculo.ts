@@ -10,7 +10,7 @@ import { getDatosFiscales } from '@/lib/saas/fiscal';
 import { rutasPdfVersionadas, rutaPdfOperador } from './liquidacion/rutas_pdf';
 import { estadiasParaLiquidacion } from './conductor/servicios';
 import { logger } from '@/lib/logger';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import type { Gasto, Liquidacion } from '@/types/likida';
 
 export interface AjustePedido { gastoId: string; montoNuevo: number }

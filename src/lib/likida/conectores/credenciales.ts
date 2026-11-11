@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { cifrar, descifrar, pistasDe, cofreConfigurado } from './cofre';
 import { contextoCredencial } from './contexto_credencial';
 import { conectorPorId } from './registro';

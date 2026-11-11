@@ -65,7 +65,7 @@ import { conteo, traerTodo } from '@/lib/likida/pg';
 import { acotada } from '@/lib/likida/presupuesto';
 import { round2, TZ_MX, hoyMx } from '@/lib/formato';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { desglosarPrecio } from '@/lib/saas/iva';
 import { facilidad15Vigente } from '@/lib/likida/perfil/preguntas';
 // Solo TIPOS: `import type` se borra al compilar, así que esto no arrastra el

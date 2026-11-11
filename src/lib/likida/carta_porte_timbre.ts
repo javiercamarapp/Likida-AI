@@ -32,7 +32,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { getBorradorViaje } from './carta_porte_datos';

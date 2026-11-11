@@ -1,4 +1,4 @@
-import { DatoInvalido, datoInvalido, etiqueta } from './errores';
+import { datoInvalido, etiqueta } from './errores';
 // El formato de cifras vive SOLO en formato.ts, y hay una prueba que falla si
 // otro archivo formatea por su cuenta. Este archivo la hizo fallar en su
 // primera versión con un `toLocaleString` en el mensaje de error: el guardia

@@ -618,4 +618,12 @@ export const datosEn: Record<keyof typeof import('./es').datosEs, string> = {
   'etq.la_poliza': 'the policy',
   'etq.el_permiso_sict': 'the SICT permit',
   'etq.la_verificacion': 'the inspection',
+  'patio.fuera_de_patio': 'That record is not from your yard. Ask whoever manages the fleet to correct it or assign it to you.',
+  'liq_externa.conflicto_formato': 'Someone else saved the format or the phones while you were editing, and your changes were not applied so as not to overwrite theirs. Reload the screen, review what was left and make your change again.',
+  'sat.rfc_no_verificado': 'Likida has not yet verified your fleet\'s RFC for the SAT mailbox, so it cannot open your SAT mailbox. Ask your Likida contact to register it and try again.',
+  'sat.rfc_ajeno': 'The mailbox RFC must be your fleet\'s verified tax RFC. With another RFC - even one from your group - Likida does not open the mailbox until your Likida contact verifies it.',
+  'iva.falta_criterio': 'This plan does not declare whether its price INCLUDES VAT or whether VAT goes on top, so it is not known how much to charge or what amount to stamp. It is fixed in Stripe: set the price\'s `tax_behavior` to «inclusive» (the price already includes VAT) or «exclusive» (VAT is separate) and save the price again in Plans and prices. Issuing a CFDI for 16% too much is irreversible, so it is not issued blindly.',
+  'salida_config.campos_inexistentes': 'The configuration has fields that do not exist (credentials are not saved here).',
+  'estudio.video_no_aceptado': 'That file type ({mime}) is not an accepted video - send mp4, mov or webm.',
+  'estudio.imagen_no_aceptada': 'That image type ({mime}) is not accepted - send jpg, png or webp.',
 };

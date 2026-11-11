@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import {
   armarEpisodios, resumirEstadias,
   type ContextoEstadias, type EpisodioEstadia, type PoliticaDetencion,

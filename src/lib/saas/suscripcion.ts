@@ -7,7 +7,7 @@ import {
   type DatosFiscales,
 } from './stripe';
 import { cancelarCfdi, facturapiConfigurado } from './facturapi';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { hoyMx, inicioDiaMx } from '@/lib/formato';
 import { alertarOperador } from '@/lib/observability/alerta';
 

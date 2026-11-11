@@ -18,7 +18,7 @@
 
 import { INTERRUPTORES, apagar, encender, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { correrRunner } from '@/lib/likida/agentes/runner';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 

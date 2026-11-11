@@ -17,7 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateResponse } from '@/lib/llm/openrouter';
 import { encolarPieza, verificarFormatoCampana } from './cola';

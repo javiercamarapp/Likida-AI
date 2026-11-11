@@ -619,4 +619,12 @@ export const datosEs = {
   'etq.la_poliza': 'la póliza',
   'etq.el_permiso_sict': 'el permiso SICT',
   'etq.la_verificacion': 'la verificación',
+  'patio.fuera_de_patio': 'Ese registro no es de tu patio. Pídele a quien administra la flota que lo corrija o que te lo asigne.',
+  'liq_externa.conflicto_formato': 'Otra persona guardó el formato o los teléfonos mientras tú editabas, y tus cambios no se aplicaron para no pisar los suyos. Recarga la pantalla, revisa lo que quedó y vuelve a hacer tu cambio.',
+  'sat.rfc_no_verificado': 'Likida todavía no tiene verificado el RFC de tu flota para el buzón del SAT, así que no puede abrir tu buzón del SAT. Pídele a tu contacto de Likida que lo registre y vuelve a intentarlo.',
+  'sat.rfc_ajeno': 'El RFC del buzón tiene que ser el RFC fiscal verificado de tu flota. Con otro RFC —aunque sea de tu grupo— Likida no abre el buzón sin que antes lo verifique tu contacto de Likida.',
+  'iva.falta_criterio': 'Este plan no declara si su precio INCLUYE el IVA o si el IVA va encima, así que no se sabe cuánto cobrar ni por cuánto timbrar. Se arregla en Stripe: ponle al price `tax_behavior` en «inclusive» (el precio ya trae el IVA) o «exclusive» (el IVA va aparte) y vuelve a guardar el price en Planes y precios. Emitir un CFDI por 16% de más es irreversible, así que no se emite a ciegas.',
+  'salida_config.campos_inexistentes': 'La configuración trae campos que no existen (las credenciales no se guardan aquí).',
+  'estudio.video_no_aceptado': 'Ese tipo de archivo ({mime}) no es un video aceptado — manda mp4, mov o webm.',
+  'estudio.imagen_no_aceptada': 'Ese tipo de imagen ({mime}) no se acepta — manda jpg, png o webp.',
 } as const;

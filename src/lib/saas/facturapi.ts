@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TIMBRADO DEL CFDI — lo que convierte un cobro en una operación cerrada.

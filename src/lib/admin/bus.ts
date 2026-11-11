@@ -17,7 +17,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 

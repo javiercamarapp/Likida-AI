@@ -26,7 +26,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from './presupuesto';
 import { traerTodo, conteo } from './pg';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
 
 export interface Terminal {

@@ -27,7 +27,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import { acotada } from './presupuesto';
 
 /** El catálogo completo: 'global' + los 7 agentes del dominio de

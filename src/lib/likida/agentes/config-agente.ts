@@ -12,7 +12,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { ESTADOS_AGENTE, type EstadoAgente } from './definiciones';
 

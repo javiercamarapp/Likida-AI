@@ -49,7 +49,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { correoConfigurado } from '@/lib/correo/enviar';
 import { enviarPiezaPorCorreo, topeCorreoFrioDia, filtrarSuprimidos, TIPOS_CAMPANA } from './cola';

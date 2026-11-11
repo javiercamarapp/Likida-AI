@@ -13,7 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
-import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja, datoInvalido } from '../errores';
+import { OperadorAmbiguo, OperadorDeBaja, datoInvalido } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
 import { PATRON_FOLIO } from '../orquestador/escalamiento';
@@ -228,8 +228,6 @@ export async function leerVersionFormato(tenantId: string): Promise<string | nul
   return typeof v === 'string' ? v : null;
 }
 
-const MENSAJE_CONFLICTO_FORMATO = 'Otra persona guardó el formato o los teléfonos mientras tú editabas, y tus cambios no se aplicaron para no pisar los suyos. Recarga la pantalla, revisa lo que quedó y vuelve a hacer tu cambio.';
-
 /**
  * Guarda el formato (y los teléfonos que lo acompañan). `version` es lo que devolvió `leerVersionFormato` antes de editar:
  * con ella el guardado es CONDICIONAL (la fila sigue en esa versión; `null` = seguía sin existir) y, si otra persona la cambió
@@ -249,7 +247,7 @@ export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlot
   if (version === null) {
     const ins = await acotada(supabaseAdmin().from('liquidacion_formato_flota').insert({ tenant_id: tenantId, ...fila }), 'liqext.formato_crear');
     if (ins.error) {
-      if (ins.error.code === '23505') throw new DatoInvalido(MENSAJE_CONFLICTO_FORMATO);
+      if (ins.error.code === '23505') throw datoInvalido('liq_externa.conflicto_formato');
       throw new Error(`liquidacion_formato_flota guardar: ${ins.error.message}`);
     }
     return;
@@ -257,7 +255,7 @@ export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlot
   const upd = await acotada(supabaseAdmin().from('liquidacion_formato_flota').update(fila)
     .eq('tenant_id', tenantId).eq('actualizado_en', version).select('tenant_id'), 'liqext.formato_guardar');
   if (upd.error) throw new Error(`liquidacion_formato_flota guardar: ${upd.error.message}`);
-  if ((upd.data ?? []).length === 0) throw new DatoInvalido(MENSAJE_CONFLICTO_FORMATO);
+  if ((upd.data ?? []).length === 0) throw datoInvalido('liq_externa.conflicto_formato');
 }
 
 /**

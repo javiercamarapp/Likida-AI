@@ -16,7 +16,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 
 /** Lo que se guarda en `liquidacion_desglose.poliza` mientras no haya póliza real. Visible tal cual en pantalla. */
 export const POLIZA_PROVISIONAL = 'PROVISIONAL';

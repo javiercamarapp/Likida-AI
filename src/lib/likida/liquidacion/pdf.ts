@@ -20,7 +20,7 @@ import type { ResultadoEstadiasPeriodo } from '../conductor/estadias_lectura';
 
 import { leyendaPdf } from '../cuadre/leyendas';
 import { LOGO_PNG_BASE64 } from '@/lib/marca/logo';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import type { Liquidacion, Viaje, Operador } from '@/types/likida';
 
 // Paleta (Apple) en 0–1 para pdf-lib

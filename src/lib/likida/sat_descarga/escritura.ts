@@ -18,7 +18,7 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { resolverDescargaSat, estadoDescargaSat } from './index';
 import { VENTANA_MAX_DIAS } from './ciclo';
 import { rfcFiscalDelTenant, normalizarRfc, MENSAJE_RFC_NO_VERIFICADO, mensajeRfcAjeno } from './rfc_tenant';
@@ -48,8 +48,8 @@ export async function guardarConfigDescarga(
   // VERIFICADO del tenant (su RFC verificado, 0925). La forma no prueba pertenencia: con
   // la cuenta compartida del PAC, una flota podía declarar el RFC de otra.
   const fiscal = await rfcFiscalDelTenant(tenantId);
-  if (fiscal === null) throw new DatoInvalido(MENSAJE_RFC_NO_VERIFICADO);
-  if (rfc !== fiscal) throw new DatoInvalido(mensajeRfcAjeno());
+  if (fiscal === null) throw datoInvalido('sat.rfc_no_verificado');
+  if (rfc !== fiscal) throw datoInvalido('sat.rfc_ajeno');
   const { error } = await acotada(supabaseAdmin()
     .from('sat_descarga_config')
     .upsert({

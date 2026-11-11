@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { conteo, traerTodo } from '../pg';
 import { acotada } from '../presupuesto';
 import { round2, hoyMx } from '@/lib/formato';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { normalizarPlaza, tarifaSugerida, type TarifaRow, type ModoTarifa } from '../clientes';
 import { politicasDetencion } from '../estadias/lector';
 import {

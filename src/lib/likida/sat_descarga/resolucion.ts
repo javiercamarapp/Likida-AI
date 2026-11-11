@@ -50,7 +50,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { mxn } from '@/lib/formato';
 import { correoDelUsuario } from '@/lib/likida/jornada/firma';
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { candidatosAnotados, type EstatusCfdi } from './bandeja';
 import { camposFiscalesDeXml, esFuncionAusente } from './liga_campos';
 

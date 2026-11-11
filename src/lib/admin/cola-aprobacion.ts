@@ -31,7 +31,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { traerTodo, conteo } from '@/lib/likida/pg';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { diasVencimientoPieza, motivoBandejaGlobalSinAtender, topeBandejaGlobal } from '@/lib/likida/agentes/runner';
 

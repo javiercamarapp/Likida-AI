@@ -10,7 +10,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import { parsearImporteMx, hoyMx } from '@/lib/formato';
 import { esUuidValido } from './intake/cfdi';
 import { acotada } from './presupuesto';

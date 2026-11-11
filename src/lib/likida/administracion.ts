@@ -27,7 +27,7 @@ import { regimenElegiblePorClave } from './perfil/preguntas';
 import type { PoliticaGasto } from './cuadre/engine';
 import { logger } from '@/lib/logger';
 import { rateLimit } from '@/lib/ratelimit';
-import { DatoInvalido, datoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import { trMensajes } from '@/lib/i18n/mensajes_tr';
 import {
   nuevoMarcadorSinTelefono, correoDeOperador, telefonoVisible, esMarcadorSinTelefono,

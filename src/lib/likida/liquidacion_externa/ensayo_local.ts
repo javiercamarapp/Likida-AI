@@ -7,7 +7,7 @@
 // Los datos de la muestra real son personales: este módulo no los escribe en ningún lado; quien lo llama (scripts/tms/cargar-muestra.mjs)
 // decide la carpeta de salida, que debe estar FUERA del repositorio.
 // ═══════════════════════════════════════════════════════════════════════════
-import { DatoInvalido, datoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { prepararMuestraTms, SISTEMA_ORIGEN_MUESTRA_TMS, resumenRevisiones } from './desglose_muestra_recepcion';
 import type { PadronOperadores } from './desglose_muestra_tms';
 import { recibirDesglose, type DependenciasDesglose, type ResultadoDesglose } from './desglose_recibir';
