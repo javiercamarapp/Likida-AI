@@ -197,7 +197,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
         <Tarjeta titulo={t('op.convenio_ligado_a_cada_viaje_en')} info="convenios.ligado_viaje">
           <p className="rv-cv__nota">{t('op.si_el_sistema_ligo_el_convenio')}</p>
           {p.viajes.length === 0 ? (
-            <p className="rv-cv__nota">{t('op.no_hay_viajes_abiertos_con_cliente')}</p>
+            <EstadoVacio contenido titulo={t('op.no_hay_viajes_abiertos_con_cliente')} />
           ) : (
             <ul className="rv-cv__lista">
               {p.viajes.map((v) => (
