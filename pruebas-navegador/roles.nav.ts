@@ -1,5 +1,5 @@
 import { test, expect, type Page } from './apoyo/fixture';
-import { ESTADOS } from './apoyo/sesion';
+import { ESTADOS, MARCA_CONSOLA } from './apoyo/sesion';
 import { getLocalE2E } from '../scripts/ci/e2e/entorno-local.mjs';
 
 const AJENO = '22222222-eeee-4eee-8eee-222222222222';
@@ -57,7 +57,7 @@ test.describe('encargado: operación sin cifras ni administración', () => {
     test(`niega URL directa ${ruta} incluso con rol manipulado`, async ({ page }) => {
       await page.goto(`${ruta}?rol=flota_admin&tenant=${AJENO}`);
       await expect(page).toHaveURL(/\/dashboard$/);
-      await expect(page.locator('body')).not.toContainText('Consola de Likida');
+      await expect(page.locator('body')).not.toContainText(MARCA_CONSOLA);
     });
   }
   test('exports financieros niegan acceso por API', async ({ page }) => {
@@ -76,7 +76,8 @@ test.describe('contador: dinero sin despacho ni administración', () => {
     page.on('console', (m) => { if (m.type() === 'error') errores.push(m.text()); });
     await paginaSana(page, '/dashboard/contador', 'Contador E2E');
     await expect(page.locator('a[href="/dashboard/despacho"]')).toHaveCount(0);
-    await page.locator('a[href="/dashboard/facturacion"]').first().click();
+    // En v2 el grupo «Dinero y fiscal» del sidebar llega plegado: se toca el enlace a Facturación que SÍ está a la vista.
+    await page.locator('a[href="/dashboard/facturacion"]:visible').first().click();
     await expect(page).toHaveURL(/\/dashboard\/facturacion$/);
     await expect(page.locator('body')).toContainText('Facturación');
     await page.waitForLoadState('networkidle');
@@ -159,7 +160,7 @@ test.describe('vendedor: sólo su cartera, ningún dato de flota', () => {
       await page.goto(`${ruta}?rol=superadmin&tenant=${AJENO}`);
       await expect(page).toHaveURL(/\/vendedor$/);
       await expect(page.locator('body')).not.toContainText('VJ-2026-0844');
-      await expect(page.locator('body')).not.toContainText('Consola de Likida');
+      await expect(page.locator('body')).not.toContainText(MARCA_CONSOLA);
     });
   }
 });

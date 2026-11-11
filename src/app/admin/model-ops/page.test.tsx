@@ -26,7 +26,7 @@ beforeEach(() => {
 
 it('sin actividad de ninguna fase: dice "sin llamadas" en las tres, no un $0 que parezca medición real', async () => {
   const html = await renderizar();
-  expect((html.match(/sin llamadas/g) ?? []).length).toBeGreaterThanOrEqual(3);
+  expect((html.match(/sin llamadas/gi) ?? []).length).toBeGreaterThanOrEqual(3);
   expect(html).toContain('Todavía no hay actividad de IA registrada');
   expect(html).toContain('Sin llamadas registradas todavía');
 });
@@ -34,7 +34,7 @@ it('sin actividad de ninguna fase: dice "sin llamadas" en las tres, no un $0 que
 it('una fase con llamadas reales muestra su costo y conteo verdaderos, desglosados por modelo', async () => {
   dobles.getResumenNegocio.mockResolvedValue({
     porFase: [{ fase: 'ocr', costoUsd: 12.5, n: 340 }],
-    porModelo: [{ modelo: 'gpt-5-mini', costoUsd: 12.5 }],
+    porModelo: [{ modelo: 'gpt-5-mini', costoUsd: 12.5, n: 340 }],
   });
   dobles.getCostoPorFaseModelo.mockResolvedValue([{ fase: 'ocr', modelo: 'gpt-5-mini', costoUsd: 12.5, n: 340 }]);
   const html = await renderizar();

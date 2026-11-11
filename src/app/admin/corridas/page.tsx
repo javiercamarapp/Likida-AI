@@ -1,22 +1,29 @@
 import type { Metadata } from 'next';
-import { Fragment } from 'react';
 import Link from 'next/link';
-import { ListTree, ArrowLeft } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
-  corridasFiltradas, ESTADOS_CORRIDA, type CorridaCruzada,
+  corridasFiltradas, CORRIDAS_POR_PAGINA, ESTADOS_CORRIDA, type CorridaCruzada,
 } from '@/lib/admin/corridas-cruzadas';
+import { getAgentesParados } from '@/lib/admin/agentes-parados';
+import { leerResumenBandeja } from '@/lib/admin/cola-aprobacion';
+import { opcionesBitacora } from '@/lib/admin/bitacora';
+import { ahoraMs } from '@/lib/saludo';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
-import { StatusPill, EstadoError, EstadoVacio, type Estado } from '../ui/kit';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { etiquetaInterruptor } from '../observabilidad/etiquetas';
+import {
+  BarraFiltros, EstadoError, FiltroOpciones, MarcoPagina, StatusChip, type OpcionFiltro, type TonoEstado,
+} from '../../ui-v2/componentes';
+import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
+import { ETIQUETA_INTERRUPTOR, etiquetaInterruptor } from '../observabilidad/etiquetas';
+import { BloqueAgentesParados } from '../escalaciones/agentes-parados';
+import { PiePaginas } from '../pie-paginas';
+import '../sistema.css';
 
 export const dynamic = 'force-dynamic';
 
-const PILL: Record<string, { estado: Estado; etiqueta: string }> = {
-  ok: { estado: 'ok', etiqueta: 'OK' },
-  parcial: { estado: 'warn', etiqueta: 'Parcial' },
-  fallo: { estado: 'bad', etiqueta: 'Fallo' },
+const CHIP: Record<string, { tono: TonoEstado; etiqueta: string }> = {
+  ok: { tono: 'ok', etiqueta: 'OK' },
+  parcial: { tono: 'warn', etiqueta: 'Parcial' },
+  fallo: { tono: 'bad', etiqueta: 'Fallo' },
 };
 
 function duracion(ms: number | null): string {
@@ -25,21 +32,50 @@ function duracion(ms: number | null): string {
   return `${Math.round(ms / 6_000) / 10} min`;
 }
 
+/** Los agentes del catálogo de palancas, por su nombre (el filtro compara el id exacto; un nombre mal escrito jamás coincidiría). */
+const OPCIONES_AGENTE: OpcionFiltro[] = [
+  { valor: '', rotulo: 'Cualquier agente' },
+  ...Object.entries(ETIQUETA_INTERRUPTOR).filter(([id]) => id.startsWith('agente:')).map(([id, nombre]) => ({ valor: id.slice('agente:'.length), rotulo: nombre })),
+];
+
 interface SearchParams { agente?: string; estado?: string; tenant?: string; p?: string }
 
+const COLUMNAS: ColumnaTabla<CorridaCruzada>[] = [
+  {
+    id: 'agente', titulo: 'Agente', principal: true,
+    celda: (c) => (
+      <>
+        <Link href={`/admin/corridas/${c.id}`}>{etiquetaInterruptor(c.agente)}</Link>
+        {/* EL ERROR, EN LA LISTA. Estaba solo dentro de la traza, una por una: con 50 corridas y tres fallos, encontrar el motivo eran tres
+            clics a ciegas. El motivo ya viene REDACTADO para una persona (no un stack), así que se puede pintar tal cual. */}
+        {c.error !== null && c.error !== '' ? <span className="adm-sis-error-fila" title={c.error}>{c.error}</span> : null}
+      </>
+    ),
+  },
+  { id: 'flota', titulo: 'Flota', celda: (c) => c.tenantNombre ?? 'Likida (negocio)' },
+  { id: 'estado', titulo: 'Estado', celda: (c) => { const e = CHIP[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }; return <StatusChip tono={e.tono}>{e.etiqueta}</StatusChip>; } },
+  { id: 'inicio', titulo: 'Inicio', corta: true, celda: (c) => fechaHoraMx(c.inicio) },
+  {
+    id: 'duracion', titulo: 'Duración',
+    // Tareas: ambos o ninguno — la regla de la casa.
+    celda: (c) => <>{duracion(c.duracionMs)}<span className="adm-sis-sub">{c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal} tareas` : 'sin tareas medidas'}</span></>,
+  },
+  {
+    id: 'gasto', titulo: 'Gasto', alinear: 'der',
+    // `usd4` y no `usd`: una corrida cuesta céntimos de céntimo, y `usd` los redondearía a US$0.00, que se lee «no gastó». NULL se pinta
+    // «—» con su porqué: no se midió, no es que saliera gratis.
+    celda: (c) => (c.costoUsd === null
+      ? <span title="Esta corrida no midió su gasto. No significa que no gastara.">—</span>
+      : usd4(c.costoUsd)),
+  },
+];
+
 /**
- * EL ÍNDICE DE CORRIDAS — /admin/corridas (16-ago-2026; filtros + paginación
- * ADM-10, auditoría 24).
+ * EL ÍNDICE DE CORRIDAS — /admin/corridas (16-ago-2026; filtros + paginación ADM-10, auditoría 24).
  *
- * Existía solo /admin/corridas/[id], y DOS mapas del copiloto
- * (PANTALLA_POR_TOOL y PANTALLA_UI) mandaban al usuario a esta URL: el chip
- * de fuente de `traza_corrida` aterrizaba en un 404. El mapeo del 16-ago lo
- * encontró; esta página lo cerró con la MISMA fuente que ya pinta el
- * Inicio, pero sin filtro ni paginación — con 58 agentes despachando por
- * cron/webhook, triage de fallos ("¿qué le pasó a Cobranza hoy?") era
- * desplazarse a ojo entre filas de todo lo demás. `corridasFiltradas`
- * (lib/admin/corridas-cruzadas.ts) trae el mismo patrón de `?q=&p=` que
- * `buscarConversaciones` (ADM-1): filtro GET, sin JS, `count` real.
+ * Existía solo /admin/corridas/[id], y DOS mapas del copiloto mandaban al usuario a esta URL: el chip de fuente de `traza_corrida`
+ * aterrizaba en un 404. Esta página lo cerró con la MISMA fuente que ya pinta el Inicio, con filtro GET y total real. F7: el bloque
+ * «Agentes que no corrieron y por qué» vive también aquí (es la otra mitad de la pregunta «qué pasó con las corridas»).
  */
 export default async function IndiceCorridas({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireSuperadmin();
@@ -51,7 +87,6 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
   const hayFiltro = agente !== '' || estado !== '' || tenant !== '';
 
   let resultado: { corridas: CorridaCruzada[]; pagina: number; paginas: number; total: number } | null = null;
-  let error: string | null = null;
   try {
     resultado = await corridasFiltradas({
       agente: agente || undefined,
@@ -59,176 +94,42 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
       tenantId: tenant || undefined,
       pagina,
     });
-  } catch (e) {
-    error = e instanceof Error ? e.message : 'no se pudo leer';
+  } catch {
+    resultado = null;
   }
+  // Nunca lanzan: `null` = sin dato (y el bloque lo dice).
+  const [parados, cola, opciones] = await Promise.all([
+    getAgentesParados(ahoraMs()), leerResumenBandeja(ahoraMs()), opcionesBitacora(),
+  ]);
+  const flotas: OpcionFiltro[] | null = opciones.flotas === null ? null : [{ valor: '', rotulo: 'Todas las flotas' }, ...opciones.flotas.map((f) => ({ valor: f.id, rotulo: f.nombre }))];
+  const params = { agente: agente || undefined, estado: estado || undefined, tenant: tenant || undefined };
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <BarraPagina icono={<ListTree className="w-5 h-5" style={{ color: 'var(--muted)' }} />} titulo="Corridas de agentes" />
-      <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
-        Cruzadas de todas las flotas. Cada una abre su traza completa.
-      </p>
-      <div className="mb-4">
-        <Link href="/admin" className="inline-flex items-center gap-1 text-sm" style={{ color: 'var(--muted)' }}>
-          <ArrowLeft className="w-4 h-4" /> Volver al inicio
-        </Link>
-      </div>
+    <MarcoPagina titulo="Corridas" apoyo="Las corridas de los agentes en todas las flotas, y qué agentes no corrieron y por qué. Cada corrida abre su traza completa.">
+      <BarraFiltros accion="/admin/corridas" enLinea buscar etiqueta="Filtrar corridas" nActivos={[agente, estado, tenant].filter(Boolean).length} limpiarHref="/admin/corridas">
+        <FiltroOpciones etiqueta="Agente" nombre="agente" valor={agente} opciones={OPCIONES_AGENTE} />
+        <FiltroOpciones etiqueta="Estado" nombre="estado" valor={estado} opciones={[{ valor: '', rotulo: 'Cualquier estado' }, ...ESTADOS_CORRIDA.map((e) => ({ valor: e, rotulo: CHIP[e].etiqueta }))]} />
+        {flotas ? <FiltroOpciones etiqueta="Flota" nombre="tenant" valor={tenant} opciones={flotas} /> : null}
+      </BarraFiltros>
 
-      <FormaFiltros agente={agente} estado={estado} tenant={tenant} hayFiltro={hayFiltro} />
-
-      {error !== null && (
-        <EstadoError mensaje={`No se pudieron leer las corridas — ${error}. La consulta falló; no es que no existan.`} />
+      {resultado === null ? (
+        <EstadoError reintentar>No se pudieron leer las corridas. La consulta falló; no es que no existan.</EstadoError>
+      ) : (
+        <>
+          <TablaLista<CorridaCruzada>
+            etiqueta="Corridas de agentes" columnas={COLUMNAS} filas={resultado.corridas} idFila={(c) => c.id} base="/admin/corridas" params={params}
+            vacio={hayFiltro
+              ? { titulo: 'Ninguna corrida coincide', texto: 'Ninguna corrida coincide con el filtro. Quita un filtro o cambia el agente.' }
+              : { titulo: 'Aún no hay corridas', texto: 'Cada corrida de un agente deja aquí su fila; la primera aparecerá cuando un agente trabaje.' }}
+          />
+          {resultado.total > 0 ? (
+            <PiePaginas base="/admin/corridas" params={params} pagina={resultado.pagina} paginas={resultado.paginas} total={resultado.total} tamano={CORRIDAS_POR_PAGINA} unidad="corridas" />
+          ) : null}
+        </>
       )}
-      {resultado !== null && resultado.total === 0 && (
-        <EstadoVacio>
-          {hayFiltro
-            ? 'Ninguna corrida coincide con el filtro.'
-            : 'Aún no hay corridas. Cada corrida de un agente deja aquí su fila; la primera aparecerá cuando un agente trabaje.'}
-        </EstadoVacio>
-      )}
-      {resultado !== null && resultado.total > 0 && (
-        <div>
-          <div className="mb-2">
-            <TituloSeccion>
-              {`${resultado.total} corrida${resultado.total === 1 ? '' : 's'} — página ${resultado.pagina} de ${resultado.paginas}`}
-            </TituloSeccion>
-          </div>
-          <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
-            <table aria-label="Corridas de agentes" className="w-full text-sm" style={{ minWidth: 640 }}>
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                  <th scope="col" className="px-4 py-2.5">Agente</th>
-                  <th scope="col" className="px-4 py-2.5">Flota</th>
-                  <th scope="col" className="px-4 py-2.5">Estado</th>
-                  <th scope="col" className="px-4 py-2.5">Inicio</th>
-                  <th scope="col" className="px-4 py-2.5">Duración</th>
-                  <th scope="col" className="px-4 py-2.5">Tareas</th>
-                  <th scope="col" className="px-4 py-2.5">Gasto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resultado.corridas.map((c) => {
-                  const pill = PILL[c.estado] ?? { estado: 'neutral' as Estado, etiqueta: c.estado };
-                  return (
-                    <Fragment key={c.id}>
-                    {/* ADM-12 (auditoría 24, menor): `--line-2`/`--ink-2` no
-                        existen (globals.css define `--line2`/`--ink2`) — los
-                        bordes de esta tabla eran invisibles. */}
-                    <tr className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                      <td className="px-4 py-2.5">
-                        <Link href={`/admin/corridas/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--ink)' }}>
-                          {etiquetaInterruptor(c.agente)}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2.5" style={{ color: 'var(--ink2)' }}>{c.tenantNombre ?? 'Likida (negocio)'}</td>
-                      <td className="px-4 py-2.5"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
-                      <td className="px-4 py-2.5 tabular-nums" style={{ color: 'var(--ink2)' }}>{fechaHoraMx(c.inicio)}</td>
-                      <td className="px-4 py-2.5 tabular-nums" style={{ color: 'var(--ink2)' }}>{duracion(c.duracionMs)}</td>
-                      <td className="px-4 py-2.5 tabular-nums" style={{ color: 'var(--ink2)' }}>
-                        {/* ambos o ninguno — la regla de la casa para tareas */}
-                        {c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : '—'}
-                      </td>
-                      <td className="px-4 py-2.5 tabular-nums" style={{ color: 'var(--ink2)' }}>
-                        {/* `usd4` y no `usd`: una corrida cuesta céntimos de
-                            céntimo, y `usd` los redondearía a US$0.00 — que se
-                            lee «no gastó». NULL se pinta '—' con su porqué en
-                            el title: no se midió, no es que saliera gratis. */}
-                        {c.costoUsd === null
-                          ? <span style={{ color: 'var(--faint)' }} title="Esta corrida no midió su gasto (costo_usd NULL). No significa que no gastara.">—</span>
-                          : usd4(c.costoUsd)}
-                      </td>
-                    </tr>
-                    {/* EL ERROR, EN LA LISTA. Estaba solo dentro de la traza, una
-                        por una: con 50 corridas y tres fallos, encontrar el
-                        motivo eran tres clics a ciegas. `agente_corrida.error`
-                        ya guarda el motivo REDACTADO para una persona (0102:42),
-                        no un stack, así que se puede pintar tal cual. */}
-                    {c.error !== null && c.error !== '' && (
-                      <tr>
-                        <td colSpan={7} className="px-4 pb-2.5 text-xs" style={{ color: 'var(--color-bad)' }}>
-                          <span className="line-clamp-2" title={c.error}>{c.error}</span>
-                        </td>
-                      </tr>
-                    )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <Paginador agente={agente} estado={estado} tenant={tenant} pagina={resultado.pagina} paginas={resultado.paginas} />
-        </div>
-      )}
-    </div>
-  );
-}
 
-/**
- * Formulario GET — sin JS, sin action de servidor. Mismo criterio que
- * `CajaBusqueda` de /admin/conversaciones (ADM-1): `agente`/`tenant` son
- * texto libre (id del catálogo/uuid) porque el catálogo de agentes tiene 58
- * entradas — un selector no cabría sin volverse la mitad de la pantalla;
- * `estado` sí es un `<select>` porque su dominio son tres valores fijos.
- */
-function FormaFiltros({ agente, estado, tenant, hayFiltro }: {
-  agente: string; estado: string; tenant: string; hayFiltro: boolean;
-}) {
-  return (
-    <form className="card p-3 mb-4 flex flex-wrap items-center gap-2" method="GET">
-      <input
-        type="text" name="agente" defaultValue={agente} placeholder="Agente (id del catálogo)…"
-        className="text-sm rounded-lg px-2.5 py-1.5 outline-none w-48"
-        style={{ background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' }}
-      />
-      <select name="estado" defaultValue={estado}
-        className="text-sm rounded-lg px-2.5 py-1.5 outline-none"
-        style={{ background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' }}>
-        <option value="">Cualquier estado</option>
-        {ESTADOS_CORRIDA.map((e) => (
-          <option key={e} value={e}>{PILL_LABEL[e]}</option>
-        ))}
-      </select>
-      <input
-        type="text" name="tenant" defaultValue={tenant} placeholder="Flota (uuid del tenant)…"
-        className="text-sm rounded-lg px-2.5 py-1.5 outline-none w-56"
-        style={{ background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' }}
-      />
-      <button type="submit" className="text-xs px-2.5 py-1.5 rounded-lg hairline" style={{ color: 'var(--muted)' }}>
-        Filtrar
-      </button>
-      {hayFiltro && (
-        <Link href="/admin/corridas" className="text-xs px-2.5 py-1.5 rounded-lg hairline" style={{ color: 'var(--muted)' }}>
-          Limpiar
-        </Link>
-      )}
-    </form>
-  );
-}
-
-const PILL_LABEL: Record<string, string> = { ok: 'OK', parcial: 'Parcial', fallo: 'Fallo' };
-
-/** Paginador de corridas — enlaces GET simples, conservando los filtros. */
-function Paginador({ agente, estado, tenant, pagina, paginas }: {
-  agente: string; estado: string; tenant: string; pagina: number; paginas: number;
-}) {
-  if (paginas <= 1) return null;
-  const href = (p: number) => {
-    const qs = new URLSearchParams();
-    if (agente) qs.set('agente', agente);
-    if (estado) qs.set('estado', estado);
-    if (tenant) qs.set('tenant', tenant);
-    qs.set('p', String(p));
-    return `/admin/corridas?${qs.toString()}`;
-  };
-  return (
-    <div className="flex items-center justify-between mt-3 text-xs" style={{ color: 'var(--muted)' }}>
-      <span>Página {pagina} de {paginas}</span>
-      <div className="flex gap-2">
-        {pagina > 1 && <Link href={href(pagina - 1)} className="hairline rounded-lg px-2.5 py-1.5">Anterior</Link>}
-        {pagina < paginas && <Link href={href(pagina + 1)} className="hairline rounded-lg px-2.5 py-1.5">Siguiente</Link>}
-      </div>
-    </div>
+      <BloqueAgentesParados datos={parados} cola={cola} />
+    </MarcoPagina>
   );
 }
 

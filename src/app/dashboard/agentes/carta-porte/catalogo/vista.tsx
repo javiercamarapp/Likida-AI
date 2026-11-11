@@ -4,14 +4,17 @@ import { useState, type ReactNode } from 'react';
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { useActionState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Download, Plus, Upload } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
+import '../carta-porte.css';
 import { numero as fmtNumero } from '@/lib/formato';
 import { llaveTexto } from '@/lib/likida/carta_porte_docs/catalogos';
 import { plantillaCsv, TIPOS_PLANTILLA, type Registro, type TipoPlantilla } from '@/lib/likida/carta_porte_docs/catalogo_import';
 import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDeFormulario, type FilasCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
-import { Aviso, BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { Aviso, BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
-import { Aviso as AvisoV2, BarraFiltros, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  Aviso as AvisoV2, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, Tarjeta,
+} from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA «CATÁLOGO DEL CLIENTE» (T-A3-22): lo que el agente aprende UNA vez de cada cliente y usa en cada documento.
@@ -62,41 +65,31 @@ const textoDe = (v: Registro[string] | undefined): string => (v === null || v ==
 /** Los campos de una fila (editar o agregar). Las columnas de la clave natural de una fila que ya existe no se editan. */
 function Campos({ tipo, valores, claveBloqueada }: { tipo: TipoPlantilla; valores: Record<string, string>; claveBloqueada: boolean }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3">
+    <div className="rv-cp__cuad">
       {columnasDeFila(tipo).map((c) => {
         const id = `cat-${tipo}-${c}-${claveBloqueada ? 'e' : 'n'}-${valores[COLUMNAS_CLAVE[tipo][0] ?? c] ?? ''}`.replace(/\s+/g, '_');
         const bloqueada = claveBloqueada && COLUMNAS_CLAVE[tipo].includes(c);
         const rotulo = ROTULO_COLUMNA[c] ?? c;
         if (c === 'material_peligroso' || c === 'activo') {
           return (
-            <div key={c}>
-              <label htmlFor={id} className={ETIQUETA}>{rotulo}</label>
-              <select id={id} name={`c_${c}`} defaultValue={valores[c] || 'no'} style={{ background: 'var(--surface)' }}>
-                <option value="si">sí</option>
-                <option value="no">no</option>
-              </select>
-            </div>
+            <CampoSelect key={c} id={id} etiqueta={rotulo} name={`c_${c}`} defaultValue={valores[c] || 'no'}>
+              <option value="si">sí</option>
+              <option value="no">no</option>
+            </CampoSelect>
           );
         }
         if (c === 'rol') {
           return (
             <div key={c}>
-              <label htmlFor={id} className={ETIQUETA}>{rotulo}</label>
-              <select id={id} name={`c_${c}`} defaultValue={valores[c] || 'remitente'} disabled={bloqueada} style={{ background: 'var(--surface)' }}>
+              <CampoSelect id={id} etiqueta={rotulo} name={`c_${c}`} defaultValue={valores[c] || 'remitente'} disabled={bloqueada}>
                 <option value="remitente">remitente</option>
                 <option value="destinatario">destinatario</option>
-              </select>
+              </CampoSelect>
               {bloqueada && <input type="hidden" name={`c_${c}`} value={valores[c]} />}
             </div>
           );
         }
-        return (
-          <div key={c}>
-            <label htmlFor={id} className={ETIQUETA}>{rotulo}</label>
-            <input id={id} name={`c_${c}`} defaultValue={valores[c] ?? ''} readOnly={bloqueada} autoComplete="off" spellCheck={false}
-              style={{ background: 'var(--surface)' }} />
-          </div>
-        );
+        return <CampoTexto key={c} id={id} etiqueta={rotulo} name={`c_${c}`} defaultValue={valores[c] ?? ''} readOnly={bloqueada} autoComplete="off" spellCheck={false} />;
       })}
     </div>
   );
@@ -106,7 +99,7 @@ function FormaFila({ tipo, clienteId, ver, accion, fila, modo }: {
   tipo: TipoPlantilla; clienteId: string; ver: VerComo; accion: AccionDoc; fila: Registro | null; modo: 'editar' | 'nuevo';
 }) {
   return (
-    <FormaAccion accion={accion} className="space-y-3 pt-3">
+    <FormaAccion accion={accion} className="rv-cp__pila">
       <Ocultos ver={ver} />
       <input type="hidden" name="tipo" value={tipo} />
       <input type="hidden" name="cliente_id" value={clienteId} />
@@ -118,9 +111,9 @@ function FormaFila({ tipo, clienteId, ver, accion, fila, modo }: {
 }
 
 function resumen(tipo: TipoPlantilla, f: Registro): ReactNode {
-  if (tipo === 'producto') return <><strong className="font-medium cifra-mono">{textoDe(f.sku)}</strong><span style={{ color: 'var(--muted)' }}> · {textoDe(f.bienes_transp)} · {textoDe(f.clave_unidad)}{f.embalaje ? ` · ${textoDe(f.embalaje)}` : ''}</span></>;
-  if (tipo === 'parte') return <><span style={{ color: 'var(--faint)' }}>{textoDe(f.rol)}</span> <strong className="font-medium">{textoDe(f.alias)}</strong><span style={{ color: 'var(--muted)' }}>{f.rfc ? ` · ${textoDe(f.rfc)}` : ' · sin RFC'}{f.cp ? ` · CP ${textoDe(f.cp)}` : ''}</span></>;
-  return <><strong className="font-medium cifra-mono">{textoDe(f.numero_interno)}</strong>{f.activo === false && <span style={{ color: 'var(--warn)' }}> · inactivo</span>}</>;
+  if (tipo === 'producto') return <><strong className="cifra-mono">{textoDe(f.sku)}</strong><span className="rv-cp__tenue"> · {textoDe(f.bienes_transp)} · {textoDe(f.clave_unidad)}{f.embalaje ? ` · ${textoDe(f.embalaje)}` : ''}</span></>;
+  if (tipo === 'parte') return <><span className="rv-cp__tenue">{textoDe(f.rol)}</span> <strong>{textoDe(f.alias)}</strong><span className="rv-cp__tenue">{f.rfc ? ` · ${textoDe(f.rfc)}` : ' · sin RFC'}{f.cp ? ` · CP ${textoDe(f.cp)}` : ''}</span></>;
+  return <><strong className="cifra-mono">{textoDe(f.numero_interno)}</strong>{f.activo === false && <span className="rv-cp__nota" data-tono="warn"> · inactivo</span>}</>;
 }
 
 const COLUMNAS_FILTRO: Record<TipoPlantilla, string[]> = {
@@ -133,52 +126,48 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
   const [filtro, setFiltro] = useState('');
   const visibles = filtrarFilas(filas, filtro, COLUMNAS_FILTRO[tipo]);
   return (
-    <section aria-label={titulo} className="card p-4 space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <TituloRecuadro info={tipo === 'producto' ? 'carta_porte_catalogo.productos' : 'carta_porte_catalogo.partes'}>{titulo} <span className="font-normal" style={{ color: 'var(--faint)' }}>({fmtNumero(filas.length)})</span></TituloRecuadro>
-        {filas.length > 0 && (
-          <BarraFiltros enLinea etiqueta={`Filtrar ${titulo}`} busqueda={{ valor: filtro, onCambio: setFiltro, placeholder: 'Escribe para filtrar…', etiqueta: 'Filtrar' }} nActivos={filtro ? 1 : 0} />
+    <Tarjeta titulo={`${titulo} (${fmtNumero(filas.length)})`} info={tipo === 'producto' ? 'carta_porte_catalogo.productos' : 'carta_porte_catalogo.partes'}
+      acciones={filas.length > 0 ? (
+        <BarraFiltros enLinea etiqueta={`Filtrar ${titulo}`} busqueda={{ valor: filtro, onCambio: setFiltro, placeholder: 'Escribe para filtrar…', etiqueta: 'Filtrar' }} nActivos={filtro ? 1 : 0} />
+      ) : undefined}>
+      <div className="rv-cp__pila">
+        {filas.length === 0 ? (
+          <p className="rv-cp__nota">Todavía no hay nada aquí.</p>
+        ) : visibles.length === 0 ? (
+          <p className="rv-cp__nota">Ninguna fila coincide con «{filtro}».</p>
+        ) : (
+          <ul className="rv-cp__filas">
+            {visibles.slice(0, FILAS_VISIBLES).map((f, i) => (
+              <li key={`${textoDe(f.sku)}|${textoDe(f.rol)}|${textoDe(f.alias)}|${i}`}>
+                <Disclosure titulo={resumen(tipo, f)} variante="linea">
+                  <FormaFila tipo={tipo} clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={f} modo="editar" />
+                </Disclosure>
+              </li>
+            ))}
+          </ul>
         )}
+        {visibles.length > FILAS_VISIBLES && (
+          <p className="rv-cp__nota" data-tono="faint">Se muestran {fmtNumero(FILAS_VISIBLES)} de {fmtNumero(visibles.length)} filas: afina el filtro para ver las demás.</p>
+        )}
+        <Disclosure titulo="Agregar una fila" variante="linea">
+          <FormaFila tipo={tipo} clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={null} modo="nuevo" />
+        </Disclosure>
       </div>
-      {filas.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no hay nada aquí.</p>
-      ) : visibles.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Ninguna fila coincide con «{filtro}».</p>
-      ) : (
-        <ul className="divide-y" style={{ borderColor: 'var(--hairline, var(--canvas))' }}>
-          {visibles.slice(0, FILAS_VISIBLES).map((f, i) => (
-            <li key={`${textoDe(f.sku)}|${textoDe(f.rol)}|${textoDe(f.alias)}|${i}`} className="py-2">
-              <details>
-                <summary className="cursor-pointer text-[12px] select-none">{resumen(tipo, f)}</summary>
-                <FormaFila tipo={tipo} clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={f} modo="editar" />
-              </details>
-            </li>
-          ))}
-        </ul>
-      )}
-      {visibles.length > FILAS_VISIBLES && (
-        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Se muestran {fmtNumero(FILAS_VISIBLES)} de {fmtNumero(visibles.length)} filas: afina el filtro para ver las demás.</p>
-      )}
-      <details>
-        <summary className="cursor-pointer text-[12px] font-medium select-none inline-flex items-center gap-1.5" style={{ color: 'var(--marca)' }}>
-          <Plus width={13} height={13} strokeWidth={1.75} />Agregar una fila
-        </summary>
-        <FormaFila tipo={tipo} clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={null} modo="nuevo" />
-      </details>
-    </section>
+    </Tarjeta>
   );
 }
 
 function Numero({ fila, clienteId, ver, acciones }: { fila: Registro | null; clienteId: string; ver: VerComo; acciones: AccionesCatalogo }) {
   return (
-    <section aria-label="Número interno del cliente" className="card p-4 space-y-2">
-      <TituloRecuadro info="carta_porte_catalogo.numero_interno">Número interno del cliente</TituloRecuadro>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-        Es el número con el que el sistema de la empresa conoce al cliente que paga. Si falta o está mal, el documento no se liga: el agente no lo inventa.
-      </p>
-      {fila ? <p className="text-[12px]">Hoy: {resumen('cliente_numero', fila)}</p> : <p className="text-[12px]" style={{ color: 'var(--warn)' }}>Este cliente todavía no tiene número interno.</p>}
-      <FormaFila tipo="cliente_numero" clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={fila} modo={fila ? 'editar' : 'nuevo'} />
-    </section>
+    <Tarjeta titulo="Número interno del cliente" info="carta_porte_catalogo.numero_interno">
+      <div className="rv-cp__pila">
+        <p className="rv-cp__nota">
+          Es el número con el que el sistema de la empresa conoce al cliente que paga. Si falta o está mal, el documento no se liga: el agente no lo inventa.
+        </p>
+        {fila ? <p className="rv-cp__nota">Hoy: {resumen('cliente_numero', fila)}</p> : <p className="rv-cp__nota" data-tono="warn">Este cliente todavía no tiene número interno.</p>}
+        <FormaFila tipo="cliente_numero" clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={fila} modo={fila ? 'editar' : 'nuevo'} />
+      </div>
+    </Tarjeta>
   );
 }
 
@@ -187,44 +176,38 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
   const [tipo, setTipo] = useState<TipoPlantilla>('producto');
   const [archivo, setArchivo] = useState<File | null>(null);
   return (
-    <section aria-label="Importar un CSV" className="card p-4 space-y-3">
-      <TituloRecuadro info="carta_porte_catalogo.importar"><Upload width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />Importar un CSV</TituloRecuadro>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-        Descarga la plantilla, llénala (una fila por cliente y producto, remitente o destinatario) y súbela. Primero ves cuántas filas son nuevas, cuántas cambian y cuáles traen error; nada se guarda hasta que confirmes.
-      </p>
-      <ul className="flex flex-wrap gap-2" aria-label="Plantillas">
-        {TIPOS_PLANTILLA.map((t) => (
-          <li key={t}>
-            <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(plantillaCsv(t))}`} download={ARCHIVO_PLANTILLA[t]}
-              className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline hover:opacity-85" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-              <Download width={13} height={13} strokeWidth={1.75} />{ROTULO_TIPO[t]}
-            </a>
-          </li>
-        ))}
-      </ul>
-      {/* El envío arma su propio FormData: React limpia los campos tras cada envío y la vista previa y el «confirmar» deben ser del MISMO archivo. */}
-      <form className="space-y-3" action={(fd) => { fd.set('tipo', tipo); if (archivo) fd.set('archivo', archivo); despachar(fd); }}>
-        <Ocultos ver={ver} />
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label htmlFor="cat-imp-tipo" className={ETIQUETA}>Qué vas a importar</label>
-            <select id="cat-imp-tipo" value={tipo} onChange={(e) => setTipo(e.target.value as TipoPlantilla)} style={{ background: 'var(--surface)' }}>
+    <Tarjeta titulo="Importar un CSV" info="carta_porte_catalogo.importar">
+      <div className="rv-cp__pila">
+        <p className="rv-cp__nota">
+          Descarga la plantilla, llénala (una fila por cliente y producto, remitente o destinatario) y súbela. Primero ves cuántas filas son nuevas, cuántas cambian y cuáles traen error; nada se guarda hasta que confirmes.
+        </p>
+        <ul className="rv-cp__acciones" aria-label="Plantillas">
+          {TIPOS_PLANTILLA.map((t) => (
+            <li key={t}>
+              <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(plantillaCsv(t))}`} download={ARCHIVO_PLANTILLA[t]} className={clasesBoton('secondary', 'sm')}>
+                <Icono icono={Download} tam={14} />{ROTULO_TIPO[t]}
+              </a>
+            </li>
+          ))}
+        </ul>
+        {/* El envío arma su propio FormData: React limpia los campos tras cada envío y la vista previa y el «confirmar» deben ser del MISMO archivo. */}
+        <form className="rv-cp__pila" action={(fd) => { fd.set('tipo', tipo); if (archivo) fd.set('archivo', archivo); despachar(fd); }}>
+          <Ocultos ver={ver} />
+          <div className="rv-cp__cuad">
+            <CampoSelect id="cat-imp-tipo" etiqueta="Qué vas a importar" value={tipo} onChange={(e) => setTipo(e.target.value as TipoPlantilla)}>
               {TIPOS_PLANTILLA.map((t) => <option key={t} value={t}>{ROTULO_TIPO[t]}</option>)}
-            </select>
+            </CampoSelect>
+            <CampoArchivo id="cat-imp-archivo" etiqueta="Archivo CSV (hasta 4 MB)" accept=".csv,text/csv" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
           </div>
-          <div className="grow min-w-[220px]">
-            <label htmlFor="cat-imp-archivo" className={ETIQUETA}>Archivo CSV (hasta 4 MB)</label>
-            <input id="cat-imp-archivo" type="file" accept=".csv,text/csv" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} className="text-[12px]" />
-            {archivo && <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>Archivo elegido: {archivo.name}</p>}
+          {archivo && <p className="rv-cp__nota" data-tono="faint">Archivo elegido: {archivo.name}</p>}
+          <div className="rv-cp__acciones">
+            <BotonEnvio variante="secundario" intencion="previsualizar" etiqueta="Ver vista previa" pendiente="Revisando…" />
+            <BotonEnvio intencion="confirmar" etiqueta="Confirmar e importar" pendiente="Importando…" />
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <BotonEnvio variante="secundario" intencion="previsualizar" etiqueta="Ver vista previa" pendiente="Revisando…" />
-          <BotonEnvio intencion="confirmar" etiqueta="Confirmar e importar" pendiente="Importando…" />
-        </div>
-      </form>
-      <ResultadoImportar estado={estado} />
-    </section>
+        </form>
+        <ResultadoImportar estado={estado} />
+      </div>
+    </Tarjeta>
   );
 }
 
@@ -232,10 +215,10 @@ function ResultadoImportar({ estado }: { estado: EstadoImportacion }) {
   if (!estado) return null;
   if ('error' in estado) return <Aviso estado={{ ok: false, error: estado.error }} />;
   return (
-    <div className="space-y-2" role="status">
+    <div className="rv-cp__pila" role="status">
       <Aviso estado={estado.ok ? { ok: true, mensaje: estado.aplicado ? `Importado. ${estado.mensaje}` : `Vista previa: ${estado.mensaje}` } : { ok: false, error: estado.mensaje }} />
       {estado.errores.length > 0 && (
-        <ul className="text-[12px] list-disc pl-5 space-y-0.5" style={{ color: 'var(--bad)' }} aria-label="Filas con error">
+        <ul className="rv-cp__lista rv-cp__error" aria-label="Filas con error">
           {estado.errores.map((e) => <li key={e.fila}>Fila {fmtNumero(e.fila)}: {e.mensaje}</li>)}
           {estado.conError > estado.errores.length && <li>… y {fmtNumero(estado.conError - estado.errores.length)} más.</li>}
         </ul>
@@ -261,49 +244,42 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
   const clientesVisibles = k === '' ? clientes : clientes.filter((c) => llaveTexto(c.nombre).includes(k));
   const vacio = catalogo !== null && catalogo.numero === null && catalogo.productos.length === 0 && catalogo.partes.length === 0;
   return (
-    <MarcoPagina titulo="Catálogo del cliente" apoyo="Lo que el agente aprende una vez de cada cliente: productos, remitentes y destinatarios y su número interno." acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<ArrowLeft width={13} height={13} strokeWidth={1.75} />}>Volver al Agente de Carta Porte</BotonEnlace>}>
+    <MarcoPagina titulo="Catálogo del cliente" apoyo="Lo que el agente aprende una vez de cada cliente: productos, remitentes y destinatarios y su número interno." acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>Volver al Agente de Carta Porte</BotonEnlace>}>
       <AvisoV2 tono="info">Un dato del catálogo nunca pisa lo que una persona escribió en la revisión.</AvisoV2>
 
       <Importador ver={ver} importar={acciones.importar} />
 
-      <section aria-label="Cliente" className="card p-4 space-y-3">
-        <TituloRecuadro info="carta_porte_catalogo.cliente">Cliente</TituloRecuadro>
-        {clientes.length === 0 ? (
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay clientes en tu flota: el catálogo se arma por cliente. Da de alta uno primero.</p>
-        ) : (
-          <>
-            {clientes.length > 8 && (
-              <div className="max-w-sm">
-                <label htmlFor="cat-buscar-cliente" className={ETIQUETA}>Buscar cliente</label>
-                <input id="cat-buscar-cliente" value={buscar} onChange={(e) => setBuscar(e.target.value)} autoComplete="off" style={{ background: 'var(--surface)' }} />
-              </div>
-            )}
-            <ul className="flex flex-wrap gap-2">
-              {clientesVisibles.map((c) => (
-                <li key={c.id}>
-                  <Link href={hrefDe(sufijo, c.id)} aria-current={c.id === clienteId ? 'true' : undefined}
-                    className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center hairline hover:opacity-85"
-                    style={c.id === clienteId ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : { background: 'var(--surface)', color: 'var(--ink)' }}>
-                    {c.nombre}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
+      <Tarjeta titulo="Cliente" info="carta_porte_catalogo.cliente" estado={clientes.length === 0 ? 'vacio' : 'ok'} mensaje="Aún no hay clientes en tu flota"
+        detalle="Aún no hay clientes en tu flota: el catálogo se arma por cliente. Da de alta uno primero.">
+        <div className="rv-cp__pila">
+          {clientes.length > 8 && (
+            <div className="rv-cp__form">
+              <CampoTexto id="cat-buscar-cliente" etiqueta="Buscar cliente" value={buscar} onChange={(e) => setBuscar(e.target.value)} autoComplete="off" />
+            </div>
+          )}
+          <ul className="rv-cp__acciones">
+            {clientesVisibles.map((c) => (
+              <li key={c.id}>
+                <Link href={hrefDe(sufijo, c.id)} aria-current={c.id === clienteId ? 'true' : undefined} className={clasesBoton(c.id === clienteId ? 'primary' : 'secondary', 'sm')}>
+                  {c.nombre}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Tarjeta>
 
       {elegido === null ? (
-        clientes.length > 0 && <p className="card p-4 text-[12px]" style={{ color: 'var(--muted)' }}>Elige un cliente para ver y editar su catálogo.</p>
+        clientes.length > 0 && <p className="rv-cp__nota">Elige un cliente para ver y editar su catálogo.</p>
       ) : lecturaFallida || catalogo === null ? (
-        <p className="card p-4 text-[12px]" role="alert" style={{ color: 'var(--bad)' }}>No se pudo leer el catálogo de {elegido.nombre}. Recarga la pantalla; si sigue igual, avísanos.</p>
+        <EstadoError reintentar>{`No se pudo leer el catálogo de ${elegido.nombre}. Recarga la pantalla; si sigue igual, avísanos.`}</EstadoError>
       ) : (
         <>
-          {vacio && <p className="card p-4 text-[12px]" role="status">{FRASE_SIN_CATALOGO}</p>}
+          {vacio && <EstadoVacio titulo="Aún sin catálogo" contenido>{FRASE_SIN_CATALOGO}</EstadoVacio>}
           {catalogo.truncado && (
-            <p className="text-[12px] px-3 py-2 rounded-lg" role="alert" style={{ color: 'var(--warn)' }}>
+            <AvisoV2 tono="warn">
               El catálogo de este cliente es tan grande que solo se leyó una parte: puede faltar alguna fila en esta pantalla.
-            </p>
+            </AvisoV2>
           )}
           <Numero fila={catalogo.numero} clienteId={elegido.id} ver={ver} acciones={acciones} />
           <Tabla tipo="producto" titulo="Productos" filas={catalogo.productos} clienteId={elegido.id} ver={ver} acciones={acciones} />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PAYLOADS_HOSTILES } from '@/lib/pruebas/cargas_hostiles_csv';
-import { tablaACsv } from './exportar';
+import { tablaACsv, serieACsv, repartoACsv } from './exportar';
 
 // El CSV de una tabla de respuesta pasa TODA celda por la guarda única (`@/lib/csv_seguro`, CWE-1236).
 describe('chat · tablaACsv es seguro contra inyección de fórmulas', () => {
@@ -23,5 +23,15 @@ describe('chat · tablaACsv es seguro contra inyección de fórmulas', () => {
 
   it('comillas y comas siguen entrecomilladas (RFC 4180)', () => {
     expect(tablaACsv([['a, b', '$1,000.00']])).toBe('Concepto,Valor\n"a, b","$1,000.00"');
+  });
+});
+
+describe('chat · exportar series y repartos graficados', () => {
+  it('la serie sale tal como la graficó el servidor', () => {
+    expect(serieACsv([{ dia: '2026-11-01', valor: 12.5 }, { dia: '2026-11-02', valor: -3 }])).toBe('Día,Valor\n2026-11-01,12.5\n2026-11-02,-3');
+  });
+  it('el reparto exporta etiqueta y valor, y neutraliza fórmulas en la etiqueta', () => {
+    expect(repartoACsv([{ etiqueta: 'OCR', valor: 4 }])).toBe('Concepto,Valor\nOCR,4');
+    expect(repartoACsv([{ etiqueta: '=1+1', valor: 4 }])).toContain("'=1+1");
   });
 });

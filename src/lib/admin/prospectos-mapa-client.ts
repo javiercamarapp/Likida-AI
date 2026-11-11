@@ -2,20 +2,20 @@
 // libre de Supabase, Node y cualquier otra dependencia server-only.
 
 export const COLOR_EMBUDO: Record<string, { color: string; nombre: string }> = {
-  nuevo: { color: '#64748b', nombre: 'Sin contactar' },
-  contactado: { color: '#d97706', nombre: 'Contactado' },
-  demo: { color: '#7c3aed', nombre: 'Demo dado' },
-  negociacion: { color: '#ea580c', nombre: 'En negociación' },
-  cerrado: { color: '#16a34a', nombre: 'Cliente' },
-  perdido: { color: '#94a3b8', nombre: 'Perdido' },
-  appointment: { color: '#2563eb', nombre: 'Cita agendada' },
-  rescheduled: { color: '#0891b2', nombre: 'Cita reprogramada' },
-  cancelled: { color: '#be123c', nombre: 'Cita cancelada' },
-  'no-show': { color: '#9f1239', nombre: 'No se presentó' },
-  proposal: { color: '#c026d3', nombre: 'Propuesta' },
-  pilot: { color: '#0f766e', nombre: 'Piloto' },
-  won: { color: '#15803d', nombre: 'Ganado' },
-  lost: { color: '#64748b', nombre: 'Perdido' },
+  nuevo: { color: 'var(--muted)', nombre: 'Sin contactar' },
+  contactado: { color: 'var(--chart-4)', nombre: 'Contactado' },
+  demo: { color: 'var(--chart-7)', nombre: 'Demo dado' },
+  negociacion: { color: 'var(--chart-2)', nombre: 'En negociación' },
+  cerrado: { color: 'var(--chart-3)', nombre: 'Cliente' },
+  perdido: { color: 'var(--faint)', nombre: 'Perdido' },
+  appointment: { color: 'var(--chart-1)', nombre: 'Cita agendada' },
+  rescheduled: { color: 'var(--chart-5)', nombre: 'Cita reprogramada' },
+  cancelled: { color: 'var(--chart-6)', nombre: 'Cita cancelada' },
+  'no-show': { color: 'var(--chart-6)', nombre: 'No se presentó' },
+  proposal: { color: 'var(--chart-7)', nombre: 'Propuesta' },
+  pilot: { color: 'var(--chart-5)', nombre: 'Piloto' },
+  won: { color: 'var(--chart-3)', nombre: 'Ganado' },
+  lost: { color: 'var(--faint)', nombre: 'Perdido' },
 };
 
 /** Incluye aliases históricos para que la UI no ofrezca redacción en filas

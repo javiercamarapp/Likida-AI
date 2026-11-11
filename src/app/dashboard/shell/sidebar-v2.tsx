@@ -17,9 +17,10 @@ import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
  *
  * Conserva el contrato de siempre: `<aside>` con `<nav>` y `<a href>` reales.
  */
-export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cerrarSesion, insignias }: {
+export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cerrarSesion, insignias, organizacion }: {
   rol: string; rolEtiqueta: string; nombre: string | null; perfil?: PerfilTenant | null; usoIa?: { pct: number } | null;
   cerrarSesion?: () => Promise<void>; insignias?: Record<string, string>;
+  organizacion?: { id: string; nombre: string } | null;
 }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
   const { riel, alternar } = useRiel();
@@ -42,7 +43,7 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
       </nav>
       <div className="rv-sb__pie">
         <PieMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre}
-          usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
+          usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} />
       </div>
     </aside>
   );

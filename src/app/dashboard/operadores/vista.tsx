@@ -1,9 +1,7 @@
-import Link from 'next/link';
 import { Phone, PhoneOff, IdCard, UserPlus } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
 import type { ConteosOperadores } from '@/lib/likida/administracion';
-import { EstadoVacio, EstadoError } from '../estados';
 import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
 import { FormaOperador, FormaAltaOperador, type AccionForma, type PatioOpcion } from './forma';
@@ -12,7 +10,10 @@ import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import type { InvitacionDeOperador } from '@/lib/likida/invitacion_operador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { Disclosure, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  AvisoCompacto, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, BotonEnlace, type ColumnaBase,
+} from '@/app/ui-v2/componentes';
+import './operadores.css';
 
 /** La fila del registro — SIN el dinero que `OperadorDetalle` trae (ver
  *  encabezado de page.tsx: la fuga del 4-ago). `licencia` y `rfc` SÍ viajan:
@@ -118,8 +119,58 @@ export function VistaOperadores({
   // Sin operadores el alta es lo único útil: se abre sola; con datos, la lista va primero y las altas quedan plegadas debajo.
   const sinOperadores = !ilegible && pag.filtrados === 0 && !hayFiltro;
 
+  const editado = pag.editando ? filas.find((f) => f.operadorId === pag.editando) : undefined;
+  const hrefDe = (f: FilaOperador) => urlRegistro('/dashboard/operadores', sufijo, {
+    q: pag.q || null, p: pag.pagina,
+    editar: pag.editando === f.operadorId ? null : f.operadorId,
+  });
+  const columnas: ColumnaBase<FilaOperador>[] = [
+    {
+      id: 'operador', titulo: 'Operador', principal: true,
+      celda: (f) => (
+        <>
+          {f.nombre}
+          {f.numeroEmpleado && <span className="rv-eq__tenue">Nº {f.numeroEmpleado}</span>}
+        </>
+      ),
+    },
+    {
+      id: 'telefono', titulo: 'Teléfono',
+      celda: (f) => (f.telefono ? (
+        <span className="rv-eq__tel"><Icono icono={Phone} tam={14} /> {f.telefono}</span>
+      ) : (
+        <span className="rv-eq__tel" data-falta><Icono icono={PhoneOff} tam={14} /> Sin teléfono</span>
+      )),
+    },
+    { id: 'patio', titulo: 'Patio', celda: (f) => f.terminalNombre ?? <span className="rv-eq__tenue">Sin patio</span> },
+    { id: 'viajes', titulo: 'Viajes', alinear: 'der', celda: (f) => numero(f.viajes) },
+    { id: 'licencia', titulo: 'Licencia', celda: (f) => <PillLicencia f={f} hoy={hoy} /> },
+    {
+      id: 'estado', titulo: 'Estado',
+      celda: (f) => (
+        <span className="rv-eq__estados">
+          <StatusChip tono={f.activo ? 'ok' : 'muted'}>{f.activo ? 'Activo' : 'Inactivo'}</StatusChip>
+          {f.activo && f.invitacion && <PillInvitacion i={f.invitacion} />}
+        </span>
+      ),
+    },
+  ];
+  if (puedeEditar) {
+    columnas.push({
+      id: 'acciones', titulo: 'Acciones', alinear: 'der',
+      celda: (f) => (f.editable ? (
+        <span className="rv-eq__acciones">
+          <BotonEnlace href={hrefDe(f)} variante="ghost" tamano="sm">{pag.editando === f.operadorId ? 'Cerrar' : 'Editar'}</BotonEnlace>
+          {f.activo && f.telefono && f.invitacion && f.invitacion.estado !== 'enviada' && (
+            <InvitarUno operadorId={f.operadorId} nombre={f.nombre} reintento={f.invitacion.estado === 'fallo'} accion={invitar} />
+          )}
+        </span>
+      ) : null),
+    });
+  }
+
   return (
-    <MarcoPagina titulo="Operadores" apoyo="Tu padrón de operadores con teléfono y vigencia de licencia. Sin teléfono capturado, los agentes no pueden escribirles.">
+    <MarcoPagina titulo="Equipo" apoyo="Tu padrón de operadores con teléfono y vigencia de licencia. Sin teléfono capturado, los agentes no pueden escribirles.">
 
       <TiraCifras sello={selloHoy('Padrón de operadores')}>
         <Cifra etiqueta="Activos" valor={kpi(conteos?.activos)}
@@ -132,97 +183,81 @@ export function VistaOperadores({
           tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} info="operadores.licencias_por_vencer" />
       </TiraCifras>
 
-      <section className="card p-4">
-        <TituloRecuadro info="operadores.registro" className="mb-3">El registro</TituloRecuadro>
-        {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
-          <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
-            sustantivo="operadores" camposOcultos={camposOcultos} />
-        )}
-        {!ilegible && hayFiltro && !totalConocido && (
-          // No se pudo contar el padrón entero, así que el «de N» del pie
-          // sería un número inventado. Se dice, en vez de dejarlo pasar.
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-            No pude contar el padrón completo en este momento: el total de al lado es el de los que
-            coinciden con la búsqueda, no el de la flota.
-          </p>
-        )}
-        {ilegible ? (
-          <EstadoError mensaje="No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta." />
-        ) : pag.filtrados === 0 && !hayFiltro ? (
-          <EstadoVacio pantalla contenido titulo="Aún no hay operadores"
-            accion={puedeEditar ? { href: '#alta', texto: 'Dar de alta al primero' } : undefined}>
-            {puedeEditar
-              ? 'Aún no hay operadores dados de alta. Dalos de alta uno por uno arriba, o carga a toda tu flota de una vez desde un Excel o CSV.'
-              : 'Aún no hay operadores dados de alta. Quien administra tu flota los da de alta.'}
-          </EstadoVacio>
-        ) : (
-          <div className="overflow-x-auto">
-            <table aria-label="Operadores y su teléfono" className="w-full text-[13px]">
-              <thead>
-                <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Teléfono</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Patio</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Viajes</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Licencia</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estado</th>
-                  {puedeEditar && <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2" />}
-                </tr>
-              </thead>
-              <tbody>
-                {filas.map((f) => (
-                  <RenglonOperador key={f.operadorId} f={f} hoy={hoy}
-                    puedeEditar={puedeEditar && f.editable} guardarOperador={guardarOperador}
-                    patios={patios} patioFijo={patioDelJefe !== null} invitar={invitar}
-                    editando={pag.editando === f.operadorId}
-                    hrefEditar={urlRegistro('/dashboard/operadores', sufijo, {
-                      q: pag.q || null, p: pag.pagina,
-                      editar: pag.editando === f.operadorId ? null : f.operadorId,
-                    })} />
-                ))}
-              </tbody>
-            </table>
-            {filas.length === 0 && (
-              <p className="text-[12px] pt-2" style={{ color: 'var(--muted)' }}>
-                Ningún operador coincide con «{pag.q}».
-              </p>
-            )}
-          </div>
-        )}
-      </section>
       {puedeEditar && invitaciones && (
         <InvitarPendientes pendientes={invitaciones.pendientes} conFallo={invitaciones.conFallo}
           accion={invitar} hrefGuia={hrefGuia} />
       )}
 
+      {puedeEditar && editado && editado.editable && (
+        <Tarjeta titulo={`Corregir los datos de ${editado.nombre}`}>
+          <div className="rv-eq__editor">
+            <FormaOperador
+              accion={guardarOperador}
+              operadorId={editado.operadorId}
+              idPrefijo={`operador-${editado.operadorId}`}
+              // La fila COMPLETA, no solo lo que se ve en la tabla: `actualizarOperador` reemplaza los campos que reciba, y un
+              // formulario que no trajera el nombre lo dejaría vacío si alguien lo borra sin querer del campo.
+              inicial={{
+                nombre: editado.nombre,
+                telefono: editado.telefono ?? '',
+                numeroEmpleado: editado.numeroEmpleado ?? '',
+                licencia: editado.licencia ?? '',
+                licenciaTipo: editado.licenciaTipo ?? '',
+                licenciaVence: editado.licenciaVence ?? '',
+                rfc: editado.rfc ?? '',
+                activo: editado.activo,
+                terminalId: editado.terminalId ?? '',
+              }}
+              patios={patios}
+              patioFijo={patioDelJefe !== null}
+            />
+            <BotonEnlace href={hrefDe(editado)} variante="ghost" tamano="sm">Cerrar</BotonEnlace>
+          </div>
+        </Tarjeta>
+      )}
+
+      <Tarjeta titulo="El registro" info="operadores.registro">
+        {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
+          <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
+            sustantivo="operadores" camposOcultos={camposOcultos} />
+        )}
+        {!ilegible && hayFiltro && !totalConocido && (
+          // No se pudo contar el padrón entero, así que el «de N» del pie sería un número inventado. Se dice.
+          <AvisoCompacto tono="warn" resumen="No pude contar el padrón completo en este momento: el total de al lado es el de los que coinciden con la búsqueda, no el de la flota." />
+        )}
+        {ilegible ? (
+          <EstadoError reintentar>No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta.</EstadoError>
+        ) : pag.filtrados === 0 && !hayFiltro ? (
+          <EstadoVacio pantalla contenido icono={UserPlus} titulo="Aún no hay operadores"
+            accion={puedeEditar ? <BotonEnlace tamano="sm" href="#alta">Dar de alta al primero</BotonEnlace> : undefined}>
+            {puedeEditar
+              ? 'Dalos de alta uno por uno abajo, o carga a toda tu flota de una vez desde un Excel o CSV.'
+              : 'Quien administra tu flota los da de alta.'}
+          </EstadoVacio>
+        ) : (
+          <TablaBase<FilaOperador> etiqueta="Operadores y su teléfono" columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
+            vacio={{ titulo: 'Sin coincidencias', texto: `Ningún operador coincide con «${pag.q}».` }} />
+        )}
+      </Tarjeta>
+
       {puedeEditar && (
         <>
-          <Disclosure variante="linea" titulo="Dar de alta un operador" abierto={sinOperadores}>
-          <section id="alta" aria-labelledby="titulo-alta" className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                <UserPlus aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <TituloRecuadro id="titulo-alta" info="operadores.alta">Dar de alta un operador</TituloRecuadro>
-                <p className="mb-3 mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
-                  Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.
-                </p>
-                <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
-              </div>
+          <Disclosure variante="tarjeta" titulo="Dar de alta un operador" abierto={sinOperadores}>
+            <div id="alta" className="rv-eq__bloque">
+              <p className="rv-eq__texto">Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.</p>
+              <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
             </div>
-          </section>
           </Disclosure>
-          <Disclosure variante="linea" titulo="Cargar operadores desde Excel o CSV" abierto={sinOperadores}>
-          <ImportadorMasivo
-            entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
-            archivoPlantilla="plantilla-operadores.csv"
-            columnas={(sinWhatsApp
-              ? 'Obligatorias: nombre y, o bien teléfono, o bien número de empleado y correo (tu flota recibe el desglose por correo). Opcionales: correo con teléfono,'
-              : 'Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales:')
-              + ' número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio.'}
-            hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
-          />
+          <Disclosure variante="tarjeta" titulo="Cargar operadores desde Excel o CSV" abierto={sinOperadores}>
+            <ImportadorMasivo
+              entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
+              archivoPlantilla="plantilla-operadores.csv"
+              columnas={(sinWhatsApp
+                ? 'Obligatorias: nombre y, o bien teléfono, o bien número de empleado y correo (tu flota recibe el desglose por correo). Opcionales: correo con teléfono,'
+                : 'Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales:')
+                + ' número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio.'}
+              hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
+            />
           </Disclosure>
         </>
       )}
@@ -230,152 +265,22 @@ export function VistaOperadores({
   );
 }
 
-/**
- * Un renglón del registro + su forma de edición (auditoría 2, A2). La forma
- * va en un `<tr>` aparte con `colSpan` completo, plegada por default
- * (`Plegable`/`<details>`) — mismo patrón que `RenglonCliente` en
- * `dashboard/clientes/vista.tsx`: no pintar el formulario cuando `puedeEditar`
- * es falso, en vez de pintarlo deshabilitado, porque el rol de operación no
- * tiene ningún botón que darle.
- */
-function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefEditar, patios, patioFijo, invitar }: {
-  f: FilaOperador;
-  hoy: string;
-  puedeEditar: boolean;
-  guardarOperador: AccionForma;
-  patios: PatioOpcion[];
-  patioFijo: boolean;
-  invitar: AccionInvitar;
-  /** FE-12: solo la fila que `?editar=` nombra trae su formulario. */
-  editando: boolean;
-  hrefEditar: string;
-}) {
-  return (
-    <>
-      <tr className="border-t" style={{ borderColor: 'var(--line2)' }}>
-        <td className="py-2">
-          <span className="font-medium block">{f.nombre}</span>
-          {f.numeroEmpleado && (
-            <span className="block text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>Nº {f.numeroEmpleado}</span>
-          )}
-        </td>
-        <td className="py-2">
-          {f.telefono ? (
-            <span className="inline-flex items-center gap-1.5 cifra-mono" style={{ color: 'var(--muted)' }}>
-              <Phone width={12} height={12} strokeWidth={1.75} /> {f.telefono}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>
-              <PhoneOff width={12} height={12} strokeWidth={1.75} /> Sin teléfono
-            </span>
-          )}
-        </td>
-        <td className="py-2 text-[12px]" style={{ color: f.terminalNombre ? 'var(--ink2)' : 'var(--faint)' }}>
-          {f.terminalNombre ?? 'Sin patio'}
-        </td>
-        <td className="py-2 pr-6 text-right cifra-mono">{numero(f.viajes)}</td>
-        <td className="py-2"><PillLicencia f={f} hoy={hoy} /></td>
-        <td className="py-2">
-          <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-            style={f.activo
-              ? { color: 'var(--ok)', background: 'var(--okbg)' }
-              : { color: 'var(--muted)', background: 'var(--canvas)' }}>
-            {f.activo ? 'Activo' : 'Inactivo'}
-          </span>
-          {f.activo && f.invitacion && <PillInvitacion i={f.invitacion} />}
-        </td>
-        {puedeEditar && <td className="py-2" />}
-      </tr>
-      {puedeEditar && !editando && (
-        <tr style={{ borderColor: 'var(--line2)' }}>
-          <td colSpan={7} className="pb-2">
-            <span className="inline-flex flex-wrap items-center gap-x-4 gap-y-1">
-              <Link href={hrefEditar} className="text-[12px] underline hover:opacity-70 transition-opacity"
-                style={{ color: 'var(--muted)' }}>
-                Editar
-              </Link>
-              {f.activo && f.telefono && f.invitacion && f.invitacion.estado !== 'enviada' && (
-                <InvitarUno operadorId={f.operadorId} nombre={f.nombre} reintento={f.invitacion.estado === 'fallo'} accion={invitar} />
-              )}
-            </span>
-          </td>
-        </tr>
-      )}
-      {puedeEditar && editando && (
-        <tr style={{ borderColor: 'var(--line2)' }}>
-          <td colSpan={7} className="pb-3">
-            <>
-              <FormaOperador
-                accion={guardarOperador}
-                operadorId={f.operadorId}
-                idPrefijo={`operador-${f.operadorId}`}
-                // La fila COMPLETA, no solo lo que se ve en la tabla:
-                // `actualizarOperador` reemplaza los campos que reciba, y un
-                // formulario que no trajera el nombre lo dejaría vacío si
-                // alguien lo borra sin querer del campo.
-                inicial={{
-                  nombre: f.nombre,
-                  telefono: f.telefono ?? '',
-                  numeroEmpleado: f.numeroEmpleado ?? '',
-                  licencia: f.licencia ?? '',
-                  licenciaTipo: f.licenciaTipo ?? '',
-                  licenciaVence: f.licenciaVence ?? '',
-                  rfc: f.rfc ?? '',
-                  activo: f.activo,
-                  terminalId: f.terminalId ?? '',
-                }}
-                patios={patios}
-                patioFijo={patioFijo}
-              />
-              <Link href={hrefEditar} className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
-                style={{ color: 'var(--muted)' }}>
-                Cerrar
-              </Link>
-            </>
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
-/** El estado de la invitación por WhatsApp. Cada estado dice la verdad: «enviada»
- *  es que Meta ACEPTÓ el mensaje (no que el chofer lo haya leído). */
+/** El estado de la invitación por WhatsApp. Cada estado dice la verdad: «enviada» es que Meta ACEPTÓ el mensaje (no que el chofer lo haya leído). */
 function PillInvitacion({ i }: { i: InvitacionDeOperador }) {
-  const estilo = i.estado === 'enviada'
-    ? { color: 'var(--ok)', background: 'var(--okbg)' }
-    : i.estado === 'fallo'
-      ? { color: 'var(--bad)', background: 'var(--badbg)' }
-      : { color: 'var(--muted)', background: 'var(--canvas)' };
+  const tono = i.estado === 'enviada' ? 'ok' : i.estado === 'fallo' ? 'bad' : 'muted';
   const texto = i.estado === 'enviada' ? 'Invitación enviada' : i.estado === 'fallo' ? 'Invitación falló' : 'Sin invitar';
-  return (
-    <span className="ml-1.5 inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={estilo}
-      title={i.estado === 'fallo' && i.fallo ? i.fallo : undefined}>
-      {texto}
-    </span>
-  );
+  return <StatusChip tono={tono} title={i.estado === 'fallo' && i.fallo ? i.fallo : undefined}>{texto}</StatusChip>;
 }
 
-/** La vigencia que ancla. Cuatro estados y los cuatro son verdad: vencida /
- *  por vencer (≤30 días) / vigente / SIN REGISTRAR — el null no marca a nadie. */
+/** La vigencia que ancla. Cuatro estados y los cuatro son verdad: vencida / por vencer (≤30 días) / vigente / SIN REGISTRAR — el null no marca a nadie. */
 function PillLicencia({ f, hoy }: { f: FilaOperador; hoy: string }) {
   if (f.licenciaVence === null) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--faint)' }}>
-        <IdCard width={12} height={12} strokeWidth={1.75} /> Sin registrar
-      </span>
-    );
+    return <span className="rv-eq__tel"><Icono icono={IdCard} tam={14} /> Sin registrar</span>;
   }
   const dias = diasParaVencer(f.licenciaVence, hoy);
   const estado = clasificarVigencia(dias, 'Licencia').estado;
   const tipo = f.licenciaTipo ? `${f.licenciaTipo} · ` : '';
-  const pill = (texto: string, fg: string, bg: string) => (
-    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: fg, background: bg }}>
-      {texto}
-    </span>
-  );
-  if (estado === 'vencido') return pill(`${tipo}vencida ${fechaCorta(f.licenciaVence)}`, 'var(--bad)', 'var(--badbg)');
-  if (estado === 'por_vencer') return pill(dias === 0 ? `${tipo}vence hoy` : `${tipo}vence en ${numero(dias)} días`, 'var(--warn)', 'var(--warnbg)');
-  return pill(`${tipo}vigente hasta ${fechaCorta(f.licenciaVence)}`, 'var(--ok)', 'var(--okbg)');
+  if (estado === 'vencido') return <StatusChip tono="bad">{`${tipo}vencida ${fechaCorta(f.licenciaVence)}`}</StatusChip>;
+  if (estado === 'por_vencer') return <StatusChip tono="warn">{dias === 0 ? `${tipo}vence hoy` : `${tipo}vence en ${numero(dias)} días`}</StatusChip>;
+  return <StatusChip tono="ok">{`${tipo}vigente hasta ${fechaCorta(f.licenciaVence)}`}</StatusChip>;
 }
-

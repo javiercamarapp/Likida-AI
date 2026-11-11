@@ -3,6 +3,8 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { CheckCircle2, TriangleAlert } from 'lucide-react';
+import './conductores.css';
+import { Boton, Campo, CampoSelect, CampoTexto, Disclosure, Icono } from '@/app/ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DEL JEFE SOBRE UN HITO (0385) — capturar a mano, validar, marcar atendido.
@@ -27,24 +29,18 @@ const AYUDA: Record<ModoAccion, string> = {
 
 function Enviar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      {pending ? 'Guardando…' : texto}
-    </button>
-  );
+  return <Boton type="submit" variante="primary" loading={pending}>{pending ? 'Guardando…' : texto}</Boton>;
 }
 
 function Resultado({ r }: { r: ResultadoOficina }) {
   if (!r) return null;
   return r.ok ? (
-    <p role="status" className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--ok)' }}>
-      <CheckCircle2 width={13} height={13} strokeWidth={1.75} />{r.mensaje}
+    <p role="status" className="rv-cd__icono-linea" data-tono="ok">
+      <Icono icono={CheckCircle2} tam={14} />{r.mensaje}
     </p>
   ) : (
-    <p role="alert" className="flex items-start gap-1.5 text-[12px]" style={{ color: 'var(--bad)' }}>
-      <TriangleAlert width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />{r.error}
+    <p role="alert" className="rv-cd__icono-linea rv-cd__nota" data-tono="bad">
+      <Icono icono={TriangleAlert} tam={14} />{r.error}
     </p>
   );
 }
@@ -52,28 +48,23 @@ function Resultado({ r }: { r: ResultadoOficina }) {
 function FormaAccion({ modo, accion, hitoId, viajeId }: { modo: ModoAccion; accion: AccionOficinaServidor; hitoId: string | null; viajeId: string }) {
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <details className="text-[12px]">
-      <summary className="cursor-pointer select-none underline-offset-2 hover:underline" style={{ color: 'var(--muted)' }}>{TITULO[modo]}</summary>
-      <form action={enviar} className="mt-2 space-y-2 max-w-[44ch]">
+    <Disclosure titulo={TITULO[modo]} variante="linea">
+      <form action={enviar} className="rv-cd__form">
         <input type="hidden" name="tipo" value={modo} />
         {modo === 'atender' ? <input type="hidden" name="viajeId" value={viajeId} /> : <input type="hidden" name="hitoId" value={hitoId ?? ''} />}
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{AYUDA[modo]}</p>
+        <p className="rv-cd__micro">{AYUDA[modo]}</p>
         {modo === 'capturar' && (
-          <label className="block">
-            <span className="block text-[11px] font-medium mb-1">Hora del hito (hora de México)</span>
-            <input type="datetime-local" name="hora" required className="w-full" />
-          </label>
+          <Campo etiqueta="Hora del hito (hora de México)">
+            <input type="datetime-local" name="hora" required className="rv-ctl" />
+          </Campo>
         )}
-        <label className="block">
-          <span className="block text-[11px] font-medium mb-1">Motivo (queda en la bitácora con tu nombre)</span>
-          <input type="text" name="motivo" required minLength={5} maxLength={200} placeholder="p. ej. avisó por radio" className="w-full" />
-        </label>
-        <div className="flex items-center gap-2 flex-wrap">
+        <CampoTexto etiqueta="Motivo (queda en la bitácora con tu nombre)" name="motivo" required minLength={5} maxLength={200} placeholder="p. ej. avisó por radio" />
+        <div className="rv-cd__linea">
           <Enviar texto={BOTON[modo]} />
           <Resultado r={estado} />
         </div>
       </form>
-    </details>
+    </Disclosure>
   );
 }
 
@@ -83,7 +74,7 @@ export function AccionesHito({ accion, modos, hitoId, viajeId }: {
 }) {
   if (modos.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5">
+    <div className="rv-cd__pila--s">
       {modos.map((m) => <FormaAccion key={m} modo={m} accion={accion} hitoId={hitoId} viajeId={viajeId} />)}
     </div>
   );
@@ -104,23 +95,22 @@ export function FormaAsignarSitios({ accion, viajeId, sitios, hayMas = false }: 
     </>
   );
   return (
-    <details className="text-[12px]">
-      <summary className="cursor-pointer select-none underline-offset-2 hover:underline" style={{ color: 'var(--muted)' }}>Asignar sitios</summary>
-      <form action={enviar} className="mt-2 space-y-2 max-w-[52ch]">
+    <Disclosure titulo="Asignar sitios" variante="linea">
+      <form action={enviar} className="rv-cd__form">
         <input type="hidden" name="viajeId" value={viajeId} />
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Contra estos sitios se compara cada «ya llegué». Sin sitio, la llegada queda «sin dato» (nunca «no coincide»).</p>
+        <p className="rv-cd__micro">Contra estos sitios se compara cada «ya llegué». Sin sitio, la llegada queda «sin dato» (nunca «no coincide»).</p>
         {hayMas && (
-          <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>
+          <p role="status" className="rv-cd__micro" data-tono="warn">
             Hay más sitios activos de los que caben en esta lista (solo salen los primeros {sitios.length} por nombre). Si no aparece el que buscas, ligarlo
             desde aquí no es posible todavía: avisa a soporte o asígnalo con las equivalencias de «Textos sin sitio» en el catálogo.
           </p>
         )}
-        <div className="grid sm:grid-cols-2 gap-2">
-          <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de carga</span><select name="origen" defaultValue="" className="w-full">{opciones}</select></label>
-          <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de descarga</span><select name="destino" defaultValue="" className="w-full">{opciones}</select></label>
+        <div className="rv-cd__cuad">
+          <CampoSelect etiqueta="Sitio de carga" name="origen" defaultValue="">{opciones}</CampoSelect>
+          <CampoSelect etiqueta="Sitio de descarga" name="destino" defaultValue="">{opciones}</CampoSelect>
         </div>
-        <div className="flex items-center gap-2 flex-wrap"><Enviar texto="Guardar sitios" /><Resultado r={estado} /></div>
+        <div className="rv-cd__linea"><Enviar texto="Guardar sitios" /><Resultado r={estado} /></div>
       </form>
-    </details>
+    </Disclosure>
   );
 }

@@ -34,6 +34,13 @@
 /* Móvil: el margen de 16 px lo ponen HOY las páginas (C); sumar el del shell dejaba 32 y ensanchaba el documento en /agentes/liquidacion
    a 462 px (e2e «recorrido móvil»). Se desactiva aquí; desde 768 el padding único es del shell. */
 [data-ui="v2"] .rv-contenido { min-width: 0; padding: 0; }
+/* PESTAÑAS DEL HUB (Fase 8, dashboard): la barra de respaldo (`rv-pestanas-dash`, pantallas aún sin `MarcoPagina`) va pegada al borde
+   superior; con `MarcoPagina` en la página la pinta el propio marco bajo el encabezado y el respaldo se oculta (nunca dos barras).
+   La fila desplaza en horizontal por dentro (360 px con 6 pestañas) y nunca ensancha la página. */
+[data-ui="v2"] .rv-pestanas-dash { margin: 0 0 12px; }
+[data-ui="v2"] .rv-contenido:has(> .rv-marco) > .rv-pestanas-respaldo { display: none; }
+[data-ui="v2"] .rv-marco > .rv-marco__pestanas { min-width: 0; max-width: 100%; margin: -4px 0 4px; }
+[data-ui="v2"] .rv-pestanas-respaldo, [data-ui="v2"] .rv-marco__pestanas { min-width: 0; max-width: 100%; }
 
 /* ── Móvil (<768): sin aside, documento que scrollea ──────────────────────── */
 [data-ui="v2"] .rv-sb { display: none; }
@@ -282,7 +289,7 @@
   /* La columna del contenido es una tarjeta: topbar fija arriba y contenido que scrollea por dentro */
   [data-ui="v2"] .rv-col {
     display: flex; flex-direction: column; height: 100%; box-sizing: border-box; overflow: hidden;
-    border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-canvas); box-shadow: var(--sh-marco);
+    border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-sunken); box-shadow: var(--sh-marco);
   }
   [data-ui="v2"] .rv-contenido { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 24px 24px 28px; }
 

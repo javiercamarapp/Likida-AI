@@ -71,7 +71,11 @@ select :'que' in ('gps', 'todo') as es_gps, :'que' in ('geocercas', 'todo') as e
 \endif
 \if :es_liq
   delete from liquidacion_externa where tenant_id = :'t' and sistema_origen = 'SAP (demo)';
-  \echo 'liquidaciones: las de «SAP (demo)» borradas.'
+  -- ruta de correo con Excel (05b): sus desgloses y entregas caen en cascada con la liquidación; las excepciones y el coordinador se borran aparte.
+  delete from liquidacion_externa where tenant_id = :'t' and sistema_origen = 'desglose-bitacora (demo)';
+  delete from liquidacion_excepcion where tenant_id = :'t' and clave_externa like 'BIT-DEMO-%';
+  delete from liquidacion_coordinador where tenant_id = :'t' and correo = 'coordinador@demo.invalid';
+  \echo 'liquidaciones: las de «SAP (demo)» y los desgloses por correo de demo borrados.'
 \endif
 \if :es_cp
   delete from cp_documento where tenant_id = :'t' and modelo = 'demo-sintetico';

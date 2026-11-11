@@ -1,0 +1,104 @@
+/* Piezas propias de las pantallas del agente de Peajes (cliente). Solo tokens del sistema; sin style= en el JSX. */
+.rv-pj-sub { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.45; }
+.rv-pj-nota { margin: 0; font-size: var(--t-micro, 11px); color: var(--muted); line-height: 1.45; }
+.rv-pj-pie { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--t-small, 12px); color: var(--muted); }
+.rv-pj-pie strong { color: var(--ink); font-weight: 600; }
+.rv-pj-apagado { color: var(--muted); }
+.rv-pj-malo { color: var(--bad); }
+.rv-pj-tono[data-tono="ok"] { color: var(--ok); }
+.rv-pj-tono[data-tono="warn"] { color: var(--warn); }
+.rv-pj-enlace { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-small, 12px); font-weight: 500; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.rv-pj-enlace:hover { opacity: .7; }
+
+/* Listas densas de una línea por renglón (cola, estados recibidos, líneas de una cubeta). */
+.rv-pj-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rv-pj-lista__fila { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: var(--t-small, 12px); }
+.rv-pj-fijo { flex: none; }
+.rv-pj-corto { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-pj-der { margin-left: auto; }
+.rv-pj-conteo { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-micro, 11px); color: var(--muted); }
+.rv-pj-conteo[data-tono="ok"] { color: var(--ok); }
+.rv-pj-conteo[data-tono="warn"] { color: var(--warn); }
+
+/* Desglose del proveedor: lista a la izquierda, detalle a la derecha. */
+.rv-pj-desglose { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 1024px) { .rv-pj-desglose { grid-template-columns: minmax(240px, 1fr) 2fr; } }
+.rv-pj-desglose__lista, .rv-pj-desglose__detalle { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.rv-pj-desglose__detalle { gap: 12px; }
+.rv-pj-item { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); text-decoration: none; }
+.rv-pj-item:hover, .rv-pj-item[data-activo] { background: var(--canvas); }
+.rv-pj-item__cab { display: flex; align-items: center; gap: 8px; font-size: var(--t-small, 12px); min-width: 0; }
+.rv-pj-item__cab [data-tono="ok"] { color: var(--ok); }
+.rv-pj-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-pj-conciliado { display: grid; gap: 6px; }
+.rv-pj-cubetas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 768px) { .rv-pj-cubetas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rv-pj-caja { display: grid; gap: 6px; align-content: start; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); min-width: 0; }
+.rv-pj-caja__cab { display: flex; align-items: baseline; gap: 8px; font-size: var(--t-small, 12px); }
+.rv-pj-caja__total { font-size: var(--t-card, 14px); font-weight: 500; }
+.rv-pj-caja__total[data-tono="ok"] { color: var(--ok); }
+.rv-pj-caja__total[data-tono="warn"] { color: var(--warn); }
+.rv-pj-cubeta__linea { display: grid; gap: 2px; }
+
+/* Requisitos del estímulo. */
+.rv-pj-requisitos { display: grid; gap: 6px 24px; font-size: var(--t-small, 12px); }
+@media (min-width: 768px) { .rv-pj-requisitos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rv-pj-req { display: flex; align-items: flex-start; gap: 8px; }
+.rv-pj-req__icono { flex: none; margin-top: 1px; display: inline-flex; color: var(--muted); }
+.rv-pj-req[data-tono="ok"] .rv-pj-req__icono { color: var(--ok); }
+.rv-pj-req[data-tono="abierto"] .rv-pj-req__icono { color: var(--warn); }
+.rv-pj-req[data-tono="flota"] .rv-pj-req__texto, .rv-pj-req[data-tono="abierto"] .rv-pj-req__texto { color: var(--muted); }
+
+/* Controles de acción del agente: botón, confirmación en dos pasos y su acuse. */
+.rv-pj-control { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.rv-pj-confirmar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-pj-forma { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.rv-pj-forma--linea { align-items: center; }
+.rv-pj-acuse { display: grid; gap: 2px; }
+.rv-pj-dialogo { display: grid; gap: 8px; }
+
+/* Revisión de cobros. */
+.rv-pj-franja { display: grid; gap: 8px; }
+.rv-pj-franja__titulo { margin: 0; font-size: var(--t-body, 13px); font-weight: 600; }
+.rv-pj-tarjetas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 640px) { .rv-pj-tarjetas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .rv-pj-tarjetas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rv-pj-caja__titulo { margin: 0; font-size: var(--t-small, 12px); font-weight: 600; }
+.rv-pj-caja__monto { font-size: var(--t-card, 14px); font-weight: 600; }
+.rv-pj-texto { margin: 4px 0 0; font-size: var(--t-small, 12px); }
+.rv-pj-notas { margin: 0; padding-left: 16px; display: grid; gap: 2px; font-size: var(--t-small, 12px); color: var(--muted); }
+
+/* Tabla de candidatos. */
+.rv-pj-celda { display: grid; gap: 6px; justify-items: start; min-width: 14rem; }
+.rv-pj-que { max-width: 28rem; }
+.rv-pj-total { display: inline-flex; align-items: baseline; gap: 8px; }
+.rv-pj-total__valor { font-size: var(--t-kpi, 26px); font-weight: 600; }
+.rv-pj-rotulo { font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-pj-paginas { display: flex; align-items: center; gap: 12px; font-size: var(--t-small, 12px); }
+
+/* Reclamación: cierre mensual, seguimiento y revisión. */
+.rv-pj-bloque { display: grid; gap: 12px; }
+.rv-pj-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rv-pj-decenas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@media (min-width: 640px) { .rv-pj-decenas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rv-pj-categorias { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@media (min-width: 640px) { .rv-pj-categorias { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .rv-pj-categorias { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.rv-pj-caja--enlace { color: var(--ink); text-decoration: none; }
+.rv-pj-caja--enlace:hover { background: var(--canvas); }
+.rv-pj-det { display: grid; gap: 8px; }
+.rv-pj-det__cab { cursor: pointer; font-size: var(--t-body, 13px); font-weight: 600; }
+.rv-pj-que--ancho { max-width: 40rem; display: grid; gap: 4px; justify-items: start; }
+
+/* Configuración del conciliador: colores de texto por tono y piezas pequeñas. */
+.rv-pj-c-faint { color: var(--faint); }
+.rv-pj-c-muted { color: var(--muted); }
+.rv-pj-c-warn { color: var(--warn); }
+.rv-pj-c-bad { color: var(--bad); }
+.rv-pj-c-ok { color: var(--ok); }
+.rv-pj-c-ink { color: var(--ink); }
+.rv-pj-c-marca { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.rv-pj-pill { display: inline-flex; padding: 2px 8px; border-radius: 8px; background: var(--canvas); color: var(--muted); }
+.rv-pj-pill[data-tono="ok"] { color: var(--ok); }
+.rv-pj-codigo { margin: 8px 0 0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: var(--t-micro, 11px); background: var(--canvas); color: var(--ink); }
+.rv-pj-fila[data-apagada] { opacity: .55; }

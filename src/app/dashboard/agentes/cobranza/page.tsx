@@ -1,3 +1,4 @@
+import { Tarjeta } from '@/app/ui-v2/componentes';
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../../sufijo';
@@ -200,13 +201,8 @@ export default async function PaginaAgenteCobranza({
         ? <SeccionPorGasto config={porGasto.config} plan={porGasto.plan} tablero={tableroPorGasto}
             firma={config.firma} instrucciones={config.instrucciones} guardar={guardarPorGasto} />
         : (
-          <section className="card p-4">
-            <h2 className="font-display text-[15px] font-semibold">Cobranza por gasto</h2>
-            <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>
-              No se pudo leer la cobranza por gasto ahora mismo. No se muestra una lista a medias: media lista se
-              ve igual que la lista entera.
-            </p>
-          </section>
+          <Tarjeta titulo="Cobranza por gasto" info="cobranza.gasto" estado="error"
+            mensaje="No se pudo leer la cobranza por gasto ahora mismo. No se muestra una lista a medias: media lista se ve igual que la lista entera." reintentar />
         )}
       notificaciones={
         <>

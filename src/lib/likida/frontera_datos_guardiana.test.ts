@@ -326,7 +326,23 @@ import { join, relative } from 'node:path';
 // en `tenant_exportacion`). Los dos apagados por omisión. Funcionalidad nueva, no código migrado.
 // Ronda 7 (arreglos de auditoria + prueba en seco del TMS): +1 archivo (333 -> 334), `conectores/tms/prueba_en_seco.ts`: lee `tms_mapeo` de UNA flota (activo, anclado a tenant_id,
 // por `acotada`) para la prueba en seco; no cabe en `sincronizar.ts`, cuya lectura es por lote de flotas. Funcionalidad nueva, no codigo migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 334;
+// S1 «dinero y accesos» (/admin, 10-nov-2026): +2 archivos (334 -> 336) y +10 llamadas (2,491 -> 2,501), medidos con el guardián. Funcionalidad nueva, no código migrado:
+//   · `saas/asignar-plan.ts` (+7): asignar/cambiar/activar/pausar/cancelar la suscripción local de UNA flota (el hueco P0 que volvía inalcanzable `emitirMensualidad`):
+//     leer la flota, la suscripción viva (anclada a tenant_id) y el plan, insertar/actualizar con compare-and-set y sincronizar `tenant.plan`;
+//   · `auth/gestion_admin.ts` (+2): la flota y el rol de la persona elegida en /admin (por su id) y el nombre de la flota para el correo de acceso; el resto reutiliza `usuarios_escritura.ts`;
+//   · `saas/transferencia.ts` (+1, archivo que ya contaba): `tenantDeFacturaSaas`, para atribuir a su flota el asiento de la conciliación.
+// Integración r19 (s3/slo + s2/runner + s1/dinero): el barrido real mide 342 (+6 sobre 336) por las lecturas nuevas de /admin y del runner (agentes-parados, calidad-agentes,
+// cola-aprobacion, anotaciones-despliegue, slo-quema y soporte-avisos); funcionalidad nueva, no código migrado. Techo subido a lo medido, sin relajar la regla.
+// w3/cli (Fase 4, Clientes y acceso): +2 archivos (342 → 344) y +8 llamadas (2,514 → 2,522): `admin/personas.ts` (las personas de todas las flotas con su último
+// acceso de Auth, cruce a propósito como `getEquipo`) y `auth/baja_acceso.ts` (baja y reactivación del personal de Likida, tenant nulo, que `usuarios_escritura` rechaza a propósito).
+// Funcionalidad nueva, no código migrado; cada lectura falla cerrada.
+// F5 (w3/age): +1 archivo, `likida/agentes/config-agente.ts` (configurar un agente desde el admin: lee la fila `agente_definicion` por id y la actualiza con motivo y bitácora). Funcionalidad nueva.
+// F7 «seguridad y sistema» (/admin, 10-nov-2026): +1 archivo (342 -> 343), `admin/soporte-escalado.ts`: leer en `bitacora_auditoria` si consta el aviso de SLA vencido de cada ticket
+// (la consecuencia visible del plazo). No cabe en `soporte.ts` sin arrastrar el correo y Meta de `soporte-avisos.ts` a todo el que lee la cola. Funcionalidad nueva, no código migrado.
+// Pie de sidebar (r19, 10-nov-2026): +1 archivo neto (346 -> 347) y +1 llamada neta (2,536 -> 2,537). Los layouts de /admin y /dashboard leen `tenant` para el selector de flota del pie
+// (admin: id+nombre de todas las flotas, tras requireSuperadmin; dashboard: el nombre de UNA flota por `eq('id', tenantDelMenu)`, el tenant de la sesión). Las dos fallan cerradas (el pie dice
+// «Sin dato», nunca una lista vacía). Cuenta neta porque `dashboard/contador/inicio-contador.tsx` dejó de leer. Lecturas legítimas de presentación, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 347;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -682,7 +698,24 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 334;
 // para resolver al operador por NOMBRE en el formato «muestra-tms»; con `tenant_id`, por `acotada`, completa y demostrada con `traerTodo` y `order('id')`. No escribe.
 // Ronda 7: +2 (2,489 -> 2,491), medidas con el guardian: `conectores/tms/prueba_en_seco.ts` (+1, el mapeo activo de una flota) y `dashboard/contador/timbrado.tsx` (+1: el RFC y el
 // modo GUARDADOS al momento de guardar, para decidir si el cambio exige segundo factor; se lee en la accion, no se confia en lo pintado). Funcionalidad nueva, no codigo migrado.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_491;
+// Integración r19: +13 llamadas (2,501 -> 2,514) medidas con el guardián, de las mismas lecturas nuevas de /admin y del runner; techo subido a lo medido.
+// W3 P-BAN: +2 (2,514 -> 2,516), medidas con el guardián; 0 archivos nuevos. `lib/admin/cola-aprobacion.ts#leerResumenBandeja` (conteo de pendientes y conteo de urgentes, un solo `contarPendientes`) y `#leerMasVieja`
+// (la pieza pendiente más vieja, `limit(1)` con desempate por id): solo consulta, por `acotada`, sin tenant porque `cola_aprobacion` es del superadmin; alimentan los números de las pestañas de la Bandeja. No escriben.
+// W3 Dinero del admin: +3 llamadas (2,514 -> 2,517), medidas con el guardián: `saas/transferencia.ts` `listarFacturasSaas` (la lista de facturas de la mensualidad para /admin/facturas y el CSV del contador),
+// `llm/repo.ts` `listarAlertasTopeRecientes` (los avisos de tope de /admin/consumo) y `saas/suscripcion.ts` `listarSuscripcionesVivas` (el plan de cada flota en Planes y cobro). Lecturas nuevas del superadmin, no código migrado.
+// W3 Clientes y acceso (F4): +8 llamadas por los lectores personas.ts y arranque.ts. Integración: 2,514 + 2 + 3 + 8 = 2,527.
+// F5 (w3/age): +2 llamadas (2,514 -> 2,516), las dos de `config-agente.ts` (leer el valor anterior y escribir el cambio), por `acotada` y por id de agente.
+// Integración Ola 3b: +1 archivo y +2 llamadas de F5 sobre F4.
+// Integración de la Ola 3: +2 (Bandeja) +3 (Dinero) = 2,519 sobre 2,514.
+// F7 «seguridad y sistema» (/admin, 10-nov-2026): +7 llamadas (2,519 -> 2,526), todas por `acotada` y de solo lectura: `admin/bitacora.ts` +6 (la página filtrada de la bitácora, las listas de
+// flotas y personas para los filtros y la tabla de accesos del equipo con sus dos resoluciones de nombre) y `admin/soporte-escalado.ts` +1 (el aviso de SLA vencido por ticket).
+// Pie de sidebar (r19): +2 llamadas en los layouts de /admin y /dashboard (lectura de `tenant`) y -1 en inicio-contador.tsx = +1 neto (2,536 -> 2,537); ver el techo de archivos.
+// Integración w5 (r19): +2 llamadas netas (2,537 -> 2,539), 0 archivos netos (347). Entran 2 archivos de w5/pil y salen 2 llamadas-archivo por migración a piezas de Rovaq:
+//   `dashboard/puesta-en-marcha/listo_lecturas.ts` +2 (conteo de `tms_mapeo` activo y de `tenant_api_key` vigentes del asistente «¿Estoy listo?»; head:true, por `acotada`, filtradas por `tenant_id`
+//   que sale de la sesión en `puesta-en-marcha/page.tsx` -> `leerLecturasListo(s.tenantId)`) y `liquidacion_externa/poliza_provisional.ts` +2 (leer y guardar la perilla `poliza_provisional` de
+//   `liquidacion_correo_config`, por `acotada` y `.eq('tenant_id')`); -1 en agentes/liquidacion/vista.tsx y -1 en agentes/conductores/vista.tsx (w5/liq y w5/cpv ya no consultan ahí).
+//   `ensayo_local.ts` dejó de contar: era un `from` de Buffer (falso positivo), ahora decodifica base64 con `atob`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_539;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

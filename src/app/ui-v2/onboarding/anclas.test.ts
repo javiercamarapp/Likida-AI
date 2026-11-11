@@ -90,4 +90,4 @@ describe('anclas del recorrido', () => {
 });
 
 /** Pantallas del menú que NO usan el encabezado compartido: su paso «qué es» degrada (ancla ausente) en vez de resaltar el título. */
-const SIN_ENCABEZADO_COMPARTIDO: string[] = ['/dashboard/chat', '/dashboard/onboarding'];
+const SIN_ENCABEZADO_COMPARTIDO: string[] = ['/dashboard/chat'];

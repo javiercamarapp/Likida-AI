@@ -20,7 +20,8 @@ import { sufijoTenant } from '../sufijo';
 import { FormaOnboarding, type Opcion } from './forma';
 import { ChatEntrevista } from './chat';
 import { estadoEntrevista, mensajeBienvenida } from '@/lib/likida/perfil/entrevista';
-import type { ResultadoAccion } from '../../admin/ui/forma';
+import { Boton, Disclosure, MarcoPagina, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import './entrevista.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -113,14 +114,11 @@ export default async function OnboardingFlotaPage({
   const bien = mensajeBienvenida(entrevista);
   const preguntaInicial = entrevista.siguiente?.pregunta ?? null;
   const formulario = (
-    <details className="text-left">
-      <summary className="text-[12px] cursor-pointer text-center" style={{ color: 'var(--faint)' }}>
-        Prefiero el formulario
-      </summary>
-      <p className="text-[11px] mt-2 mb-4" style={{ color: 'var(--muted)' }}>
+    <Disclosure titulo="Prefiero el formulario" variante="linea">
+      <p className="rv-ob__form-apoyo">
         Las mismas declaraciones, sin conversación. Vacío no se inventa como no.
         Los topes de gasto se capturan en{' '}
-        <a href={`/dashboard/politicas${sufijo}`} className="underline">Políticas</a>.
+        <a href={`/dashboard/politicas${sufijo}`} className="rv-ob__form-enlace">Políticas</a>.
       </p>
       <FormaOnboarding
         accion={accion}
@@ -136,32 +134,30 @@ export default async function OnboardingFlotaPage({
           ...formularioDeclarado(perfil),
         }}
       />
-    </details>
+    </Disclosure>
   );
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <div className="flex-1 flex flex-col">
-          {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
-            <form action={posponer} className="px-5 pt-4 text-[12px]" style={{ color: 'var(--muted)' }}>
-              ¿No tienes a la mano tus ingresos anuales o no sabes si eres parte relacionada?{' '}
-              <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--ink)' }}>Lo confirmo con mi contador</button>
-              {' '}— el Resumen se abre con un aviso permanente: el estímulo de peaje queda en $0 hasta que lo declares.
-            </form>
-          )}
-          <ChatEntrevista
-            preguntaInicial={preguntaInicial}
-            preguntaIdInicial={entrevista.siguiente?.id ?? null}
-            chipsIniciales={bien.chips}
-            sustentoInicial={bien.sustento}
-            perfilListoInicial={entrevista.perfilListo || onboardingFiscalListo(perfil)}
-            sufijo={sufijo}
-            formulario={formulario}
-          />
-        </div>
+    <MarcoPagina titulo="Perfil de la flota" apoyo="Lo que Likida necesita saber de tu operación para cuadrar tus viajes. Lo que no sepas, déjalo vacío.">
+      <div className="rv-ob">
+        {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
+          <form action={posponer} className="rv-ob__pospuesto">
+            ¿No tienes a la mano tus ingresos anuales o no sabes si eres parte relacionada?{' '}
+            <Boton type="submit" variante="ghost" tamano="sm">Lo confirmo con mi contador</Boton>
+            {' '}— el Resumen se abre con un aviso permanente: el estímulo de peaje queda en $0 hasta que lo declares.
+          </form>
+        )}
+        <ChatEntrevista
+          preguntaInicial={preguntaInicial}
+          preguntaIdInicial={entrevista.siguiente?.id ?? null}
+          chipsIniciales={bien.chips}
+          sustentoInicial={bien.sustento}
+          perfilListoInicial={entrevista.perfilListo || onboardingFiscalListo(perfil)}
+          sufijo={sufijo}
+          formulario={formulario}
+        />
       </div>
-    </main>
+    </MarcoPagina>
   );
 }
 

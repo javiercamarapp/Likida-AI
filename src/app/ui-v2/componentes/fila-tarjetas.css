@@ -1,0 +1,43 @@
+/* FilaTarjetas · rejilla de 12 columnas (K2, fase 0). Archivo propio: no se edita componentes.css ni paginas.css.
+   Sin colores ni medidas fuera de los tokens del sistema; cero reglas que dependan de la piel del chrome. */
+.rv-fila-tarjetas { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; min-width: 0; }
+.rv-fila-tarjetas > * { min-width: 0; }
+.rv-fila-tarjetas[data-llena] { flex: 1 1 auto; }
+
+/* 8-4 y 4-8 solo en escritorio: sus selectores (0,3,0) ganarían a las reglas móviles (0,2,0) y la fila nunca se apilaría. */
+@media (min-width: 1024px) {
+  .rv-fila-tarjetas[data-variante="8-4"] > :first-child { grid-column: span 8; }
+  .rv-fila-tarjetas[data-variante="8-4"] > :not(:first-child) { grid-column: span 4; }
+  .rv-fila-tarjetas[data-variante="4-8"] > :first-child { grid-column: span 4; }
+  .rv-fila-tarjetas[data-variante="4-8"] > :not(:first-child) { grid-column: span 8; }
+}
+.rv-fila-tarjetas[data-variante="4-4-4"] > * { grid-column: span 4; }
+.rv-fila-tarjetas[data-variante="6-6"] > * { grid-column: span 6; }
+.rv-fila-tarjetas[data-variante="12"] > * { grid-column: 1 / -1; }
+
+/* La tarjeta de la fila llena su celda: el cuerpo crece y el vacío/error ocupa el hueco (no queda un vacío bajo la línea). */
+.rv-fila-tarjetas > .rv-tarjeta > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; }
+.rv-fila-tarjetas > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio,
+.rv-fila-tarjetas > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-error { flex: 1 1 auto; }
+
+/* Hasta 1023 px: 6 + 6 (la tercera tarjeta de 4-4-4, sola en su renglón, ocupa el ancho completo). */
+@media (max-width: 1023.98px) {
+  .rv-fila-tarjetas[data-variante="8-4"] > *,
+  .rv-fila-tarjetas[data-variante="4-8"] > *,
+  .rv-fila-tarjetas[data-variante="4-4-4"] > *,
+  .rv-fila-tarjetas[data-variante="6-6"] > * { grid-column: span 6; }
+  .rv-fila-tarjetas[data-variante="4-4-4"] > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/* Móvil: una columna, 10 px de separación. */
+@media (max-width: 767.98px) {
+  .rv-fila-tarjetas { gap: 10px; }
+  .rv-fila-tarjetas[data-variante] > * { grid-column: 1 / -1; }
+}
+
+/* Entrada escalonada de las tarjetas (una vez; 0/40/80 ms). Solo transform; con `reduce` no hay animación. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-fila-tarjetas > * { animation: rv-sube var(--ui-motion) var(--ui-ease) both; }
+  [data-ui="v2"] .rv-fila-tarjetas > :nth-child(2) { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-fila-tarjetas > :nth-child(3) { animation-delay: 80ms; }
+}

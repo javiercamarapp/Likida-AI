@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache';
-import { FileSpreadsheet, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -15,8 +15,8 @@ import {
 import { ENCABEZADO_CONTPAQI, SAP_B1_BASE } from '@/lib/likida/contabilidad/formatos';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
-import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
-import { CampoSelect, CampoTexto, Disclosure } from '@/app/ui-v2/componentes';
+import { BotonEnlace, CampoSelect, CampoTexto, Disclosure, FormaConAviso, Icono, Tarjeta, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import './contador.css';
 
 /**
  * PLAN MAESTRO 26-ago, sección B — el formulario que desbloquea el export a
@@ -43,8 +43,8 @@ const listaDeColumnas = (v: FormDataEntryValue | null): string[] =>
 
 function EstadoPerfil({ etiqueta, perfil, leyoOk }: { etiqueta: string; perfil: PerfilExportacionErp | null; leyoOk: boolean }) {
   return (
-    <p className="text-xs" style={{ color: 'var(--muted)' }}>
-      <span className="font-medium">{etiqueta}:</span>{' '}
+    <p className="rv-cont__linea">
+      <strong>{etiqueta}:</strong>{' '}
       {!leyoOk
         ? 'no pude leer si ya hay plantilla confirmada — recarga antes de confirmar de nuevo.'
         : perfil
@@ -81,12 +81,9 @@ function BotonPoliza({ sufijo, hoy }: { sufijo: string; hoy: string }) {
   // repo: `${sufijo}${sufijo ? '&' : '?'}`, igual que el botón de arriba.
   const href = `/api/export/poliza${sufijo}${sufijo ? '&' : '?'}formato=contpaqi&desde=${hoy.slice(0, 8)}01&hasta=${hoy}`;
   return (
-    <a href={href} download
-      className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
-      style={{ background: 'var(--surface)' }}>
-      <Download width={13} height={13} strokeWidth={1.75} />
+    <BotonEnlace href={href} download variante="secondary" tamano="sm" icono={<Icono icono={Download} />}>
       Descargar póliza del mes (CSV CONTPAQi)
-    </a>
+    </BotonEnlace>
   );
 }
 
@@ -166,43 +163,29 @@ export async function PerfilErp({
     : { tipo: 'Dr', numero: 1, separador: ',' as const, encabezado: [...ENCABEZADO_CONTPAQI] };
 
   return (
-    <section
-      className="mt-3 rounded-2xl px-5 py-4 flex flex-col gap-4 hairline"
-      style={{ background: 'var(--surface)' }}
-    >
-      <div className="flex items-start gap-2.5">
-        <FileSpreadsheet width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-        <div className="min-w-0">
-          <p className="text-sm font-medium">Plantilla de exportación contable (CONTPAQi / SAP Business One)</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-            El export de la póliza usa el layout EXACTO que tu instancia importa — no hay una
-            plantilla universal segura entre versiones. Confirmarla aquí significa que la
-            contrastaste contra el esquema de importación de tu CONTPAQi o tu Data Transfer
-            Workbench de SAP B1. Los campos vienen prellenados con la base común solo para no
-            teclear desde cero.
-          </p>
-          <div className="mt-1.5 flex flex-col gap-0.5">
-            <EstadoPerfil etiqueta="CONTPAQi" perfil={contpaqi} leyoOk={leyoOk} />
-            <EstadoPerfil etiqueta="SAP Business One" perfil={sapB1} leyoOk={leyoOk} />
+    <Tarjeta titulo="Plantilla de exportación contable (CONTPAQi / SAP Business One)">
+      <div className="rv-cont__lista">
+        <p className="rv-cont__linea">
+          El export de la póliza usa el layout EXACTO que tu instancia importa — no hay una
+          plantilla universal segura entre versiones. Confirmarla aquí significa que la
+          contrastaste contra el esquema de importación de tu CONTPAQi o tu Data Transfer
+          Workbench de SAP B1. Los campos vienen prellenados con la base común solo para no
+          teclear desde cero.
+        </p>
+        <EstadoPerfil etiqueta="CONTPAQi" perfil={contpaqi} leyoOk={leyoOk} />
+        <EstadoPerfil etiqueta="SAP Business One" perfil={sapB1} leyoOk={leyoOk} />
+
+        {/* El botón solo con plantilla CONTPAQi confirmada Y con permiso de exportar: sin lo primero la ruta contesta 409, y sin lo segundo 403. Ofrecerlo igual mandaría al contador a un error en vez de a un archivo. La puerta REAL sigue estando en la ruta. */}
+        {leyoOk && contpaqi !== null && puedeExportar(rol) && (
+          <div className="rv-cont__lista">
+            <div><BotonPoliza sufijo={sufijoTenant(searchParams)} hoy={hoyMx(new Date(ahoraMs()))} /></div>
+            <p className="rv-cont__linea">
+              El asiento del mes en curso, con el layout que confirmaste. SAP Business One no
+              baja como archivo —su plantilla DTW son dos .txt que la ruta entrega en JSON—;
+              se pide desde la integración, no desde aquí.
+            </p>
           </div>
-
-          {/* El botón solo con plantilla CONTPAQi confirmada Y con permiso de
-              exportar: sin lo primero la ruta contesta 409, y sin lo segundo
-              403. Ofrecerlo igual mandaría al contador a un error en vez de a
-              un archivo. La puerta REAL sigue estando en la ruta. */}
-          {leyoOk && contpaqi !== null && puedeExportar(rol) && (
-            <div className="mt-2.5">
-              <BotonPoliza sufijo={sufijoTenant(searchParams)} hoy={hoyMx(new Date(ahoraMs()))} />
-              <p className="text-xs mt-1" style={{ color: 'var(--faint)' }}>
-                El asiento del mes en curso, con el layout que confirmaste. SAP Business One no
-                baja como archivo —su plantilla DTW son dos .txt que la ruta entrega en JSON—;
-                se pide desde la integración, no desde aquí.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
+        )}
       {/* Mismo criterio que estimulo-peaje: sin lectura confiable no se ofrece
           el formulario — confirmaría a ciegas encima de una plantilla real. */}
       {leyoOk && (
@@ -250,6 +233,7 @@ export async function PerfilErp({
           </Disclosure>
         </>
       )}
-    </section>
+      </div>
+    </Tarjeta>
   );
 }

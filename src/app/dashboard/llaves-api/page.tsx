@@ -11,10 +11,9 @@ import {
   crearLlaveApi, revocarLlaveApi, listarLlavesApi, AREAS_DE_LLAVE, VIGENCIAS_DE_LLAVE,
   VIGENCIA_DEFAULT, type LlaveListada,
 } from '@/lib/auth/llave-api-escritura';
-import { EstadoError } from '../estados';
 import { FormaEmision, type ResultadoForma } from './forma';
 import { ListaLlaves } from './vista';
-import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, AvisoCompacto, EstadoError, Tarjeta } from '@/app/ui-v2/componentes';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Llaves de API' };
 
@@ -114,25 +113,20 @@ export default async function PaginaLlavesApi({
 
   return (
     <MarcoPagina titulo="Llaves de API" apoyo="Con una llave, un sistema tuyo consume la API de Likida sin navegador ni sesión. Aquí las emites y las revocas.">
-      <Aviso tono="info">
-        Con una llave, un sistema tuyo —un TMS, un tablero— consume la API de Likida sin
-        navegador ni sesión: se manda como <code className="cifra-mono">Authorization: Bearer</code> en
-        cada petición. La referencia completa vive en <code className="cifra-mono">/api/v1/openapi</code>.
-      </Aviso>
+      <AvisoCompacto tono="info"
+        resumen="Con una llave, un sistema tuyo (un TMS, un tablero) consume la API de Likida sin navegador ni sesión."
+        mas={<p>La llave se manda como <code className="cifra-mono">Authorization: Bearer</code> en cada petición. La referencia completa vive en <code className="cifra-mono">/api/v1/openapi</code>.</p>} />
 
       {llaves === null ? (
-        <EstadoError mensaje="No pude leer las llaves de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre llaves eso invita a emitir duplicados." />
+        <EstadoError reintentar>No pude leer las llaves de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre llaves eso invita a emitir duplicados.</EstadoError>
       ) : (
         <>
           <ListaLlaves llaves={llaves} revocarLlave={revocarLlave} />
 
-          <section className="space-y-3">
-            <TituloRecuadro info="llaves_api.emitir">Emitir una llave</TituloRecuadro>
-            <div className="card p-4">
-              <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
-                vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
-            </div>
-          </section>
+          <Tarjeta titulo="Emitir una llave" info="llaves_api.emitir">
+            <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
+              vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
+          </Tarjeta>
         </>
       )}
     </MarcoPagina>

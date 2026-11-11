@@ -1,32 +1,27 @@
 import type { Metadata } from 'next';
-import { getResumenNegocio } from '@/lib/admin/negocio';
-import { sentryActivo } from '@/lib/observability/sentry';
-import { usd } from '@/lib/utils';
-import { Activity, ExternalLink, Timer, ScrollText, ListTree, Search } from 'lucide-react';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarInterruptores, apagar, encender } from '@/lib/likida/interruptores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { ultimasEntradasBitacora, type EntradaBitacora } from '@/lib/admin/bitacora';
 import { corridasRecientes, type CorridaCruzada } from '@/lib/admin/corridas-cruzadas';
-import { getLatencias, type LatenciasMedidas, type FilaLatencia } from '@/lib/admin/slo';
-import { fechaHoraMx } from '@/lib/formato';
-import { AreaChartSimple } from '../charts';
-import { StatusPill, EstadoVacio, EstadoError, type Estado } from '../ui/kit';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
+import { getLatencias, type LatenciasMedidas, type FilaLatencia, type FilaLatenciaIa } from '@/lib/admin/slo';
+import { fechaHoraMx, numero } from '@/lib/formato';
+import { BotonEnlace, EstadoError, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { SeccionInterruptores, type InterruptorParaUi } from './interruptores-ui';
 import { etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
+import { NOMBRE_RELOJ } from '../crons/estado-relojes';
+import { CRONS, type CronId } from '@/lib/admin/salud';
 import type { ResultadoAccion } from '../ui/forma';
+import '../sistema.css';
 
 export const dynamic = 'force-dynamic';
 
-/** `agente_corrida.estado` como pill; un valor fuera del dominio se pinta
- *  crudo en neutro — visible, no roto (criterio de PILL_ESTATUS). */
-const PILL_CORRIDA: Record<string, { estado: Estado; etiqueta: string }> = {
-  ok: { estado: 'ok', etiqueta: 'OK' },
-  parcial: { estado: 'warn', etiqueta: 'Parcial' },
-  fallo: { estado: 'bad', etiqueta: 'Fallo' },
+/** El estado de la corrida como chip; un valor fuera del dominio se pinta crudo en neutro — visible, no roto. */
+const CHIP_CORRIDA: Record<string, { tono: TonoEstado; etiqueta: string }> = {
+  ok: { tono: 'ok', etiqueta: 'OK' },
+  parcial: { tono: 'warn', etiqueta: 'Parcial' },
+  fallo: { tono: 'bad', etiqueta: 'Fallo' },
 };
 
 /** "3 s" / "2.4 min" — para la tabla. `null` (sin fin) se pinta '—'. */
@@ -43,53 +38,49 @@ function msLegible(ms: number | null): string {
   return duracion(ms);
 }
 
-/** La tabla p50/p95 de rutas o crons. Sin filas NO se pinta una tabla vacía: la sección dice por qué no hay. */
-function TablaLatencia({ filas, etiqueta, notas }: { filas: FilaLatencia[]; etiqueta: string; notas?: (nombre: string) => string | null }) {
-  return (
-    <div className="overflow-x-auto mt-1">
-      <table aria-label={`Latencia por ${etiqueta.toLowerCase()}`} className="w-full text-sm">
-        <thead>
-          <tr style={{ color: 'var(--muted)' }} className="text-left">
-            <th scope="col" className="px-3 py-2 font-medium">{etiqueta}</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Muestras</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">p50</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">p95</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Máx.</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Fallos</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((f) => (
-            <tr key={f.nombre} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-              <td className="px-3 py-2 font-medium whitespace-nowrap"><code className="font-mono text-xs">{f.nombre}</code>
-                {notas?.(f.nombre) ? <span className="block text-[11px] font-normal" style={{ color: 'var(--muted)' }}>mide {notas(f.nombre)}</span> : null}
-              </td>
-              <td className="px-3 py-2 tabular text-right" style={{ color: 'var(--muted)' }}>{f.muestras}</td>
-              <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p50Ms)}</td>
-              <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p95Ms)}</td>
-              <td className="px-3 py-2 tabular text-right whitespace-nowrap" style={{ color: 'var(--muted)' }}>{msLegible(f.maxMs)}</td>
-              <td className="px-3 py-2 tabular text-right" style={{ color: f.fallos > 0 ? 'var(--bad, #b91c1c)' : 'var(--muted)' }}>{f.fallos}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+/** Un reloj se llama como en Relojes; lo que no es un reloj conocido se muestra tal cual (visible, no roto). */
+const nombreReloj = (id: string): string => ((CRONS as readonly string[]).includes(id) ? NOMBRE_RELOJ[id as CronId] : id);
+
+function columnasLatencia(etiqueta: string, nombre: (n: string) => string, notas?: (n: string) => string | null): ColumnaBase<FilaLatencia>[] {
+  return [
+    { id: 'nombre', titulo: etiqueta, principal: true, celda: (f) => <>{nombre(f.nombre)}{notas?.(f.nombre) ? <span className="adm-sis-sub">mide {notas(f.nombre)}</span> : null}</> },
+    { id: 'muestras', titulo: 'Muestras', alinear: 'der', celda: (f) => numero(f.muestras) },
+    { id: 'p50', titulo: 'p50', alinear: 'der', celda: (f) => msLegible(f.p50Ms) },
+    { id: 'p95', titulo: 'p95', alinear: 'der', celda: (f) => msLegible(f.p95Ms) },
+    { id: 'max', titulo: 'Máx.', alinear: 'der', celda: (f) => msLegible(f.maxMs) },
+    { id: 'fallos', titulo: 'Fallos', alinear: 'der', celda: (f) => (f.fallos > 0 ? <StatusChip tono="bad">{numero(f.fallos)}</StatusChip> : numero(f.fallos)) },
+  ];
 }
 
+const COLUMNAS_IA: ColumnaBase<FilaLatenciaIa>[] = [
+  { id: 'fase', titulo: 'Fase', principal: true, celda: (f) => f.fase },
+  { id: 'muestras', titulo: 'Medidas', alinear: 'der', celda: (f) => numero(f.muestras) },
+  { id: 'sin', titulo: 'Sin duración', alinear: 'der', celda: (f) => numero(f.sinDuracion) },
+  { id: 'p50', titulo: 'p50', alinear: 'der', celda: (f) => msLegible(f.p50Ms) },
+  { id: 'p95', titulo: 'p95', alinear: 'der', celda: (f) => msLegible(f.p95Ms) },
+  { id: 'max', titulo: 'Máx.', alinear: 'der', celda: (f) => msLegible(f.maxMs) },
+];
+
+const COLUMNAS_CORRIDAS: ColumnaBase<CorridaCruzada>[] = [
+  { id: 'agente', titulo: 'Agente', principal: true, celda: (c) => <Link href={`/admin/corridas/${c.id}`}>{etiquetaInterruptor(`agente:${c.agente}`)}</Link> },
+  // Corrida sin flota = del negocio (ventas, 0105): se dice, no se deja en blanco.
+  { id: 'flota', titulo: 'Flota', celda: (c) => c.tenantNombre ?? (c.tenantId === null ? 'Likida (negocio)' : '—') },
+  { id: 'estado', titulo: 'Estado', celda: (c) => { const e = CHIP_CORRIDA[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }; return <StatusChip tono={e.tono}>{e.etiqueta}</StatusChip>; } },
+  { id: 'tareas', titulo: 'Tareas', alinear: 'der', celda: (c) => (c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : '—') },
+  { id: 'duracion', titulo: 'Duración', alinear: 'der', celda: (c) => duracion(c.duracionMs) },
+  { id: 'inicio', titulo: 'Inicio', celda: (c) => fechaHoraMx(c.inicio) },
+];
+
 /**
- * Observabilidad — la casa de OPERAR el sistema: el kill switch (0110), la
- * traza de corridas y el primer lector de la bitácora de auditoría, junto a
- * lo que ya vivía aquí (Sentry/Vercel y el costo de IA como proxy de
- * actividad). `requireSuperadmin()` ya lo hizo el layout para RENDERIZAR;
- * los server actions lo repiten adentro porque el gateo de la UI solo decide
- * si se pinta el formulario (patrón de administracion.ts).
+ * Observabilidad — la casa de OPERAR el sistema: el kill switch (0110), la traza de corridas y la latencia medida. `requireSuperadmin()`
+ * ya lo hizo el layout para RENDERIZAR; la acción de los interruptores lo repite adentro porque el gateo de la UI solo decide si se
+ * pinta el formulario (patrón de administracion.ts).
+ *
+ * F7: se quitaron los duplicados (el semáforo de Sentry y Vercel vive en Estado, el costo de IA por día en Consumo de IA) y la ventana
+ * de la bitácora, que ahora es la pantalla Bitácora con filtros y páginas. La acción de los interruptores no cambió: la fija
+ * `page.test.tsx`.
  */
-export default async function ObservabilidadPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ b?: string }>;
-}) {
+export default async function ObservabilidadPage() {
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   async function accionInterruptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -115,335 +106,76 @@ export default async function ObservabilidadPage({
     };
   }
 
-  const sp = await searchParams;
-  const filtroBitacora = (sp.b ?? '').trim();
 
-  // Cada fuente falla POR SEPARADO y lo dice: los interruptores caídos no
-  // pueden esconder la bitácora, ni al revés — en un incidente esta página
-  // es la que tiene que seguir en pie aunque sea a pedazos.
-  //
-  // FE-14 (22-ago-2026): las cuatro se pedían EN SERIE, una tras otra —cuatro
-  // viajes a la base sumados en el reloj— y encima `getResumenNegocio` iba
-  // sin catch al final: en un incidente donde la métrica de negocio no
-  // responde, los INTERRUPTORES —lo único que esta página tiene que enseñar
-  // sí o sí— se caían con ella. Ahora salen las cuatro juntas y la de negocio
-  // degrada como las demás: su gráfica lo dice y los kill switches siguen.
-  const [interruptores, corridas, bitacora, resumen, latencias] = await Promise.all([
+  // Cada fuente falla POR SEPARADO y lo dice: los interruptores caídos no pueden esconder las corridas, ni al revés — en un incidente esta
+  // página es la que tiene que seguir en pie aunque sea a pedazos.
+  const [interruptores, corridas, latencias] = await Promise.all([
     listarInterruptores().catch((): InterruptorParaUi[] | null => null),
     corridasRecientes(15).catch((): CorridaCruzada[] | null => null),
-    ultimasEntradasBitacora({ limite: 50, filtroAccion: filtroBitacora })
-      .catch((): EntradaBitacora[] | null => null),
-    getResumenNegocio().catch(() => null),
     // E1-A (0700): los p50/p95 se calculan en SQL; cada fuente (rutas, crons, IA) degrada por separado dentro de la función.
     getLatencias(7).catch((): LatenciasMedidas | null => null),
   ]);
-  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
+  const dias = latencias?.ventanaDias ?? 7;
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Activity {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo="Observabilidad & Operación"
-        />
+    <MarcoPagina titulo="Observabilidad" apoyo="Apagar un agente en segundos, ver sus corridas recientes y cuánto tarda el sistema.">
+      <Tarjeta titulo="Interruptores"
+        estado={interruptores === null ? 'error' : 'ok'} reintentar
+        mensaje="No se pudieron leer los interruptores. La consulta falló: no es que estén todos encendidos, es que no se pudo mirar. Los relojes, ante lo mismo, NO corren (fallan cerrado)."
+      >
+        <p className="adm-sis-nota">
+          Sin fila = encendido: lo seguro es que el sistema corra. Apagar exige motivo. La palanca es global por agente, no por flota, y los relojes fallan cerrado: si no pueden leerla, no corren.
+          Desde ⌘K también se mueven.
+        </p>
+        {interruptores !== null ? <SeccionInterruptores interruptores={interruptores} accion={accionInterruptor} /> : null}
+      </Tarjeta>
 
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          {/* ── El kill switch (0110) ─────────────────────────────────────── */}
-          <div className="card p-3">
-            <div className="flex items-center justify-between gap-3">
-              <TituloSeccion>Interruptores — apagar un agente en cinco segundos</TituloSeccion>
-              <span className="text-[10px]" style={{ color: 'var(--muted)' }}>⌘K también los mueve</span>
-            </div>
-            <p className="text-xs mt-1 mb-2" style={{ color: 'var(--muted)' }}>
-              Sin fila = encendido: el default seguro es que el sistema corre. Apagar exige motivo.
-              La palanca es global por agente (v1), no por flota, y los crons fallan cerrado: si no
-              pueden leerla, no corren.
-            </p>
-            {interruptores === null ? (
-              <EstadoError mensaje="No se pudieron leer los interruptores. La consulta falló — no es que estén todos encendidos, es que no se pudo mirar. Los crons, ante lo mismo, NO corren (fail-closed)." />
-            ) : (
-              <SeccionInterruptores interruptores={interruptores} accion={accionInterruptor} />
-            )}
-          </div>
+      <Tarjeta titulo="Corridas recientes" acciones={<BotonEnlace href="/admin/corridas" variante="ghost" tamano="sm">Ver todas</BotonEnlace>}
+        estado={corridas === null ? 'error' : corridas.length === 0 ? 'vacio' : 'ok'} reintentar
+        mensaje={corridas === null ? 'No se pudo leer el historial de corridas. La consulta falló: no es que los agentes no hayan corrido, es que no se pudo mirar.' : 'Los agentes no han corrido todavía'}
+        detalle="El historial existe y está vacío de verdad: la base está en cero porque no hay clientes operando, no porque falte código.">
+        {corridas !== null ? <TablaBase etiqueta="Corridas de agentes recientes" columnas={COLUMNAS_CORRIDAS} filas={corridas} idFila={(c) => c.id} densa tarjetaMovil /> : null}
+      </Tarjeta>
 
-          {/* ── La traza de corridas ──────────────────────────────────────── */}
-          <div className="card p-3">
-            <TituloSeccion>Corridas recientes — todos los agentes, todas las flotas</TituloSeccion>
-            {corridas === null ? (
-              <div className="mt-2">
-                <EstadoError mensaje="No se pudo leer el historial de corridas. La consulta falló — no es que los agentes no hayan corrido, es que no se pudo mirar." />
-              </div>
-            ) : corridas.length === 0 ? (
-              <div className="mt-2">
-                <EstadoVacio icono={<ListTree width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  La bitácora de corridas (0102) existe y está vacía de verdad: los agentes no han
-                  corrido todavía — la base está en cero porque no hay clientes, no porque falte código.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <div className="overflow-x-auto mt-1">
-                <table aria-label="Corridas de agentes" className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th scope="col" className="px-3 py-2 font-medium">Agente</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Flota</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Estado</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Tareas</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Duración</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Inicio</th>
-                      <th scope="col" className="px-3 py-2 font-medium text-right">Traza</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {corridas.map((c) => {
-                      const pill = PILL_CORRIDA[c.estado] ?? { estado: 'neutral' as Estado, etiqueta: c.estado };
-                      return (
-                        <tr key={c.id} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                          <td className="px-3 py-2 font-medium whitespace-nowrap">{etiquetaInterruptor(`agente:${c.agente}`)}</td>
-                          {/* Corrida sin flota = del negocio (ventas, 0105) — se dice, no se deja en blanco. */}
-                          <td className="px-3 py-2">{c.tenantNombre ?? (c.tenantId === null ? 'Likida (negocio)' : '—')}</td>
-                          <td className="px-3 py-2"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
-                          <td className="px-3 py-2 tabular" style={{ color: 'var(--muted)' }}>
-                            {c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas}/${c.tareasTotal}` : '—'}
-                          </td>
-                          <td className="px-3 py-2 tabular whitespace-nowrap" style={{ color: 'var(--muted)' }}>{duracion(c.duracionMs)}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--muted)' }}>{fechaHoraMx(c.inicio)}</td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <Link href={`/admin/corridas/${c.id}`} className="text-xs font-medium underline underline-offset-2">
-                              abrir traza
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+      {/* ── Latencias medidas (0700) ─────────────────────────────────────── */}
+      <Tarjeta titulo={`Latencia por ruta (p50 y p95, ${dias} días)`}
+        estado={latencias === null || latencias.rutas === null ? 'error' : latencias.rutas.length === 0 ? 'vacio' : 'ok'} reintentar
+        mensaje={latencias === null || latencias.rutas === null ? 'No se pudo leer la latencia de rutas. La consulta falló: no es que no haya tráfico, es que no se pudo mirar.' : 'Sin muestras todavía'}
+        detalle="La tabla existe y está vacía de verdad. Se llena sola con el tráfico de las rutas medidas (salud, webhook de WhatsApp, chat e ingesta del panel).">
+        <p className="adm-sis-nota">
+          Percentiles calculados en la base (rango más cercano: un valor que de verdad ocurrió). Solo se mide una de cada diez peticiones, sin sesgo hacia lo lento: el p95 de pocas muestras es una estimación, no una garantía.
+          Cada ruta mide hasta que devuelve su respuesta; en las que contestan antes de terminar su trabajo (WhatsApp, chat) la nota junto al nombre dice hasta dónde.
+        </p>
+        {latencias?.rutas ? <TablaBase etiqueta="Latencia por ruta" columnas={columnasLatencia('Ruta', (n) => n, notaDeLatenciaRuta)} filas={latencias.rutas} idFila={(f) => f.nombre} densa tarjetaMovil /> : null}
+      </Tarjeta>
 
-          {/* ── El primer lector de la bitácora (0053) ────────────────────── */}
-          <div className="card p-3">
-            <TituloSeccion>Bitácora de auditoría — todas las flotas</TituloSeccion>
-            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              Las últimas 50 entradas (es una ventana, no un export). Hasta hoy esta tabla tenía
-              siete escritores y cero lectores — este es el primero.
-            </p>
-            <form method="GET" className="flex items-center gap-2 mt-2">
-              <Search width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              <input
-                name="b"
-                defaultValue={filtroBitacora}
-                placeholder="Filtrar por acción (interruptor, flota.creada, impersonacion…)"
-                className="text-xs rounded-lg px-2.5 py-1.5 w-72 outline-none"
-                style={{ background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' }}
-              />
-              <button type="submit" className="text-xs font-medium rounded-lg px-3 py-1.5 hairline">Filtrar</button>
-            </form>
-            {bitacora === null ? (
-              <div className="mt-2">
-                <EstadoError mensaje="No se pudo leer la bitácora. La consulta falló — no es que nadie haya tocado nada, es que no se pudo mirar." />
-              </div>
-            ) : bitacora.length === 0 ? (
-              <div className="mt-2">
-                <EstadoVacio icono={<ScrollText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  {filtroBitacora
-                    ? <>Ninguna entrada coincide con «{filtroBitacora}» en las acciones registradas.</>
-                    : <>La bitácora existe y está vacía: ninguna operación administrativa se ha registrado todavía.</>}
-                </EstadoVacio>
-              </div>
-            ) : (
-              <div className="overflow-x-auto mt-1">
-                <table aria-label="Acciones registradas" className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th scope="col" className="px-3 py-2 font-medium">Cuándo</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Acción</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Quién</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Flota</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Entidad</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Detalle</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bitacora.map((e) => (
-                      <tr key={e.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--muted)' }}>{fechaHoraMx(e.ocurrioEn)}</td>
-                        <td className="px-3 py-2 font-medium whitespace-nowrap"><code className="font-mono text-xs">{e.accion}</code></td>
-                        {/* Sin actor no se inventa uno: los escritores viejos no firmaban. */}
-                        <td className="px-3 py-2 text-xs">{e.actor ?? 'sistema'}</td>
-                        <td className="px-3 py-2 text-xs">{e.tenantNombre ?? (e.tenantId === null ? 'plataforma' : '—')}</td>
-                        <td className="px-3 py-2 text-xs" style={{ color: 'var(--muted)' }}>
-                          {e.entidad ?? '—'}{e.entidadId ? ` · ${e.entidadId.slice(0, 8)}` : ''}
-                        </td>
-                        <td className="px-3 py-2 text-xs" style={{ color: 'var(--muted)' }}>
-                          {e.detalle ? <code className="font-mono text-[11px] break-all">{JSON.stringify(e.detalle)}</code> : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+      <Tarjeta titulo={`Latencia por reloj (p50 y p95, ${dias} días)`}
+        estado={latencias === null || latencias.crons === null ? 'error' : latencias.crons.length === 0 ? 'vacio' : 'ok'} reintentar
+        mensaje={latencias === null || latencias.crons === null ? 'No se pudo leer la latencia de los relojes. La consulta falló: no es que no hayan corrido, es que no se pudo mirar.' : 'Sin muestras todavía'}
+        detalle="Ningún reloj ha corrido desde que existe la medición.">
+        <p className="adm-sis-nota">Una muestra por corrida, de la puerta del reloj a su latido. Los saltos por palanca no cuentan (responden en milisegundos sin trabajar y hundirían el p50).</p>
+        {latencias?.crons ? <TablaBase etiqueta="Latencia por reloj" columnas={columnasLatencia('Reloj', nombreReloj)} filas={latencias.crons} idFila={(f) => f.nombre} densa tarjetaMovil /> : null}
+      </Tarjeta>
 
-          {/* ── Lo que ya vivía aquí ──────────────────────────────────────── */}
-          <div className="card p-3">
-            <TituloSeccion>Salud del sistema</TituloSeccion>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-2">
-              {/* MEDIDO, no fijo (auditoría 4, D3): el pill decía "Conectado"
-                  por decreto. Lo único que se puede afirmar desde aquí es si hay
-                  DSN — "configurado", nunca "conectado". */}
-              <a href="https://sentry.io" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
-                    <ExternalLink width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                    Errores — Sentry
-                  </div>
-                  {sentryActivo()
-                    ? <StatusPill estado="ok">DSN configurado</StatusPill>
-                    : <StatusPill estado="bad">Sin DSN — ciego</StatusPill>}
-                </div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Se enlaza en vez de reconstruirse.</div>
-              </a>
-              <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
-                    <ExternalLink width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                    Uptime, deploys y latencia de edge — Vercel
-                  </div>
-                  {/* No hay medición de Vercel desde adentro (si esto renderiza,
-                      Vercel contestó): neutral honesto, no verde de adorno. */}
-                  <StatusPill estado="neutral">No medido</StatusPill>
-                </div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Vercel ya lo mide. Se enlaza en vez de reconstruirse.</div>
-              </a>
-            </div>
-          </div>
+      <Tarjeta titulo={`Latencia de la IA por fase (p50 y p95, ${dias} días)`}
+        estado={latencias === null || latencias.ia === null ? 'error' : latencias.ia.length === 0 ? 'vacio' : 'ok'} reintentar
+        mensaje={latencias === null || latencias.ia === null ? 'No se pudo leer la latencia de la IA. La consulta falló: no es que no haya llamadas, es que no se pudo mirar.' : 'Sin llamadas de IA en la ventana'}
+        detalle="La base está en cero porque no hay clientes operando, no porque falte código.">
+        <p className="adm-sis-nota">
+          Las llamadas anteriores a esta medición, y las fases cuyo código aún no lleva cronómetro, quedan SIN duración: se cuentan aparte, no como cero.
+          Siguen sin medirse la tasa de éxito de las herramientas, la de escalamiento a humano y el tiempo de resolución de punta a punta. La traza de una corrida sí existe: se abre desde la lista de arriba.
+        </p>
+        {latencias?.ia ? <TablaBase etiqueta="Duración por fase" columnas={COLUMNAS_IA} filas={latencias.ia} idFila={(f) => f.fase} densa tarjetaMovil /> : null}
+      </Tarjeta>
 
-          <div className="card p-4">
-            <TituloSeccion>Actividad de IA en el tiempo</TituloSeccion>
-            <div className="mt-3">
-              {resumen === null ? (
-                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
-                  No se pudo leer la actividad de IA. La consulta falló — no es que no haya actividad,
-                  es que no se pudo mirar.
-                </div>
-              ) : resumen.porDia.length > 1 ? (
-                <AreaChartSimple datos={resumen.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
-              ) : (
-                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
-                  Sin historial suficiente todavía.
-                </div>
-              )}
-            </div>
-            <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-              Proxy honesto de actividad, no de rendimiento: enseña cuánto gasta la IA día a día, no qué tan rápido responde.
-            </p>
-          </div>
+      {interruptores === null && corridas === null && latencias === null ? <EstadoError reintentar>Ninguna de las tres fuentes respondió: probablemente la base está caída.</EstadoError> : null}
 
-          {/* ── Latencias medidas (0700) ──────────────────────────────────── */}
-          <div className="card p-3">
-            <TituloSeccion>Latencia por ruta — p50 / p95 ({latencias?.ventanaDias ?? 7} días)</TituloSeccion>
-            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              Percentiles calculados en la base (rango más cercano: un valor que de verdad ocurrió). Solo se mide una
-              de cada diez peticiones (muestreo uniforme, sin sesgo hacia lo lento): el p95 de pocas muestras es una
-              estimación, no una garantía. Cada ruta mide hasta que devuelve su respuesta: en las que contestan antes de
-              terminar su trabajo (WhatsApp, chat) la nota junto al nombre dice hasta dónde.
-            </p>
-            {latencias === null || latencias.rutas === null ? (
-              <div className="mt-2">
-                <EstadoError mensaje="No se pudo leer la latencia de rutas. La consulta falló — no es que no haya tráfico, es que no se pudo mirar." />
-              </div>
-            ) : latencias.rutas.length === 0 ? (
-              <div className="mt-2">
-                <EstadoVacio icono={<Timer width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Sin muestras todavía: la tabla existe y está vacía de verdad. Se llena sola con el tráfico de las
-                  rutas medidas (health, webhook de WhatsApp, chat e ingesta del panel).
-                </EstadoVacio>
-              </div>
-            ) : (
-              <TablaLatencia filas={latencias.rutas} etiqueta="Ruta" notas={notaDeLatenciaRuta} />
-            )}
-          </div>
-
-          <div className="card p-3">
-            <TituloSeccion>Latencia por cron — p50 / p95 ({latencias?.ventanaDias ?? 7} días)</TituloSeccion>
-            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              Una muestra por corrida, de la puerta del cron a su latido. Los saltos por palanca no cuentan (responden
-              en milisegundos sin trabajar y hundirían el p50).
-            </p>
-            {latencias === null || latencias.crons === null ? (
-              <div className="mt-2">
-                <EstadoError mensaje="No se pudo leer la latencia de crons. La consulta falló — no es que no hayan corrido, es que no se pudo mirar." />
-              </div>
-            ) : latencias.crons.length === 0 ? (
-              <div className="mt-2">
-                <EstadoVacio icono={<Timer width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Sin muestras todavía: ningún cron ha corrido desde que existe la medición.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <TablaLatencia filas={latencias.crons} etiqueta="Cron" />
-            )}
-          </div>
-
-          <div className="card p-3">
-            <TituloSeccion>Latencia de la IA por fase — p50 / p95 ({latencias?.ventanaDias ?? 7} días)</TituloSeccion>
-            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              Desde <code className="font-mono">llm_costo.duracion_ms</code> (0700). Las llamadas anteriores a la 0700,
-              y las fases cuyo llamador aún no lleva cronómetro, quedan SIN duración: se cuentan aparte, no como cero.
-            </p>
-            {latencias === null || latencias.ia === null ? (
-              <div className="mt-2">
-                <EstadoError mensaje="No se pudo leer la latencia de la IA. La consulta falló — no es que no haya llamadas, es que no se pudo mirar." />
-              </div>
-            ) : latencias.ia.length === 0 ? (
-              <div className="mt-2">
-                <EstadoVacio icono={<Timer width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Sin llamadas de IA registradas en la ventana: la base está en cero porque no hay clientes operando, no porque falte código.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <div className="overflow-x-auto mt-1">
-                <table aria-label="Duración por fase" className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th scope="col" className="px-3 py-2 font-medium">Fase</th>
-                      <th scope="col" className="px-3 py-2 font-medium text-right">Medidas</th>
-                      <th scope="col" className="px-3 py-2 font-medium text-right">Sin duración</th>
-                      <th scope="col" className="px-3 py-2 font-medium text-right">p50</th>
-                      <th scope="col" className="px-3 py-2 font-medium text-right">p95</th>
-                      <th scope="col" className="px-3 py-2 font-medium text-right">Máx.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {latencias.ia.map((f) => (
-                      <tr key={f.fase} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                        <td className="px-3 py-2 font-medium whitespace-nowrap"><code className="font-mono text-xs">{f.fase}</code></td>
-                        <td className="px-3 py-2 tabular text-right" style={{ color: 'var(--muted)' }}>{f.muestras}</td>
-                        <td className="px-3 py-2 tabular text-right" style={{ color: 'var(--muted)' }}>{f.sinDuracion}</td>
-                        <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p50Ms)}</td>
-                        <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p95Ms)}</td>
-                        <td className="px-3 py-2 tabular text-right whitespace-nowrap" style={{ color: 'var(--muted)' }}>{msLegible(f.maxMs)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-              Siguen sin instrumentarse: la tasa de éxito de tool-calls, la tasa de escalamiento a humano y el tiempo de
-              resolución de punta a punta. La traza de una CORRIDA sí existe — el enlace «abrir traza» de arriba.
-            </p>
-          </div>
-        </div>
+      <div className="adm-sis-acciones">
+        <BotonEnlace href="/admin/bitacora" variante="secondary" tamano="sm">Ver la bitácora de acciones</BotonEnlace>
+        <BotonEnlace href="/admin/salud-sistema" variante="secondary" tamano="sm">Estado del sistema</BotonEnlace>
+        <BotonEnlace href="/admin/consumo" variante="secondary" tamano="sm">Gasto de IA por día</BotonEnlace>
       </div>
-    </main>
+    </MarcoPagina>
   );
 }
 

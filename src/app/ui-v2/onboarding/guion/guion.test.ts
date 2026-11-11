@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio módulo */
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { validarRecorrido } from '@/app/ui-v2/movimiento/tour/validar';
@@ -13,9 +13,10 @@ import { textosParaRevision } from './textos_revision';
 const TODOS: PasoGuia[] = Object.values(GUION).flat();
 const SRC = join(process.cwd(), 'src');
 function fuente(dir: string, salida: string[] = []): string[] {
-  for (const n of readdirSync(dir)) {
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    const n = d.name;
     const r = join(dir, n);
-    if (statSync(r).isDirectory()) { if (n !== 'node_modules') fuente(r, salida); continue; }
+    if (d.isDirectory()) { if (n !== 'node_modules') fuente(r, salida); continue; }
     if (/\.(tsx|ts)$/.test(n) && !/\.test\./.test(n)) salida.push(readFileSync(r, 'utf8'));
   }
   return salida;
@@ -58,9 +59,10 @@ describe('integridad del guion', () => {
   });
   it('las ilustraciones citadas existen y cada ancla existe en el marcado de la pantalla', () => {
     const codigo = fuente(join(SRC, 'app')).join('\n');
+    const escaparRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     for (const p of TODOS) {
       if (p.visual.tipo === 'ilu') expect(NOMBRES_ILU, p.id).toContain(p.visual.id);
-      if (p.ancla) expect(codigo, `${p.id}: ancla ${p.ancla}`).toMatch(new RegExp(`ancla(Tour|Onboarding)\\(\\s*['"]${p.ancla.replace(/\./g, '\\.')}['"]|data-(onboarding|tour)=["']${p.ancla.replace(/\./g, '\\.')}["']`));
+      if (p.ancla) expect(codigo, `${p.id}: ancla ${p.ancla}`).toMatch(new RegExp(`ancla(Tour|Onboarding)\\(\\s*['"]${escaparRe(p.ancla)}['"]|data-(onboarding|tour)=["']${escaparRe(p.ancla)}["']`));
     }
   });
   it('el borrador completo es un recorrido válido para el motor', () => {

@@ -1,5 +1,5 @@
 import { test, expect } from './apoyo/fixture';
-import { ESTADOS } from './apoyo/sesion';
+import { ESTADOS, MARCA_CONSOLA } from './apoyo/sesion';
 import { writeFile } from 'node:fs/promises';
 import type { TestInfo } from '@playwright/test';
 
@@ -17,7 +17,7 @@ function evidencia(r: { status(): number; headers(): Record<string, string> }) {
 }
 for (const [rol, ruta, privado] of [
   ['duena', '/dashboard', 'Dueña E2E'],
-  ['superadmin', '/admin', 'Consola de Likida'],
+  ['superadmin', '/admin', MARCA_CONSOLA],
   ['vendedor', '/vendedor', 'Cartera propia E2E'],
 ] as const) {
   test.describe(`caché privada ${ruta}`, () => {

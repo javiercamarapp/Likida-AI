@@ -1,0 +1,29 @@
+/* Calidad › Pruebas reales (F5): los estilos que antes iban en línea, ahora con las variables del sistema. */
+.rv-qa-mut { color: var(--muted); }
+.rv-qa-faint { color: var(--faint); }
+.rv-qa-bad { color: var(--bad); }
+.rv-qa-warn { color: var(--warn); }
+.rv-qa-acento { color: var(--marca); }
+.rv-qa-ink2 { color: var(--ink2); }
+.rv-qa-bl2 { border-color: var(--line2); }
+.rv-qa-fs { background: var(--surface); }
+.rv-qa-fc { background: var(--canvas); }
+.rv-qa-g1 { background: var(--g1); }
+.rv-qa-fl2 { background: var(--line2); }
+.rv-qa-fbad { background: var(--badbg); }
+.rv-qa-marca { background: var(--marca); color: var(--marca-fg); }
+.rv-qa-malo { background: var(--badbg); color: var(--bad); }
+.rv-qa-caja { background: var(--canvas); border: 1px solid var(--line2); }
+.rv-qa-punteado { border-top: 1px dashed var(--line2); color: var(--muted); }
+.rv-qa-zona { border-color: var(--line); background: transparent; }
+.rv-qa-zona[data-arrastrando="true"] { border-color: var(--marca); background: var(--canvas); }
+.rv-qa-activa { outline: 2px solid var(--marca); outline-offset: -2px; }
+.rv-qa-escenario[data-activo="true"] { background: var(--ui-activo-bg); color: var(--ui-activo-ink); border-color: var(--ui-activo-barra); box-shadow: inset 3px 0 0 var(--ui-activo-barra); }
+.rv-qa-escenario[data-activo="true"] .rv-qa-ink2 { color: var(--ui-activo-ink); }
+.rv-qa-burbuja-user { background: var(--marca); color: var(--marca-fg); }
+.rv-qa-burbuja-bot { background: var(--surface); }
+
+.rv-qa-barra { display: block; width: 100%; height: 6px; border: 0; border-radius: 999px; appearance: none; background: var(--line2); overflow: hidden; }
+.rv-qa-barra::-webkit-progress-bar { background: var(--line2); }
+.rv-qa-barra::-webkit-progress-value { background: var(--marca); }
+.rv-qa-barra::-moz-progress-bar { background: var(--marca); }

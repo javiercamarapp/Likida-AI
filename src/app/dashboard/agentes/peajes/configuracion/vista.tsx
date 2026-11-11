@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { ArrowLeft, Upload, Trash2, KeyRound, Inbox, RefreshCw } from 'lucide-react';
-import { EstadoVacio } from '../../../estados';
 import { numero } from '@/lib/formato';
 
 // SOLO tipos: los módulos importan supabaseAdmin y no deben entrar al bundle de la vista.
@@ -15,7 +14,8 @@ import { SeccionCorreoAvisos, type CorreoAvisosVista } from './correo-avisos';
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
 import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
 import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
-import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, BotonEnlace, EstadoVacio, Icono, StatusChip, TituloRecuadro } from '@/app/ui-v2/componentes';
+import '../peajes.css';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 type Accion = (fd: FormData) => Promise<void>;
@@ -55,9 +55,6 @@ await fetch(URL, { method: 'POST', body: cuerpo, headers: {
   'content-type': 'application/json', 'x-likida-flota': FLOTA_ID,
   'x-likida-timestamp': String(ts), 'x-likida-firma': firma } });`;
 
-const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
   sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, correoAvisos, cruceViajes, inmovilizadas, clasesCobro, superficie,
@@ -96,10 +93,10 @@ export function VistaConfiguracionPeajes({
   superficie?: { gps: boolean; cursos: boolean };
 }) {
   return (
-    <MarcoPagina titulo="Configuración del conciliador de peajes" apoyo="Buzón, entradas y mapeos con los que el agente concilia el estado de cuenta contra los gastos de los viajes." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
-      {aviso && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
-      {error && <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
-      {agenteApagado && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--warn)' }}>{agenteApagado}</p>}
+    <MarcoPagina titulo="Configuración del conciliador de peajes" apoyo="Buzón, entradas y mapeos con los que el agente concilia el estado de cuenta contra los gastos de los viajes." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<Icono icono={ArrowLeft} />}>Volver al agente</BotonEnlace>}>
+      {aviso && <p role="status" className="rv-pj-caja text-[12px] rv-pj-c-ink">{aviso}</p>}
+      {error && <p role="alert" className="rv-pj-caja text-[12px] rv-pj-c-bad">{error}</p>}
+      {agenteApagado && <p role="status" className="rv-pj-caja text-[12px] rv-pj-c-warn">{agenteApagado}</p>}
 
       <SeccionBuzon buzon={buzon} archivos={archivos} acciones={acciones} sufijo={sufijo} />
       <SeccionEntradas entradas={entradas} acciones={acciones} />
@@ -123,13 +120,13 @@ function Titulo({ t, nota, info }: { t: string; nota: React.ReactNode; info: Inf
   return (
     <>
       <TituloRecuadro info={info} className="mb-1">{t}</TituloRecuadro>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>{nota}</p>
+      <p className="text-[11px] mb-3 rv-pj-c-faint">{nota}</p>
     </>
   );
 }
 
 function NoSePudoLeer({ que }: { que: string }) {
-  return <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>No se pudo leer {que} ahora mismo.</p>;
+  return <p className="text-[12px] mt-3 rv-pj-c-muted">No se pudo leer {que} ahora mismo.</p>;
 }
 
 // ── Buzón firmado y archivos recibidos ──────────────────────────────────────
@@ -137,11 +134,11 @@ const ETIQUETA_ESTADO: Record<string, string> = { pendiente: 'en cola', procesan
 
 function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista; archivos: ArchivoIngestaVista[] | null; acciones: AccionesConfiguracion; sufijo: string }) {
   return (
-    <section className="card p-4" id="buzon">
+    <section className="rv-tarjeta" id="buzon">
       <Titulo t="Buzón automático del proveedor" info="peajes_config.buzon"
         nota="El sistema del proveedor (o un script de la flota) manda el archivo de cada corte a este buzón firmado y el agente lo importa y lo cruza solo, cada 15 minutos. Sin esto, alguien tiene que subirlo a mano." />
       {!buzon.secretoConfigurado && (
-        <p className="text-[12px] mb-3" style={{ color: 'var(--warn)' }}>
+        <p className="text-[12px] mb-3 rv-pj-c-warn">
           Falta configurar la llave del buzón en el servidor: mientras no exista, el buzón rechaza todo envío. Lo configura el equipo de Likida.
         </p>
       )}
@@ -149,25 +146,25 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
         <NoSePudoLeer que="el estado del buzón" />
       ) : buzon.estado === 'inactivo' ? (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12px]" style={{ color: 'var(--muted)' }}>Buzón desactivado.</span>
+          <span className="text-[12px] rv-pj-c-muted">Buzón desactivado.</span>
           {buzon.puedeAdministrar
-            ? <form action={acciones.activarBuzon}><button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Inbox width={13} height={13} strokeWidth={2} /> Activar buzón</button></form>
-            : <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo quien administra la flota lo activa.</span>}
+            ? <form action={acciones.activarBuzon}><button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Inbox} /> Activar buzón</button></form>
+            : <span className="text-[11px] rv-pj-c-faint">Solo quien administra la flota lo activa.</span>}
         </div>
       ) : (
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap text-[12px]">
-            <span className="cifra-mono px-2 py-0.5 rounded-md" style={{ background: 'var(--canvas)', color: 'var(--ok)' }}>activo</span>
-            <span style={{ color: 'var(--muted)' }}>llave n.º {buzon.rotacion}</span>
+            <span className="cifra-mono rv-pj-pill" data-tono="ok">activo</span>
+            <span className="rv-pj-c-muted">llave n.º {buzon.rotacion}</span>
             {buzon.puedeAdministrar && (
               <>
                 <form action={acciones.rotarLlave}>
-                  <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO} title="La llave anterior deja de servir al instante">
-                    <KeyRound width={12} height={12} strokeWidth={2} className="inline mr-1" />Rotar llave
+                  <button type="submit" className="rv-btn rv-btn--secondary" title="La llave anterior deja de servir al instante">
+                    <Icono icono={KeyRound} />Rotar llave
                   </button>
                 </form>
                 <form action={acciones.desactivarBuzon}>
-                  <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>Desactivar</button>
+                  <button type="submit" className="rv-btn rv-btn--secondary">Desactivar</button>
                 </form>
               </>
             )}
@@ -177,12 +174,12 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
             <Campo etiqueta="Flota (cabecera x-likida-flota)" valor={buzon.flotaId} />
             {buzon.puedeAdministrar && buzon.llave
               ? <Campo etiqueta="Llave de firma (secreto: no la compartas ni la subas a un repositorio)" valor={buzon.llave} />
-              : <p style={{ color: 'var(--faint)' }}>La llave de firma solo la ve quien administra la flota.</p>}
+              : <p className="rv-pj-c-faint">La llave de firma solo la ve quien administra la flota.</p>}
           </div>
           <details className="text-[12px]">
-            <summary className="cursor-pointer" style={{ color: 'var(--marca)' }}>Cómo firmar un envío (ejemplo)</summary>
-            <pre className="mt-2 p-3 rounded-lg overflow-x-auto text-[11px]" style={{ background: 'var(--canvas)', color: 'var(--ink)' }}>{EJEMPLO_FIRMA}</pre>
-            <p className="mt-1.5" style={{ color: 'var(--faint)' }}>
+            <summary className="cursor-pointer rv-pj-c-marca">Cómo firmar un envío (ejemplo)</summary>
+            <pre className="rv-pj-codigo">{EJEMPLO_FIRMA}</pre>
+            <p className="mt-1.5 rv-pj-c-faint">
               Respuestas: 202 aceptado · 200 ya lo teníamos (el mismo archivo no se duplica) · 401 firma o flota inválida · 413 archivo mayor a 4 MB ·
               429 demasiados envíos o cola llena · 503 reintenta más tarde (agente apagado o falla temporal).
             </p>
@@ -192,7 +189,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
 
       <TituloRecuadro nivel="h3" info="peajes_config.archivos_recibidos" className="mt-5 mb-2">Archivos recibidos</TituloRecuadro>
       {archivos === null ? <NoSePudoLeer que="los archivos recibidos" /> : archivos.length === 0 ? (
-        <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+        <EstadoVacio icono={Inbox} titulo="Aún sin archivos">
           Aún no se ha recibido ningún archivo por el buzón.
         </EstadoVacio>
       ) : (
@@ -201,14 +198,14 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
             <div key={a.id} className="hairline rounded-lg px-2.5 py-2 text-[12px]">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="truncate font-medium" title={a.nombre}>{a.nombre}</span>
-                <span style={{ color: a.estado === 'fallida' ? 'var(--bad)' : a.estado === 'procesada' ? 'var(--ok)' : 'var(--muted)' }}>{ETIQUETA_ESTADO[a.estado] ?? a.estado}</span>
-                <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                <span className={a.estado === 'fallida' ? 'rv-pj-c-bad' : a.estado === 'procesada' ? 'rv-pj-c-ok' : 'rv-pj-c-muted'}>{ETIQUETA_ESTADO[a.estado] ?? a.estado}</span>
+                <span className="text-[11px] rv-pj-c-faint">
                   {a.proveedor ? `${a.proveedor} · ` : ''}{numero(Math.round(a.bytes / 1024))} KB · {a.recibidaEn.slice(0, 16).replace('T', ' ')} UTC
                   {a.intentos > 0 ? ` · ${a.intentos} intento${a.intentos === 1 ? '' : 's'}` : ''}
                 </span>
                 <span className="ml-auto flex items-center gap-2">
                   {a.desgloseId && (
-                    <Link href={`/dashboard/agentes/peajes${sufijo}${sufijo ? '&' : '?'}desglose=${a.desgloseId}`} className="text-[12px]" style={{ color: 'var(--marca)' }}>Ver desglose</Link>
+                    <Link href={`/dashboard/agentes/peajes${sufijo}${sufijo ? '&' : '?'}desglose=${a.desgloseId}`} className="text-[12px] rv-pj-c-marca">Ver desglose</Link>
                   )}
                   {a.reintentable && (
                     <form action={acciones.reintentarArchivo}>
@@ -217,14 +214,14 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
                       {!a.proveedor && (
                         <input name="proveedor" maxLength={60} placeholder="Proveedor (p. ej. IAVE)" aria-label="Proveedor del archivo" className="hairline rounded px-1.5 py-0.5 text-[11px] w-36 mr-1" />
                       )}
-                      <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>
-                        <RefreshCw width={11} height={11} strokeWidth={2} className="inline mr-1" />Reintentar
+                      <button type="submit" className="rv-btn rv-btn--secondary">
+                        <Icono icono={RefreshCw} />Reintentar
                       </button>
                     </form>
                   )}
                 </span>
               </div>
-              {a.ultimoError && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{a.ultimoError}</p>}
+              {a.ultimoError && <p className="text-[11px] mt-1 rv-pj-c-bad">{a.ultimoError}</p>}
             </div>
           ))}
         </div>
@@ -236,8 +233,8 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
 function Campo({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <label className="block">
-      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
-      <input readOnly value={valor} className="w-full cifra-mono mt-0.5" style={ESTILO_INPUT} />
+      <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{etiqueta}</span>
+      <input readOnly value={valor} className="w-full cifra-mono mt-0.5 rv-ctl" />
     </label>
   );
 }
@@ -245,24 +242,24 @@ function Campo({ etiqueta, valor }: { etiqueta: string; valor: string }) {
 // ── Mapeo de columnas ───────────────────────────────────────────────────────
 function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; acciones: AccionesConfiguracion }) {
   return (
-    <section className="card p-4" id="mapeo">
+    <section className="rv-tarjeta" id="mapeo">
       <Titulo t="Mapeo de columnas por proveedor" info="peajes_config.mapeo"
         nota={<>El lector detecta las columnas por su nombre. Si un proveedor usa otros encabezados (o el lector te dijo «no encontré la columna…»),
           declara aquí cuál es cuál: por el <b>encabezado exacto</b> («Fecha de cobro») o por la <b>letra de la columna</b> («C»). Fecha, caseta e importe son obligatorios; hora, TAG, unidad y clase, opcionales (si no los declaras, se buscan por nombre: «Tarjeta IDMX», «No. economico», «Clase»).</>} />
       {mapeos === null ? <NoSePudoLeer que="los mapeos" /> : mapeos.length === 0 ? (
-        <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>Ningún proveedor tiene mapeo: todos se leen por detección automática.</p>
+        <p className="text-[12px] mb-3 rv-pj-c-muted">Ningún proveedor tiene mapeo: todos se leen por detección automática.</p>
       ) : (
         <div className="space-y-1.5 mb-3">
           {mapeos.map((m) => (
             <div key={m.id} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12px]">
               <span className="font-medium">{m.proveedor}</span>
-              <span className="text-[11px] cifra-mono" style={{ color: 'var(--muted)' }}>
+              <span className="text-[11px] cifra-mono rv-pj-c-muted">
                 fecha=«{m.columnas.fecha}» · caseta=«{m.columnas.caseta}» · importe=«{m.columnas.monto}»
                 {m.columnas.hora ? ` · hora=«${m.columnas.hora}»` : ''}{m.columnas.tag ? ` · TAG=«${m.columnas.tag}»` : ''}{m.columnas.unidad ? ` · unidad=«${m.columnas.unidad}»` : ''}{m.columnas.clase ? ` · clase=«${m.columnas.clase}»` : ''}
               </span>
               <form action={acciones.borrarMapeo} className="ml-auto">
                 <input type="hidden" name="mapeo" value={m.id} />
-                <button type="submit" aria-label={`Eliminar el mapeo de ${m.proveedor}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
+                <button type="submit" aria-label={`Eliminar el mapeo de ${m.proveedor}`} className="rv-btn rv-btn--secondary"><Icono icono={Trash2} /></button>
               </form>
             </div>
           ))}
@@ -277,9 +274,9 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
         <Entrada nombre="tag" etiqueta="TAG (opc.)" ph="No. TAG" ancho="w-[110px]" />
         <Entrada nombre="unidad" etiqueta="Unidad (opc.)" ph="No. economico" ancho="w-[120px]" />
         <Entrada nombre="clase" etiqueta="Clase (opc.)" ph="Clase" ancho="w-[90px]" />
-        <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar mapeo</button>
+        <button type="submit" className="rv-btn rv-btn--primary">Guardar mapeo</button>
       </form>
-      <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+      <p className="text-[11px] mt-1.5 rv-pj-c-faint">
         Guardar el mismo proveedor de nuevo reemplaza su mapeo. El archivo REAL de PASE todavía no se ha calibrado aquí: cuando llegue, su mapeo se declara en esta pantalla, sin tocar código.
       </p>
     </section>
@@ -289,8 +286,8 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
 function Entrada({ nombre, etiqueta, ph, requerido, ancho }: { nombre: string; etiqueta: string; ph: string; requerido?: boolean; ancho?: string }) {
   return (
     <label className="block">
-      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
-      <input name={nombre} placeholder={ph} required={requerido} maxLength={80} className={`${ancho ?? 'w-[140px]'} mt-0.5`} style={ESTILO_INPUT} />
+      <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{etiqueta}</span>
+      <input name={nombre} placeholder={ph} required={requerido} maxLength={80} className={`${ancho ?? 'w-[140px]'} mt-0.5 rv-ctl`} />
     </label>
   );
 }
@@ -299,10 +296,9 @@ function SubirCsv({ accion, etiqueta, extra }: { accion: Accion; etiqueta: strin
   return (
     <form action={accion} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
       <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label={etiqueta}
-        className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
-        style={{ color: 'var(--muted)' }} />
+        className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
       {extra}
-      <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar</button>
+      <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Upload} /> Cargar</button>
     </form>
   );
 }
@@ -310,7 +306,7 @@ function SubirCsv({ accion, etiqueta, extra }: { accion: Accion; etiqueta: strin
 // ── TAGs ────────────────────────────────────────────────────────────────────
 function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; unidades: Array<{ id: string; numeroEconomico: string; placas: string | null }> | null; acciones: AccionesConfiguracion }) {
   return (
-    <section className="card p-4" id="tags">
+    <section className="rv-tarjeta" id="tags">
       <Titulo t="TAGs de telepeaje por unidad" info="peajes_config.tags"
         nota={<>Qué TAG es de qué camión. Con esto el cruce sabe <b>qué unidad pasó</b> aunque el chofer no fotografíe el ticket, desempata entre dos gastos iguales y avisa si el TAG es de otra unidad que la del viaje.
           Carga masiva por CSV con columnas <span className="cifra-mono">tag; unidad; proveedor</span> (unidad = número económico o placas).</>} />
@@ -318,45 +314,45 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
       <form action={acciones.altaTag} className="flex items-end gap-2 flex-wrap mt-3">
         <Entrada nombre="tag" etiqueta="TAG" ph="IMDM 12345678" requerido />
         <label className="block">
-          <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Unidad</span>
-          <select name="unidad" required className="w-[170px] mt-0.5" style={ESTILO_INPUT} defaultValue="">
+          <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Unidad</span>
+          <select name="unidad" required className="w-[170px] mt-0.5 rv-ctl" defaultValue="">
             <option value="" disabled>Elige…</option>
             {(unidades ?? []).map((u) => <option key={u.id} value={u.id}>{u.numeroEconomico}{u.placas ? ` · ${u.placas}` : ''}</option>)}
           </select>
         </label>
         <Entrada nombre="proveedor" etiqueta="Proveedor (opc.)" ph="PASE" ancho="w-[110px]" />
-        <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Agregar TAG</button>
+        <button type="submit" className="rv-btn rv-btn--primary">Agregar TAG</button>
       </form>
       {tags === null ? <NoSePudoLeer que="los TAGs" /> : tags.length === 0 ? (
-        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>Aún no hay TAGs dados de alta: el cruce no puede casar un cobro con una unidad por su TAG.</p>
+        <p className="text-[12px] mt-3 rv-pj-c-muted">Aún no hay TAGs dados de alta: el cruce no puede casar un cobro con una unidad por su TAG.</p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[320px] overflow-y-auto">
-          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{numero(tags.length)} TAGs</p>
+          <p className="text-[11px] rv-pj-c-faint">{numero(tags.length)} TAGs</p>
           {tags.slice(0, 300).map((t) => (
             <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]">
               <span className="cifra-mono">{t.tagOriginal ?? t.tag}</span>
-              <span style={{ color: 'var(--muted)' }}>→ {t.unidadEconomico ?? 'unidad borrada'}</span>
-              {t.proveedor && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{t.proveedor}</span>}
+              <span className="rv-pj-c-muted">→ {t.unidadEconomico ?? 'unidad borrada'}</span>
+              {t.proveedor && <span className="text-[11px] rv-pj-c-faint">{t.proveedor}</span>}
               {t.bajaEn ? (
-                <span className="text-[11px]" style={{ color: 'var(--warn, var(--muted))' }}>
+                <span className="text-[11px] rv-pj-c-warn">
                   Baja desde el {t.bajaEn}{t.bajaMotivo ? ` · ${t.bajaMotivo}` : ''}. Un cruce posterior a esa fecha se marca para revisar.
                 </span>
               ) : (
                 <form action={acciones.bajaTag} className="ml-auto flex items-end gap-1.5 flex-wrap">
                   <input type="hidden" name="tag" value={t.id} />
                   <label className="block">
-                    <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Último día en uso</span>
-                    <input type="date" name="fecha" required className="mt-0.5" style={ESTILO_INPUT} />
+                    <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Último día en uso</span>
+                    <input type="date" name="fecha" required className="mt-0.5 rv-ctl rv-ctl--fecha" />
                   </label>
                   <Entrada nombre="motivo" etiqueta="Motivo" ph="Unidad siniestrada" ancho="w-[150px]" />
-                  <button type="submit" aria-label={`Eliminar el TAG ${t.tag} del uso: se da de baja con fecha y motivo`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>
-                    <Trash2 width={12} height={12} strokeWidth={2} /> Dar de baja
+                  <button type="submit" aria-label={`Eliminar el TAG ${t.tag} del uso: se da de baja con fecha y motivo`} className="rv-btn rv-btn--secondary">
+                    <Icono icono={Trash2} /> Dar de baja
                   </button>
                 </form>
               )}
             </div>
           ))}
-          {tags.length > 300 && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se muestran los primeros 300.</p>}
+          {tags.length > 300 && <p className="text-[11px] rv-pj-c-faint">Se muestran los primeros 300.</p>}
         </div>
       )}
     </section>
@@ -366,32 +362,32 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
 // ── Casetas ─────────────────────────────────────────────────────────────────
 function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; acciones: AccionesConfiguracion }) {
   return (
-    <section className="card p-4" id="casetas">
+    <section className="rv-tarjeta" id="casetas">
       <Titulo t="Catálogo de casetas" info="peajes_config.casetas"
         nota={<>Las casetas por NOMBRE (lo único obligatorio), con opcionalmente su carretera, si <b>cobra por pasada</b> (la clase 1 es normal ahí) y sus coordenadas, para validar con el GPS que la unidad estuvo ahí a la hora del cobro
           (distancia Haversine). <b>Nace vacío a propósito</b>: Likida no inventa coordenadas. Acepta la plantilla del catálogo tal cual (sus encabezados largos) o un CSV
           <span className="cifra-mono"> nombre; carretera; por pasada; lat; lng; radio_m; alias; fuente</span> (grados decimales; radio de 50 a 5,000 m, 300 si lo omites;
           alias separados por «|»). Volver a cargar una caseta con el mismo nombre actualiza sus datos; las columnas que no traiga el archivo no se tocan.</>} />
       <SubirCsv accion={acciones.importarCasetas} etiqueta="CSV de casetas"
-        extra={<input name="fuente" placeholder="Fuente de las coordenadas" aria-label="Fuente de las coordenadas" maxLength={200} className="w-[230px]" style={ESTILO_INPUT} />} />
+        extra={<input name="fuente" placeholder="Fuente de las coordenadas" aria-label="Fuente de las coordenadas" maxLength={200} className="w-[230px] rv-ctl" />} />
       {casetas === null ? <NoSePudoLeer que="las casetas" /> : casetas.length === 0 ? (
-        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-3 rv-pj-c-muted">
           Catálogo vacío: el cruce por caseta no puede validar nada y cada línea queda «sin datos» (la caseta no está en el catálogo) — nunca una acusación.
         </p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[320px] overflow-y-auto">
-          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{numero(casetas.filter((c) => c.activa).length)} activas de {numero(casetas.length)}</p>
+          <p className="text-[11px] rv-pj-c-faint">{numero(casetas.filter((c) => c.activa).length)} activas de {numero(casetas.length)}</p>
           {casetas.slice(0, 300).map((c) => (
-            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]" style={c.activa ? undefined : { opacity: 0.55 }}>
+            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px] rv-pj-fila" data-apagada={c.activa ? undefined : ''}>
               <span className="font-medium">{c.nombre}</span>
-              <span className="cifra-mono text-[11px]" style={{ color: 'var(--muted)' }}>{c.lat !== null && c.lng !== null ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} · ${c.radioM} m` : 'sin coordenadas · solo por nombre'}</span>
-              {c.carretera && <span className="text-[11px]" style={{ color: 'var(--muted)' }}>{c.carretera}</span>}
-              {c.porPasada && <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: 'var(--ok)', background: 'var(--okbg)' }}>por pasada</span>}
-              {c.fuente && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.fuente}</span>}
+              <span className="cifra-mono text-[11px] rv-pj-c-muted">{c.lat !== null && c.lng !== null ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} · ${c.radioM} m` : 'sin coordenadas · solo por nombre'}</span>
+              {c.carretera && <span className="text-[11px] rv-pj-c-muted">{c.carretera}</span>}
+              {c.porPasada && <StatusChip tono="ok">por pasada</StatusChip>}
+              {c.fuente && <span className="text-[11px] rv-pj-c-faint">{c.fuente}</span>}
               <form action={acciones.estadoCaseta} className="ml-auto">
                 <input type="hidden" name="caseta" value={c.id} />
                 <input type="hidden" name="activa" value={c.activa ? 'false' : 'true'} />
-                <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>{c.activa ? 'Desactivar' : 'Activar'}</button>
+                <button type="submit" className="rv-btn rv-btn--secondary">{c.activa ? 'Desactivar' : 'Activar'}</button>
               </form>
             </div>
           ))}
@@ -404,35 +400,35 @@ function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; 
 // ── Geocercas ───────────────────────────────────────────────────────────────
 function SeccionGeocercas({ geocercas, tipos, acciones }: { geocercas: GeocercaVista[] | null; tipos: string[]; acciones: AccionesConfiguracion }) {
   return (
-    <section className="card p-4" id="geocercas">
+    <section className="rv-tarjeta" id="geocercas">
       <Titulo t="Geocercas" info="peajes_config.geocercas"
         nota="Círculos (centro y radio) para patios, orígenes, destinos y puntos de interés. Las usan estadías, el briefing y la facturación; hasta hoy nadie podía crearlas desde el panel. Mismo nombre = se actualiza." />
       <form action={acciones.guardarGeocerca} className="flex items-end gap-2 flex-wrap">
         <Entrada nombre="nombre" etiqueta="Nombre" ph="Patio Querétaro" requerido />
         <label className="block">
-          <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Tipo</span>
-          <select name="tipo" className="w-[130px] mt-0.5" style={ESTILO_INPUT} defaultValue="punto_interes">
+          <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Tipo</span>
+          <select name="tipo" className="w-[130px] mt-0.5 rv-ctl" defaultValue="punto_interes">
             {tipos.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
           </select>
         </label>
         <Entrada nombre="lat" etiqueta="Latitud" ph="20.5888" requerido ancho="w-[100px]" />
         <Entrada nombre="lng" etiqueta="Longitud" ph="-100.3899" requerido ancho="w-[100px]" />
         <Entrada nombre="radio_m" etiqueta="Radio (m)" ph="300" requerido ancho="w-[80px]" />
-        <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar geocerca</button>
+        <button type="submit" className="rv-btn rv-btn--primary">Guardar geocerca</button>
       </form>
       {geocercas === null ? <NoSePudoLeer que="las geocercas" /> : geocercas.length === 0 ? (
-        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>Aún no hay geocercas.</p>
+        <p className="text-[12px] mt-3 rv-pj-c-muted">Aún no hay geocercas.</p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[280px] overflow-y-auto">
           {geocercas.map((g) => (
-            <div key={g.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]" style={g.activa ? undefined : { opacity: 0.55 }}>
+            <div key={g.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px] rv-pj-fila" data-apagada={g.activa ? undefined : ''}>
               <span className="font-medium">{g.nombre}</span>
-              <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{g.tipo.replace('_', ' ')}</span>
-              <span className="cifra-mono text-[11px]" style={{ color: 'var(--muted)' }}>{g.lat.toFixed(5)}, {g.lng.toFixed(5)} · {g.radioM} m</span>
+              <span className="text-[11px] rv-pj-c-faint">{g.tipo.replace('_', ' ')}</span>
+              <span className="cifra-mono text-[11px] rv-pj-c-muted">{g.lat.toFixed(5)}, {g.lng.toFixed(5)} · {g.radioM} m</span>
               <form action={acciones.estadoGeocerca} className="ml-auto">
                 <input type="hidden" name="geocerca" value={g.id} />
                 <input type="hidden" name="activa" value={g.activa ? 'false' : 'true'} />
-                <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>{g.activa ? 'Desactivar' : 'Activar'}</button>
+                <button type="submit" className="rv-btn rv-btn--secondary">{g.activa ? 'Desactivar' : 'Activar'}</button>
               </form>
             </div>
           ))}
@@ -452,7 +448,7 @@ function SeccionCursos({ cursos, unidades, convenios, acciones }: {
   const eco = new Map((unidades ?? []).map((u) => [u.id, u.numeroEconomico]));
   const conv = new Map((convenios ?? []).map((c) => [c.id, c.nombre]));
   return (
-    <section className="card p-4" id="cursos">
+    <section className="rv-tarjeta" id="cursos">
       <Titulo t="Cursos (rutas autorizadas)" info="peajes_config.cursos"
         nota={<>Las casetas que cada unidad, o cada convenio A→B, puede cruzar. Un pase en una caseta que <b>no</b> está en el curso aparece en el reporte de reclamación como
           «Cruce fuera de curso» (confianza media: el curso lo declara la flota). Sin curso declarado no se reclama nada por este motivo. Carga tu CSV o Excel
@@ -461,30 +457,30 @@ function SeccionCursos({ cursos, unidades, convenios, acciones }: {
           acepta, pero el formato real de tus rutas está pendiente: hoy se prueba con datos sintéticos.</>} />
       <SubirCsv accion={acciones.importarCursos} etiqueta="CSV de cursos" />
       <form action={acciones.importarCursosDeTabla} className="mt-2">
-        <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>Leer los cursos de mi tabla conectada</button>
+        <button type="submit" className="rv-btn rv-btn--secondary">Leer los cursos de mi tabla conectada</button>
       </form>
       {cursos === null ? <NoSePudoLeer que="los cursos" /> : cursos.length === 0 ? (
-        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-3 rv-pj-c-muted">
           Aún no hay cursos: el reporte de reclamación no evalúa «fuera de curso» y lo dice (las líneas se cuentan como «sin curso declarado»).
         </p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[320px] overflow-y-auto">
-          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{numero(cursos.filter((c) => c.activo).length)} activos de {numero(cursos.length)}</p>
+          <p className="text-[11px] rv-pj-c-faint">{numero(cursos.filter((c) => c.activo).length)} activos de {numero(cursos.length)}</p>
           {cursos.slice(0, 300).map((c) => (
-            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]" style={c.activo ? undefined : { opacity: 0.55 }}>
+            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px] rv-pj-fila" data-apagada={c.activo ? undefined : ''}>
               <span className="font-medium">{c.nombre}</span>
-              <span className="cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>{c.codigo}</span>
-              <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+              <span className="cifra-mono text-[11px] rv-pj-c-faint">{c.codigo}</span>
+              <span className="text-[11px] rv-pj-c-muted">
                 {[c.unidadId ? `unidad ${eco.get(c.unidadId) ?? '—'}` : null, c.convenioId ? `convenio ${conv.get(c.convenioId) ?? '—'}` : null].filter(Boolean).join(' · ')}
               </span>
-              <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+              <span className="text-[11px] rv-pj-c-muted">
                 {c.tipo === 'casetas' ? c.casetas.map((k) => k.nombre || '—').join(' → ') : `corredor de ${numero(c.corredor?.length ?? 0)} puntos · ±${numero(c.bufferM ?? 0)} m`}
               </span>
-              {(c.vigenteDesde || c.vigenteHasta) && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.vigenteDesde ?? '…'} a {c.vigenteHasta ?? '…'}</span>}
+              {(c.vigenteDesde || c.vigenteHasta) && <span className="text-[11px] rv-pj-c-faint">{c.vigenteDesde ?? '…'} a {c.vigenteHasta ?? '…'}</span>}
               <form action={acciones.estadoCurso} className="ml-auto">
                 <input type="hidden" name="curso" value={c.id} />
                 <input type="hidden" name="activo" value={c.activo ? 'false' : 'true'} />
-                <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>{c.activo ? 'Desactivar' : 'Activar'}</button>
+                <button type="submit" className="rv-btn rv-btn--secondary">{c.activo ? 'Desactivar' : 'Activar'}</button>
               </form>
             </div>
           ))}

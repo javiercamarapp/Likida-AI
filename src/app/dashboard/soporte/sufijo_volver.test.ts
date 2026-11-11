@@ -31,10 +31,10 @@ describe('soporte/page.tsx — "Volver a mis tickets" conserva la previsualizaci
   });
 
   it('el Link de "Volver a mis tickets" usa enlaceVolver, no la ruta pelada', () => {
-    // Ancla el JSX real (el hijo de texto del <Link>), no la prosa del
+    // Ancla el JSX real (el hijo de texto del <BotonEnlace>), no la prosa del
     // comentario de arriba que también nombra "Volver a mis tickets" entre
     // comillas.
-    const idx = fuente.indexOf('← Volver a mis tickets\n');
+    const idx = fuente.indexOf('Volver a mis tickets</BotonEnlace>');
     expect(idx, 'debe existir el JSX del link').toBeGreaterThan(-1);
     const antes = fuente.slice(Math.max(0, idx - 200), idx);
     expect(antes).toMatch(/href=\{enlaceVolver\}/);

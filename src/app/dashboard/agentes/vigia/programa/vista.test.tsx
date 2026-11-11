@@ -76,7 +76,8 @@ describe('lo que se muestra tras subir (Salida)', () => {
     const html = pintarSalida({ ok: true, resumen: resumen() });
     expect(html).toContain('05/10/2026');
     expect(html).toContain('06/10/2026');
-    expect(html).toMatch(/05\/10\/2026<\/td><td[^>]*>40<\/td><td[^>]*>3<\/td><td[^>]*>2<\/td>/);
+    // La primera columna es el título de la fila (<th scope="row"> de la tabla del sistema).
+    expect(html).toMatch(/05\/10\/2026<\/t[dh]><td[^>]*>40<\/td><td[^>]*>3<\/td><td[^>]*>2<\/td>/);
   });
 
   it('con avisos: lista las filas a revisar con su línea y fecha', () => {

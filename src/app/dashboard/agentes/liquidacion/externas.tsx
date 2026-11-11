@@ -1,8 +1,12 @@
 import Link from 'next/link';
-import { BarraFiltros, CampoArchivo, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
+import {
+  AvisoCompacto, BarraFiltros, Boton, CampoArchivo, EstadoVacio, FiltroFecha, FiltroOpciones, Icono, StatusChip, TablaBase, Tarjeta,
+  type TonoEstado,
+} from '@/app/ui-v2/componentes';
 import { Truck, Download, RefreshCw, FileText, FileSpreadsheet, Send, Settings2 } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
-import { EstadoVacio } from '../../estados';
+import './liquidacion.css';
+import { Ficha } from './desgloses';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
 import { motivoDeFallo } from '@/lib/likida/liquidacion_externa/api';
 import {
@@ -74,12 +78,12 @@ export const ROTULO_AVISO: Record<EstadoAvisoDiscrepancia | 'sin_registro', { ro
   sin_registro: { rotulo: 'Aviso sin registrar', ayuda: 'No hay registro del aviso a la oficina (el acuse es anterior a esta función). Puedes reavisar.', tono: 'muted' },
 };
 
-const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: string; fg: string; bg: string }> = {
-  pendiente: { rotulo: 'Pendiente', ayuda: 'Recibida; todavía no entra a la cola de WhatsApp.', fg: 'var(--muted)', bg: 'var(--canvas)' },
-  en_cola: { rotulo: 'En cola', ayuda: 'En la cola de WhatsApp; se reintenta sola.', fg: 'var(--warn)', bg: 'var(--warnbg)' },
-  enviada: { rotulo: 'Enviada', ayuda: 'WhatsApp aceptó el mensaje; el chofer todavía no responde.', fg: 'var(--ok)', bg: 'var(--okbg)' },
-  acusada: { rotulo: 'Con respuesta', ayuda: 'El chofer apretó un botón.', fg: 'var(--ok)', bg: 'var(--okbg)' },
-  fallida: { rotulo: 'Falló', ayuda: 'No se pudo entregar. Se puede reintentar.', fg: 'var(--bad)', bg: 'var(--badbg)' },
+const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: string; tono: TonoEstado }> = {
+  pendiente: { rotulo: 'Pendiente', ayuda: 'Recibida; todavía no entra a la cola de WhatsApp.', tono: 'muted' },
+  en_cola: { rotulo: 'En cola', ayuda: 'En la cola de WhatsApp; se reintenta sola.', tono: 'warn' },
+  enviada: { rotulo: 'Enviada', ayuda: 'WhatsApp aceptó el mensaje; el chofer todavía no responde.', tono: 'ok' },
+  acusada: { rotulo: 'Con respuesta', ayuda: 'El chofer apretó un botón.', tono: 'ok' },
+  fallida: { rotulo: 'Falló', ayuda: 'No se pudo entregar. Se puede reintentar.', tono: 'bad' },
 };
 
 export type MensajeExterno = 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' | 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'importada' | 'importacion_error'
@@ -137,42 +141,35 @@ export async function SeccionExternas(p: ExternasProps) {
   const hace30 = (() => { const d = new Date(`${hoy}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 30); return d.toISOString().slice(0, 10); })();
   const sinNada = pagina.filas.length === 0 && !p.filtroEstado;
 
+  const textoMensaje = p.mensaje
+    ? (p.mensaje === 'importada' || p.mensaje === 'importacion_error' ? textoImportacion(p.mensaje, p.importacion) : MENSAJES[p.mensaje].texto)
+    : null;
+
   return (
-    <section className="card p-4" id="liquidaciones-externas">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
-        <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5">
-          <Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          Liquidaciones externas
-        </h2>
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-          {pagina.total !== null ? `${numero(pagina.total)} en total` : 'Total no disponible'}
-        </p>
-      </div>
-      <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
-        <Link href={`/dashboard/agentes/liquidacion/formato${query(p.contexto)}`} className="inline-flex items-center gap-1 font-medium hover:opacity-70 mr-1.5" style={{ color: 'var(--marca)' }}>
-          <Settings2 width={12} height={12} strokeWidth={2} /> Formato de las liquidaciones
-        </Link>
+    <div id="liquidaciones-externas">
+    <Tarjeta
+      titulo="Liquidaciones externas"
+      acciones={<span className="rv-liq-sub">{pagina.total !== null ? `${numero(pagina.total)} en total` : 'Total no disponible'}</span>}
+    >
+      <p className="rv-liq-sub">
+        <Link href={`/dashboard/agentes/liquidacion/formato${query(p.contexto)}`} className="rv-liq-enlace">
+          <Icono icono={Settings2} tam={14} /> Formato de las liquidaciones
+        </Link>{' '}
         Calculadas por el sistema de tu empresa (SAP/TMS). Likida solo las entrega al chofer por WhatsApp y registra su
         respuesta: no las recalcula ni las mezcla con las del cuadre de arriba.
       </p>
 
-      {p.mensaje && (
-        <p role="status" className="text-[12px] rounded-lg px-3 py-2 mb-3"
-          style={{ background: MENSAJES[p.mensaje].tono === 'ok' ? 'var(--okbg)' : 'var(--badbg)', color: MENSAJES[p.mensaje].tono === 'ok' ? 'var(--ok)' : 'var(--bad)' }}>
-          {p.mensaje === 'importada' || p.mensaje === 'importacion_error' ? textoImportacion(p.mensaje, p.importacion) : MENSAJES[p.mensaje].texto}
-        </p>
-      )}
+      {textoMensaje && p.mensaje && <AvisoCompacto tono={MENSAJES[p.mensaje].tono === 'ok' ? 'ok' : 'error'} resumen={textoMensaje} />}
 
       {p.subirArchivo && (
-        <form action={p.subirArchivo} className="flex flex-wrap items-end gap-2 mb-3">
+        <form action={p.subirArchivo} className="rv-liq-acciones rv-liq-acciones--forma">
           <CampoArchivo etiqueta="Subir liquidaciones (CSV o Excel de tu sistema; una fila por renglón, agrupadas por la clave de tu sistema)" name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required />
-          <button type="submit" className="rv-btn rv-btn--primary"
-            style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y entregar</button>
+          <Boton type="submit" variante="primary">Subir y entregar</Boton>
         </form>
       )}
 
       {/* ── Las fichas: lo que pide a una persona, primero ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 mb-3">
+      <div className="rv-liq-fichas">
         <Ficha etiqueta="No coincide" valor={fichas.noCoincide} tono="bad" ayuda="El chofer dice que su liquidación no cuadra. Revísala con él."
           href={query(p.contexto, [['ext_estado', 'no_coincide']])} />
         <Ficha etiqueta="Fallaron" valor={fichas.porEstado.fallida} tono="bad" ayuda={ROTULO_ESTADO.fallida.ayuda}
@@ -187,7 +184,7 @@ export async function SeccionExternas(p: ExternasProps) {
           href={query(p.contexto, [['ext_estado', 'acusada']])} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-3 justify-between">
+      <div className="rv-liq-barras">
         <BarraFiltros accion="?" enLinea ocultos={p.contexto} etiqueta="Filtros de liquidaciones externas" nActivos={p.filtroEstado ? 1 : 0} limpiarHref={query(p.contexto)}>
           <FiltroOpciones nombre="ext_estado" etiqueta="Estado" valor={p.filtroEstado ?? ''}
             opciones={[{ valor: '', rotulo: 'Todos' }, ...ESTADOS.map((e) => ({ valor: e, rotulo: ROTULO_ESTADO[e].rotulo })), { valor: 'no_coincide', rotulo: 'No coincide (respuesta del chofer)' }]} />
@@ -204,33 +201,75 @@ export async function SeccionExternas(p: ExternasProps) {
           ]}>
           <FiltroFecha nombre="desde" etiqueta="Desde" valor={hace30} autoEnvio={false} />
           <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={hoy} autoEnvio={false} />
-          <button type="submit" className="rv-btn rv-btn--secondary rv-btn--sm"><Download aria-hidden strokeWidth={1.75} /> Exportar CSV</button>
+          <Boton type="submit" tamano="sm" icono={<Icono icono={Download} />}>Exportar CSV</Boton>
         </BarraFiltros>
       </div>
 
       {pagina.filas.length === 0 ? (
-        <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+        <EstadoVacio icono={Truck} titulo={sinNada ? 'Aún sin liquidaciones externas' : 'Ninguna con ese estado'}>
           {sinNada
-            ? 'Todavía no ha llegado ninguna liquidación de tu sistema. Cuando tu SAP/TMS la mande a Likida (POST /v1/liquidaciones-externas), la vas a ver aquí con su estado de entrega.'
+            ? 'Todavía no ha llegado ninguna liquidación de tu sistema. Cuando tu SAP o TMS la mande a Likida, la vas a ver aquí con su estado de entrega.'
             : 'Ninguna liquidación cae en ese estado.'}
         </EstadoVacio>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table aria-label="Liquidaciones externas" className="w-full text-[13px]">
-              <thead>
-                <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <Th>Folio</Th><Th>Operador</Th><Th>Periodo</Th><Th derecha>Total (de tu sistema)</Th>
-                  <Th>Estado</Th><Th>Respuesta del chofer</Th><Th>Enviada</Th><th scope="col" className="pb-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {pagina.filas.map((l) => <Fila key={l.id} l={l} p={p} formato={formato} avisos={avisos} />)}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between gap-3 mt-2.5">
-            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>De la más nueva a la más vieja.</p>
+          <TablaBase<LiquidacionExterna>
+            etiqueta="Liquidaciones externas"
+            filas={pagina.filas}
+            idFila={(l) => l.id}
+            altoMaximo={false}
+            tarjetaMovil
+            columnas={[
+              {
+                id: 'folio', titulo: 'Folio', principal: true,
+                celda: (l) => (
+                  <>
+                    <strong>{l.claveExterna}</strong>
+                    {l.sistemaOrigen && <span className="rv-liq-nota">{l.sistemaOrigen}</span>}
+                  </>
+                ),
+              },
+              { id: 'operador', titulo: 'Operador', celda: (l) => <span className="rv-liq-apagado">{l.operadorNombre ?? '—'}</span> },
+              { id: 'periodo', titulo: 'Periodo', celda: (l) => <span className="rv-liq-apagado">{fechaCorta(l.periodoDesde)} – {fechaCorta(l.periodoHasta)}</span> },
+              { id: 'total', titulo: 'Total (de tu sistema)', alinear: 'der', celda: (l) => <span className="cifra-mono">{dinero(l.total, l.moneda)}</span> },
+              {
+                id: 'estado', titulo: 'Estado',
+                celda: (l) => {
+                  const e = ROTULO_ESTADO[l.estado] ?? { rotulo: l.estado, ayuda: '', tono: 'muted' as const };
+                  const fallo = motivoDeFallo(l.ultimoError);
+                  return (
+                    <>
+                      <StatusChip tono={e.tono} title={e.ayuda}>{e.rotulo}</StatusChip>
+                      {l.via === 'plantilla' && <span className="rv-liq-nota">por plantilla (fuera de las 24 h)</span>}
+                      {/* El porqué, en frase: jamás el cuerpo crudo del error de Meta. */}
+                      {fallo && l.estado !== 'acusada' && <span className="rv-liq-nota" data-tono="bad">{fallo.texto}</span>}
+                    </>
+                  );
+                },
+              },
+              {
+                id: 'respuesta', titulo: 'Respuesta del chofer',
+                celda: (l) => {
+                  const disputa = l.acuseTipo === 'no_coincide';
+                  // El aviso a la oficina solo existe para una discrepancia, y solo se pinta si la base lo guarda (`avisos` no nulo).
+                  const aviso = disputa && avisos ? ROTULO_AVISO[avisos[l.id]?.estado ?? 'sin_registro'] : null;
+                  return (
+                    <span data-disputa={disputa || undefined}>
+                      {l.acuseTipo === 'recibida' && <span className="rv-liq-ok">Recibida</span>}
+                      {disputa && <strong className="rv-liq-malo">No coincide</strong>}
+                      {l.acuseTipo === null && <span className="rv-liq-apagado">Sin respuesta</span>}
+                      {l.acuseEn && <span className="rv-liq-nota">{fechaHoraMx(l.acuseEn)}</span>}
+                      {aviso && <span className="rv-liq-nota" data-tono={aviso.tono} title={aviso.ayuda}>{aviso.rotulo}</span>}
+                    </span>
+                  );
+                },
+              },
+              { id: 'enviada', titulo: 'Enviada', celda: (l) => <span className="rv-liq-apagado">{l.enviadaEn ? fechaHoraMx(l.enviadaEn) : '—'}</span> },
+              { id: 'acciones', titulo: 'Acciones', alinear: 'der', celda: (l) => <AccionesFila l={l} p={p} formato={formato} avisos={avisos} /> },
+            ]}
+          />
+          <div className="rv-liq-pagina">
+            <p className="rv-liq-sub">De la más nueva a la más vieja.</p>
             {pagina.siguiente && (
               <NavPaginas>
                 <EnlacePagina
@@ -242,102 +281,44 @@ export async function SeccionExternas(p: ExternasProps) {
           </div>
         </>
       )}
-    </section>
+    </Tarjeta>
+    </div>
   );
 }
 
-function Fila({ l, p, formato, avisos }: { l: LiquidacionExterna; p: ExternasProps; formato: { excel: boolean; copia: boolean } | null; avisos: Record<string, { estado: EstadoAvisoDiscrepancia }> | null }) {
-  const e = ROTULO_ESTADO[l.estado] ?? { rotulo: l.estado, ayuda: '', fg: 'var(--muted)', bg: 'var(--canvas)' };
-  const fallo = motivoDeFallo(l.ultimoError);
+function AccionesFila({ l, p, formato, avisos }: { l: LiquidacionExterna; p: ExternasProps; formato: { excel: boolean; copia: boolean } | null; avisos: Record<string, { estado: EstadoAvisoDiscrepancia }> | null }) {
   const disputa = l.acuseTipo === 'no_coincide';
-  // El aviso a la oficina solo existe para una discrepancia, y solo se pinta si la base lo guarda (`avisos` no nulo).
-  const aviso = disputa && avisos ? ROTULO_AVISO[avisos[l.id]?.estado ?? 'sin_registro'] : null;
   const puedeReavisar = disputa && avisos !== null && p.puedeReintentar && !!p.reavisar && (avisos[l.id]?.estado ?? 'sin_registro') !== 'enviado';
   return (
-    <tr className="border-t align-top" style={{ borderColor: 'var(--line2)', background: disputa ? 'var(--badbg)' : undefined }}>
-      <td className="py-2 font-medium">
-        {l.claveExterna}
-        {l.sistemaOrigen && <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>{l.sistemaOrigen}</span>}
-      </td>
-      <td className="py-2" style={{ color: 'var(--muted)' }}>{l.operadorNombre ?? '—'}</td>
-      <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaCorta(l.periodoDesde)} – {fechaCorta(l.periodoHasta)}</td>
-      <td className="py-2 text-right cifra-mono">{dinero(l.total, l.moneda)}</td>
-      <td className="py-2">
-        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" title={e.ayuda}
-          style={{ color: e.fg, background: e.bg }}>{e.rotulo}</span>
-        {l.via === 'plantilla' && <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>por plantilla (fuera de las 24 h)</span>}
-        {/* El porqué, en frase: jamás el cuerpo crudo del error de Meta. */}
-        {fallo && l.estado !== 'acusada' && <span className="block text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>{fallo.texto}</span>}
-      </td>
-      <td className="py-2">
-        {l.acuseTipo === 'recibida' && <span style={{ color: 'var(--ok)' }}>Recibida</span>}
-        {disputa && <span className="font-medium" style={{ color: 'var(--bad)' }}>No coincide</span>}
-        {l.acuseTipo === null && <span style={{ color: 'var(--faint)' }}>Sin respuesta</span>}
-        {l.acuseEn && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(l.acuseEn)}</span>}
-        {aviso && (
-          <span className="block text-[11px] mt-0.5" title={aviso.ayuda}
-            style={{ color: aviso.tono === 'ok' ? 'var(--ok)' : aviso.tono === 'bad' ? 'var(--bad)' : aviso.tono === 'warn' ? 'var(--warn)' : 'var(--faint)' }}>
-            {aviso.rotulo}
-          </span>
-        )}
-      </td>
-      <td className="py-2" style={{ color: 'var(--muted)' }}>{l.enviadaEn ? fechaHoraMx(l.enviadaEn) : '—'}</td>
-      <td className="py-2 text-right whitespace-nowrap">
-        {l.pdfRuta && (
-          <a href={`/api/export/liquidaciones-externas${query(p.contexto.filter(([k]) => k === 'tenant'), [['pdf', l.id]])}`}
-            className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity mr-3" style={{ color: 'var(--marca)' }}>
-            <FileText width={12} height={12} strokeWidth={2} /> PDF
-          </a>
-        )}
-        {formato?.excel && l.pdfRuta && l.pdfOrigen === 'generado' && (
-          <a href={`/api/export/liquidaciones-externas${query(p.contexto.filter(([k]) => k === 'tenant'), [['excel', l.id]])}`}
-            className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity mr-3" style={{ color: 'var(--marca)' }}>
-            <FileSpreadsheet width={12} height={12} strokeWidth={2} /> Excel
-          </a>
-        )}
-        {formato?.copia && p.reenviarCopia && l.estado !== 'pendiente' && l.estado !== 'fallida' && (
-          <form action={p.reenviarCopia} className="inline mr-3">
-            <input type="hidden" name="id" value={l.id} />
-            <button type="submit" title="Reenvía la copia al jefe de flota (solo se manda si aún no salió)" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--marca)' }}>
-              <Send width={12} height={12} strokeWidth={2} /> Copia al jefe
-            </button>
-          </form>
-        )}
-        {puedeReavisar && p.reavisar && (
-          <form action={p.reavisar} className="inline mr-3">
-            <input type="hidden" name="id" value={l.id} />
-            <button type="submit" title="Vuelve a avisar a la persona responsable (no repite a quien ya recibió el aviso)" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--marca)' }}>
-              <Send width={12} height={12} strokeWidth={2} /> Reavisar
-            </button>
-          </form>
-        )}
-        {l.estado === 'fallida' && p.puedeReintentar && (
-          <form action={p.reintentar} className="inline">
-            <input type="hidden" name="id" value={l.id} />
-            <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--marca)' }}>
-              <RefreshCw width={12} height={12} strokeWidth={2} /> Reintentar
-            </button>
-          </form>
-        )}
-      </td>
-    </tr>
+    <span className="rv-liq-acciones">
+      {l.pdfRuta && (
+        <a href={`/api/export/liquidaciones-externas${query(p.contexto.filter(([k]) => k === 'tenant'), [['pdf', l.id]])}`} className="rv-liq-enlace">
+          <Icono icono={FileText} tam={14} /> PDF
+        </a>
+      )}
+      {formato?.excel && l.pdfRuta && l.pdfOrigen === 'generado' && (
+        <a href={`/api/export/liquidaciones-externas${query(p.contexto.filter(([k]) => k === 'tenant'), [['excel', l.id]])}`} className="rv-liq-enlace">
+          <Icono icono={FileSpreadsheet} tam={14} /> Excel
+        </a>
+      )}
+      {formato?.copia && p.reenviarCopia && l.estado !== 'pendiente' && l.estado !== 'fallida' && (
+        <form action={p.reenviarCopia}>
+          <input type="hidden" name="id" value={l.id} />
+          <Boton type="submit" variante="ghost" tamano="sm" icono={<Icono icono={Send} />} title="Reenvía la copia al jefe de flota (solo se manda si aún no salió)">Copia al jefe</Boton>
+        </form>
+      )}
+      {puedeReavisar && p.reavisar && (
+        <form action={p.reavisar}>
+          <input type="hidden" name="id" value={l.id} />
+          <Boton type="submit" variante="ghost" tamano="sm" icono={<Icono icono={Send} />} title="Vuelve a avisar a la persona responsable (no repite a quien ya recibió el aviso)">Reavisar</Boton>
+        </form>
+      )}
+      {l.estado === 'fallida' && p.puedeReintentar && (
+        <form action={p.reintentar}>
+          <input type="hidden" name="id" value={l.id} />
+          <Boton type="submit" variante="ghost" tamano="sm" icono={<Icono icono={RefreshCw} />}>Reintentar</Boton>
+        </form>
+      )}
+    </span>
   );
-}
-
-function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string; valor: number | null; ayuda: string; href: string; tono?: 'bad' }) {
-  // `null` = no se pudo contar: «—», jamás un cero que nadie midió.
-  const alerta = tono === 'bad' && valor !== null && valor > 0;
-  return (
-    <Link href={href} title={ayuda} className="card p-3 hover:opacity-80 transition-opacity block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>
-      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
-      <span className="text-[20px] font-semibold cifra-mono block" style={alerta ? { color: 'var(--bad)' } : undefined}>
-        {valor === null ? '—' : numero(valor)}
-      </span>
-      {valor === null && <span className="text-[11px] block" style={{ color: 'var(--faint)' }}>no se pudo contar</span>}
-    </Link>
-  );
-}
-
-function Th({ children, derecha }: { children: React.ReactNode; derecha?: boolean }) {
-  return <th className={`etiqueta-mono text-[11px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>;
 }

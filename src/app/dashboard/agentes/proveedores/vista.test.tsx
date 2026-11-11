@@ -137,10 +137,10 @@ describe('VistaAgenteProveedores — lo nuevo de la 0108 se dice', () => {
 
   it('«no_encontrado» (folio que el SAT NO reconoce) grita IGUAL que «cancelado» — ni tono ni ícono de "sin consultar"', () => {
     const html = pintarVista([{ ...BASE, estadoSat: 'no_encontrado' }]);
-    // Mismo tratamiento visual que CANCELADO: color var(--bad) + ícono TriangleAlert.
-    expect(html).toContain('el SAT NO LO ENCUENTRA');
-    expect(html).toContain('stroke="currentColor"'); // el ícono TriangleAlert se renderizó
-    expect(html).toContain('color:var(--bad)');
+    // Mismo tratamiento visual que CANCELADO: StatusChip con tono «bad» (punto + texto, nunca solo color).
+    expect(html).toMatch(/data-tono="bad"[^>]*><i[^>]*><\/i>el SAT NO LO ENCUENTRA/);
+    const cancelado = pintarVista([{ ...BASE, estadoSat: 'cancelado' }]);
+    expect(cancelado).toMatch(/data-tono="bad"[^>]*><i[^>]*><\/i>CANCELADO ante el SAT/);
     // No debe compartir el bloque apagado de "pendiente"/"sin consultar".
     expect(html).not.toContain('SAT sin consultar');
     expect(html).not.toContain('SAT sin contestar al ingerir');

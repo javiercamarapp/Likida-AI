@@ -1,11 +1,11 @@
 'use client';
 
 import { useActionState } from 'react';
-import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 import { useFormStatus } from 'react-dom';
-import { Disclosure } from '@/app/ui-v2/componentes';
 import { Save } from 'lucide-react';
-import { Casilla } from '@/app/ui-v2/componentes';
+import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
+import { AvisoResultado, Boton as BotonDs, CampoFecha, CampoSelect, CampoTexto, Casilla, Disclosure, Icono } from '@/app/ui-v2/componentes';
+import './clientes.css';
 // SOLO TIPOS DE `clientes.ts`, y es una restricción real, no un gusto: ese
 // módulo importa `supabaseAdmin`, cuyo encabezado dice textualmente "NUNCA
 // importar en código de cliente". Un `import` de valor (por ejemplo del
@@ -13,28 +13,20 @@ import { Casilla } from '@/app/ui-v2/componentes';
 // navegador aunque el componente no la use. Los `import type` se borran al
 // compilar; el catálogo viaja como PROP desde la página, que sí es servidor.
 import type { ClienteCrudo, TarifaCruda } from '@/lib/likida/clientes';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
-const AYUDA = 'text-[11px] mt-1';
-
 function Boton({ etiqueta }: { etiqueta: string }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Save width={14} height={14} strokeWidth={1.75} />
+    <BotonDs type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />} className="rv-cl__guardar">
       {pending ? 'Guardando…' : etiqueta}
-    </button>
+    </BotonDs>
   );
 }
 
-/** El aviso del resultado: el UNICO del panel (`admin/ui/aviso-resultado`). El error
- *  del servidor se enseña VERBATIM: los `DatoInvalido` están escritos para leerse aquí. */
+/** El aviso del resultado: el UNICO del panel. El error del servidor se enseña VERBATIM: los `DatoInvalido` están escritos para leerse aquí. */
 const Aviso = AvisoResultado;
 
 /**
@@ -69,59 +61,22 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
   return (
-    <form action={despachar} className="space-y-3">
+    <form action={despachar} className="rv-forma">
       <input type="hidden" name="id" value={id} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="sm:col-span-2">
-          <label htmlFor={campo('nombre')} className={ETIQUETA}>Nombre o razón social</label>
-          <input id={campo('nombre')} name="nombre" type="text" required maxLength={120}
-            defaultValue={inicial.nombre} placeholder="Cementos del Bajío S.A. de C.V."
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-
-        <div>
-          <label htmlFor={campo('rfc')} className={ETIQUETA}>RFC</label>
-          <input id={campo('rfc')} name="rfc" type="text" maxLength={13}
-            defaultValue={inicial.rfc} placeholder="Opcional"
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Se le revisa el dígito verificador. Es el RFC con el que le vas a facturar.
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor={campo('dias')} className={ETIQUETA}>Días de crédito</label>
-          <input id={campo('dias')} name="diasCredito" type="number" min={0} max={365} step={1}
-            defaultValue={inicial.diasCredito} placeholder="Déjalo vacío si no hay crédito pactado"
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          {/* La distinción que sostiene la cobranza entera: vacío ≠ 0. */}
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Vacío = sin condiciones pactadas (sus facturas no llevan fecha de vencimiento).
-            Un 0 significa contado.
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor={campo('contacto')} className={ETIQUETA}>Contacto</label>
-          <input id={campo('contacto')} name="contacto" type="text" maxLength={120}
-            defaultValue={inicial.contacto} placeholder="Quién autoriza pagos"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-
-        <div>
-          <label htmlFor={campo('correo')} className={ETIQUETA}>Correo</label>
-          <input id={campo('correo')} name="correo" type="email" maxLength={160}
-            defaultValue={inicial.correo} placeholder="cuentasporpagar@empresa.com"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label htmlFor={campo('telefono')} className={ETIQUETA}>Teléfono</label>
-          <input id={campo('telefono')} name="telefono" type="text" maxLength={40}
-            defaultValue={inicial.telefono} placeholder="477 123 4567 ext. 210"
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-        </div>
+      <div className="rv-forma__rejilla">
+        <CampoTexto id={campo('nombre')} name="nombre" etiqueta="Nombre o razón social" obligatorio maxLength={120}
+          defaultValue={inicial.nombre} placeholder="Cementos del Bajío S.A. de C.V." className="rv-cl__ancho" />
+        <CampoTexto id={campo('rfc')} name="rfc" etiqueta="RFC" maxLength={13} defaultValue={inicial.rfc} placeholder="Opcional"
+          ayuda="Se le revisa el dígito verificador. Es el RFC con el que le vas a facturar." />
+        {/* La distinción que sostiene la cobranza entera: vacío ≠ 0. */}
+        <CampoTexto id={campo('dias')} name="diasCredito" tipo="number" etiqueta="Días de crédito" min={0} max={365} step={1}
+          defaultValue={inicial.diasCredito} placeholder="Déjalo vacío si no hay crédito pactado"
+          ayuda="Vacío = sin condiciones pactadas (sus facturas no llevan fecha de vencimiento). Un 0 significa contado." />
+        <CampoTexto id={campo('contacto')} name="contacto" etiqueta="Contacto" maxLength={120} defaultValue={inicial.contacto} placeholder="Quién autoriza pagos" />
+        <CampoTexto id={campo('correo')} name="correo" tipo="email" etiqueta="Correo" maxLength={160} defaultValue={inicial.correo} placeholder="cuentasporpagar@empresa.com" />
+        <CampoTexto id={campo('telefono')} name="telefono" etiqueta="Teléfono" maxLength={40} defaultValue={inicial.telefono}
+          placeholder="477 123 4567 ext. 210" className="rv-cl__ancho" />
       </div>
 
       <Casilla name="activo" defaultChecked={inicial.activo} etiqueta="Cliente activo" />
@@ -172,77 +127,40 @@ export function FormaTarifa({
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
   return (
-    <form action={despachar} className="space-y-3">
+    <form action={despachar} className="rv-forma">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="moneda" value="MXN" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="sm:col-span-2">
-          <label htmlFor={campo('cliente')} className={ETIQUETA}>Cliente</label>
+      <div className="rv-forma__rejilla">
+        <div className="rv-campo rv-cl__ancho">
+          <label htmlFor={campo('cliente')} className="rv-campo__etq">Cliente</label>
           <ComboCatalogo tipo="cliente" name="clienteId" campoId={campo('cliente')}
             buscar={buscarCliente} aria-label="Cliente"
             etiquetaVacia="Tarifa de lista — aplica a cualquier cliente"
             valorInicial={inicial.clienteId || null} textoInicial={clienteNombre}
-            total={totalClientes} className="w-full" estilo={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Una tarifa con cliente es negociada, y le gana a la de lista. Déjalo vacío para una
-            tarifa de lista.
-          </p>
+            total={totalClientes} className="rv-ctl" />
+          <span className="rv-campo__ayuda">
+            Una tarifa con cliente es negociada, y le gana a la de lista. Déjalo vacío para una tarifa de lista.
+          </span>
         </div>
 
-        <div>
-          <label htmlFor={campo('origen')} className={ETIQUETA}>Origen</label>
-          <input id={campo('origen')} name="origen" type="text" maxLength={120}
-            defaultValue={inicial.origen} placeholder="Vacío = cualquiera"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
+        <CampoTexto id={campo('origen')} name="origen" etiqueta="Origen" maxLength={120} defaultValue={inicial.origen} placeholder="Vacío = cualquiera" />
+        <CampoTexto id={campo('destino')} name="destino" etiqueta="Destino" maxLength={120} defaultValue={inicial.destino} placeholder="Vacío = cualquiera" />
 
-        <div>
-          <label htmlFor={campo('destino')} className={ETIQUETA}>Destino</label>
-          <input id={campo('destino')} name="destino" type="text" maxLength={120}
-            defaultValue={inicial.destino} placeholder="Vacío = cualquiera"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
+        <CampoSelect id={campo('modo')} name="modo" etiqueta="Cómo se cobra" defaultValue={inicial.modo}
+          ayuda={modos.map((m) => `${m.rotulo}: ${m.detalle}`).join(' ')}>
+          {modos.map((m) => (
+            <option key={m.valor} value={m.valor}>{m.rotulo}</option>
+          ))}
+        </CampoSelect>
 
-        <div>
-          <label htmlFor={campo('modo')} className={ETIQUETA}>Cómo se cobra</label>
-          <select id={campo('modo')} name="modo" defaultValue={inicial.modo}
-            className="w-full" style={{ background: 'var(--surface)' }}>
-            {modos.map((m) => (
-              <option key={m.valor} value={m.valor}>{m.rotulo}</option>
-            ))}
-          </select>
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            {modos.map((m) => `${m.rotulo}: ${m.detalle}`).join(' ')}
-          </p>
-        </div>
+        <CampoTexto id={campo('precio')} name="precio" etiqueta="Precio (MXN)" obligatorio inputMode="decimal"
+          defaultValue={inicial.precio} placeholder="28,500.00"
+          ayuda="En la unidad que elegiste arriba. Solo pesos: Likida todavía no convierte moneda." />
 
-        <div>
-          <label htmlFor={campo('precio')} className={ETIQUETA}>Precio (MXN)</label>
-          <input id={campo('precio')} name="precio" type="text" inputMode="decimal" required
-            defaultValue={inicial.precio} placeholder="28,500.00"
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            En la unidad que elegiste arriba. Solo pesos: Likida todavía no convierte moneda.
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor={campo('desde')} className={ETIQUETA}>Rige desde</label>
-          <input id={campo('desde')} name="vigenteDesde" type="date" required
-            defaultValue={inicial.vigenteDesde}
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-
-        <div>
-          <label htmlFor={campo('hasta')} className={ETIQUETA}>Rige hasta</label>
-          <input id={campo('hasta')} name="vigenteHasta" type="date"
-            defaultValue={inicial.vigenteHasta}
-            className="w-full" style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Vacío = sin fecha de término. El último día pactado la tarifa todavía rige.
-          </p>
-        </div>
+        <CampoFecha id={campo('desde')} name="vigenteDesde" etiqueta="Rige desde" obligatorio defaultValue={inicial.vigenteDesde} />
+        <CampoFecha id={campo('hasta')} name="vigenteHasta" etiqueta="Rige hasta" defaultValue={inicial.vigenteHasta}
+          ayuda="Vacío = sin fecha de término. El último día pactado la tarifa todavía rige." />
       </div>
 
       <Casilla name="activa" defaultChecked={inicial.activa} etiqueta="Tarifa activa" />

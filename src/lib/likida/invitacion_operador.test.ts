@@ -45,6 +45,8 @@ function op(n: number, extra: Fila = {}): Fila {
 const flota = { alcance: { tipo: 'flota' } as const };
 
 beforeEach(() => {
+  process.env.WHATSAPP_ACCESS_TOKEN = 'token-de-prueba';
+  process.env.WHATSAPP_PHONE_NUMBER_ID = 'numero-de-prueba';
   base = crearBaseEnMemoria({ tenant: [{ id: T, nombre: 'Transportes del Norte' }], operador: [] });
   enviar.mockClear();
   enviar.mockImplementation(async () => ({ ok: true, via: 'plantilla', id: 'wamid', motivo: 'ventana_cerrada', ventana: 'cerrada' }));
@@ -431,5 +433,39 @@ describe('A37-S47-10 — constancia reintentada y reclamo con marca propia', () 
     });
     await invitarOperadores(T, { ...flota, ahora: new Date('2026-10-01T18:00:00Z') });
     expect(base.tabla('operador')[0]).toMatchObject({ invitacion_enviada_en: marcaDeLaOtraTanda, invitacion_via: 'reclamada' });
+  });
+});
+
+// ── Falso éxito (10-nov-2026): «Invitación enviada» en verde con WhatsApp sin conectar ─────────────────────────
+describe('la invitación nunca se declara enviada si no pudo salir', () => {
+  it('sin WhatsApp conectado: error claro, no se llama al selector y NADIE queda marcado como invitado', async () => {
+    delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+    base.tabla('operador').push(op(1), op(2));
+    const r = await invitarOperadores(T, flota);
+    expect(r.error).toMatch(/WhatsApp no está conectado/);
+    expect(r.enviadas).toBe(0);
+    expect(enviar).not.toHaveBeenCalled();
+    for (const f of base.tabla('operador')) expect(f).toMatchObject({ invitacion_enviada_en: null, invitacion_via: null, invitacion_fallo: null });
+    const { mensajeDeInvitacion } = await import('./invitacion_operador');
+    expect(mensajeDeInvitacion(r)).toMatchObject({ ok: false, error: expect.stringMatching(/Falta conectar el número de WhatsApp Business/) });
+    expect(await contarPendientes(T, { tipo: 'flota' })).toBe(2);
+  });
+
+  it('si todas fallan el resultado es un ERROR con los motivos, no «Se enviaron 0» en verde', async () => {
+    const { mensajeDeInvitacion } = await import('./invitacion_operador');
+    const m = mensajeDeInvitacion({ enviadas: 0, fallidas: [{ operadorId: 'a', nombre: 'A', motivo: 'Número sin WhatsApp' }], pendientesRestantes: 0, saltadas: 0 });
+    expect(m.ok).toBe(false);
+    expect(m).toMatchObject({ error: expect.stringMatching(/No salió la invitación/), fallidas: [{ nombre: 'A', motivo: 'Número sin WhatsApp' }] });
+    expect(JSON.stringify(m)).not.toMatch(/Se enviaron/);
+  });
+
+  it('lo encolado por Meta se dice «en cola», no «enviado»', async () => {
+    base.tabla('operador').push(op(1));
+    enviar.mockImplementation(async () => ({ ok: false, motivo: 'plantilla_rechazada', mensaje: 'Meta pide esperar.', reintentable: true, encolado: true, fueraDeVentana: true, ventana: 'cerrada' }));
+    const r = await invitarOperadores(T, flota);
+    const { mensajeDeInvitacion } = await import('./invitacion_operador');
+    const m = mensajeDeInvitacion(r);
+    expect(m).toMatchObject({ ok: true, mensaje: expect.stringMatching(/1 quedó en cola de WhatsApp.*aún no están entregadas/) });
+    expect((m as { mensaje: string }).mensaje).not.toMatch(/Se enviaron/);
   });
 });

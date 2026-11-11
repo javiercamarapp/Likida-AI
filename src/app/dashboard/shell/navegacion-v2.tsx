@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Settings } from 'lucide-react';
 import { moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Item } from '../rutas';
 import { useSufijoYRol } from '../sidebar-nav';
-import { menuPorPerfil, hrefActivo, HREF_NOTIFICACIONES, HREF_PUESTA_EN_MARCHA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
+import { menuPorPerfil, hrefActivo, hrefsDelMenu, HREF_NOTIFICACIONES, HREF_PUESTA_EN_MARCHA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
 import MenuCuenta from './menu-cuenta';
+import PieSidebar from '../../ui-v2/componentes/pie-sidebar';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA NAVEGACIÓN v2 — una sola pieza para el sidebar de escritorio y la hoja «Más» del móvil.
@@ -146,25 +147,38 @@ function FilaPuesta({ avance, sufijo, alNavegar, activo }: { avance: { n: number
 }
 
 /**
- * El pie fijo: UN solo bloque compacto (≤100 px). «Puesta en marcha» (solo <6/6) y la tarjeta de cuenta (monograma, nombre, rol,
- * salir). Nada apilado: Notificaciones vive en la topbar (y en la cabecera móvil), y Mi perfil, Ayuda, Plan, Configuración, el
- * recorrido y el tema, en el menú de la tarjeta. Ninguna función se pierde, solo cambia de lugar.
+ * El pie fijo: el `PieSidebar` compartido con /admin (organización · Avisos · Administración (solo superadmin) · tema e idioma · tarjeta de
+ * usuario) y, arriba, «Puesta en marcha» (solo <6/6). Mi perfil, Ayuda, Plan y Configuración siguen en el menú de la tarjeta.
+ * «Avisos» lleva la cifra solo si `insignias` la trae (número entero); sin ella no se pinta ninguna: nunca un 0 inventado.
  */
-export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, perfil, alNavegar, pathname }: {
+export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, perfil, alNavegar, pathname, organizacion }: {
   menu: MenuV2; sufijo: string; pathname: string; perfil?: PerfilTenant | null; rol: string; rolEtiqueta: string; nombre: string | null;
   usoIa?: { pct: number } | null; cerrarSesion?: () => Promise<void>; insignias?: Insignias; alNavegar?: () => void;
+  /** La flota que se está viendo (nombre leído en el servidor). `null`/ausente = no se pudo saber: el pie lo dice. */
+  organizacion?: { id: string; nombre: string } | null;
 }) {
   const activo = hrefActivo(pathname, menu);
   // Todo lo que el pie ya no pinta como fila (Mi perfil, Ayuda y, en el menú genérico, Plan y Configuración) va al menú de la tarjeta.
   const filasMenuCuenta = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES);
   const avance = avanceDe(insignias?.[HREF_PUESTA_EN_MARCHA]);
   const enMenu = menu.grupos.some((g) => g.items.some((i) => i.href === HREF_PUESTA_EN_MARCHA));
+  const insigniaAvisos = insignias?.[HREF_NOTIFICACIONES];
+  const pendientes = insigniaAvisos && /^\d+$/.test(insigniaAvisos) ? Number(insigniaAvisos) : undefined;
+  const hayAvisos = hrefsDelMenu(menu).includes(HREF_NOTIFICACIONES);
   return (
-    <div className="rv-pie">
-      {avance && enMenu && <FilaPuesta avance={avance} sufijo={sufijo} alNavegar={alNavegar} activo={activo === HREF_PUESTA_EN_MARCHA} />}
-      <MenuCuenta nombre={nombre} rol={rol} rolEtiqueta={rolEtiqueta} sufijo={sufijo} filas={filasMenuCuenta} usoIaPct={usoIa === undefined || perfil ? undefined : usoIa?.pct ?? null}
-        cerrarSesion={cerrarSesion} alNavegar={alNavegar} iniciales={iniciales(nombre)} />
-    </div>
+    <PieSidebar
+      alNavegar={alNavegar}
+      extra={avance && enMenu ? <FilaPuesta avance={avance} sufijo={sufijo} alNavegar={alNavegar} activo={activo === HREF_PUESTA_EN_MARCHA} /> : undefined}
+      organizacion={{
+        opciones: organizacion === undefined ? [] : organizacion ? [{ valor: organizacion.id, nombre: organizacion.nombre }] : null,
+        actual: organizacion?.id ?? null,
+        hrefIr: () => `/dashboard${sufijo}`,
+      }}
+      avisos={hayAvisos ? { href: `${HREF_NOTIFICACIONES}${sufijo}`, pendientes } : null}
+      acceso={rol === 'superadmin' ? { href: '/admin', texto: 'Administración de Likida', Icono: Settings } : null}
+      tarjeta={<MenuCuenta nombre={nombre} rol={rol} rolEtiqueta={rolEtiqueta} sufijo={sufijo} filas={filasMenuCuenta}
+        usoIaPct={usoIa === undefined || perfil ? undefined : usoIa?.pct ?? null} cerrarSesion={cerrarSesion} alNavegar={alNavegar} iniciales={iniciales(nombre)} />}
+    />
   );
 }
 

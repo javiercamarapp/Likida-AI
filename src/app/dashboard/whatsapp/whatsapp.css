@@ -1,0 +1,25 @@
+/* WhatsApp del operador · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-wa__cartel { display: flex; flex-direction: column; gap: 16px; }
+@media (min-width: 640px) { .rv-wa__cartel { flex-direction: row; align-items: center; } }
+.rv-wa__qr { flex: none; align-self: center; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.rv-wa__texto { display: grid; gap: 8px; min-width: 0; }
+.rv-wa__numero { margin: 0; display: flex; align-items: center; gap: 8px; font-size: var(--t-kpi); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rv-wa__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-wa__nota strong { color: var(--ink); font-weight: 600; }
+.rv-wa__enlace-largo { margin: 0; font-size: var(--t-small); color: var(--faint); overflow-wrap: anywhere; }
+.rv-wa__enlace { text-decoration: underline; text-underline-offset: 2px; }
+.rv-wa__prueba { margin: 0; font-size: var(--t-section); font-weight: 600; text-transform: uppercase; color: var(--warn); }
+.rv-wa__acciones { margin-top: 4px; }
+.rv-wa__botones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-wa__pasos { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: paso; }
+.rv-wa__pasos li { position: relative; padding-left: 32px; counter-increment: paso; }
+.rv-wa__pasos li::before { content: counter(paso); position: absolute; left: 0; top: 1px; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 999px; font-size: var(--t-micro); font-weight: 600; color: var(--muted); }
+.rv-wa__paso { margin: 0; font-size: var(--t-body); font-weight: 500; }
+
+/* El cartel imprimible es el ÚNICO bloque que sale al imprimir. */
+@media print {
+  body * { visibility: hidden !important; }
+  #cartel-whatsapp, #cartel-whatsapp * { visibility: visible !important; }
+  #cartel-whatsapp { position: fixed; inset: 0; margin: 0; padding: 32px; border: 0 !important; box-shadow: none !important; background: white !important; color: black !important; }
+  #cartel-whatsapp .rv-wa__acciones { display: none; }
+}

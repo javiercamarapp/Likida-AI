@@ -25,6 +25,7 @@ const dobles = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
 vi.mock('next/cache', () => ({ revalidatePath: dobles.revalidatePath }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/compliance', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/likida/repo', async (importar) => ({
   ...(await importar<typeof import('@/lib/likida/repo')>()),
   resolverSolicitudArco: dobles.resolverSolicitudArco,
@@ -75,14 +76,14 @@ beforeEach(() => {
 
 it('sin sesión (getSessionTenant null), la página no revienta — pinta cero solicitudes', async () => {
   dobles.getSessionTenant.mockResolvedValue(null);
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
   expect(html).toContain('Ninguna solicitud ARCO registrada');
 });
 
 it('resolver: exige requireSuperadmin() DENTRO de la action — un POST directo sin sesión de superadmin se rechaza', async () => {
   dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   const accion = buscar(pagina, FormaConAviso)[0].props.accion as AccionForma;
 
   dobles.requireSuperadmin.mockRejectedValueOnce(new Error('no autorizado'));
@@ -94,7 +95,7 @@ it('resolver: exige requireSuperadmin() DENTRO de la action — un POST directo 
 it('resolver: una resolución de menos de 5 caracteres se rechaza SIN tocar la base', async () => {
   dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
   dobles.requireSuperadmin.mockResolvedValue(undefined);
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   const accion = buscar(pagina, FormaConAviso)[0].props.accion as AccionForma;
   const r = await accion(null, fd({ solicitudId: 's-1', resolucion: 'ok' }));
   expect(r).toEqual({ error: 'Escribe la respuesta que se entrega al titular (qué se resolvió y cómo).' });
@@ -105,7 +106,7 @@ it('resolver: el tenant sale de la SOLICITUD (no del listado ni del form) — ev
   dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
   dobles.requireSuperadmin.mockResolvedValue(undefined);
   dobles.resolverSolicitudArco.mockResolvedValue({ enviada: true });
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   const accion = buscar(pagina, FormaConAviso)[0].props.accion as AccionForma;
   // La action hace su PROPIA lectura .maybeSingle() (tenant_id de la
   // solicitud) — se encadena aparte de la del render, con forma singular.
@@ -119,7 +120,7 @@ it('resolver: el tenant sale de la SOLICITUD (no del listado ni del form) — ev
 it('resolver: ADM-10 — una base caída leyendo la solicitud da un mensaje DISTINTO de "no existe" (no se confunden)', async () => {
   dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
   dobles.requireSuperadmin.mockResolvedValue(undefined);
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   const accion = buscar(pagina, FormaConAviso)[0].props.accion as AccionForma;
 
   // Sondeo directo de la action (que hace su PROPIA lectura .maybeSingle()):
@@ -140,7 +141,7 @@ it('resolver: un DatoInvalido del motor llega verbatim, no genérico', async () 
   dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
   dobles.requireSuperadmin.mockResolvedValue(undefined);
   dobles.resolverSolicitudArco.mockRejectedValueOnce(new DatoInvalido('El titular ya fue notificado hace menos de 24h.'));
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   const accion = buscar(pagina, FormaConAviso)[0].props.accion as AccionForma;
   dobles.from.mockReturnValueOnce(encadenar({ tenant_id: 't-1' }));
   const r = await accion(null, fd({ solicitudId: 's-1', resolucion: 'Se le respondió por WhatsApp.' }));
@@ -149,7 +150,7 @@ it('resolver: un DatoInvalido del motor llega verbatim, no genérico', async () 
 
 it('una solicitud ya resuelta NO ofrece el formulario de responder — muestra su resolución', async () => {
   dobles.from.mockReturnValue(encadenar([{ ...SOLICITUD_PENDIENTE, estado: 'resuelta', resolucion: 'Se le envió su expediente el 2-ene.' }]));
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
   expect(html).toContain('Se le envió su expediente el 2-ene.');
   expect(buscar(pagina, FormaConAviso)).toHaveLength(0);
@@ -159,7 +160,7 @@ it('A37-S05-04: si el WhatsApp NO salió, la pantalla lo dice (no afirma envío)
   dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
   dobles.requireSuperadmin.mockResolvedValue(undefined);
   dobles.resolverSolicitudArco.mockResolvedValue({ enviada: false, error: 'fuera de ventana' });
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   const accion = buscar(pagina, FormaConAviso)[0].props.accion as AccionForma;
   dobles.from.mockReturnValueOnce(encadenar({ tenant_id: 't-1' }));
   const r = await accion(null, fd({ solicitudId: 's-1', resolucion: 'Se le envió su expediente completo.' }));
@@ -172,9 +173,32 @@ it('A37-S05-04: cancelación y oposición no ofrecen "Responder": enlazan a la b
     { ...SOLICITUD_PENDIENTE, id: 's-c', tipo: 'cancelacion' },
     { ...SOLICITUD_PENDIENTE, id: 's-o', tipo: 'oposicion' },
   ]));
-  const pagina = await CompliancePage();
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
   expect(buscar(pagina, FormaConAviso)).toHaveLength(0);
   const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
   expect(html).toContain('/dashboard/arco?tenant=t-1');
   expect(html).toContain('Ejecutar cancelación');
+});
+
+it('F7: una lectura caída se DICE (no es «ninguna solicitud») y las cifras no inventan un cero', async () => {
+  dobles.from.mockReturnValue({ select: () => ({ order: () => ({ order: () => ({ range: async () => ({ data: null, error: { message: 'caída' }, count: null }) }) }) }) });
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
+  const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
+  expect(html).toContain('No se pudieron leer las solicitudes ARCO');
+  expect(html).toContain('NO quiere decir que no haya ninguna');
+  expect(html).not.toContain('Ninguna solicitud ARCO registrada');
+});
+
+it('F7: una pendiente cuyo plazo ya pasó se marca «Vencida» y el formulario de responder sigue ahí (ARCO no se cierra por vencer)', async () => {
+  dobles.from.mockReturnValue(encadenar([{ ...SOLICITUD_PENDIENTE, vence_en: '2000-01-01' }]));
+  const pagina = await CompliancePage({ searchParams: Promise.resolve({}) });
+  const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
+  expect(html).toContain('Vencida');
+  expect(buscar(pagina, FormaConAviso)).toHaveLength(1);
+});
+
+it('F7: la pantalla no imprime nombres internos (tablas, plantillas ni variables)', async () => {
+  dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
+  const html = (await import('react-dom/server')).renderToStaticMarkup(await CompliancePage({ searchParams: Promise.resolve({}) }));
+  expect(html).not.toMatch(/respuesta_arco|solicitud_arco|LIKIDA_/);
 });

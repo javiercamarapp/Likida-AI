@@ -161,6 +161,40 @@ export async function getSuscripcion(tenantId: string): Promise<Suscripcion | nu
   };
 }
 
+/**
+ * Las suscripciones VIVAS de TODAS las flotas, para el panel de planes de /admin (una por flota: el índice único de la 0052 lo
+ * garantiza). Solo lee. LANZA si la base no responde: «ninguna suscripción» y «no se pudo leer» no son lo mismo, y de esa lectura
+ * depende saber qué flotas deberían estar pagando.
+ */
+export async function listarSuscripcionesVivas(): Promise<Suscripcion[]> {
+  const r = await supabaseAdmin()
+    .from('suscripcion')
+    .select('id, tenant_id, plan_clave, estado, inicio, periodo_fin, stripe_customer_id, stripe_subscription_id, plan(nombre)')
+    .in('estado', ['prueba', 'activa', 'morosa', 'pausada'])
+    .order('tenant_id')
+    .order('id')
+    .limit(1000);
+  const datos = fila<Array<Record<string, unknown>>>(r, 'listarSuscripcionesVivas') ?? [];
+  const hoy = hoyMx();
+  return datos.map((s) => {
+    const planRel = s.plan as { nombre?: string } | Array<{ nombre?: string }> | null;
+    const nombre = Array.isArray(planRel) ? planRel[0]?.nombre : planRel?.nombre;
+    const fin = (s.periodo_fin as string) || null;
+    return {
+      vencida: fin !== null && fin < hoy,
+      id: s.id as string,
+      tenantId: s.tenant_id as string,
+      planClave: s.plan_clave as string,
+      planNombre: nombre ?? (s.plan_clave as string),
+      estado: s.estado as Suscripcion['estado'],
+      inicio: s.inicio as string,
+      periodoFin: fin,
+      stripeCustomerId: (s.stripe_customer_id as string) || null,
+      stripeSubscriptionId: (s.stripe_subscription_id as string) || null,
+    };
+  });
+}
+
 /** H41 (auditoría 24): tope por omisión de `getFacturasSaas`, exportado para
  *  que la pantalla pueda declarar el recorte en vez de dejarlo mudo. */
 export const LIMITE_FACTURAS_SAAS = 12;

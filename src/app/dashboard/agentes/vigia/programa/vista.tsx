@@ -1,11 +1,11 @@
 'use client';
 
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import '../vigia.css';
+import { AvisoResultado, Aviso as AvisoV2, Boton, CampoArchivo, CampoTexto, Icono, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { TriangleAlert, Upload } from 'lucide-react';
-import { AvisoResultado } from '../../../../admin/ui/aviso-resultado';
+import { Upload } from 'lucide-react';
 import { recortarRellenoCsv, TOPE_SUBIDA_BYTES } from './recortar_relleno';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -80,22 +80,14 @@ const MOTIVOS: Record<string, string> = {
   sin_caja_unidad_ni_cliente: 'no traía caja, unidad ni cliente',
 };
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1';
-
 function Aviso({ children }: { children: React.ReactNode }) {
-  return (
-    <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{children}
-    </p>
-  );
+  return <AvisoV2 tono="error">{children}</AvisoV2>;
 }
 
 function Enviar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary">
-      <Upload width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Leyendo el archivo…' : 'Subir y leer'}
-    </button>
+    <Boton type="submit" loading={pending} icono={<Icono icono={Upload} tam={14} />}>{pending ? 'Leyendo el archivo…' : 'Subir y leer'}</Boton>
   );
 }
 
@@ -123,23 +115,17 @@ function FormaSubir({ accion }: { accion: AccionPrograma }) {
     despachar(fd);
   }
   return (
-    <div className="space-y-4">
-      <form action={preparar} className="space-y-3">
-        <div className="grid sm:grid-cols-2 gap-3">
-          <label>
-            <span className={ETIQUETA}>Terminal</span>
-            <input name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" className="w-full" autoComplete="off" />
-          </label>
-          <label>
-            <span className={ETIQUETA}>Archivo del programa (CSV, hasta {TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB, sin contar las columnas vacías)</span>
-            <input name="archivo" type="file" required accept=".csv,.txt,text/csv" className="w-full py-1.5 h-auto" />
-          </label>
+    <div className="rv-vg__pila">
+      <form action={preparar} className="rv-vg__pila">
+        <div className="rv-vg__cuad">
+          <CampoTexto etiqueta="Terminal" name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" autoComplete="off" />
+          <CampoArchivo etiqueta={`Archivo del programa (CSV, hasta ${TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB, sin contar las columnas vacías)`} name="archivo" required accept=".csv,.txt,text/csv" />
         </div>
-        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-vg__nota">
           Sube el archivo completo del día: si ya lo habías subido, no se duplica nada; si cambió, se guarda qué cambió.
           El Excel con colores (.xlsx) todavía no se puede leer: guárdalo como CSV.
         </p>
-        <Enviar />
+        <div><Enviar /></div>
       </form>
       {local && <Aviso>{local}</Aviso>}
       <Salida estado={estado} />
@@ -151,93 +137,76 @@ function FormaSubir({ accion }: { accion: AccionPrograma }) {
 export function Salida({ estado }: { estado: ResultadoPrograma }) {
   if (estado && !estado.ok) return <AvisoResultado estado={estado} />;
   if (estado?.ok) return <Resultado resumen={estado.resumen} />;
-  return <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{VACIO}</p>;
+  return <p className="rv-vg__nota" data-testid="vacio">{VACIO}</p>;
 }
 
 function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
   const g = r.guardado;
+  const columnas: readonly ColumnaBase<DiaPrograma>[] = [
+    { id: 'dia', titulo: 'Día', principal: true, celda: (d) => dia(d.fecha) },
+    { id: 'filas', titulo: 'Filas', alinear: 'der', celda: (d) => miles(d.filas) },
+    { id: 'sincaja', titulo: 'Sin caja', alinear: 'der', celda: (d) => miles(d.sinCaja) },
+    { id: 'conaviso', titulo: 'Con aviso', alinear: 'der', celda: (d) => miles(d.conAviso) },
+  ];
   return (
-    <div className="space-y-4" aria-live="polite">
-      <div className="space-y-1.5">
-        <TituloRecuadro nivel="h3" info="vigia_programa.entendi">Qué entendí</TituloRecuadro>
-        <p className="text-[13px]">
-          Leí {miles(r.leidas)} {plural(r.leidas, 'fila', 'filas')} de {miles(r.dias)} {plural(r.dias, 'día', 'días')} en la terminal {r.terminal}.
-          {r.totalDescartadas > 0
-            ? ` ${miles(r.totalDescartadas)} no se pudieron leer.`
-            : ' Todas se pudieron leer.'}
-        </p>
-        <p className="text-[13px]" data-testid="guardado">
-          {g.yaCargado
-            ? 'Este archivo ya estaba cargado: no cambié nada.'
-            : `Guardé ${miles(g.nuevas)} ${plural(g.nuevas, 'fila nueva', 'filas nuevas')}, ${miles(g.cambiadas)} ${plural(g.cambiadas, 'con cambios', 'con cambios')} y ${miles(g.sinCambio)} sin cambios.`
-            + (g.desaparecidas > 0 ? ` ${miles(g.desaparecidas)} ${plural(g.desaparecidas, 'ya no viene', 'ya no vienen')} en el archivo: las dejé ocultas, no las borré.` : '')}
-        </p>
-        {r.sinFecha > 0 ? (
-          <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
-            {miles(r.sinFecha)} {plural(r.sinFecha, 'fila', 'filas')} no tenían fecha de sección y no se guardaron.
+    <div className="rv-vg__pila" aria-live="polite">
+      <Tarjeta titulo="Qué entendí" info="vigia_programa.entendi">
+        <div className="rv-vg__pila--s">
+          <p>
+            Leí {miles(r.leidas)} {plural(r.leidas, 'fila', 'filas')} de {miles(r.dias)} {plural(r.dias, 'día', 'días')} en la terminal {r.terminal}.
+            {r.totalDescartadas > 0
+              ? ` ${miles(r.totalDescartadas)} no se pudieron leer.`
+              : ' Todas se pudieron leer.'}
           </p>
-        ) : null}
-      </div>
+          <p data-testid="guardado">
+            {g.yaCargado
+              ? 'Este archivo ya estaba cargado: no cambié nada.'
+              : `Guardé ${miles(g.nuevas)} ${plural(g.nuevas, 'fila nueva', 'filas nuevas')}, ${miles(g.cambiadas)} ${plural(g.cambiadas, 'con cambios', 'con cambios')} y ${miles(g.sinCambio)} sin cambios.`
+              + (g.desaparecidas > 0 ? ` ${miles(g.desaparecidas)} ${plural(g.desaparecidas, 'ya no viene', 'ya no vienen')} en el archivo: las dejé ocultas, no las borré.` : '')}
+          </p>
+          {r.sinFecha > 0 ? (
+            <p className="rv-vg__nota" data-tono="bad">
+              {miles(r.sinFecha)} {plural(r.sinFecha, 'fila', 'filas')} no tenían fecha de sección y no se guardaron.
+            </p>
+          ) : null}
+        </div>
+      </Tarjeta>
 
       {r.avisosArchivo.length > 0 ? (
-        <ul className="text-[12px] space-y-1 list-disc pl-5" aria-label="Avisos del archivo">
+        <ul className="rv-vg__bullets" aria-label="Avisos del archivo">
           {r.avisosArchivo.map((a, i) => <li key={i}>{a}</li>)}
         </ul>
       ) : null}
 
       {r.descartadas.length > 0 ? (
-        <div className="space-y-1.5">
-          <TituloRecuadro nivel="h3" info="vigia_programa.descarte">Lo que descarté</TituloRecuadro>
-          <ul className="text-[12px] space-y-0.5 list-disc pl-5">
+        <Tarjeta titulo="Lo que descarté" info="vigia_programa.descarte">
+          <ul className="rv-vg__bullets">
             {r.descartadas.map((d) => <li key={d.lineaCsv}>Línea {miles(d.lineaCsv)} del archivo: {MOTIVOS[d.motivo] ?? 'no se pudo entender'}.</li>)}
           </ul>
           {r.totalDescartadas > r.descartadas.length ? (
-            <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Y {miles(r.totalDescartadas - r.descartadas.length)} más.</p>
+            <p className="rv-vg__micro">Y {miles(r.totalDescartadas - r.descartadas.length)} más.</p>
           ) : null}
-        </div>
+        </Tarjeta>
       ) : null}
 
-      <div className="space-y-1.5">
-        <TituloRecuadro nivel="h3" info="vigia_programa.por_dia">Por día</TituloRecuadro>
-        <div className="overflow-x-auto">
-          <table aria-label="Por día" className="w-full text-[12px]">
-            <thead>
-              <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                <th scope="col" className="font-medium py-1 pr-3">Día</th>
-                <th scope="col" className="font-medium py-1 pr-3 text-right">Filas</th>
-                <th scope="col" className="font-medium py-1 pr-3 text-right">Sin caja</th>
-                <th scope="col" className="font-medium py-1 text-right">Con aviso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.porDia.map((d) => (
-                <tr key={d.fecha} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                  <td className="py-1 pr-3">{dia(d.fecha)}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums">{miles(d.filas)}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums">{miles(d.sinCaja)}</td>
-                  <td className="py-1 text-right tabular-nums">{miles(d.conAviso)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <Tarjeta titulo="Por día" info="vigia_programa.por_dia">
+        <TablaBase etiqueta="Por día" columnas={columnas} filas={r.porDia} idFila={(d) => d.fecha} densa tarjetaMovil />
+      </Tarjeta>
 
       {r.filasConAviso.length > 0 ? (
-        <div className="space-y-1.5">
-          <TituloRecuadro nivel="h3" info="vigia_programa.revisar">Filas que conviene revisar</TituloRecuadro>
-          <ul className="text-[12px] space-y-1">
+        <Tarjeta titulo="Filas que conviene revisar" info="vigia_programa.revisar">
+          <ul className="rv-vg__lista rv-vg__nota">
             {r.filasConAviso.map((f) => (
               <li key={f.lineaCsv}>
-                <span className="font-medium">Línea {miles(f.lineaCsv)}{f.fecha ? ` (${dia(f.fecha)})` : ''}:</span>{' '}
+                <span className="rv-vg__medio">Línea {miles(f.lineaCsv)}{f.fecha ? ` (${dia(f.fecha)})` : ''}:</span>{' '}
                 {f.avisos.join(' ')}
               </li>
             ))}
           </ul>
           {r.totalConAviso > r.filasConAviso.length ? (
-            <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Y {miles(r.totalConAviso - r.filasConAviso.length)} filas más con aviso.</p>
+            <p className="rv-vg__micro">Y {miles(r.totalConAviso - r.filasConAviso.length)} filas más con aviso.</p>
           ) : null}
-        </div>
+        </Tarjeta>
       ) : null}
     </div>
   );
@@ -253,28 +222,27 @@ export function VistaProgramaVigia({ sufijo, puedeEscribir, vigiaEncendido, acci
 }) {
   return (
     <MarcoPagina titulo="Programa de despacho" apoyo="Sube el archivo del programa de despacho para que el Vigía avise a tus clientes.">
-      <nav aria-label="Volver" className="text-[12px]">
-        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
+      <nav aria-label="Volver">
+        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">Volver a servicio al cliente</Link>
       </nav>
 
       {vigiaEncendido === false ? (
         <Aviso>El Vigía está apagado: el programa se guarda, pero no se avisa a ningún cliente hasta que el dueño lo encienda.</Aviso>
       ) : null}
       {vigiaEncendido === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude confirmar si el Vigía está encendido.</p>
+        <p className="rv-vg__nota">No pude confirmar si el Vigía está encendido.</p>
       ) : null}
 
-      <section className="card p-4 space-y-3" aria-labelledby="programa-subir">
-        <TituloRecuadro id="programa-subir" info="vigia_programa.subir">Subir el programa del día</TituloRecuadro>
+      <Tarjeta titulo="Subir el programa del día" info="vigia_programa.subir">
         {puedeEscribir ? (
           <FormaSubir accion={accion} />
         ) : (
-          <>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota sube el programa. Tú puedes ver esta pantalla pero no cargar archivos.</p>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{VACIO}</p>
-          </>
+          <div className="rv-vg__pila">
+            <p className="rv-vg__nota">Solo el dueño o el encargado de la flota sube el programa. Tú puedes ver esta pantalla pero no cargar archivos.</p>
+            <p className="rv-vg__nota" data-testid="vacio">{VACIO}</p>
+          </div>
         )}
-      </section>
+      </Tarjeta>
     </MarcoPagina>
   );
 }

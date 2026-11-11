@@ -1,27 +1,33 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import LogoV2 from './logo-v2';
+import LogoV2, { PROPORCION_LOGO } from './logo-v2';
 import { crearControlador, type EstadoCarga } from './controlador-carga';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EL TELÓN DE CARGA (ESTILO-LIKIDA §9; patrón de `~/vexa`: arranque-limpio) — SOLO en la primera carga de la sesión.
+// EL TELÓN DE CARGA (ESTILO-LIKIDA §9; patrón de `~/vexa`: arranque-limpio) — IGUAL A ROVAQ desde el 10-nov-2026: en la carga, en la
+// recarga Y en las navegaciones internas lentas (> 250 ms, mínimo 400 ms visible).
 //
 // UNA capa fija (`inset:0; z-index:2000; background:var(--carga-fondo)`) que tapa sidebar, topbar y contenido; SOLO el logo de
-// Likida centrado que respira. Sin texto visible (`role=status aria-busy aria-label`), sin spinner, sin barra, sin contador.
-// Decisión de Javier (31-oct): aparece una vez por sesión del navegador (`sessionStorage`, con try/catch). Las navegaciones internas
-// y las tarjetas que esperan datos muestran ESQUELETOS con la forma real (`EsqPagina`, `Esq*`), no el telón.
+// Likida centrado (140 px de ancho) que respira. Sin texto visible (`role=status aria-busy aria-label`), sin spinner, sin barra, sin
+// contador. Con prefers-reduced-motion el logo queda quieto (carga.css).
 //
 // CSP / SCRIPT_TEMA: no hay script inline nuevo (el hash de `SCRIPT_TEMA` no se toca y la CSP con nonce no cambia). El primer
 // pintado lo da el SERVIDOR: la capa viaja en el HTML con `data-estado="inicial"` y su CSS (`ui-v2/carga.css`) la muestra desde
-// el primer fotograma, sin esperar a React. Este controlador cliente solo la SUELTA:
+// el primer fotograma, sin esperar a React. Este controlador cliente la SUELTA y la vuelve a levantar (`data-estado="nav"`):
 //   · primera carga de la sesión: se libera cuando, de forma continua durante 600 ms, el documento terminó de llegar y no hay
 //     pantalla de carga de página en el DOM, y la capa lleva ≥400 ms visible; sale con fundido de 170 ms;
 //   · recarga dentro de la misma sesión: se libera en cuanto el contenido está listo (sin mínimo ni ventana);
-//   · seguro de 20 s: se retira y deja «No disponible ahora. No es cero» con «Reintentar».
+//   · navegación interna: si la pantalla de carga de página sigue en el DOM pasados 250 ms, la capa vuelve; se suelta cuando
+//     desaparece (150 ms estables, ≥400 ms visible);
+//   · seguro de 45 s: se retira y deja «No disponible ahora. No es cero» con «Reintentar».
 // La condición se lee del DOM (no del registro de React): con respuestas lentas el HTML llega por partes y la frontera
 // Suspense aún pendiente no se hidrata, pero el DOM del servidor sí trae la pantalla de carga.
 // ═══════════════════════════════════════════════════════════════════════════
+
+/** Logo del telón: 140 px de ANCHO como Rovaq (`RovaqLogo ancho={140}`); antes 40 px de alto (~195 px de ancho). */
+export const ANCHO_LOGO_CARGA = 140;
+export const ALTO_LOGO_CARGA = ANCHO_LOGO_CARGA / PROPORCION_LOGO.horizontal;
 
 /** Clave de sessionStorage: ya se mostró el telón en esta sesión del navegador. */
 export const CLAVE_TELON = 'likida.telon.visto';
@@ -53,7 +59,7 @@ export default function CapaCarga() {
       primeraVez: leerPrimeraVez(),
       marcarVista: anotarVista,
       poner: (e: EstadoCarga) => {
-        const visible = e === 'inicial';
+        const visible = e === 'inicial' || e === 'nav';
         const activo = document.activeElement;
         if (visible && activo instanceof HTMLElement && activo !== document.body) foco = activo;
         if (!visible && foco) {
@@ -61,7 +67,7 @@ export default function CapaCarga() {
           // Se restaura tras pintar el marco visible; solo si el foco no fue a otro sitio y el elemento sigue en el documento.
           queueMicrotask(() => { if (f.isConnected && (document.activeElement === document.body || document.activeElement === null)) f.focus({ preventScroll: true }); });
         }
-        el.dataset.estado = e === 'tope' ? 'oculta' : e; el.setAttribute('aria-busy', e === 'inicial' ? 'true' : 'false'); err.hidden = e !== 'tope'; },
+        el.dataset.estado = e === 'tope' ? 'oculta' : e; el.setAttribute('aria-busy', visible ? 'true' : 'false'); err.hidden = e !== 'tope'; },
       ahora: () => Date.now(),
       esperar: (f, ms) => window.setTimeout(f, ms),
       cancelar: (id) => window.clearTimeout(id),
@@ -84,7 +90,7 @@ export default function CapaCarga() {
     <>
       {/* `data-estado="inicial"` viaja en el HTML del servidor: visible desde el primer fotograma, sin script inline. */}
       <div ref={capa} id="rv-carga" className="rv-carga" data-estado="inicial" role="status" aria-busy="true" aria-label="Cargando">
-        <LogoV2 alto={40} className="rv-respira" />
+        <LogoV2 alto={ALTO_LOGO_CARGA} className="rv-respira" />
       </div>
       <div ref={error} className="rv-carga-error" role="alert" hidden>
         <p><strong>No disponible ahora.</strong> No es cero: la consulta no respondió a tiempo.</p>

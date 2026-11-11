@@ -1,0 +1,22 @@
+/* Piezas mínimas de las pantallas de dinero de /admin (Consumo, Planes y cobro, Facturas, Cobranza, Crecimiento, Estudio).
+   Archivo propio, como pide el plan: nada de editar componentes.css ni paginas.css. Solo tokens definidos, sin movimiento. */
+[data-ui="v2"] .adm-din-nota { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+[data-ui="v2"] .adm-din-nota:last-child { margin-bottom: 0; }
+[data-ui="v2"] .adm-din-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-din-lista > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+[data-ui="v2"] .adm-din-lista > li:first-child { border-top: 0; padding-top: 0; }
+[data-ui="v2"] .adm-din-lista > li > span { color: var(--muted); }
+[data-ui="v2"] .adm-din-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+[data-ui="v2"] .adm-din-forma { display: flex; flex-direction: column; gap: 12px; max-width: 520px; }
+[data-ui="v2"] .adm-din-rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+[data-ui="v2"] .adm-din-plan { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+[data-ui="v2"] .adm-din-plan__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
+[data-ui="v2"] .adm-din-plan__precio { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .adm-din-plan__precio small { font-size: 12px; font-weight: 400; color: var(--muted); }
+[data-ui="v2"] .adm-din-sub { display: block; font-size: 11px; color: var(--muted); }
+[data-ui="v2"] .adm-din-pre { margin: 8px 0; padding: 8px 12px; max-height: 256px; overflow-y: auto; white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.5; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
+[data-ui="v2"] .adm-din-bloque { margin: 8px 0; padding: 8px 12px; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
+[data-ui="v2"] .adm-din-bloque > b { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+[data-ui="v2"] .adm-din-bloque > p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+[data-ui="v2"] .adm-din-video { width: 100%; max-height: 160px; border-radius: 8px; }
+[data-ui="v2"] .adm-din-miniatura { display: block; width: 100%; height: 80px; object-fit: cover; border-radius: 8px; }

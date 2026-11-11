@@ -112,7 +112,7 @@ export const ESCENARIOS_QA: EscenarioQaDef[] = [
     nombre: 'El del guion del demo',
     descripcion:
       'Las fotos contra el anticipo y la política del guion real del demo ($10,600; diésel tope $4,000). ' +
-      'Responde: ¿el camino real —OCR de verdad sobre fotos de verdad— llega a lo que el demo enseña?',
+      'Responde: ¿el camino real, con lectura de fotos de verdad, llega a lo que el demo enseña?',
     anticipoDefault: 10_600,          // el anticipo del guion (escenarios-catalogo.md §2)
     rfcEmpresaDefault: 'GMX0902279I1', // el RFC de la flota demo (api/demo/route.ts, empresaRfc)
     rutaDefault: { origen: 'Silao', destino: 'Nuevo Laredo' }, // la ruta del guion ('Silao-Laredo')
@@ -141,9 +141,9 @@ export const ESCENARIOS_QA: EscenarioQaDef[] = [
     id: 'foto_duplicada',
     nombre: 'La misma foto, dos veces',
     descripcion:
-      'La primera foto se manda otra vez, byte a byte, desde un SEGUNDO chofer del mismo tenant. ' +
-      'Responde: ¿se puede cobrar dos veces el mismo ticket? El pre-check del processor solo mira ' +
-      'un viaje, así que cruzando de viaje el que tiene que rechazar es el índice de la base.',
+      'La primera foto se manda otra vez, idéntica, desde un SEGUNDO chofer de la misma flota. ' +
+      'Responde: ¿se puede cobrar dos veces el mismo ticket? La revisión previa solo mira ' +
+      'un viaje, así que si cambia de viaje, quien tiene que rechazarlo es la base de datos.',
     anticipoDefault: null,   // el mismo criterio que "feliz": el monto lo pone Javier
     rfcEmpresaDefault: 'GMX0902279I1',
     rutaDefault: { origen: 'Silao', destino: 'Nuevo Laredo' },
@@ -162,9 +162,9 @@ export const ESCENARIOS_QA: EscenarioQaDef[] = [
     nombre: 'El ticket que llegó tarde',
     descripcion:
       'Se mandan todas las fotos MENOS la última, el chofer cierra («listo, ya subí todo»), y la última ' +
-      'foto llega DESPUÉS de la liquidación. Responde el invariante #4: ¿la liquidación queda intacta y el ' +
-      'ticket tardío aparece en huérfanos con su monto — o se pierde en silencio? La última foto elegida ' +
-      'NECESITA monto en su verdad-de-terreno: es la vara con la que se busca el huérfano.',
+      'foto llega DESPUÉS de la liquidación. Responde: ¿la liquidación queda intacta y el ' +
+      'ticket tardío aparece como pendiente de asignar con su monto, o se pierde en silencio? La última foto elegida ' +
+      'NECESITA monto en la ficha de verdad: es la vara con la que se busca el ticket tardío.',
     anticipoDefault: null,   // mismo criterio que "feliz": el monto lo pone Javier
     rfcEmpresaDefault: 'GMX0902279I1',
     rutaDefault: { origen: 'Silao', destino: 'Nuevo Laredo' },

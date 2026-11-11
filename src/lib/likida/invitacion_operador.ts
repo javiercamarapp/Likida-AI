@@ -54,8 +54,19 @@ export interface ResultadoInvitacion {
   /** Cuántos pidieron invitarse y ya tenían invitación (o no son de la flota,
    *  están de baja, o caen fuera del patio del jefe): no se tocan. */
   saltadas: number;
+  /** De `enviadas`, cuántas Meta NO aceptó todavía: quedaron en la cola de reintento (`wa_outbox`) y salen solas. «Enviada» sin
+   *  este matiz era un éxito falso. */
+  enCola?: number;
   error?: string;
 }
+
+/** ¿Hay un número de WhatsApp Business conectado? Sin esto ningún envío puede salir (ni a Meta ni a la cola). */
+export function whatsappConfigurado(): boolean {
+  return Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
+}
+
+export const ERROR_WHATSAPP_NO_CONECTADO =
+  'No se envió ninguna invitación: WhatsApp no está conectado en esta cuenta. Falta conectar el número de WhatsApp Business de tu empresa; pídeselo al equipo de Likida y vuelve a intentar.';
 
 type FilaOperador = { id: string; nombre: string; telefono: string };
 
@@ -258,6 +269,9 @@ export async function invitarOperadores(
     modo = { tipo: 'pendientes' };
   }
 
+  // Sin WhatsApp conectado nada puede salir: se dice ANTES de reclamar a nadie (reclamar y soltar dejaba a los choferes en un limbo).
+  if (!whatsappConfigurado()) return { ...vacio, error: ERROR_WHATSAPP_NO_CONECTADO };
+
   let reclamadas: FilaOperador[];
   let flota: string;
   try {
@@ -292,6 +306,7 @@ export async function invitarOperadores(
       if (r.encolado) {
         await marcarEnviada(tenantId, op.id, 'plantilla', marcaDelReclamo);
         resultado.enviadas += 1;
+        resultado.enCola = (resultado.enCola ?? 0) + 1;
         return;
       }
       // Reintentable (429, bloqueo temporal, red): se suelta SIN marcar fallo, para
@@ -357,7 +372,7 @@ export async function reintentarFallidas(
  */
 export function mensajeDeInvitacion(r: ResultadoInvitacion):
   | { ok: true; mensaje: string; fallidas: FalloInvitacion[] }
-  | { ok: false; error: string } {
+  | { ok: false; error: string; fallidas?: FalloInvitacion[] } {
   if (r.error) return { ok: false, error: r.error };
   if (r.enviadas === 0 && r.fallidas.length === 0) {
     return {
@@ -367,7 +382,17 @@ export function mensajeDeInvitacion(r: ResultadoInvitacion):
         : 'No hay operadores pendientes de invitar.',
     };
   }
-  const partes = [`Se enviaron ${r.enviadas} ${r.enviadas === 1 ? 'invitación' : 'invitaciones'}`];
+  const enCola = Math.min(r.enCola ?? 0, r.enviadas);
+  const aceptadas = r.enviadas - enCola;
+  // Ninguna salió: es un FALLO, no un «Se enviaron 0» en verde.
+  if (r.enviadas === 0) {
+    const n = r.fallidas.length;
+    const resto = r.saltadas > 0 ? ` ${r.saltadas} ya estaban invitados.` : '';
+    return { ok: false, error: `No salió ${n === 1 ? 'la invitación' : `ninguna de las ${n} invitaciones`}; revisa el motivo de cada una.${resto}`, fallidas: r.fallidas };
+  }
+  const partes: string[] = [];
+  if (aceptadas > 0) partes.push(`Se enviaron ${aceptadas} ${aceptadas === 1 ? 'invitación' : 'invitaciones'}`);
+  if (enCola > 0) partes.push(`${enCola} ${enCola === 1 ? 'quedó' : 'quedaron'} en cola de WhatsApp (salen solas en cuanto Meta responda; aún no están entregadas)`);
   if (r.fallidas.length > 0) partes.push(`${r.fallidas.length} no ${r.fallidas.length === 1 ? 'salió' : 'salieron'}`);
   if (r.saltadas > 0) partes.push(`${r.saltadas} ya estaban invitados`);
   let mensaje = `${partes.join('; ')}.`;

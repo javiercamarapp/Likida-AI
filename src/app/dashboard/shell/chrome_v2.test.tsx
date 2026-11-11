@@ -52,9 +52,12 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).toContain('<p>contenido</p>');
   });
 
-  it('el ítem activo lleva aria-current="page" y es uno solo', () => {
-    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+  it('el ítem activo del menú lleva aria-current="page" y es uno solo; la pestaña activa de su entrada, otro', () => {
+    // El menú (`rv-item`) tiene UN activo: la entrada «Conciliación de peajes». Aparte, la barra de pestañas del hub (respaldo,
+    // porque el contenido de la prueba no trae `MarcoPagina`) marca su pestaña «Conciliación».
+    expect(html.match(/<a[^>]*rv-item[^>]*aria-current="page"/g)).toHaveLength(1);
     expect(html).toMatch(/aria-current="page"[^>]*>(?:(?!<\/a>).)*Conciliación de peajes/);
+    expect(html.match(/<a[^>]*rv-tabs__tab[^>]*aria-current="page"/g)).toHaveLength(1);
   });
 
   it('A4/A5 están en el menú con su enlace real (hoy el perfil los tiene encendidos)', () => {
@@ -84,14 +87,14 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).toContain('data-tour="nav-mas"');
   });
 
-  it('«Guía» no se pinta cuando su menú no tiene filas (nómina) y sí con filas (dueño); la fecha vive solo en el shell', () => {
+  it('«Guía» no se pinta cuando su menú no tiene filas (nómina) y sí con filas (dueño); la fecha de hoy solo vive en la cabecera móvil', () => {
     const nomina = pintar('nomina');
     expect(nomina).not.toContain('>Guía<');
     expect(nomina).not.toContain('aria-label="Guía"');
     expect(html).toContain('>Guía<');
     expect(html).toContain('aria-label="Guía"'); // la de la cabecera móvil, solo icono
     expect(html).toContain('class="rv-cab-movil__fecha"');
-    expect(html).toContain('class="rv-cab-esc__fecha"');
+    expect(html).not.toContain('rv-cab-esc__fecha'); // retirada de la topbar de escritorio (igual que Rovaq)
   });
 
   it('ninguna ancla data-tour se repite y la barra móvil va DESPUÉS del sidebar (los localizadores que toman el primero ven el del sidebar)', () => {
@@ -117,22 +120,23 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html.match(/class="rv-grupo" data-abierto/g)).toHaveLength(1);
   });
 
-  it('el pie es UN solo bloque: la tarjeta de cuenta (monograma, nombre, rol, salir); sin tema segmentado ni Notificaciones apilados', () => {
-    const pie = html.slice(html.indexOf('class="rv-pie"'), html.indexOf('</aside>'));
+  it('el pie es el PieSidebar compartido: organización, tema e idioma y la tarjeta de cuenta; «Avisos» solo con rol que los ve', () => {
+    const pie = html.slice(html.indexOf('class="rv-pie rv-ps"'), html.indexOf('</aside>'));
+    expect(pie).toContain('Organización');
+    expect(pie).toContain('data-conmutador="tema"');
+    expect(pie).toContain('data-conmutador="idioma"');
     expect(pie).toContain('aria-haspopup="menu"');
     expect(pie).toContain('aria-label="Cerrar sesión"');
-    expect(pie).not.toContain('role="radiogroup"');
-    expect(pie).not.toContain('Notificaciones');
-    expect(pie).not.toContain('rv-contador');
-    expect(pie.match(/<a /g) ?? []).toHaveLength(0); // sin filas de enlace: perfil, ayuda y demás viven en el menú de la tarjeta
+    expect(pie).not.toContain('Administración de Likida'); // solo el superadmin ve el acceso cruzado
   });
 
-  it('la topbar de escritorio no tiene miga de pan: trae «Guía», Notificaciones y la fecha', () => {
+  it('la topbar de escritorio queda como la de Rovaq: plegar y «Guía»; sin campana ni fecha, sin miga de pan', () => {
     const top = html.slice(html.indexOf('<header class="rv-cab-esc"'), html.indexOf('</header>', html.indexOf('<header class="rv-cab-esc"')));
     expect(top).not.toContain('rv-migas');
+    expect(top).toContain('rv-cab-esc__plegar');
     expect(top).toContain('>Guía<');
-    expect(top).toContain('aria-label="Notificaciones"');
-    expect(top).toContain('class="rv-cab-esc__fecha"');
+    expect(top).not.toContain('Notificaciones');
+    expect(top).not.toContain('rv-cab-esc__fecha');
   });
 
   it('«Puesta en marcha <6/6» vive en el pie y no se duplica en el acordeón', () => {
@@ -153,8 +157,11 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
   });
 
   it('contrato e2e: UNA sola navegación visible a la vez (el sidebar y la barra móvil se excluyen por CSS) y la hoja se llama «Menú completo»', () => {
-    // En el HTML hay dos landmarks: el del sidebar (≥768) y el de la barra inferior (<768). `shell.css` los hace disjuntos (display: none).
-    expect(html.match(/<nav/g)).toHaveLength(2);
+    // En el HTML hay dos landmarks de NAVEGACIÓN: el del sidebar (≥768) y el de la barra inferior (<768). `shell.css` los hace disjuntos
+    // (display: none). La barra de pestañas del hub es un tercer <nav> con su propia etiqueta («Secciones de …»): es contexto de la
+    // pantalla, no navegación principal, y existe una sola vez.
+    expect(html.match(/<nav/g)).toHaveLength(3);
+    expect(html.match(/aria-label="Secciones de [^"]+"/g)).toHaveLength(1);
     expect(html.match(/aria-label="Navegación principal"/g)).toHaveLength(1);
     expect(html.match(/aria-label="Navegación móvil"/g)).toHaveLength(1);
     expect(html).toContain('>Menú completo</h2>');

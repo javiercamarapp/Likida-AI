@@ -1,6 +1,4 @@
-import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
-import { Stamp } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -11,8 +9,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
-import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
-import { CamposSistema, CampoSelect, CampoTexto, Fieldset } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BotonEnlace, CamposSistema, CampoSelect, CampoTexto, Fieldset, FormaConAviso, Tarjeta, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import './contador.css';
 
 /**
  * TIMBRADO (0226) — el perfil del EMISOR y el estado del PAC, en el panel del
@@ -100,12 +98,8 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
   const modoActual = perfil?.modo === 'produccion' ? 'produccion' : 'sandbox';
 
   return (
-    <section className="space-y-3">
-      <header className="flex items-center gap-2">
-        <Stamp size={15} style={{ color: 'var(--marca)' }} aria-hidden />
-        <h2 className="font-display text-[15px] font-semibold">Timbrado (Carta Porte vía PAC)</h2>
-      </header>
-
+    <Tarjeta titulo="Timbrado (Carta Porte vía PAC)">
+      <div className="rv-cont__lista">
       {pac.configurado ? (
         <CamposSistema etiqueta="Estado del PAC" campos={[
           { etiqueta: 'PAC conectado', valor: String(pac.proveedor ?? '').toUpperCase() },
@@ -113,7 +107,7 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
           { etiqueta: 'CSD de la flota', valor: 'En la bóveda del PAC', nota: 'Se carga en SU portal, nunca en Likida.' },
         ]} />
       ) : (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-cont__linea">
           Sin PAC configurado: el timbrado está apagado. Se enciende desde la configuración del servidor (contrato con el PAC y sus credenciales) — sin eso, Likida no timbra y jamás simula un timbre.
           {' '}El CSD de la flota vive en la bóveda del PAC (se carga en SU portal), nunca en Likida.
         </p>
@@ -123,20 +117,14 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
           el único acceso al timbre era el borrador de Carta Porte, que es del
           área `operacion` — o sea, la pantalla donde este rol rebota. Declarar
           el perfil aquí y no poder usarlo era la mitad de un flujo. */}
-      <p className="text-[12px]">
-        <Link href={`/dashboard/timbrado${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
-          Ir a la cola de Timbrado →
-        </Link>
-        <span style={{ color: 'var(--muted)' }}>
-          {' '}Ahí se emite el CFDI de cada viaje con su complemento. El borrador (los 37 datos y la
-          declaración de ruta) lo trabaja el jefe de tráfico en Carta Porte; emitirlo es de este lado.
-        </span>
+      <p className="rv-cont__linea">
+        <BotonEnlace href={`/dashboard/timbrado${sufijo}`} variante="secondary" tamano="sm">Ir a la cola de Timbrado</BotonEnlace>
+        {' '}Ahí se emite el CFDI de cada viaje con su complemento. El borrador (los 37 datos y la
+        declaración de ruta) lo trabaja el jefe de tráfico en Carta Porte; emitirlo es de este lado.
       </p>
 
       {!leyoOk ? (
-        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-          No se pudo leer el perfil guardado — reintenta antes de capturar encima.
-        </p>
+        <AvisoCompacto tono="warn" resumen="No se pudo leer el perfil guardado — reintenta antes de capturar encima." />
       ) : (
         <FormaConAviso accion={guardar} boton="Declarar mi perfil fiscal" columnas="md:grid-cols-1">
           <Fieldset leyenda="Emisor">
@@ -158,6 +146,7 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
           </Fieldset>
         </FormaConAviso>
       )}
-    </section>
+      </div>
+    </Tarjeta>
   );
 }

@@ -7,7 +7,7 @@ import { EsqPagina } from '../../ui-v2/componentes';
 import Cargando from '../../cargando';
 import Loading from '../loading';
 import { ChartState } from '../../ui-v2/graficas';
-import { anotarVista, CLAVE_TELON, leerPrimeraVez, MARCA_CARGA_PAGINA, PENDIENTE } from './capa-carga';
+import { ALTO_LOGO_CARGA, ANCHO_LOGO_CARGA, anotarVista, CLAVE_TELON, leerPrimeraVez, MARCA_CARGA_PAGINA, PENDIENTE } from './capa-carga';
 
 // La señal «hay una pantalla de carga de PÁGINA pendiente» es un atributo explícito de `cargando.tsx` (loading.tsx), no una
 // coincidencia de role/aria-label/clase: así una tarjeta en estado «cargando» (ChartState) jamás levanta la capa global ni se oculta.
@@ -24,7 +24,7 @@ describe('selector de la pantalla de carga de página contra el DOM real', () =>
     expect(renderToStaticMarkup(<Cargando />)).toContain(`${MARCA_CARGA_PAGINA.atributo}="${MARCA_CARGA_PAGINA.valor}"`);
   });
 
-  it('el esqueleto de la pantalla no lleva logo: el logo es del telón de la primera carga', () => {
+  it('el esqueleto de la pantalla no lleva logo: el logo es del telón', () => {
     expect(renderToStaticMarkup(<Loading />)).not.toContain('likida-respira');
   });
 
@@ -39,7 +39,7 @@ describe('selector de la pantalla de carga de página contra el DOM real', () =>
   it('el selector del controlador y el del CSS son el mismo atributo, sin :has (sin SyntaxError en navegadores viejos)', () => {
     expect(PENDIENTE).toBe(`.rv-contenido [${MARCA_CARGA_PAGINA.atributo}="${MARCA_CARGA_PAGINA.valor}"]`);
     expect(PENDIENTE).not.toContain(':has');
-    // El esqueleto de página YA NO se oculta: se ve en cada navegación (solo la primera carga de la sesión lo tapa el telón).
+    // El esqueleto de página no se oculta por CSS: lo tapa el telón (primera carga y navegaciones lentas) y se ve en las rápidas.
     expect(CSS).not.toContain(`[${MARCA_CARGA_PAGINA.atributo}="${MARCA_CARGA_PAGINA.valor}"] { visibility: hidden; }`);
   });
 });
@@ -65,5 +65,12 @@ describe('«solo la primera carga de la sesión» (sessionStorage con try/catch)
     vi.stubGlobal('window', { sessionStorage: { getItem: lanza, setItem: lanza } });
     expect(leerPrimeraVez()).toBe(true);
     expect(() => anotarVista()).not.toThrow();
+  });
+});
+
+describe('logo del telón: 140 px de ancho como Rovaq', () => {
+  it('el alto sale de la proporción del logo horizontal y el SVG mide 140 de ancho', () => {
+    expect(ANCHO_LOGO_CARGA).toBe(140);
+    expect(Math.round(ALTO_LOGO_CARGA * 100) / 100).toBeCloseTo(28.73, 1);
   });
 });

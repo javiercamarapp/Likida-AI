@@ -44,6 +44,7 @@ import { INFO_OPERACION } from './info-textos/operacion';
 import { INFO_ADMIN } from './info-textos/administracion';
 import { INFO_LIQUIDACION } from './info-textos/liquidacion';
 import { INFO_AGENTES } from './info-textos/agentes';
+import { INFO_AGENTES_CPV } from './info-textos/agentes_cpv';
 
 const PENDIENTE_FUENTE = PENDIENTE.PENDIENTE_FUENTE;
 
@@ -177,6 +178,7 @@ export const INFO = {
   ...INFO_ADMIN,
   ...INFO_LIQUIDACION,
   ...INFO_AGENTES,
+  ...INFO_AGENTES_CPV,
 } as const satisfies Record<string, InfoTexto>;
 
 export type InfoClave = keyof typeof INFO;

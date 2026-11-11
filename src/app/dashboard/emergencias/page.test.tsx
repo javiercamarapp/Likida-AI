@@ -61,6 +61,7 @@ vi.mock('@/lib/likida/emergencias', async (importar) => ({
 }));
 
 import { FormaConAviso } from '../../admin/ui/forma';
+import { AccionFila } from './accion-fila';
 import PaginaEmergencias from './page';
 
 /** Aplana el árbol ya renderizado a la lista, EN ORDEN, de todo elemento
@@ -85,9 +86,23 @@ function formasConAviso(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   return salida;
 }
 
+/** Las acciones de FILA (verificar, quitar): componentes `AccionFila` con la server action real en `accion`. */
+function accionesFila(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
+  if (Array.isArray(nodo)) { for (const hijo of nodo) accionesFila(hijo, salida); return salida; }
+  if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
+  if (nodo.type === AccionFila) salida.push(nodo);
+  accionesFila(nodo.props.children as ReactNode, salida);
+  return salida;
+}
+const deFila = (pagina: ReactNode, etiqueta: string) => {
+  const e = accionesFila(pagina).find((x) => x.props.etiqueta === etiqueta);
+  if (!e) throw new Error(`No hay una acción de fila «${etiqueta}»`);
+  return e;
+};
+
 const SP = Promise.resolve({});
 const fd = (campos: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(campos)) f.set(k, v); return f; };
-type Accion2 = (fd: FormData) => Promise<void>;
+type Accion2 = (previo: unknown, fd: FormData) => Promise<{ ok: string } | { error: string }>;
 type Accion1 = (previo: unknown, fd: FormData) => Promise<{ ok: string } | { error: string }>;
 
 beforeEach(() => {
@@ -113,6 +128,7 @@ it('una lectura caída no ofrece los formularios — capturar a ciegas invita a 
   dobles.listarProveedoresEmergencia.mockRejectedValueOnce(new Error('caída'));
   const pagina = await PaginaEmergencias({ searchParams: SP });
   expect(formularios(pagina)).toHaveLength(0);
+  expect(accionesFila(pagina)).toHaveLength(0);
 });
 
 /** Distingue las tres `<FormaConAviso>` por su texto de botón, que es
@@ -154,12 +170,11 @@ it('verificar proveedor: el botón "Verificado" invoca marcarProveedorVerificado
   ]);
   dobles.marcarProveedorVerificado.mockResolvedValue(undefined);
   const pagina = await PaginaEmergencias({ searchParams: SP });
-  const fs = formularios(pagina);
-  // Orden conocido con 1 proveedor SIN verificar: [verificar, borrar, ...].
-  const verificar = fs[0].props.action as Accion2;
-  await verificar(fd({ id: 'p-1', userId: 'OTRO-USUARIO' }));
+  const verificar = deFila(pagina, 'Verificado').props.accion as Accion2;
+  const r = await verificar(null, fd({ id: 'p-1', userId: 'OTRO-USUARIO' }));
   expect(dobles.marcarProveedorVerificado).toHaveBeenCalledWith('t-1', 'p-1', 'u-1');
   expect(dobles.revalidatePath).toHaveBeenCalledWith('/dashboard/emergencias');
+  expect(r).toEqual({ ok: expect.stringContaining('verificado') });
 });
 
 it('borrar proveedor: id viaja por el form, tenant por la sesión', async () => {
@@ -168,11 +183,53 @@ it('borrar proveedor: id viaja por el form, tenant por la sesión', async () => 
   ]);
   dobles.borrarProveedorEmergencia.mockResolvedValue(undefined);
   const pagina = await PaginaEmergencias({ searchParams: SP });
-  const fs = formularios(pagina);
-  // Ya verificado: no hay form de "verificar", el primero es "borrar".
-  const borrar = fs[0].props.action as Accion2;
-  await borrar(fd({ id: 'p-1' }));
+  // Ya verificado: no hay acción de "verificar", solo la de quitar.
+  expect(accionesFila(pagina).map((x) => x.props.etiqueta)).toEqual(['Quitar']);
+  const borrar = deFila(pagina, 'Quitar').props.accion as Accion2;
+  const r = await borrar(null, fd({ id: 'p-1' }));
   expect(dobles.borrarProveedorEmergencia).toHaveBeenCalledWith('t-1', 'p-1');
+  expect(r).toEqual({ ok: expect.stringContaining('quitado') });
+});
+
+// ── SEGURIDAD: antes, verificar y quitar devolvían `void` y se tragaban el error; quitar salía de un clic ────────────────────────
+it('un fallo al verificar, quitar un proveedor o quitar un contacto LLEGA a la pantalla (antes se tragaba)', async () => {
+  dobles.listarProveedoresEmergencia.mockResolvedValue([
+    { id: 'p-1', tipo: 'grua', nombre: 'G', telefono: '1', radioKm: null, verificadoEn: null, lat: null, lng: null, notas: null },
+  ]);
+  dobles.listarContactosEmergencia.mockResolvedValue([
+    { id: 'c-1', operadorId: 'op-1', operadorNombre: 'Juan', nombre: 'Ana', telefono: '1', parentesco: null, avisarSiLesionados: false },
+  ]);
+  dobles.marcarProveedorVerificado.mockRejectedValue(new Error('la base no contestó'));
+  dobles.borrarProveedorEmergencia.mockRejectedValue(new Error('la base no contestó'));
+  dobles.borrarContactoEmergencia.mockRejectedValue(new Error('la base no contestó'));
+  const pagina = await PaginaEmergencias({ searchParams: SP });
+  const quitar = accionesFila(pagina).filter((x) => x.props.etiqueta === 'Quitar');
+  expect(quitar).toHaveLength(2);
+  for (const a of [deFila(pagina, 'Verificado'), ...quitar]) {
+    const r = await (a.props.accion as Accion2)(null, fd({ id: 'x' }));
+    expect(r).toHaveProperty('error');
+    expect((r as { error: string }).error).not.toBe('');
+  }
+  expect(dobles.revalidatePath).not.toHaveBeenCalled();
+});
+
+it('quitar un proveedor o un contacto pide confirmación con su alcance; verificar (que no corta nada) no', async () => {
+  dobles.listarProveedoresEmergencia.mockResolvedValue([
+    { id: 'p-1', tipo: 'grua', nombre: 'Grúas García', telefono: '1', radioKm: null, verificadoEn: null, lat: null, lng: null, notas: null },
+  ]);
+  dobles.listarContactosEmergencia.mockResolvedValue([
+    { id: 'c-1', operadorId: 'op-1', operadorNombre: 'Juan', nombre: 'Ana', telefono: '1', parentesco: null, avisarSiLesionados: true },
+  ]);
+  const pagina = await PaginaEmergencias({ searchParams: SP });
+  const quitar = accionesFila(pagina).filter((x) => x.props.etiqueta === 'Quitar');
+  expect(quitar).toHaveLength(2);
+  for (const q of quitar) {
+    const c = q.props.confirmar as { titulo: string; descripcion: string; etiquetaConfirmar: string };
+    expect(c.titulo).toMatch(/Quitar a /);
+    expect(c.descripcion.length).toBeGreaterThan(40);
+    expect(q.props.tono).toBe('peligro');
+  }
+  expect(deFila(pagina, 'Verificado').props.confirmar).toBeUndefined();
 });
 
 it('alta de contacto: manda el tenant de la SESIÓN', async () => {
@@ -192,10 +249,10 @@ it('borrar contacto: id viaja por el form, tenant por la sesión', async () => {
   ]);
   dobles.borrarContactoEmergencia.mockResolvedValue(undefined);
   const pagina = await PaginaEmergencias({ searchParams: SP });
-  const fs = formularios(pagina);
-  const borrarContacto = fs.at(-1)!.props.action as Accion2;
-  await borrarContacto(fd({ id: 'c-1' }));
+  const borrarContacto = deFila(pagina, 'Quitar').props.accion as Accion2;
+  const r = await borrarContacto(null, fd({ id: 'c-1' }));
   expect(dobles.borrarContactoEmergencia).toHaveBeenCalledWith('t-1', 'c-1');
+  expect(r).toEqual({ ok: 'Contacto quitado.' });
 });
 
 it.each(['contador', 'vendedor'])('la puerta compartida `gate()` rechaza a %s en las seis acciones, aunque se invoquen directo', async (rol) => {
@@ -206,7 +263,8 @@ it.each(['contador', 'vendedor'])('la puerta compartida `gate()` rechaza a %s en
     { id: 'c-1', operadorId: 'op-1', operadorNombre: 'Juan', nombre: 'Ana', telefono: '1', parentesco: null, avisarSiLesionados: false },
   ]);
   const pagina = await PaginaEmergencias({ searchParams: SP });
-  const [verificar, borrarProv] = formularios(pagina).map((f) => f.props.action as Accion2);
+  const verificar = deFila(pagina, 'Verificado').props.accion as Accion2;
+  const [borrarProv, borrarCont] = accionesFila(pagina).filter((x) => x.props.etiqueta === 'Quitar').map((x) => x.props.accion as Accion2);
   const altaProveedor = accionDelBoton(pagina, /Agregar proveedor/);
   const guardarPolizaAction = accionDelBoton(pagina, /póliza/i);
 
@@ -216,10 +274,13 @@ it.each(['contador', 'vendedor'])('la puerta compartida `gate()` rechaza a %s en
     .toEqual({ error: 'Tu rol no puede editar el directorio de emergencia.' });
   expect(await guardarPolizaAction(null, fd({ aseguradora: 'x', numeroPoliza: 'x', telefonoSiniestros: 'x' })))
     .toEqual({ error: 'Tu rol no puede editar el directorio de emergencia.' });
-  await verificar(fd({ id: 'p-1' }));
-  await borrarProv(fd({ id: 'p-1' }));
+  const rechazo = { error: 'Tu rol no puede editar el directorio de emergencia.' };
+  expect(await verificar(null, fd({ id: 'p-1' }))).toEqual(rechazo);
+  expect(await borrarProv(null, fd({ id: 'p-1' }))).toEqual(rechazo);
+  expect(await borrarCont(null, fd({ id: 'c-1' }))).toEqual(rechazo);
   expect(dobles.crearProveedorEmergencia).not.toHaveBeenCalled();
   expect(dobles.guardarPoliza).not.toHaveBeenCalled();
   expect(dobles.marcarProveedorVerificado).not.toHaveBeenCalled();
   expect(dobles.borrarProveedorEmergencia).not.toHaveBeenCalled();
+  expect(dobles.borrarContactoEmergencia).not.toHaveBeenCalled();
 });

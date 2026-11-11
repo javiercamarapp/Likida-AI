@@ -31,11 +31,9 @@ describe('menú de la tarjeta de cuenta abierto', () => {
     expect(html).toMatch(/<a[^>]*role="menuitem"[^>]*href="\/cuenta/);
     expect(html).not.toMatch(/<a(?![^>]*role=)[^>]*href=/); // ningún enlace sin role dentro del menú
   });
-  it('ofrece el tema (claro / sistema / oscuro) dentro del menú: alcanzable también en riel y tablet', () => {
-    expect(html.match(/data-tema="(claro|sistema|oscuro)"/g)).toHaveLength(3);
-    expect(html.match(/role="menuitemradio"/g)).toHaveLength(3);
-    expect(html).toMatch(/role="menuitemradio" aria-checked="true"[^>]*data-tema="claro"/);
-    expect(html.match(/aria-checked="false"/g)).toHaveLength(2);
+  it('el tema ya NO vive en el menú: es el conmutador del pie (y un ciclo en el riel)', () => {
+    expect(html).not.toContain('data-tema=');
+    expect(html).not.toContain('menuitemradio');
   });
   it('usa el Popover y el MenuList del sistema de overlays, no un menú propio; ninguna clase propia choca con .rv-menu', () => {
     expect(html).toContain('class="rv-pop"');
@@ -43,6 +41,6 @@ describe('menú de la tarjeta de cuenta abierto', () => {
     expect(html).not.toContain('rv-menu__fila');
   });
   it('los ítems no son tabulables (foco programático con flechas)', () => {
-    expect(html.match(/tabindex="-1"/g)!.length).toBeGreaterThanOrEqual(5);
+    expect(html.match(/tabindex="-1"/g)!.length).toBeGreaterThanOrEqual(2);
   });
 });

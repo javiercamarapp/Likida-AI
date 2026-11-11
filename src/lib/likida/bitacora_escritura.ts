@@ -58,6 +58,10 @@ export type EntidadBitacora =
   // consume el tope diario que ese RFC tiene ante el SAT.
   | 'sat_descarga_config'
   | 'sat_descarga_solicitud'
+  // Lo que Likida le cobra a una flota (0052/0057): el plan (su price), la suscripción y la mensualidad por transferencia.
+  | 'plan'
+  | 'suscripcion'
+  | 'factura_saas'
   // 0243: la bandeja de conciliación. Ligar un CFDI a un gasto, archivarlo o
   // DESHACER cualquiera de las dos cosas son afirmaciones sobre dinero
   // deducible: «este comprobante ampara este gasto» es lo que el contador va a

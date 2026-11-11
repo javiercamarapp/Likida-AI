@@ -1,5 +1,5 @@
 // Seguro de la capa de carga SIN controlador (hidratación rota, chunk JS bloqueado, JS desactivado) y con cualquier preferencia
-// de movimiento: a los 20 s la capa se retira y el marco queda VISIBLE (no una página en blanco). El HTML es el del arnés estático
+// de movimiento: a los 45 s la capa se retira y el marco queda VISIBLE (no una página en blanco). El HTML es el del arnés estático
 // (el controlador cliente nunca corre aquí, que es exactamente el caso a cubrir) y NO se fuerza `data-estado="oculta"`.
 //   node scripts/ui2-calidad/carga-seguro.mjs [--trabajo=DIR]      (un Chromium; ~25 s; bajo heavy.sh)
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -47,7 +47,7 @@ await paginas[0][1].waitForTimeout(1000);
 const inicial = await paginas[0][1].evaluate(medir);
 let fallos = 0;
 if (!inicial.capaTapa || inicial.marcoVisible) { console.log('ROJO sanidad: a 1 s la capa debe tapar el marco', JSON.stringify(inicial)); fallos++; }
-await paginas[0][1].waitForTimeout(19800); // ≈ 20.8 s desde la carga
+await paginas[0][1].waitForTimeout(44800); // ≈ 45.8 s desde la carga
 for (const [c, p] of paginas) {
   const r = await p.evaluate(medir);
   const ok = r.marcoVisible && !r.capaTapa && r.golpeaEnMarco && !r.golpeaEnCapa;

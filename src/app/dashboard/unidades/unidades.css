@@ -1,0 +1,26 @@
+/* Unidades · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-un__tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 640px) { .rv-un__tres { grid-template-columns: minmax(0, 1fr); } }
+.rv-un__guardar { justify-self: start; }
+.rv-un__tenue { display: block; font-size: var(--t-micro); color: var(--faint); }
+.rv-un__mono { font-variant-numeric: tabular-nums; }
+.rv-un__placas { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rv-un__estados { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rv-un__gps { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-small); color: var(--muted); }
+.rv-un__gps[data-vivo] { color: var(--ok); }
+.rv-un__acciones { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.rv-un__acciones form { display: contents; }
+.rv-un__editor { display: grid; gap: 10px; }
+.rv-un__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-un__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rv-un__lista li { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rv-un__bloque { display: grid; gap: 10px; }
+.rv-un__fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: var(--t-body); }
+.rv-un__fila > .rv-un__fin { margin-left: auto; }
+.rv-un__apagado { color: var(--muted); }
+.rv-un__item { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rv-un__item-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: var(--t-body); }
+.rv-un__item-cab > .rv-un__fin { margin-left: auto; color: var(--muted); }
+.rv-un__detalle { display: grid; gap: 8px; font-size: var(--t-small); color: var(--muted); }
+.rv-un__taller { display: flex; flex-direction: column; gap: var(--ui-rhythm); margin-top: var(--ui-rhythm); min-width: 0; }
+@media (max-width: 767.98px) { .rv-un__taller { padding: 0 16px; } }

@@ -3,8 +3,8 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Wrench, CircleCheck, Ban, RotateCcw } from 'lucide-react';
-import { BotonConfirmar } from '../../admin/ui/confirmar';
-import { useNotificarResultado } from '../../admin/ui/notificaciones';
+import { Boton, BotonConfirmar, Icono, clasesBoton, useNotificarResultado } from '@/app/ui-v2/componentes';
+import './unidades.css';
 
 export type ResultadoEstado = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionEstado = (previo: ResultadoEstado, fd: FormData) => Promise<ResultadoEstado>;
@@ -31,39 +31,35 @@ export type AccionEstado = (previo: ResultadoEstado, fd: FormData) => Promise<Re
  */
 
 const DESTINOS = {
-  disponible: { etiqueta: 'Marcar disponible', Icono: CircleCheck, tono: 'var(--ok)' },
-  taller: { etiqueta: 'Mandar a taller', Icono: Wrench, tono: 'var(--warn)' },
-  baja: { etiqueta: 'Dar de baja', Icono: Ban, tono: 'var(--bad)' },
+  disponible: { etiqueta: 'Marcar disponible', Glifo: CircleCheck },
+  taller: { etiqueta: 'Mandar a taller', Glifo: Wrench },
+  baja: { etiqueta: 'Dar de baja', Glifo: Ban },
 } as const;
 
 type Destino = keyof typeof DESTINOS;
 
 function BotonEstado({ destino, numeroEconomico }: { destino: Destino; numeroEconomico?: string }) {
   const { pending } = useFormStatus();
-  const { etiqueta, Icono, tono } = DESTINOS[destino];
+  const { etiqueta, Glifo } = DESTINOS[destino];
   // La BAJA pide confirmación (W2): es el único destino que saca a la unidad del
   // parque —no se ofrece para viajes nuevos y sale del conteo de papeles— y
   // antes salía de un clic. Taller y «disponible» se deshacen con otro clic.
   if (destino === 'baja') {
     return (
       <BotonConfirmar
-        etiqueta={etiqueta} icono={<Icono aria-hidden width={12} height={12} strokeWidth={1.75} />}
+        etiqueta={etiqueta} icono={<Icono icono={Glifo} tam={14} />}
         nombreConfirmar="estado" valorConfirmar="baja" deshabilitado={pending}
         titulo={`Dar de baja ${numeroEconomico ? `la unidad ${numeroEconomico}` : 'la unidad'}`}
         descripcion="Deja de ofrecerse para viajes nuevos y sale del conteo de papeles. Su historial de viajes y de taller se conserva completo; puedes devolverla al parque cuando quieras."
         etiquetaConfirmar="Sí, dar de baja"
-        className="h-7 px-2.5 rounded-lg hairline text-[11px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-70 disabled:opacity-40"
-        style={{ color: tono }}
+        className={clasesBoton('danger', 'sm')}
       />
     );
   }
   return (
-    <button type="submit" name="estado" value={destino} disabled={pending}
-      className="rv-btn rv-btn--secondary hover:opacity-70"
-      style={{ color: tono }}>
-      <Icono width={12} height={12} strokeWidth={1.75} />
+    <Boton type="submit" name="estado" value={destino} variante="secondary" tamano="sm" loading={pending} icono={<Icono icono={Glifo} tam={14} />}>
       {pending ? 'Guardando…' : etiqueta}
-    </button>
+    </Boton>
   );
 }
 
@@ -96,11 +92,9 @@ export function AccionesEstadoUnidad({ accion, unidadId, estado, numeroEconomico
   if (destinos.length === 0) return null;
 
   return (
-    <form action={despachar} className="mt-3">
+    <form action={despachar} className="rv-un__acciones">
       <input type="hidden" name="unidadId" value={unidadId} />
-      <div className="flex items-center gap-2 flex-wrap">
-        {destinos.map((d) => <BotonEstado key={d} destino={d} numeroEconomico={numeroEconomico} />)}
-      </div>
+      {destinos.map((d) => <BotonEstado key={d} destino={d} numeroEconomico={numeroEconomico} />)}
     </form>
   );
 }
@@ -124,11 +118,8 @@ export function ReactivarUnidad({ accion, unidadId }: { accion: AccionEstado; un
 function BotonReactivar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" name="estado" value="disponible" disabled={pending}
-      className="rv-btn rv-btn--secondary hover:opacity-70"
-      style={{ color: 'var(--ok)' }}>
-      <RotateCcw width={12} height={12} strokeWidth={1.75} />
+    <Boton type="submit" name="estado" value="disponible" variante="secondary" tamano="sm" loading={pending} icono={<Icono icono={RotateCcw} tam={14} />}>
       {pending ? 'Guardando…' : 'Regresó al parque'}
-    </button>
+    </Boton>
   );
 }

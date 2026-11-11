@@ -2,8 +2,8 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { clasesBoton } from '@/app/ui-v2/componentes';
-import type { AccionDeForma, ResultadoAccion } from '../../admin/ui/forma';
+import './cotizaciones.css';
+import { clasesBoton, type AccionDeForma, type ResultadoAccion } from '@/app/ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-13b (auditoría 24) — "Marcar enviada" / "Crear viaje" / "Perdida" /
@@ -46,8 +46,8 @@ export function FilaAccionesCotizacion({
   const error = estadoEnviada?.error ?? estadoConvertir?.error ?? estadoPerdidaP?.error ?? estadoPerdidaV?.error ?? null;
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <span className="flex gap-2">
+    <div className="rv-cot__fila-acc">
+      <span className="rv-cot__fila-botones">
         {puedeEnviar && (
           <form action={accEnviada}>
             <input type="hidden" name="id" value={id} />
@@ -75,7 +75,7 @@ export function FilaAccionesCotizacion({
           <Boton texto="Vencida" pendienteTexto="…" />
         </form>
       </span>
-      {error && <span className="text-xs" style={{ color: 'var(--color-bad)' }}>{error}</span>}
+      {error && <span className="rv-cot__error" role="alert">{error}</span>}
     </div>
   );
 }

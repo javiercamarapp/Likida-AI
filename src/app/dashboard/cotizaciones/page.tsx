@@ -1,4 +1,8 @@
-import { CamposSistema, CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoError, Fieldset, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  CamposSistema, CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoError, EstadoVacio, Fieldset, FormaConAviso, Icono, MarcoPagina, StatusChip, Tarjeta,
+  type AccionDeForma, type ResultadoAccion, type TonoEstado,
+} from '@/app/ui-v2/componentes';
+import './cotizaciones.css';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { TriangleAlert } from 'lucide-react';
@@ -14,7 +18,6 @@ import {
   getPanelCotizador, guardarConfigCotizador, crearCotizacion, marcarEnviada, marcarPerdida,
   convertirEnViaje, type PanelCotizador, type CotizacionRow,
 } from '@/lib/likida/cotizador/lector';
-import { FormaConAviso, type ResultadoAccion, type AccionDeForma } from '../../admin/ui/forma';
 import { FilaAccionesCotizacion } from './acciones';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Cotizador' };
@@ -165,17 +168,16 @@ export default async function PaginaCotizaciones({
   ];
 
   return (
-<MarcoPagina titulo="Cotizador" apoyo="La ganancia real del viaje antes de aceptarlo: costos declarados, casetas medidas en tus viajes liquidados y cada supuesto a la vista.">
+    <MarcoPagina titulo="Margen y costos" apoyo="La ganancia real del viaje antes de aceptarlo: costos declarados, casetas medidas en tus viajes liquidados y cada supuesto a la vista.">
       {!panel && (
-        <EstadoError>No se pudo leer el cotizador. No es que no haya cotizaciones: la lectura falló. Recarga; si sigue, es cosa nuestra.</EstadoError>
+        <EstadoError reintentar>No se pudo leer el cotizador. No es que no haya cotizaciones: la lectura falló. Recarga; si sigue, es cosa nuestra.</EstadoError>
       )}
 
       {panel && (
         <>
-          <section className="space-y-2">
-            <TituloRecuadro info="cotizaciones.costos">Costos declarados de la flota</TituloRecuadro>
+          <Tarjeta titulo="Costos declarados de la flota" info="cotizaciones.costos">
             <Disclosure titulo="Costos de la flota" resumen={costosSinDeclarar === 0 ? 'completos' : `${costosSinDeclarar} sin declarar`} abierto={costosSinDeclarar > 0}>
-              <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
+              <p className="rv-cot__nota">
                 Lo que TÚ declaras — nada se supone. Un campo vacío = sin declarar, y el
                 cotizador entonces no sugiere precio: dice qué falta.
               </p>
@@ -200,11 +202,10 @@ export default async function PaginaCotizaciones({
                 </Fieldset>
               </FormaConAviso>
             </Disclosure>
-          </section>
+          </Tarjeta>
 
-          <section className="rounded-lg border p-4">
-            <TituloRecuadro info="cotizaciones.nueva" className="mb-1">Nueva cotización</TituloRecuadro>
-            <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
+          <Tarjeta titulo="Nueva cotización" info="cotizaciones.nueva">
+            <p className="rv-cot__nota">
               Si esta ruta tiene viajes liquidados, las casetas salen MEDIDAS de ahí (y la
               captura manual se ignora — la medición gana y el desglose lo dice).
             </p>
@@ -229,27 +230,27 @@ export default async function PaginaCotizaciones({
                 </div>
               </Fieldset>
             </FormaConAviso>
-          </section>
+          </Tarjeta>
 
-          <section className="rounded-lg border p-4">
-            <TituloRecuadro info="cotizaciones.lista" className="mb-3">
-              Cotizaciones ({panel.cotizaciones.length})
-            </TituloRecuadro>
+          <Tarjeta titulo={`Cotizaciones (${panel.cotizaciones.length})`} info="cotizaciones.lista">
             {panel.cotizaciones.length === 0 && (
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                Aún no hay cotizaciones. La primera se arma arriba — con los costos
-                declarados y, si la ruta ya se corrió, con las casetas medidas.
-              </p>
+              <EstadoVacio titulo="Sin cotizaciones" contenido>
+                La primera se arma arriba, con los costos declarados y, si la ruta ya se corrió, con las casetas medidas.
+              </EstadoVacio>
             )}
-            <ul className="space-y-3">
+            <ul className="rv-cot__lista">
               {panel.cotizaciones.map((q) => <Fila key={q.id} q={q} puedeCrearViaje={puedeAsignar(rol)} enviada={accionEnviada} perdida={accionPerdida} convertir={accionConvertir} />)}
             </ul>
-          </section>
+          </Tarjeta>
         </>
       )}
-</MarcoPagina>
+    </MarcoPagina>
   );
 }
+
+const TONO_ESTADO: Record<string, TonoEstado> = {
+  borrador: 'neutral', enviada: 'info', aceptada: 'ok', convertida: 'ok', perdida: 'bad', vencida: 'warn',
+};
 
 function Fila({
   q, puedeCrearViaje, enviada, perdida, convertir,
@@ -266,84 +267,78 @@ function Fila({
   // se dice eso — nunca "$0.00", que se leería como un viaje que sale a mano.
   const g = gananciaReal(q.precio, q.costoEstimado);
   return (
-    <li className="rounded-md border p-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="text-sm">
-          <span className="font-medium">{q.origen} → {q.destino}</span>
-          {q.folio && <span className="ml-2" style={{ color: 'var(--muted)' }}>({q.folio})</span>}
-          <span className="ml-2" style={{ color: 'var(--muted)' }}>{q.clienteNombre ?? 'sin cliente'}</span>
-          {q.km !== null && <span className="ml-2" style={{ color: 'var(--muted)' }}>{numero(q.km)} km</span>}
+    <li className="rv-cot__fila">
+      <div className="rv-cot__cabeza">
+        <div className="rv-cot__ruta">
+          <strong>{q.origen} → {q.destino}</strong>
+          {q.folio && <span className="rv-cot__tenue">({q.folio})</span>}
+          <span className="rv-cot__tenue">{q.clienteNombre ?? 'sin cliente'}</span>
+          {q.km !== null && <span className="rv-cot__tenue">{numero(q.km)} km</span>}
         </div>
-        <div className="text-sm">
-          <span className="mr-3">costo: {q.costoEstimado !== null ? mxn(q.costoEstimado) : 'incompleto'}</span>
-          <span className="mr-3 font-medium">precio: {q.precio !== null ? mxn(q.precio) : 'a medias — sin precio'}</span>
-          <span className="mr-3 font-medium">
+        <div className="rv-cot__cifras">
+          <span>costo: {q.costoEstimado !== null ? mxn(q.costoEstimado) : 'incompleto'}</span>
+          <strong>precio: {q.precio !== null ? mxn(q.precio) : 'a medias — sin precio'}</strong>
+          <strong>
             ganancia:{' '}
             {g === null ? (
-              <span className="font-normal" style={{ color: 'var(--muted)' }}>
+              <span className="rv-cot__tenue">
                 {q.precio === null ? 'falta el precio' : 'falta un dato del costo'}
               </span>
             ) : (
-              <span style={{ color: g.pesos < 0 ? 'var(--color-bad)' : 'var(--color-ok)' }}>
+              <>
                 {mxn(g.pesos)}
                 {g.margenPct !== null && (
-                  <span className="font-normal"> ({porcentaje(g.margenPct)} del precio)</span>
+                  <span className="rv-cot__tenue"> ({porcentaje(g.margenPct)} del precio)</span>
                 )}
-              </span>
+                <StatusChip tono={g.pesos < 0 ? 'bad' : 'ok'}>{g.pesos < 0 ? 'pierde dinero' : 'deja ganancia'}</StatusChip>
+              </>
             )}
-          </span>
-          <span
-            className="rounded px-2 py-0.5 text-xs uppercase"
-            style={{ background: 'var(--canvas)', color: 'var(--ink2)' }}
-          >{q.estado}</span>
+          </strong>
+          <StatusChip tono={TONO_ESTADO[q.estado] ?? 'neutral'}>{q.estado}</StatusChip>
         </div>
       </div>
 
       {q.desglose && (
-        <details className="mt-2 text-sm">
-          <summary className="cursor-pointer" style={{ color: 'var(--ink2)' }}>Desglose citable (como se armó)</summary>
-          <ul className="mt-2 space-y-1">
+        <Disclosure variante="linea" titulo="Desglose citable (como se armó)">
+          <ul className="rv-cot__desglose">
             {q.desglose.lineas.map((l, i) => (
-              <li key={i} className="flex justify-between gap-4">
-                <span>{l.concepto} <span style={{ color: 'var(--muted)' }}>— {l.supuesto}</span></span>
-                <span className="whitespace-nowrap">{l.monto !== null ? mxn(l.monto) : '—'}</span>
+              <li key={i}>
+                <span>{l.concepto} <span className="rv-cot__tenue">— {l.supuesto}</span></span>
+                <span className="rv-cot__monto">{l.monto !== null ? mxn(l.monto) : '—'}</span>
               </li>
             ))}
           </ul>
-          <div className="mt-2">
-            <CamposSistema etiqueta="Totales del desglose" campos={[
-              { etiqueta: 'Costo total', valor: q.desglose.costoTotal !== null ? mxn(q.desglose.costoTotal) : 'incompleto' },
-              { etiqueta: 'Precio sugerido', valor: q.desglose.precioSugerido !== null ? mxn(q.desglose.precioSugerido) : 'sin sugerencia' },
-            ]} />
-          </div>
+          <CamposSistema etiqueta="Totales del desglose" campos={[
+            { etiqueta: 'Costo total', valor: q.desglose.costoTotal !== null ? mxn(q.desglose.costoTotal) : 'incompleto' },
+            { etiqueta: 'Precio sugerido', valor: q.desglose.precioSugerido !== null ? mxn(q.desglose.precioSugerido) : 'sin sugerencia' },
+          ]} />
           {q.tarifaCatalogo && (
-            <p className="mt-2" style={{ color: 'var(--ink2)' }}>
+            <p className="rv-cot__nota">
               Tarifa del catálogo: {q.tarifaCatalogo.monto !== null ? mxn(q.tarifaCatalogo.monto) : 'sin monto (falta un dato de la tarifa)'}
               {' '}— {q.tarifaCatalogo.porque}
               {q.tarifaCatalogo.ambigua && (
-                // El triángulo del sistema y no el emoji (la documentación interna §2.1: «sin emojis como iconos»).
-                <span className="inline-flex items-center gap-1" style={{ color: 'var(--warn)' }}>
-                  {' · '}<TriangleAlert aria-hidden width={12} height={12} strokeWidth={1.75} />
+                <span className="rv-cot__aviso">
+                  {' · '}<Icono icono={TriangleAlert} tam={14} />
                   el catálogo tiene dos verdades para esta ruta
                 </span>
               )}
             </p>
           )}
           {q.desglose.faltantes.length > 0 && (
-            <p className="mt-2" style={{ color: 'var(--color-warn)' }}>Falta: {q.desglose.faltantes.join(' · ')}</p>
+            <p className="rv-cot__nota" data-tono="warn">Falta: {q.desglose.faltantes.join(' · ')}</p>
           )}
           {q.desglose.notas.map((nota, i) => (
-            <p key={i} className="mt-1" style={{ color: 'var(--muted)' }}>{nota}</p>
+            <p key={i} className="rv-cot__nota">{nota}</p>
           ))}
-        </details>
+        </Disclosure>
       )}
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
+      <div className="rv-cot__pie">
         <span>creada {fechaHoraMx(q.creadaEn)}</span>
         {q.vigenteHasta && <span>· vigente hasta {fechaMx(q.vigenteHasta)}</span>}
         {q.viajeId && <span>· viaje creado</span>}
         {viva && (
-          <span className="ml-auto">
+          <span className="rv-cot__acciones">
             <FilaAccionesCotizacion
               id={q.id} puedeEnviar={q.estado === 'borrador'} puedeCrearViaje={puedeCrearViaje} precio={q.precio}
               enviada={enviada} convertir={convertir} perdida={perdida}

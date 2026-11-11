@@ -1,0 +1,20 @@
+/* Clientes y tarifas · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-cl__ancho { grid-column: 1 / -1; }
+.rv-cl__guardar { justify-self: start; }
+.rv-cl__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-cl__nota[data-tono="warn"] { color: var(--warn); }
+.rv-cl__nota strong { color: var(--ink); font-weight: 600; }
+.rv-cl__pie { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-cl__tenue { display: block; font-size: var(--t-micro); color: var(--faint); }
+.rv-cl__tenue[data-tono="warn"] { color: var(--warn); }
+.rv-cl__tenue[data-tono="bad"] { color: var(--bad); }
+.rv-cl__mono { font-variant-numeric: tabular-nums; }
+.rv-cl__sin { color: var(--faint); }
+.rv-cl__editor { display: grid; gap: 10px; }
+.rv-cl__nombre { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.rv-cl__aviso-fila { display: flex; align-items: flex-start; gap: 4px; font-size: var(--t-micro); color: var(--warn); }
+.rv-cl__aviso-fila svg { flex: none; margin-top: 1px; }
+.rv-cl__nolugar { display: inline-flex; align-items: center; gap: 6px; color: var(--faint); }
+.rv-cl__cartera { display: grid; gap: 8px; }
+.rv-cl__nopasa { white-space: nowrap; color: var(--muted); }
+.rv-cl__aviso-texto { color: var(--warn); }

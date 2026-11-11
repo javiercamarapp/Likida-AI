@@ -20,12 +20,14 @@ const ETIQUETA_CORTA: Readonly<Record<string, string>> = {
   '/dashboard/agentes/peajes': 'Peajes',
   '/dashboard/agentes/carta-porte': 'Carta Porte',
   '/dashboard/agentes/vigia': 'Clientes',
-  '/dashboard/agentes/conductores': 'Operadores',
   '/dashboard/agentes/facturas': 'Facturas',
   '/dashboard/agentes/cobranza': 'Cobranza',
   '/dashboard/agentes/proveedores': 'Proveedores',
   '/dashboard/chat': 'Preguntar',
-  '/dashboard/viajes-en-vivo': 'En vivo',
+  '/dashboard/despacho': 'Viajes',
+  '/dashboard/operadores': 'Equipo',
+  '/dashboard/asistencia': 'Emergencias',
+  '/dashboard/agentes/conductores': 'Operadores',
 };
 
 /**
@@ -33,10 +35,10 @@ const ETIQUETA_CORTA: Readonly<Record<string, string>> = {
  * fiscal y el dinero. Encargado: despacho y viajes. Un rol que no está aquí (p. ej. uno nuevo) cae al orden del menú.
  */
 const PREFERENCIA: Readonly<Record<string, readonly string[]>> = {
-  superadmin: ['/dashboard', '/dashboard/agentes/liquidacion', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/chat'],
-  flota_admin: ['/dashboard', '/dashboard/agentes/liquidacion', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/chat'],
+  superadmin: ['/dashboard', '/dashboard/agentes/liquidacion', '/dashboard/despacho', '/dashboard/chat', '/dashboard/operadores'],
+  flota_admin: ['/dashboard', '/dashboard/agentes/liquidacion', '/dashboard/despacho', '/dashboard/chat', '/dashboard/operadores'],
   contador: ['/dashboard/contador', '/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/agentes/carta-porte', '/dashboard/chat'],
-  encargado: ['/dashboard', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/operadores', '/dashboard/unidades'],
+  encargado: ['/dashboard', '/dashboard/despacho', '/dashboard/operadores', '/dashboard/asistencia'],
 };
 
 export interface DestinoMovil { href: string; nombre: string; etiqueta: string; Icono: Item['Icono'] }
@@ -55,11 +57,14 @@ function itemsDelMenu(menu: MenuV2): Item[] {
 /** Hasta `MAX_DESTINOS` destinos para el rol (con el que se filtra el menú) y su menú ya filtrado. */
 export function destinosMovil(rol: string, menu: MenuV2): DestinoMovil[] {
   const ofrecidos = itemsDelMenu(menu);
-  const porHref = new Map(ofrecidos.map((i) => [i.href, i]));
+  // Cada entrada responde por su href Y por el de cada una de sus pestañas visibles: la preferencia puede nombrar una pantalla
+  // (`/dashboard/viajes`) y obtiene la entrada que la contiene (Viajes), sin repetirla.
+  const porHref = new Map<string, Item>();
+  for (const i of ofrecidos) for (const h of [i.href, ...(i.pestanas ?? []).map((p) => p.href)]) if (!porHref.has(h)) porHref.set(h, i);
   const elegidos: Item[] = [];
   for (const h of PREFERENCIA[rol] ?? []) {
     const it = porHref.get(h);
-    if (it && elegidos.length < MAX_DESTINOS) elegidos.push(it);
+    if (it && elegidos.length < MAX_DESTINOS && !elegidos.includes(it)) elegidos.push(it);
   }
   for (const it of ofrecidos) {
     if (elegidos.length >= MAX_DESTINOS) break;

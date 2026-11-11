@@ -1,14 +1,15 @@
 import Link from 'next/link';
-import { Mail, AlertTriangle, Route } from 'lucide-react';
+import { Mail, Route } from 'lucide-react';
+import './liquidacion.css';
 import { fechaCorta, fechaMx, numero, hoyMx, inicioDiaMx, fechaHoraMx } from '@/lib/formato';
-import { EstadoVacio } from '../../estados';
-import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
-import { BotonConfirmar } from '@/app/admin/ui/confirmar';
 import { calcularInsightsA1, entradaDesdeFichas, type InsightA1 } from '@/lib/likida/liquidacion_externa/insights_a1';
 import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
-import { BarraPeriodo, hrefConParams, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  AvisoCompacto, BarraPeriodo, BotonConfirmar, BotonEnlace, CampoTexto, EstadoError, EstadoVacio, hrefConParams, MarcoPagina, StatusChip,
+  TablaBase, Tarjeta, type TonoEstado,
+} from '@/app/ui-v2/componentes';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -36,7 +37,7 @@ export type EstadoDestino = 'entregado' | 'enviado' | 'pendiente' | 'no_entregad
 export interface DestinoVista {
   estado: EstadoDestino;
   /** Cuando es `retenido`: la razón ya clasificada («neto negativo» o «requiere revisión»). */
-  retenidoPor?: 'neto' | 'revision';
+  retenidoPor?: 'neto' | 'revision' | 'poliza_provisional';
   /** Cuándo pasó el último cambio (entrega o rebote), si lo hay. */
   en?: string | null;
 }
@@ -147,7 +148,7 @@ const ESTADO_DE_ENTREGA: Record<EstadoEntregaCorreo, EstadoDestino> = {
  */
 export function destinosDe(entregas: EntregaCorreo[], retenidaMotivo: string | null): Record<RolVisible, DestinoVista> {
   if (retenidaMotivo) {
-    const retenidoPor = /neto/i.test(retenidaMotivo) ? 'neto' : 'revision';
+    const retenidoPor = /^póliza provisional/i.test(retenidaMotivo) ? 'poliza_provisional' : /neto/i.test(retenidaMotivo) ? 'neto' : 'revision';
     return { operador: { estado: 'retenido', retenidoPor }, coordinador: { estado: 'retenido', retenidoPor }, rh: { estado: 'retenido', retenidoPor } };
   }
   const out = {} as Record<RolVisible, DestinoVista>;
@@ -179,13 +180,7 @@ export function cumpleFiltro(destinos: Record<RolVisible, DestinoVista>, filtro:
 const ROTULO_ROL: Record<RolVisible, string> = { operador: 'Operador', coordinador: 'Coordinador', rh: 'RH' };
 const DE_ROL: Record<RolVisible, string> = { operador: 'del operador', coordinador: 'del coordinador', rh: 'de RH' };
 
-type Tono = 'ok' | 'warn' | 'bad' | 'muted';
-const COLOR: Record<Tono, { fg: string; bg: string }> = {
-  ok: { fg: 'var(--ok)', bg: 'var(--okbg)' },
-  warn: { fg: 'var(--warn)', bg: 'var(--warnbg)' },
-  bad: { fg: 'var(--bad)', bg: 'var(--badbg)' },
-  muted: { fg: 'var(--muted)', bg: 'var(--canvas)' },
-};
+type Tono = Extract<TonoEstado, 'ok' | 'warn' | 'bad' | 'muted'>;
 
 export function rotuloDestino(d: DestinoVista): { rotulo: string; tono: Tono } {
   switch (d.estado) {
@@ -195,7 +190,7 @@ export function rotuloDestino(d: DestinoVista): { rotulo: string; tono: Tono } {
     case 'no_entregado': return { rotulo: 'No se pudo entregar', tono: 'bad' };
     case 'omitido': return { rotulo: 'No se envió', tono: 'muted' };
     case 'sin_correo': return { rotulo: 'Sin correo', tono: 'bad' };
-    case 'retenido': return { rotulo: d.retenidoPor === 'neto' ? 'Retenido: neto negativo' : 'Retenido: pide revisión', tono: 'warn' };
+    case 'retenido': return { rotulo: d.retenidoPor === 'neto' ? 'Retenido: neto negativo' : d.retenidoPor === 'poliza_provisional' ? 'Retenido: póliza provisional' : 'Retenido: pide revisión', tono: 'warn' };
     default: return { rotulo: '—', tono: 'muted' };
   }
 }
@@ -208,7 +203,7 @@ export function ayudaDestino(rol: RolVisible, d: DestinoVista): string | null {
         ? 'El correo de RH no llegó: corrígelo en la configuración.'
         : `El correo ${DE_ROL[rol]} rebotó: corrígelo y reenvía.`;
     case 'sin_correo': return 'Este operador no tiene correo registrado: agrégalo y reenvía.';
-    case 'retenido': return d.retenidoPor === 'neto' ? 'El neto salió negativo: revísalo antes de liberar el envío.' : 'Una regla pidió revisar este desglose antes de enviarlo.';
+    case 'retenido': return d.retenidoPor === 'neto' ? 'El neto salió negativo: revísalo antes de liberar el envío.' : d.retenidoPor === 'poliza_provisional' ? 'Póliza provisional: una persona debe revisarlo antes de enviarlo.' : 'Una regla pidió revisar este desglose antes de enviarlo.';
     default: return null;
   }
 }
@@ -220,8 +215,6 @@ const ROTULO_FILTRO: Record<FiltroDesglose, string> = {
 // ── La sección ─────────────────────────────────────────────────────────────
 
 const AYUDA_VENTANA = ' Al abrirla, la lista se limita a esos 30 días.';
-
-const CLASE_CONTROL = 'text-[12px] rounded-lg px-2 py-1.5 min-w-[9rem]';
 
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
   return `?${new URLSearchParams([...contexto, ...extra]).toString()}`;
@@ -238,19 +231,13 @@ export async function SeccionDesgloses(p: DesglosesProps) {
   if (!lectura.ok) {
     // Primaria: una lista que no se pudo leer enseña su error, jamás «ningún desglose».
     return (
-      <section className="card p-4" id="desgloses" role="alert">
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--badbg)' }}>
-            <AlertTriangle width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />
-          </div>
-          <div className="flex-1 pt-0.5">
-            <p className="text-sm">No se pudieron leer los desgloses. No es que no haya: no pudimos consultarlos ahora.</p>
-            <Link href={`${query(p.contexto, params)}#desgloses`} className="inline-block mt-2 text-xs font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
-              Reintentar
-            </Link>
-          </div>
-        </div>
-      </section>
+      <div id="desgloses">
+        <Tarjeta titulo="Desgloses de pago" info="desgloses.lista">
+          <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto, params)}#desgloses`} tamano="sm">Reintentar</BotonEnlace>}>
+            No se pudieron leer los desgloses. No es que no haya: no pudimos consultarlos ahora.
+          </EstadoError>
+        </Tarjeta>
+      </div>
     );
   }
 
@@ -263,22 +250,14 @@ export async function SeccionDesgloses(p: DesglosesProps) {
   const verSinPoliza = p.filtro === 'sin_poliza';
 
   return (
-    <section className="card p-4" id="desgloses">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
-        <TituloRecuadro info="desgloses.lista">
-          <span className="inline-flex items-center gap-1.5">
-            <Mail width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-            Desgloses de pago
-          </span>
-        </TituloRecuadro>
-        {p.filtro && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Filtro: {ROTULO_FILTRO[p.filtro]}</p>}
-      </div>
-      <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
+    <div id="desgloses">
+    <Tarjeta titulo="Desgloses de pago" info="desgloses.lista" acciones={p.filtro ? <span className="rv-liq-sub">Filtro: {ROTULO_FILTRO[p.filtro]}</span> : undefined}>
+      <p className="rv-liq-sub">
         El desglose lo calcula el sistema de tu empresa. Likida lo manda por correo, en Excel, al operador, a su coordinador y a RH, y aquí ves
         el estado de cada envío.
       </p>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 mb-3">
+      <div className="rv-liq-fichas">
         <Ficha etiqueta="Recibidos hoy" valor={fichas.recibidosHoy} ayuda="Desgloses que llegaron hoy del sistema de tu empresa." href={query(p.contexto)} />
         <Ficha etiqueta="Enviados · 30 días" valor={fichas.enviados} ayuda={`Correos que salieron en los últimos 30 días y esperan confirmación de entrega. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
           href={query(p.contexto, [['des_estado', 'enviado'], ['des_desde', desde30]])} />
@@ -294,7 +273,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
       <BloqueInsights insights={lectura.insights ?? calcularInsightsA1(entradaDesdeFichas(fichas))} />
 
-      <BarraPeriodo className="mb-3" etiqueta="Periodo y filtros de desgloses"
+      <BarraPeriodo etiqueta="Periodo y filtros de desgloses"
         chips={[
           ...(p.desde || p.hasta ? [{ id: 'rango', etiqueta: `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}`, hrefQuitar: hrefConParams('', baseDes, { des_desde: null, des_hasta: null }) }] : []),
           ...(p.filtro ? [{ id: 'estado', etiqueta: `Estado: ${ROTULO_FILTRO[p.filtro]}`, hrefQuitar: hrefConParams('', baseDes, { des_estado: null }) }] : []),
@@ -308,53 +287,88 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
       {verSinPoliza ? (
         sinPoliza.length === 0 ? (
-          <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          <EstadoVacio icono={Mail} titulo="Ninguna espera póliza">
             Ninguna bitácora está esperando póliza.
           </EstadoVacio>
         ) : (
-          <div className="overflow-x-auto">
-            <table aria-label="Bitácoras esperando póliza" className="w-full text-[13px]">
-              <thead><tr className="text-left" style={{ color: 'var(--faint)' }}><Th>Bitácora</Th><Th>Esperando desde</Th><Th>Última revisión</Th></tr></thead>
-              <tbody>
-                {sinPoliza.map((s) => (
-                  <tr key={s.bitacora} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                    <td className="py-2 font-medium">{s.bitacora}</td>
-                    <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaHoraMx(s.desde)}</td>
-                    <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaHoraMx(s.ultimaVez)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <>
+            <TablaBase<FilaSinPoliza>
+              etiqueta="Bitácoras esperando póliza"
+              filas={sinPoliza}
+              idFila={(s) => s.bitacora}
+              tarjetaMovil
+              columnas={[
+                { id: 'bitacora', titulo: 'Bitácora', principal: true, celda: (s) => <strong>{s.bitacora}</strong> },
+                { id: 'desde', titulo: 'Esperando desde', celda: (s) => <span className="rv-liq-apagado">{fechaHoraMx(s.desde)}</span> },
+                { id: 'ultima', titulo: 'Última revisión', celda: (s) => <span className="rv-liq-apagado">{fechaHoraMx(s.ultimaVez)}</span> },
+              ]}
+            />
             {sinPolizaTruncada && (
-              <p className="text-[12px] mt-2" role="status" style={{ color: 'var(--bad)' }}>Se muestran las {sinPoliza.length} más recientes: hay más bitácoras sin póliza que no caben en esta lista.</p>
+              <AvisoCompacto tono="warn" resumen={`Se muestran las ${sinPoliza.length} más recientes: hay más bitácoras sin póliza que no caben en esta lista.`} />
             )}
-            <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>Estas bitácoras no se enviarán hasta tener póliza: revísalas en el sistema de tu empresa.</p>
-          </div>
+            <p className="rv-liq-sub">Estas bitácoras no se enviarán hasta tener póliza: revísalas en el sistema de tu empresa.</p>
+          </>
         )
       ) : filas.length === 0 ? (
-        <EstadoVacio icono={<Route width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+        <EstadoVacio icono={Route} titulo={filtrando ? 'Ningún desglose con ese filtro' : 'Aún sin desgloses'}>
           {filtrando
             ? 'Ningún desglose cae en ese filtro. Prueba con otro estado o con más fechas.'
-            : 'Aún no hay desgloses: llegan cuando una bitácora tiene póliza.'}
+            : 'Aún no hay desgloses. Llegan cuando está conectado el sistema de transporte (TMS), los operadores tienen correo y la bitácora trae póliza.'}
         </EstadoVacio>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table aria-label="Desgloses de liquidación" className="w-full text-[13px]">
-              <thead>
-                <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <Th>Bitácora</Th><Th>Operador</Th><Th>Periodo</Th><Th derecha>Neto (de tu sistema)</Th>
-                  {ROLES_VISIBLES.map((r) => <Th key={r}>{ROTULO_ROL[r]}</Th>)}
-                  <Th>Detalle</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {filas.map((f) => <Fila key={f.liquidacionId} f={f} href={`${query(p.contexto, [...params, ['des_det', f.liquidacionId]])}#detalle-desglose`} />)}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between gap-3 mt-2.5">
-            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>De la más nueva a la más vieja.</p>
+          <TablaBase<FilaDesglose>
+            etiqueta="Desgloses de liquidación"
+            filas={filas}
+            idFila={(f) => f.liquidacionId}
+            altoMaximo={false}
+            tarjetaMovil
+            columnas={[
+              {
+                id: 'bitacora', titulo: 'Bitácora', principal: true,
+                celda: (f) => (
+                  <>
+                    <strong>{f.bitacora}</strong>
+                    {f.terminal && <span className="rv-liq-nota">{f.terminal}</span>}
+                    {f.numeroLiquidacion && (
+                      <span className="rv-liq-nota">
+                        Liquidación {f.numeroLiquidacion}{f.numeroPago ? ` · pago ${f.numeroPago}` : ''}
+                      </span>
+                    )}
+                  </>
+                ),
+              },
+              { id: 'operador', titulo: 'Operador', celda: (f) => <span className="rv-liq-apagado">{f.operador ?? '—'}</span> },
+              {
+                id: 'periodo', titulo: 'Periodo',
+                celda: (f) => <span className="rv-liq-apagado">{f.periodoDesde && f.periodoHasta ? `${fechaCorta(f.periodoDesde)} – ${fechaCorta(f.periodoHasta)}` : '—'}</span>,
+              },
+              { id: 'neto', titulo: 'Neto (de tu sistema)', alinear: 'der', celda: (f) => <span className="cifra-mono">{f.neto === null ? '—' : dinero(f.neto, f.moneda)}</span> },
+              ...ROLES_VISIBLES.map((rol) => ({
+                id: rol, titulo: ROTULO_ROL[rol],
+                celda: (f: FilaDesglose) => {
+                  const d = f.destinos[rol];
+                  const r = rotuloDestino(d);
+                  const ayuda = ayudaDestino(rol, d);
+                  return (
+                    <>
+                      <StatusChip tono={r.tono} title={ayuda ?? undefined}>{r.rotulo}</StatusChip>
+                      {d.en && (d.estado === 'entregado' || d.estado === 'enviado' || d.estado === 'no_entregado') && (
+                        <span className="rv-liq-nota">{fechaHoraMx(d.en)}</span>
+                      )}
+                      {ayuda && <span className="rv-liq-nota" data-tono={r.tono === 'bad' ? 'bad' : undefined}>{ayuda}</span>}
+                    </>
+                  );
+                },
+              })),
+              {
+                id: 'detalle', titulo: 'Detalle',
+                celda: (f) => <Link href={`${query(p.contexto, [...params, ['des_det', f.liquidacionId]])}#detalle-desglose`} className="rv-liq-enlace">Ver detalle</Link>,
+              },
+            ]}
+          />
+          <div className="rv-liq-pagina">
+            <p className="rv-liq-sub">De la más nueva a la más vieja.</p>
             {siguiente && (
               <NavPaginas>
                 <EnlacePagina href={`${query(p.contexto, [...params, ['des_cursor', siguiente]])}#desgloses`} direccion="siguiente" />
@@ -363,64 +377,24 @@ export async function SeccionDesgloses(p: DesglosesProps) {
           </div>
         </>
       )}
-    </section>
+    </Tarjeta>
+    </div>
   );
 }
-
-function Fila({ f, href }: { f: FilaDesglose; href: string }) {
-  return (
-    <tr className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-      <td className="py-2 font-medium">
-        {f.bitacora}
-        {f.terminal && <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>{f.terminal}</span>}
-        {f.numeroLiquidacion && (
-          <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>
-            Liquidación {f.numeroLiquidacion}{f.numeroPago ? ` · pago ${f.numeroPago}` : ''}
-          </span>
-        )}
-      </td>
-      <td className="py-2" style={{ color: 'var(--muted)' }}>{f.operador ?? '—'}</td>
-      <td className="py-2" style={{ color: 'var(--muted)' }}>
-        {f.periodoDesde && f.periodoHasta ? `${fechaCorta(f.periodoDesde)} – ${fechaCorta(f.periodoHasta)}` : '—'}
-      </td>
-      <td className="py-2 text-right cifra-mono">{f.neto === null ? '—' : dinero(f.neto, f.moneda)}</td>
-      {ROLES_VISIBLES.map((rol) => {
-        const d = f.destinos[rol];
-        const r = rotuloDestino(d);
-        const ayuda = ayudaDestino(rol, d);
-        return (
-          <td key={rol} className="py-2">
-            <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" title={ayuda ?? undefined}
-              style={{ color: COLOR[r.tono].fg, background: COLOR[r.tono].bg }}>{r.rotulo}</span>
-            {d.en && (d.estado === 'entregado' || d.estado === 'enviado' || d.estado === 'no_entregado') && (
-              <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{fechaHoraMx(d.en)}</span>
-            )}
-            {ayuda && <span className="block text-[11px] mt-0.5" style={{ color: r.tono === 'bad' ? 'var(--bad)' : 'var(--muted)' }}>{ayuda}</span>}
-          </td>
-        );
-      })}
-      <td className="py-2">
-        <Link href={href} className="text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>Ver detalle</Link>
-      </td>
-    </tr>
-  );
-}
-
-const COLOR_INSIGHT: Record<InsightA1['tono'], string> = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)', muted: 'var(--faint)' };
 
 /** «Qué pasó · qué significa · qué hacer»: frases calculadas por reglas (sin IA), cada una con la fuente de su cifra. */
 export function BloqueInsights({ insights }: { insights: InsightA1[] }) {
   if (insights.length === 0) return null;
   return (
-    <div className="mb-3" id="insights-desgloses" aria-label="Lectura de los desgloses">
-      <p className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Qué pasó · qué significa · qué hacer</p>
-      <ul className="space-y-2">
+    <div className="rv-liq-insights" id="insights-desgloses" aria-label="Lectura de los desgloses">
+      <p className="rv-liq-rotulo">Qué pasó · qué significa · qué hacer</p>
+      <ul className="rv-liq-insights__lista">
         {insights.map((i) => (
-          <li key={i.id} data-insight={i.id} className="rounded-lg hairline px-3 py-2" style={{ borderLeft: `3px solid ${COLOR_INSIGHT[i.tono]}` }}>
-            <p className="text-[13px] font-medium">{i.quePaso}</p>
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{i.queSignifica}</p>
-            <p className="text-[12px]">{i.queHacer}</p>
-            <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>Fuente: {i.fuente}</p>
+          <li key={i.id} data-insight={i.id} data-tono={i.tono} className="rv-liq-insight">
+            <p className="rv-liq-insight__titulo">{i.quePaso}</p>
+            <p className="rv-liq-sub">{i.queSignifica}</p>
+            <p className="rv-liq-insight__hacer">{i.queHacer}</p>
+            <p className="rv-liq-nota">Fuente: {i.fuente}</p>
           </li>
         ))}
       </ul>
@@ -434,23 +408,17 @@ export function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string
   const alerta = tono === 'bad' && valor !== null && valor > 0;
   const contenido = (
     <>
-      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
-      <span className="text-[20px] font-semibold cifra-mono block" style={alerta ? { color: 'var(--bad)' } : undefined}>
-        {valor === null ? '—' : numero(valor)}
-      </span>
-      {valor === null && <span className="text-[11px] block" style={{ color: 'var(--faint)' }}>no se pudo contar</span>}
+      <span className="rv-liq-ficha__rotulo">{etiqueta}</span>
+      <span className="rv-liq-ficha__valor cifra-mono">{valor === null ? '—' : numero(valor)}</span>
+      {valor === null && <span className="rv-liq-nota">no se pudo contar</span>}
     </>
   );
-  if (href === undefined) return <div title={ayuda} className="card p-3 block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>{contenido}</div>;
+  if (href === undefined) return <div title={ayuda} className="rv-liq-ficha" data-alerta={alerta || undefined}>{contenido}</div>;
   return (
-    <Link href={href} title={ayuda} className="card p-3 hover:opacity-80 transition-opacity block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>
+    <Link href={href} title={ayuda} className="rv-liq-ficha" data-enlace="" data-alerta={alerta || undefined}>
       {contenido}
     </Link>
   );
-}
-
-function Th({ children, derecha }: { children: React.ReactNode; derecha?: boolean }) {
-  return <th className={`etiqueta-mono text-[11px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>;
 }
 
 // ── Resultado de una acción (el código viaja en la URL, el texto NO) ───────
@@ -502,31 +470,27 @@ const EXCEPCION: Record<TipoExcepcion, { titulo: string; ayuda: string }> = {
 };
 
 function Mensaje({ m }: { m: MensajeDesglose }) {
-  return (
-    <p role="status" className="text-[12px] rounded-lg px-3 py-2 mb-3"
-      style={m.tono === 'ok' ? { color: 'var(--ok)', background: 'var(--okbg)' } : { color: 'var(--bad)', background: 'var(--badbg)' }}>
-      {m.texto}
-    </p>
-  );
+  return <AvisoCompacto tono={m.tono === 'ok' ? 'ok' : 'error'} resumen={m.texto} />;
 }
 
 function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglones: Array<{ descripcion: string; monto: number }>; moneda: 'MXN' | 'USD' }) {
   return (
-    <div className="flex-1 min-w-[16rem]">
-      <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{titulo}</h4>
+    <div className="rv-liq-renglones">
+      <h4 className="rv-liq-rotulo">{titulo}</h4>
       {renglones.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin renglones.</p>
+        <p className="rv-liq-sub">Sin renglones.</p>
       ) : (
-        <table aria-label={titulo} className="w-full text-[13px]">
-          <tbody>
-            {renglones.map((r, i) => (
-              <tr key={i} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                <td className="py-1.5">{r.descripcion}</td>
-                <td className="py-1.5 text-right cifra-mono">{dinero(r.monto, moneda)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <TablaBase<{ descripcion: string; monto: number }>
+          etiqueta={titulo}
+          filas={renglones}
+          idFila={(r) => `${r.descripcion}-${r.monto}`}
+          densa
+          altoMaximo={false}
+          columnas={[
+            { id: 'concepto', titulo: 'Concepto', principal: true, celda: (r) => r.descripcion },
+            { id: 'monto', titulo: 'Monto', alinear: 'der', celda: (r) => <span className="cifra-mono">{dinero(r.monto, moneda)}</span> },
+          ]}
+        />
       )}
     </div>
   );
@@ -543,8 +507,8 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
   const hayCurso = opciones.some((o) => o.curso);
   return (
     <div>
-      <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Reenviar</h4>
-      <div className="flex flex-wrap gap-2">
+      <h4 className="rv-liq-rotulo">Reenviar</h4>
+      <div className="rv-liq-acciones">
         {opciones.map((o) => (
           <form key={o.a} action={accion}>
             <input type="hidden" name="id" value={d.liquidacionId} />
@@ -558,18 +522,14 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
           </form>
         ))}
       </div>
-      {hayCurso && <p className="text-[11px] mt-1.5" style={{ color: 'var(--muted)' }}>Hay un envío en curso: espera a que termine para reenviar.</p>}
-      {sinArchivo && <p className="text-[11px] mt-1.5" style={{ color: 'var(--muted)' }}>Este desglose está retenido: primero libera el envío.</p>}
+      {hayCurso && <p className="rv-liq-nota">Hay un envío en curso: espera a que termine para reenviar.</p>}
+      {sinArchivo && <p className="rv-liq-nota">Este desglose está retenido: primero libera el envío.</p>}
 
-      <form action={accion} className="flex flex-wrap items-end gap-2 mt-3">
+      <form action={accion} className="rv-liq-acciones rv-liq-acciones--forma">
         <input type="hidden" name="id" value={d.liquidacionId} />
         <input type="hidden" name="a" value="operador" />
         <input type="hidden" name="motivo" value="correccion_de_correo" />
-        <label className="flex flex-col gap-1">
-          <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Correo nuevo del operador</span>
-          <input type="email" name="correo_nuevo" required maxLength={254} autoComplete="off" placeholder="Correo del operador"
-            className={`${CLASE_CONTROL} min-w-[16rem]`} style={ESTILO_CONTROL} />
-        </label>
+        <CampoTexto tipo="email" etiqueta="Correo nuevo del operador" name="correo_nuevo" required maxLength={254} autoComplete="off" placeholder="Correo del operador" />
         <BotonConfirmar
           etiqueta="Corregir correo del operador y reenviar" titulo="Corregir el correo y reenviar" etiquetaConfirmar="Sí, corregir y reenviar" tono="normal"
           descripcion="Se guarda el correo nuevo en la ficha del operador y se le vuelve a mandar este desglose. Los próximos también irán a ese correo."
@@ -582,11 +542,11 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
 
 function EstadoCabecera({ d }: { d: DetalleDesglose }) {
   return (
-    <dl className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3 text-[13px]">
-      <div><dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Operador</dt><dd>{d.operador ?? '—'}</dd></div>
-      <div><dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Periodo</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
-      <div><dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Terminal</dt><dd>{d.terminal ?? '—'}</dd></div>
-      <div><dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{d.totalOrigen === 'calculado' ? 'Neto calculado de los renglones' : 'Neto (de tu sistema)'}</dt><dd className="cifra-mono font-semibold">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="text-[11px]" style={{ color: 'var(--muted)' }}>Tu sistema no mandó su propio neto: no hay con qué compararlo.</dd>}</div>
+    <dl className="rv-liq-cabecera">
+      <div><dt className="rv-liq-rotulo">Operador</dt><dd>{d.operador ?? '—'}</dd></div>
+      <div><dt className="rv-liq-rotulo">Periodo</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
+      <div><dt className="rv-liq-rotulo">Terminal</dt><dd>{d.terminal ?? '—'}</dd></div>
+      <div><dt className="rv-liq-rotulo">{d.totalOrigen === 'calculado' ? 'Neto calculado de los renglones' : 'Neto (de tu sistema)'}</dt><dd className="cifra-mono rv-liq-neto">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="rv-liq-nota">Tu sistema no mandó su propio neto: no hay con qué compararlo.</dd>}</div>
     </dl>
   );
 }
@@ -605,12 +565,12 @@ export function ayudaExcepcion(tipo: TipoExcepcion, detalle: Record<string, unkn
 
 function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde: string; detalle?: Record<string, unknown> }> }) {
   return (
-    <ul className="space-y-1.5">
+    <ul className="rv-liq-excepciones">
       {items.map((x, i) => (
-        <li key={`${x.tipo}-${i}`} className="text-[12px]">
-          <span className="font-medium">{EXCEPCION[x.tipo].titulo}</span>
-          <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.desde)}</span>
-          <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{ayudaExcepcion(x.tipo, x.detalle)}</span>
+        <li key={`${x.tipo}-${i}`}>
+          <strong>{EXCEPCION[x.tipo].titulo}</strong>
+          <span className="rv-liq-apagado"> · desde {fechaHoraMx(x.desde)}</span>
+          <span className="rv-liq-nota">{ayudaExcepcion(x.tipo, x.detalle)}</span>
         </li>
       ))}
     </ul>
@@ -621,46 +581,40 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
   const lectura = await p.lectura;
   const cerrar = `${query(p.contexto, p.params)}#desgloses`;
   const marco = (cuerpo: React.ReactNode, titulo = 'Detalle del desglose') => (
-    <section className="card p-4" id="detalle-desglose">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
-        <TituloRecuadro info="desgloses.detalle">{titulo}</TituloRecuadro>
-        <Link href={cerrar} className="text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>Cerrar</Link>
-      </div>
-      {p.mensaje && <Mensaje m={p.mensaje} />}
-      {cuerpo}
-    </section>
+    <div id="detalle-desglose">
+      <Tarjeta titulo={titulo} info="desgloses.detalle" acciones={<Link href={cerrar} className="rv-liq-enlace">Cerrar</Link>}>
+        {p.mensaje && <Mensaje m={p.mensaje} />}
+        {cuerpo}
+      </Tarjeta>
+    </div>
   );
 
   if (lectura.estado === 'error') {
     return marco(
-      <div role="alert" className="flex items-start gap-3">
-        <AlertTriangle width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />
-        <div>
-          <p className="text-sm">No se pudo leer este desglose. No es que no exista: no pudimos consultarlo ahora.</p>
-          <Link href={`${query(p.contexto, p.params)}#detalle-desglose`} className="inline-block mt-2 text-xs font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">Reintentar</Link>
-        </div>
-      </div>,
+      <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto, p.params)}#detalle-desglose`} tamano="sm">Reintentar</BotonEnlace>}>
+        No se pudo leer este desglose. No es que no exista: no pudimos consultarlo ahora.
+      </EstadoError>,
     );
   }
-  if (lectura.estado === 'no_encontrado') return marco(<p className="text-[13px]" style={{ color: 'var(--muted)' }}>No encontré ese desglose en tu flota.</p>);
+  if (lectura.estado === 'no_encontrado') return marco(<p className="rv-liq-sub">No encontré ese desglose en tu flota.</p>);
 
   const d = lectura.detalle;
   return marco(
-    <div className="space-y-4">
-      <p className="text-[13px] font-medium">Bitácora {d.bitacora}</p>
+    <div className="rv-liq-detalle">
+      <p className="rv-liq-detalle__bitacora">Bitácora {d.bitacora}</p>
       <EstadoCabecera d={d} />
 
       {d.retenido && (
-        <div className="rounded-lg px-3 py-2.5" style={{ background: 'var(--warnbg)' }}>
-          <p className="text-[13px] font-medium" style={{ color: 'var(--warn)' }}>
-            {d.retenido.por === 'neto' ? 'Retenido: neto negativo' : 'Retenido: pide revisión'}
+        <div className="rv-liq-retenido">
+          <p className="rv-liq-retenido__titulo">
+            {d.retenido.por === 'neto' ? 'Retenido: neto negativo' : d.retenido.por === 'poliza_provisional' ? 'Retenido: póliza provisional' : 'Retenido: pide revisión'}
           </p>
-          <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
+          <p className="rv-liq-sub">
             Este desglose no se ha enviado a nadie.{' '}
             {d.retenido.liberable ? 'Si el monto está bien, puedes liberar el envío.' : 'Corrígelo en el sistema de tu empresa: no se libera desde aquí.'}
           </p>
           {d.retenido.liberable && (
-            <form action={p.acciones.liberar} className="mt-2">
+            <form action={p.acciones.liberar}>
               <input type="hidden" name="id" value={d.liquidacionId} />
               <BotonConfirmar
                 etiqueta="Liberar envío" titulo="Liberar el envío" etiquetaConfirmar="Sí, liberar y enviar" tono="normal"
@@ -672,47 +626,43 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-4">
+      <div className="rv-liq-renglones__fila">
         <TablaRenglones titulo="Percepciones" renglones={d.percepciones} moneda={d.moneda} />
         <TablaRenglones titulo="Deducciones" renglones={d.deducciones} moneda={d.moneda} />
       </div>
 
       <div>
-        <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Destinatarios</h4>
+        <h4 className="rv-liq-rotulo">Destinatarios</h4>
         {d.destinatarios.length === 0 ? (
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+          <p className="rv-liq-sub">
             {d.retenido ? 'Aún no se manda a nadie: el desglose está retenido.' : 'Este desglose no tiene correos programados.'}
           </p>
         ) : (
-          <table aria-label="Destinatarios del desglose" className="w-full text-[13px]">
-            <thead><tr className="text-left" style={{ color: 'var(--faint)' }}><Th>Quién</Th><Th>Correo</Th><Th>Estado</Th><Th>Cuándo</Th></tr></thead>
-            <tbody>
-              {d.destinatarios.map((x, i) => {
-                const r = rotuloDestino(x.destino);
-                return (
-                  <tr key={`${x.rol}-${i}`} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                    <td className="py-1.5">{ROTULO_ROL_DETALLE[x.rol]}</td>
-                    <td className="py-1.5 cifra-mono" style={{ color: 'var(--muted)' }}>{x.correo}</td>
-                    <td className="py-1.5">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: COLOR[r.tono].fg, background: COLOR[r.tono].bg }}>{r.rotulo}</span>
-                    </td>
-                    <td className="py-1.5" style={{ color: 'var(--muted)' }}>{x.en ? fechaHoraMx(x.en) : '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <TablaBase<DetalleDesglose['destinatarios'][number]>
+            etiqueta="Destinatarios del desglose"
+            filas={d.destinatarios}
+            idFila={(x) => `${x.rol}-${x.correo}`}
+            densa
+            altoMaximo={false}
+            tarjetaMovil
+            columnas={[
+              { id: 'quien', titulo: 'Quién', principal: true, celda: (x) => ROTULO_ROL_DETALLE[x.rol] },
+              { id: 'correo', titulo: 'Correo', celda: (x) => <span className="cifra-mono rv-liq-apagado">{x.correo}</span> },
+              { id: 'estado', titulo: 'Estado', celda: (x) => { const r = rotuloDestino(x.destino); return <StatusChip tono={r.tono}>{r.rotulo}</StatusChip>; } },
+              { id: 'cuando', titulo: 'Cuándo', celda: (x) => <span className="rv-liq-apagado">{x.en ? fechaHoraMx(x.en) : '—'}</span> },
+            ]}
+          />
         )}
       </div>
 
       {d.generaciones.length > 0 && (
         <div>
-          <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Historial de envíos</h4>
-          <ul className="text-[12px] space-y-0.5">
+          <h4 className="rv-liq-rotulo">Historial de envíos</h4>
+          <ul className="rv-liq-excepciones">
             {d.generaciones.map((g) => (
               <li key={g.generacion}>
-                <span className="font-medium">Envío {g.generacion}</span>
-                <span style={{ color: 'var(--muted)' }}> · {ORIGEN_GENERACION[g.origen]} · {fechaHoraMx(g.creadaEn)} · {g.entregas === 1 ? '1 correo' : `${g.entregas} correos`}</span>
+                <strong>Envío {g.generacion}</strong>
+                <span className="rv-liq-apagado"> · {ORIGEN_GENERACION[g.origen]} · {fechaHoraMx(g.creadaEn)} · {g.entregas === 1 ? '1 correo' : `${g.entregas} correos`}</span>
               </li>
             ))}
           </ul>
@@ -720,23 +670,23 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
       )}
 
       <div>
-        <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Archivo</h4>
+        <h4 className="rv-liq-rotulo">Archivo</h4>
         {d.descargaUrl ? (
-          <>
+          <div className="rv-liq-acciones">
             <a href={d.descargaUrl} download={d.descargaNombre} className="rv-btn rv-btn--secondary">Descargar el Excel</a>
-            <span className="text-[11px] ml-2" style={{ color: 'var(--faint)' }}>{d.descargaNombre} · el enlace vale 24 horas</span>
-          </>
+            <span className="rv-liq-nota">{d.descargaNombre} · el enlace vale 24 horas</span>
+          </div>
         ) : (
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo preparar la descarga ahora. Recarga la página para intentarlo de nuevo.</p>
+          <p className="rv-liq-sub">No se pudo preparar la descarga ahora. Recarga la página para intentarlo de nuevo.</p>
         )}
       </div>
 
       <Reenviar d={d} accion={p.acciones.reenviar} />
 
       <div>
-        <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Excepciones</h4>
+        <h4 className="rv-liq-rotulo">Excepciones</h4>
         {d.excepciones.length === 0
-          ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin excepciones abiertas para esta bitácora.</p>
+          ? <p className="rv-liq-sub">Sin excepciones abiertas para esta bitácora.</p>
           : <ListaExcepciones items={d.excepciones} />}
       </div>
     </div>,
@@ -750,44 +700,43 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
   const hayMas = todas !== null && todas.length > TOPE_EXCEPCIONES;
   if (lista === null) {
     return (
-      <section className="card p-4" id="excepciones" role="alert">
-        <p className="text-sm">No se pudieron leer las excepciones. No es que no haya: no pudimos consultarlas ahora.</p>
-        <Link href={`${query(p.contexto)}#excepciones`} className="inline-block mt-2 text-xs font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">Reintentar</Link>
-      </section>
+      <div id="excepciones">
+        <Tarjeta titulo="Excepciones" info="desgloses.excepciones">
+          <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto)}#excepciones`} tamano="sm">Reintentar</BotonEnlace>}>
+            No se pudieron leer las excepciones. No es que no haya: no pudimos consultarlas ahora.
+          </EstadoError>
+        </Tarjeta>
+      </div>
     );
   }
   return (
-    <section className="card p-4" id="excepciones">
-      <TituloRecuadro info="desgloses.excepciones" className="mb-1">
-        <span className="inline-flex items-center gap-1.5">
-          <AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          Excepciones
-        </span>
-      </TituloRecuadro>
-      <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>Lo que necesita a una persona antes de que el desglose llegue completo.</p>
-      {lista.length === 0 ? (
-        <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>Sin excepciones abiertas.</EstadoVacio>
-      ) : (
-        <>
-        {hayMas && (
-          <p className="text-[12px] mb-2" role="status" style={{ color: 'var(--bad)' }}>Se muestran las {TOPE_EXCEPCIONES} más recientes: hay más excepciones abiertas que no caben en esta lista. Resuelve las visibles para ver el resto.</p>
+    <div id="excepciones">
+      <Tarjeta titulo="Excepciones" info="desgloses.excepciones">
+        <p className="rv-liq-sub">Lo que necesita a una persona antes de que el desglose llegue completo.</p>
+        {lista.length === 0 ? (
+          <EstadoVacio icono={Mail} titulo="Todo al corriente">Sin excepciones abiertas.</EstadoVacio>
+        ) : (
+          <>
+            {hayMas && (
+              <AvisoCompacto tono="warn" resumen={`Se muestran las ${TOPE_EXCEPCIONES} más recientes: hay más excepciones abiertas que no caben en esta lista. Resuelve las visibles para ver el resto.`} />
+            )}
+            <ul className="rv-liq-excepciones">
+              {lista.map((x) => {
+                const bitacora = typeof x.detalle.bitacora === 'string' ? x.detalle.bitacora : x.claveExterna;
+                return (
+                  <li key={x.id}>
+                    <strong>{EXCEPCION[x.tipo]?.titulo ?? x.tipo}</strong>
+                    <span className="rv-liq-apagado"> · bitácora {bitacora}</span>
+                    <span className="rv-liq-apagado"> · desde {fechaHoraMx(x.primeraVez)}</span>
+                    <span className="rv-liq-nota">{ayudaExcepcion(x.tipo, x.detalle)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
-        <ul className="space-y-2">
-          {lista.map((x) => {
-            const bitacora = typeof x.detalle.bitacora === 'string' ? x.detalle.bitacora : x.claveExterna;
-            return (
-              <li key={x.id} className="text-[12px]">
-                <span className="font-medium">{EXCEPCION[x.tipo]?.titulo ?? x.tipo}</span>
-                <span style={{ color: 'var(--muted)' }}> · bitácora {bitacora}</span>
-                <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.primeraVez)}</span>
-                <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{ayudaExcepcion(x.tipo, x.detalle)}</span>
-              </li>
-            );
-          })}
-        </ul>
-        </>
-      )}
-    </section>
+      </Tarjeta>
+    </div>
   );
 }
 

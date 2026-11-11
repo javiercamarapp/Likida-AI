@@ -1,0 +1,7 @@
+/* Conocimiento normativo · archivo propio de la pantalla. Solo tokens del sistema. */
+.rv-conocimiento__filtros { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.rv-conocimiento__filtros > :first-child { flex: 1 1 280px; }
+.rv-conocimiento__instrumento { margin: 0; font-size: var(--t-body, 13px); color: var(--muted); }
+.rv-conocimiento__nota { margin: 0; font-size: var(--t-micro, 11px); color: var(--faint); }
+.rv-conocimiento__nota[data-puede] { color: var(--muted); }
+.rv-conocimiento__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 4px; }

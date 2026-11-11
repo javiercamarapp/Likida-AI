@@ -19,12 +19,12 @@ const dobles = vi.hoisted(() => ({
 
 vi.mock('@/lib/admin/negocio', async (importar) => ({
   ...(await importar<typeof import('@/lib/admin/negocio')>()),
+  getCostoPorFaseModelo: vi.fn(async () => []),
   getResumenNegocio: dobles.getResumenNegocio,
   getConversacionesActivas: dobles.getConversacionesActivas,
   contarConversacionesActivas: dobles.contarConversacionesActivas,
 }));
 
-import { TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
 import AgenteWhatsappPage from './page';
 
 const RESUMEN_SIN_WA = { porFase: [{ fase: 'ocr', n: 10, costoUsd: 5 }] };
@@ -51,23 +51,14 @@ it('con fase "whatsapp" real: usa esas cifras exactas, no las de otra fase', asy
   expect(html).not.toContain('999');
 });
 
-it(`con más conversaciones de las que se listan (recorte de ${TOPE_CONVERSACIONES}, FE-9), lo dice contra el TOTAL real`, async () => {
-  dobles.getConversacionesActivas.mockResolvedValue([{ tenantId: 't-1', tenantNombre: 'ACME', telefono: '5219991234567', turns: [] }]);
+it('muestra CUÁNTAS conversaciones hay activas y enlaza a la única lista; si el conteo cae, lo dice (no es cero)', async () => {
   dobles.contarConversacionesActivas.mockResolvedValue(30);
-  const html = await renderizar();
-  expect(html).toContain(`las ${TOPE_CONVERSACIONES} más recientes de 30`);
-});
-
-it('sin recorte, título simple "Conversaciones activas"', async () => {
-  dobles.getConversacionesActivas.mockResolvedValue([{ tenantId: 't-1', tenantNombre: 'ACME', telefono: '5219991234567', turns: [] }]);
-  dobles.contarConversacionesActivas.mockResolvedValue(1);
-  const html = await renderizar();
-  expect(html).toContain('>Conversaciones activas<');
-});
-
-it('cero conversaciones DE VERDAD sí dice "Sin conversaciones activas"', async () => {
-  const html = await renderizar();
-  expect(html).toContain('Sin conversaciones activas');
+  let html = await renderizar();
+  expect(html).toContain('Conversaciones activas');
+  expect(html).toContain('/admin/conversaciones');
+  dobles.contarConversacionesActivas.mockResolvedValue(null);
+  html = await renderizar();
+  expect(html).toContain('No disponible ahora. No es cero.');
 });
 
 it('declara honestamente qué falta (entrega, ventana 24h, opt-ins) — no lo simula', async () => {
@@ -75,10 +66,13 @@ it('declara honestamente qué falta (entrega, ventana 24h, opt-ins) — no lo si
   expect(html).toContain('requiere integrar la Meta WhatsApp Business API');
 });
 
-it('R9: el teléfono completo NO se pinta en la lista, solo enmascarado (igual que whatsapp-infra)', async () => {
-  dobles.getConversacionesActivas.mockResolvedValue([{ tenantId: 't-1', tenantNombre: 'Flota X', telefono: '5219990001111', turns: [], actualizadaEn: '2026-11-01T00:00:00Z' }]);
+it('ya no lista conversaciones ni teléfonos: la lista enmascarada vive solo en /admin/conversaciones (su prueba R9 está allá)', async () => {
   dobles.contarConversacionesActivas.mockResolvedValue(1);
   const html = await renderizar();
-  expect(html).not.toContain('5219990001111');
-  expect(html).toContain('***1111');
+  expect(dobles.getConversacionesActivas).not.toHaveBeenCalled();
+  expect(html).not.toMatch(/\d{10}/);
+});
+
+it('declara el número de prueba de Meta', async () => {
+  expect(await renderizar()).toContain('número de prueba de Meta');
 });

@@ -47,7 +47,7 @@ que no tener guardia (la fuente ciega es S2 por sí misma).
 
 Objetivo: **dejar de hacer daño primero, entender después.**
 
-1. **Apagar lo que ejecuta.** Interruptores (`/admin/observabilidad` o ⌘K): `global` corta todos los crons de agentes; los hay por
+1. **Apagar lo que ejecuta.** Interruptores (`/admin/observabilidad`, menú «Salud › Observabilidad», o ⌘K): `global` corta todos los crons de agentes; los hay por
    agente (`agente:liquidacion`, `agente:facturas`, `agente:cobranza`, `agente:conductores`, `agente:peajes`, `agente:proveedores`,
    `agente:ventas`, `agente:redactor`). Sin fila = encendido; un interruptor ilegible falla **cerrado** (apagado) y avisa.
    Apagado es neutro para el health, pero después de 3 días (`DIAS_APAGADO_ALERTA`) el health lo avisa: no dejarlo olvidado.
@@ -64,7 +64,7 @@ Objetivo: **dejar de hacer daño primero, entender después.**
 
 ## 4. S2 — algo dejó de operar, nada miente
 
-1. Identificar **qué función** y desde cuándo: `/admin/salud-sistema` (latidos por cron) y `/admin/escalaciones`.
+1. Identificar **qué función** y desde cuándo: `/admin/salud-sistema` (menú «Salud › Estado»: latidos por cron) y `/admin/escalaciones` (menú «Bandeja › Escalaciones»).
 2. Casos frecuentes:
    - **Cron muerto o `parcial`**: leer el `detalle` del latido; si es un hueco de configuración declarado (falta una variable),
      llega por `alertarHuecoConfiguracion` una vez por semana y no es una regresión.

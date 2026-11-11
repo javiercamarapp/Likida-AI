@@ -1,44 +1,26 @@
-import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
-// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
-vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
-// ═══════════════════════════════════════════════════════════════════════════
-// /admin/configuracion — CERO cobertura de la página. getResumenNegocio ya
-// tiene prueba propia. Lo que se vigila: el plan mostrado es el de CADA
-// flota real (tenant.plan), "sin flotas" se dice cuando de verdad no hay
-// ninguna, y la corrección ADM-5 (auditoría 24) sigue en pantalla — la
-// lógica de límites SÍ existe (suscripcion.ts), sólo que esta pantalla no
-// la muestra todavía.
-// ═══════════════════════════════════════════════════════════════════════════
+// Stub 308 de /admin/configuracion (Fase 1): la pantalla se retiró y su dirección vieja sigue sirviendo, hacia /admin/flotas. Contrato que se fija:
+// (1) la puerta de superadmin se llama ANTES de redirigir, (2) la redirección es permanente (308, no 307) y (3) conserva la consulta.
+const dobles = vi.hoisted(() => ({ requireSuperadmin: vi.fn(), permanente: vi.fn((destino: string): never => { throw new Error(`NEXT_REDIRECT:${destino}`); }) }));
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
+vi.mock('next/navigation', () => ({ permanentRedirect: dobles.permanente, redirect: vi.fn() }));
 
-const dobles = vi.hoisted(() => ({ getResumenNegocio: vi.fn() }));
-vi.mock('@/lib/admin/negocio', () => ({ getResumenNegocio: dobles.getResumenNegocio }));
+import Pagina from './page';
 
-import ConfiguracionPage from './page';
+beforeEach(() => { vi.clearAllMocks(); dobles.requireSuperadmin.mockResolvedValue({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' }); });
 
-beforeEach(() => { vi.clearAllMocks(); });
-
-it('sin flotas dadas de alta, lo dice — no una lista vacía sin explicación', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ flotas: [] });
-  const html = renderToStaticMarkup(await ConfiguracionPage());
-  expect(html).toContain('Sin flotas dadas de alta todavía');
+it('redirige de forma permanente a /admin/flotas', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/admin/flotas');
+  expect(dobles.permanente).toHaveBeenCalledTimes(1);
 });
 
-it('con flotas reales, muestra el nombre y el plan de CADA una', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({
-    flotas: [{ id: 'f-1', nombre: 'Transportes García', plan: 'pro' }, { id: 'f-2', nombre: 'Fletes del Sur', plan: 'basico' }],
-  });
-  const html = renderToStaticMarkup(await ConfiguracionPage());
-  expect(html).toContain('Transportes García');
-  expect(html).toContain('pro');
-  expect(html).toContain('Fletes del Sur');
-  expect(html).toContain('basico');
+it('conserva la consulta de la dirección vieja', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({ tenant: 't-1' }) })).rejects.toThrow('NEXT_REDIRECT:/admin/flotas?tenant=t-1');
 });
 
-it('ADM-24 (auditoría 24): declara que la lógica de límites SÍ existe en suscripcion.ts, sólo que esta pantalla no la muestra', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ flotas: [] });
-  const html = renderToStaticMarkup(await ConfiguracionPage());
-  expect(html).toContain('lib/saas/suscripcion.ts');
-  expect(html).toContain('esta pantalla todavía no la muestra por');
+it('llama la puerta de superadmin antes de redirigir; sin sesión no redirige', async () => {
+  dobles.requireSuperadmin.mockRejectedValue(new Error('NEXT_REDIRECT:/login'));
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/login');
+  expect(dobles.permanente).not.toHaveBeenCalled();
 });

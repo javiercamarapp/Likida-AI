@@ -2,6 +2,8 @@ import { Upload, Trash2 } from 'lucide-react';
 import { numero } from '@/lib/formato';
 // SOLO tipos: el módulo de datos importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ReglaCasetaVista, TagBajaVista, ExcepcionUnidadVista } from '@/lib/likida/peajes/revision_cobros';
+import { Tarjeta, Icono } from '@/app/ui-v2/componentes';
+import '../peajes.css';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -19,9 +21,6 @@ export interface ReglasCobroVista {
   acciones: AccionesReglasCobro;
 }
 
-const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 /** Casetas que se pintan a la vez (el catálogo trae ~115; con reglas primero). */
 const MAX_CASETAS_VISIBLES = 200;
@@ -39,83 +38,85 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
     ? [...casetas].sort((a, b) => Number(b.noCruzar || b.clasesPermitidas.length > 0) - Number(a.noCruzar || a.clasesPermitidas.length > 0) || b.crucesVistos - a.crucesVistos)
     : null;
   return (
-    <section className="card p-4" id="reglas-cobro">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Reglas de cobro</h2>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+    <div id="reglas-cobro">
+    <Tarjeta titulo="Reglas de cobro">
+      <p className="text-[11px] mb-3 rv-pj-c-faint">
         La revisión de cobros marca <b>candidatos para validar con el proveedor</b> (nunca «cobro indebido»). Aquí declaras lo que ella no puede adivinar:
         qué casetas cobran por pasada (clase 1 es normal ahí), qué casetas no deben cruzarse y qué TAGs se dieron de baja. Nada viene precargado.
         Los nombres de las casetas se llenan solos con cada archivo del proveedor.
       </p>
 
-      <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Casetas por nombre</h3>
+      {/* sin-info: rótulo de un bloque dentro de la tarjeta */}
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2 rv-pj-c-muted">Casetas por nombre</h3>
       {ordenadas === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer el catálogo de casetas ahora mismo.</p>
+        <p className="text-[12px] rv-pj-c-muted">No se pudo leer el catálogo de casetas ahora mismo.</p>
       ) : ordenadas.length === 0 ? (
-        <p className="text-[12px] mb-2" style={{ color: 'var(--muted)' }}>Aún no hay casetas: aparecen cuando subes el primer archivo del proveedor.</p>
+        <p className="text-[12px] mb-2 rv-pj-c-muted">Aún no hay casetas: aparecen cuando subes el primer archivo del proveedor.</p>
       ) : (
         <div className="space-y-1.5 mb-3">
           {ordenadas.slice(0, MAX_CASETAS_VISIBLES).map((c) => (
             <form key={c.id} action={acciones.guardarReglaCaseta} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12px]">
               <input type="hidden" name="nombre" value={c.nombre} />
               <span className="font-medium min-w-[170px]">{c.nombre}</span>
-              <span className="text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>{numero(c.crucesVistos)} cruces{c.lat !== null && c.lng !== null ? ` · ${c.lat}, ${c.lng}` : ''}</span>
+              <span className="text-[11px] cifra-mono rv-pj-c-faint">{numero(c.crucesVistos)} cruces{c.lat !== null && c.lng !== null ? ` · ${c.lat}, ${c.lng}` : ''}</span>
               <label className="flex items-center gap-1.5 ml-auto">
-                <span className="text-[11px]" style={{ color: 'var(--muted)' }}>Clases válidas extra</span>
+                <span className="text-[11px] rv-pj-c-muted">Clases válidas extra</span>
                 <input name="clases" defaultValue={c.clasesPermitidas.join(', ')} placeholder="1" maxLength={60} aria-label={`Clases válidas extra en ${c.nombre}`}
-                  className="w-[80px]" style={ESTILO_INPUT} />
+                  className="w-[80px] rv-ctl" />
               </label>
               <label className="flex items-center gap-1.5">
                 <input type="checkbox" name="no_cruzar" value="1" defaultChecked={c.noCruzar} aria-label={`${c.nombre} no debe cruzarse`} />
                 <span className="text-[11px]">No debe cruzarse</span>
               </label>
-              <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>Guardar</button>
+              <button type="submit" className="rv-btn rv-btn--secondary">Guardar</button>
             </form>
           ))}
-          {ordenadas.length > MAX_CASETAS_VISIBLES && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se muestran {MAX_CASETAS_VISIBLES} de {ordenadas.length}.</p>}
+          {ordenadas.length > MAX_CASETAS_VISIBLES && <p className="text-[11px] rv-pj-c-faint">Se muestran {MAX_CASETAS_VISIBLES} de {ordenadas.length}.</p>}
         </div>
       )}
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+      <p className="text-[11px] mb-3 rv-pj-c-faint">
         «Clases válidas extra» son clases que, en esa caseta, no se marcan (p. ej. <span className="cifra-mono">1</span> en una caseta de tarifa por pasada); las generales son 3 y 5.
       </p>
 
       {excepciones !== undefined && acciones.guardarExcepcionUnidad && acciones.quitarExcepcionUnidad && (
         <div className="mb-4" id="excepciones-unidad">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Unidades exceptuadas de «no debe cruzarse»</h3>
-          <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
+          {/* sin-info: rótulo de un bloque dentro de la tarjeta */}
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2 rv-pj-c-muted">Unidades exceptuadas de «no debe cruzarse»</h3>
+          <p className="text-[11px] mb-2 rv-pj-c-faint">
             Una unidad exceptuada puede cruzar esa caseta sin que se marque (p. ej. una camioneta de rescates). Las demás unidades siguen marcándose. Nada viene precargado.
           </p>
           {excepciones === null ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la lista de excepciones ahora mismo.</p>
+            <p className="text-[12px] rv-pj-c-muted">No se pudo leer la lista de excepciones ahora mismo.</p>
           ) : excepciones.length === 0 ? (
-            <p className="text-[12px] mb-2" style={{ color: 'var(--muted)' }}>Ninguna unidad exceptuada.</p>
+            <p className="text-[12px] mb-2 rv-pj-c-muted">Ninguna unidad exceptuada.</p>
           ) : (
             <div className="space-y-1.5 mb-2">
               {excepciones.map((e) => (
                 <div key={e.id} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12px]">
                   <span className="font-medium cifra-mono">{e.unidad}</span>
                   <span>puede cruzar {nombrePorNorm.get(e.casetaNorm) ?? e.casetaNorm}</span>
-                  {e.nota && <span style={{ color: 'var(--muted)' }}>· {e.nota}</span>}
+                  {e.nota && <span className="rv-pj-c-muted">· {e.nota}</span>}
                   <form action={acciones.quitarExcepcionUnidad} className="ml-auto">
                     <input type="hidden" name="excepcion" value={e.id} />
-                    <button type="submit" aria-label={`Quitar la excepción de ${e.unidad}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
+                    <button type="submit" aria-label={`Quitar la excepción de ${e.unidad}`} className="rv-btn rv-btn--secondary"><Icono icono={Trash2} /></button>
                   </form>
                 </div>
               ))}
             </div>
           )}
           {prohibidas.length === 0 ? (
-            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Primero marca una caseta como «No debe cruzarse»; después podrás exceptuar unidades.</p>
+            <p className="text-[11px] rv-pj-c-faint">Primero marca una caseta como «No debe cruzarse»; después podrás exceptuar unidades.</p>
           ) : (
             <form action={acciones.guardarExcepcionUnidad} className="flex items-end gap-2 flex-wrap">
-              <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Caseta</span>
-                <select name="caseta" required className="mt-0.5" style={ESTILO_INPUT}>
+              <label className="block"><span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Caseta</span>
+                <select name="caseta" required className="mt-0.5 rv-ctl">
                   {prohibidas.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
                 </select></label>
-              <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Unidad</span>
-                <input name="unidad" required maxLength={40} placeholder="TC9001" className="w-[120px] mt-0.5" style={ESTILO_INPUT} /></label>
-              <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Nota (opc.)</span>
-                <input name="nota" maxLength={300} placeholder="Atiende rescates" className="w-[200px] mt-0.5" style={ESTILO_INPUT} /></label>
-              <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Exceptuar unidad</button>
+              <label className="block"><span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Unidad</span>
+                <input name="unidad" required maxLength={40} placeholder="TC9001" className="w-[120px] mt-0.5 rv-ctl" /></label>
+              <label className="block"><span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Nota (opc.)</span>
+                <input name="nota" maxLength={300} placeholder="Atiende rescates" className="w-[200px] mt-0.5 rv-ctl" /></label>
+              <button type="submit" className="rv-btn rv-btn--primary">Exceptuar unidad</button>
             </form>
           )}
         </div>
@@ -123,41 +124,43 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
 
       <form action={acciones.cargarCoordenadas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap mb-4">
         <input type="file" name="archivo" accept=".csv,.tsv" required aria-label="CSV de coordenadas de casetas"
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer" style={{ color: 'var(--muted)' }} />
-        <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar coordenadas</button>
-        <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Opcional. CSV <span className="cifra-mono">nombre; lat; lng; fuente</span>. Sin coordenadas la revisión funciona igual; solo no se detectan saltos imposibles entre casetas lejanas. No se inventan.</span>
+          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
+        <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Upload} /> Cargar coordenadas</button>
+        <span className="text-[11px] rv-pj-c-faint">Opcional. CSV <span className="cifra-mono">nombre; lat; lng; fuente</span>. Sin coordenadas la revisión funciona igual; solo no se detectan saltos imposibles entre casetas lejanas. No se inventan.</span>
       </form>
 
-      <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>TAGs dados de baja</h3>
+      {/* sin-info: rótulo de un bloque dentro de la tarjeta */}
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2 rv-pj-c-muted">TAGs dados de baja</h3>
       {bajas === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la lista de bajas ahora mismo.</p>
+        <p className="text-[12px] rv-pj-c-muted">No se pudo leer la lista de bajas ahora mismo.</p>
       ) : bajas.length === 0 ? (
-        <p className="text-[12px] mb-2" style={{ color: 'var(--muted)' }}>Ningún TAG dado de baja.</p>
+        <p className="text-[12px] mb-2 rv-pj-c-muted">Ningún TAG dado de baja.</p>
       ) : (
         <div className="space-y-1.5 mb-3">
           {bajas.map((b) => (
             <div key={b.id} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12px]">
               <span className="font-medium cifra-mono">{b.tagOriginal ?? b.tag}</span>
               <span>de baja desde el {b.bajaEn}</span>
-              {b.motivo && <span style={{ color: 'var(--muted)' }}>· {b.motivo}</span>}
+              {b.motivo && <span className="rv-pj-c-muted">· {b.motivo}</span>}
               <form action={acciones.quitarBajaTag} className="ml-auto">
                 <input type="hidden" name="baja" value={b.id} />
-                <button type="submit" aria-label={`Quitar la baja de ${b.tagOriginal ?? b.tag}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
+                <button type="submit" aria-label={`Quitar la baja de ${b.tagOriginal ?? b.tag}`} className="rv-btn rv-btn--secondary"><Icono icono={Trash2} /></button>
               </form>
             </div>
           ))}
         </div>
       )}
       <form action={acciones.altaBajaTag} className="flex items-end gap-2 flex-wrap">
-        <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>TAG</span>
-          <input name="tag" required maxLength={60} placeholder="IMDM 12345678" className="w-[160px] mt-0.5" style={ESTILO_INPUT} /></label>
-        <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Último día vigente</span>
-          <input type="date" name="baja_en" required className="mt-0.5" style={ESTILO_INPUT} /></label>
-        <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Motivo (opc.)</span>
-          <input name="motivo" maxLength={300} placeholder="Unidad siniestrada" className="w-[200px] mt-0.5" style={ESTILO_INPUT} /></label>
-        <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Dar de baja</button>
+        <label className="block"><span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">TAG</span>
+          <input name="tag" required maxLength={60} placeholder="IMDM 12345678" className="w-[160px] mt-0.5 rv-ctl" /></label>
+        <label className="block"><span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Último día vigente</span>
+          <input type="date" name="baja_en" required className="mt-0.5 rv-ctl rv-ctl--fecha" /></label>
+        <label className="block"><span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Motivo (opc.)</span>
+          <input name="motivo" maxLength={300} placeholder="Unidad siniestrada" className="w-[200px] mt-0.5 rv-ctl" /></label>
+        <button type="submit" className="rv-btn rv-btn--primary">Dar de baja</button>
       </form>
-      <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>Cualquier cruce posterior a esa fecha se marca como candidato. Dar de baja el mismo TAG otra vez cambia su fecha.</p>
-    </section>
+      <p className="text-[11px] mt-1.5 rv-pj-c-faint">Cualquier cruce posterior a esa fecha se marca como candidato. Dar de baja el mismo TAG otra vez cambia su fecha.</p>
+    </Tarjeta>
+    </div>
   );
 }

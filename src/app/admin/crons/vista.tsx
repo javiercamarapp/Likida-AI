@@ -1,297 +1,122 @@
-import { AlarmClock, Power, TriangleAlert } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
-import { CRONS, TOLERANCIA_LATIDO_MS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
-import { StatusPill, EstadoError, type Estado } from '../ui/kit';
-import { etiquetaContadorVigia } from '../observabilidad/etiquetas';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
+import { CRONS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
+import { Aviso, Disclosure, EstadoError, MarcoPagina, StatusChip, type TonoEstado } from '../../ui-v2/componentes';
+import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
+import {
+  NOMBRE_RELOJ, OFICIO_RELOJ, cadaCuanto, desdeHace, guiaDeArreglo, porQueNoCorrio, resumenDetalle, resumenRelojes,
+} from './estado-relojes';
+import '../sistema.css';
+
+// Las piezas puras viven en `estado-relojes.ts` (las usa también la portada de Salud); se re-exportan para quien ya las importaba de aquí.
+export { cadaCuanto, desdeHace, resumenDetalle, resumenRelojes };
 
 /**
- * LOS RELOJES DEL SISTEMA — el render.
+ * LOS RELOJES DEL SISTEMA — el render. `cron_latido` lleva el pulso de cada reloj; hasta que existió esta pantalla el único que lo leía
+ * era `/api/health`, que contesta un booleano agregado porque es un endpoint público: a quien pregunta desde fuera no se le dice qué
+ * reloj se paró. Aquí sí se dice cuál, desde cuándo, por qué no corrió y, si es falta de configuración, cómo se arregla.
  *
- * Cuántos son NO se escribe aquí: sale de `CRONS`, la constante que
- * `salud.test.ts` cruza contra vercel.json y contra el CHECK de la base. Eran
- * siete, luego nueve, y con el registro de jornada (0241) son diez — un
- * número escrito a mano en esta pantalla habría envejecido tres veces.
- *
- * `cron_latido` (0155) lleva meses guardando el pulso de cada cron y hasta hoy
- * el único que lo leía era `/api/health`, que contesta un booleano agregado
- * (`checks.crons: 'ok'|'degraded'|'unknown'`) porque es un endpoint público: a
- * quien pregunta desde fuera no se le dice qué reloj se paró. El dato existía
- * y nadie podía verlo — para saber por qué no salió una liquidación había que
- * abrir los logs de Vercel.
- *
- * Esta pantalla es el otro lado de ese mismo dato: aquí sí se dice cuál, desde
- * cuándo y por qué.
- *
- * LO QUE NO HACE: no dispara un cron a mano. Un cron que se puede lanzar desde
- * el panel es un cron que corre dos veces —el reloj de Vercel no se entera de
- * que alguien le ganó— y varios de estos motores (`facturar`, `runner`)
- * reservan filas: dos pasadas simultáneas se pisan. Se OBSERVA aquí y se
- * APAGA en Observabilidad, que es donde vive la palanca.
+ * LO QUE NO HACE: no dispara un reloj a mano. Uno que se puede lanzar desde el panel es uno que corre dos veces —el reloj de Vercel no
+ * se entera de que alguien le ganó— y varios (`facturar`, `runner`) reservan filas: dos pasadas simultáneas se pisan. Se OBSERVA aquí
+ * y se APAGA en Observabilidad, que es donde vive la palanca.
  */
-
-/** El id de `cron_latido` es el último segmento de la ruta en vercel.json. */
-const RUTA: Record<CronId, string> = {
-  'wa-pendientes': '/api/cron/wa-pendientes',
-  'wa-outbox': '/api/cron/wa-outbox',
-  escalar: '/api/cron/escalar',
-  facturar: '/api/cron/facturar',
-  purgar: '/api/cron/purgar',
-  runner: '/api/cron/runner',
-  gps: '/api/cron/gps',
-  asistencia: '/api/cron/asistencia',
-  'descarga-sat': '/api/cron/descarga-sat',
-  jornada: '/api/cron/jornada',
-  'portales-vivos': '/api/cron/portales-vivos',
-  'liquidaciones-externas': '/api/cron/liquidaciones-externas',
-  peajes: '/api/cron/peajes',
-  'conductor-hitos': '/api/cron/conductor-hitos',
-  vigia: '/api/cron/vigia',
-  'jornada-alertas': '/api/cron/jornada-alertas',
-  'buzon-entrega': '/api/cron/buzon-entrega',
-  'carta-porte-docs': '/api/cron/carta-porte-docs',
-  guardia: '/api/cron/guardia',
-  tms: '/api/cron/tms',
-};
-
-/** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
-const OFICIO: Record<CronId, string> = {
-  'wa-pendientes': 'recoge los mensajes de WhatsApp que llegaron',
-  'wa-outbox': 'manda los mensajes de WhatsApp encolados',
-  escalar: 'escala lo que lleva demasiado tiempo sin atender',
-  facturar: 'pide las facturas de los tickets a los portales',
-  purgar: 'borra lo que ya cumplió su retención',
-  runner: 'despacha la compañía de agentes',
-  gps: 'baja las posiciones de las unidades',
-  asistencia: 'vigila las emergencias sin reconocer',
-  'descarga-sat': 'recoge del SAT los CFDI que el comercio ya timbró',
-  jornada: 'asienta el registro de jornada del día (LFT 132-XXXIV)',
-  'portales-vivos': 'comprueba que los portales de facturación sigan en pie',
-  'liquidaciones-externas': 'entrega y concilia las liquidaciones que calcula el sistema del cliente',
-  peajes: 'importa y concilia los desgloses de peaje que el proveedor mandó por el buzón firmado',
-  'conductor-hitos': 'pide, persigue y escala los hitos del viaje (llegada, salida, regreso) a los choferes',
-  vigia: 'vigila el SLA de los clientes finales, escala por niveles y purga lo que ya cumplió su retención',
-  'jornada-alertas': 'avisa al encargado y al operador cuando la jornada en curso se acerca al tope legal (80 %, 95 % y exceso)',
-  'buzon-entrega': 'arma y manda al contador el lote de facturas aprobadas, reintenta con espera y marca lo que Resend no confirma',
-  'carta-porte-docs': 'extrae los documentos de Carta Porte que quedaron en la bandeja, reintenta con espera y avisa a la oficina de los que traen dudas o no se pudieron leer',
-  guardia: 'la guardia de producción: clasifica la bandeja con las reglas del A0, mide los componentes de /estado, avisa al operador de lo nuevo (S1/S2 o fuente ciega) y purga la retención de latencias',
-  tms: 'lee del sistema de transporte del cliente (solo lectura) los viajes, liquidaciones, peajes y posiciones de las flotas que lo conectaron, y los entrega a cada agente'
-};
 
 /**
- * El veredicto de `juzgarLatido` como pill.
- *
- * `sin_latido` es ÁMBAR y no rojo a propósito: significa «nunca escribió»,
- * que tanto puede ser un cron recién nacido como uno que no PUEDE escribir
- * (el drift de dominio que arregló la 0242). No es lo mismo que `vencido`,
- * donde sí consta que latía y dejó de hacerlo.
+ * El veredicto de `juzgarLatido` como chip. `sin_latido` es ÁMBAR y no rojo a propósito: significa «nunca escribió», que tanto puede ser
+ * un reloj recién nacido como uno que no PUEDE escribir. No es lo mismo que `vencido`, donde sí consta que latía y dejó de hacerlo.
  */
-const PILL_SALUD: Record<LatidoDetallado['estado'], { estado: Estado; etiqueta: string }> = {
-  ok: { estado: 'ok', etiqueta: 'Latiendo' },
-  vencido: { estado: 'bad', etiqueta: 'No late' },
-  sin_latido: { estado: 'warn', etiqueta: 'Nunca latió' },
+const CHIP_SALUD: Record<LatidoDetallado['estado'], { tono: TonoEstado; etiqueta: string }> = {
+  ok: { tono: 'ok', etiqueta: 'Latiendo' },
+  vencido: { tono: 'bad', etiqueta: 'No late' },
+  sin_latido: { tono: 'warn', etiqueta: 'Nunca latió' },
 };
 
-/** Lo que el propio cron dijo de su última pasada. */
-const PILL_ULTIMO: Record<string, { estado: Estado; etiqueta: string }> = {
-  ok: { estado: 'ok', etiqueta: 'OK' },
-  parcial: { estado: 'warn', etiqueta: 'Parcial' },
-  saltado: { estado: 'neutral', etiqueta: 'Saltado' },
-  fallo: { estado: 'bad', etiqueta: 'Fallo' },
+/** Lo que el propio reloj dijo de su última pasada. */
+const CHIP_ULTIMO: Record<string, { tono: TonoEstado; etiqueta: string }> = {
+  ok: { tono: 'ok', etiqueta: 'OK' },
+  parcial: { tono: 'warn', etiqueta: 'Parcial' },
+  saltado: { tono: 'neutral', etiqueta: 'Saltado' },
+  fallo: { tono: 'bad', etiqueta: 'Fallo' },
 };
 
-/** "cada 5 min" / "cada 4 h" / "una vez al día". */
-export function cadaCuanto(ms: number): string {
-  if (ms < 3_600_000) return `cada ${Math.round(ms / 60_000)} min`;
-  if (ms < 86_400_000) return `cada ${Math.round(ms / 3_600_000)} h`;
-  return 'una vez al día';
-}
+type Fila = { cron: CronId; l: LatidoDetallado };
 
-/** "hace 3 min" / "hace 2.5 h" / "hace 4 d". `null` = nunca latió. */
-export function desdeHace(min: number | null): string {
-  if (min === null) return 'nunca';
-  if (min < 60) return `hace ${min} min`;
-  if (min < 1440) return `hace ${Math.round(min / 6) / 10} h`;
-  return `hace ${Math.round(min / 144) / 10} d`;
-}
-
-/**
- * El card de arriba promete "el detalle está abajo" para una corrida
- * `parcial` — y para un `fallo` sin `codigo` no hay nada más que decir salvo
- * lo que el propio cron dejó en `detalle`. Sin esto, el renglón caía siempre
- * al guion, contradiciendo la promesa del propio card y la premisa de este
- * archivo: "aquí sí se dice cuál, desde cuándo y por qué". No inventa una
- * interpretación: sólo enseña lo que el cron ya registró, tal cual, sin
- * `codigo` (que ya tiene su propio renglón) ni claves vacías.
- */
-export function resumenDetalle(detalle: Record<string, unknown>): string | null {
-  const partes = Object.entries(detalle)
-    .filter(([clave, valor]) => clave !== 'codigo' && valor !== undefined && valor !== null)
-    .map(([clave, valor]): string | null => {
-      const nombre = etiquetaContadorVigia(clave);
-      if (Array.isArray(valor)) return valor.length > 0 ? `${nombre}: ${valor.length}` : null;
-      if (typeof valor === 'number') return valor > 0 ? `${nombre}: ${valor}` : null;
-      if (typeof valor === 'string') return valor.trim() !== '' ? `${nombre}: ${valor}` : null;
-      if (typeof valor === 'boolean') return valor ? nombre : null;
-      return null;
-    })
-    .filter((x): x is string => x !== null);
-  return partes.length > 0 ? partes.join(' · ') : null;
-}
-
-function Renglon({ cron, l }: { cron: CronId; l: LatidoDetallado }) {
-  const salud = PILL_SALUD[l.estado];
-  const ultimo = l.ultimoEstado === null ? null : PILL_ULTIMO[l.ultimoEstado];
-  return (
-    <tr className="hairline-t">
-      <td className="py-2 pr-3 align-top">
-        <div className="font-medium">{cron}</div>
-        <div className="text-xs" style={{ color: 'var(--muted)' }}>{OFICIO[cron]}</div>
-        <div className="text-xs mt-0.5" style={{ color: 'var(--faint)' }}>{RUTA[cron]}</div>
-      </td>
-      <td className="py-2 pr-3 align-top text-sm whitespace-nowrap">{cadaCuanto(l.cadenciaMs)}</td>
-      <td className="py-2 pr-3 align-top"><StatusPill estado={salud.estado}>{salud.etiqueta}</StatusPill></td>
-      <td className="py-2 pr-3 align-top text-sm whitespace-nowrap">
-        {/* La fecha exacta ARRIBA y el «hace» debajo: el «hace» se lee de un
-            golpe, la fecha es la que se pega en un reporte. */}
-        <div>{l.ultimoLatido === null ? '—' : fechaHoraMx(l.ultimoLatido)}</div>
-        <div className="text-xs" style={{ color: 'var(--muted)' }}>{desdeHace(l.haceMin)}</div>
-      </td>
-      <td className="py-2 pr-3 align-top">
-        {ultimo === null
-          ? <span className="text-sm" style={{ color: 'var(--faint)' }}>—</span>
-          : <StatusPill estado={ultimo.estado}>{ultimo.etiqueta}</StatusPill>}
-      </td>
-      <td className="py-2 align-top text-sm">
-        {l.motivoSalto !== null
-          ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Power width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              {l.motivoSalto}
-            </span>
-          )
-          // El código del fallo, si el cron lo dejó (tableros al día,
-          // 28-ago-2026): `interruptor_ilegible` y «base caída» son problemas
-          // distintos, y hasta hoy el porqué solo vivía en los logs de Vercel.
-          : l.ultimoEstado === 'fallo' && typeof l.detalle.codigo === 'string'
-          ? (
-            <span style={{ color: 'var(--muted)' }}>
-              falló con código <code>{l.detalle.codigo}</code>
-            </span>
-          )
-          : l.estado === 'sin_latido'
-            ? <span style={{ color: 'var(--muted)' }}>no ha escrito su pulso ni una vez</span>
-            : l.estado === 'vencido'
-              ? (
-                <span style={{ color: 'var(--muted)' }}>
-                  debería haber latido {cadaCuanto(l.cadenciaMs)} (+{Math.round(TOLERANCIA_LATIDO_MS / 60_000)} min de tolerancia)
-                </span>
-              )
-              : (l.ultimoEstado === 'parcial' || l.ultimoEstado === 'fallo') && resumenDetalle(l.detalle) !== null
-                ? <span style={{ color: 'var(--muted)' }}>{resumenDetalle(l.detalle)}</span>
-                : <span style={{ color: 'var(--faint)' }}>—</span>}
-      </td>
-    </tr>
-  );
-}
-
-/**
- * El resumen del card superior, puro para poder probarlo. Dos ejes, los
- * MISMOS que /api/health (tableros al día, 28-ago-2026): antes este card solo
- * miraba la cadencia (`estado !== 'ok'`) y un cron que latía puntual
- * reportando `fallo` cada minuto salía en «los 10 relojes latieron» — el
- * panel del operador era más laxo que el endpoint público, que es exactamente
- * al revés de lo que promete esta pantalla.
- */
-export function resumenRelojes(lista: Array<{ cron: CronId; l: LatidoDetallado }>): {
-  sinLatir: CronId[]; conFallo: CronId[]; parciales: CronId[];
-} {
-  return {
-    sinLatir: lista.filter((x) => x.l.estado !== 'ok').map((x) => x.cron),
-    conFallo: lista.filter((x) => x.l.estado === 'ok' && x.l.ultimoEstado === 'fallo').map((x) => x.cron),
-    parciales: lista.filter((x) => x.l.estado === 'ok' && x.l.ultimoEstado === 'parcial').map((x) => x.cron),
-  };
-}
+const COLUMNAS: ColumnaTabla<Fila>[] = [
+  {
+    id: 'reloj', titulo: 'Reloj', principal: true,
+    celda: (x) => <>{NOMBRE_RELOJ[x.cron]}<span className="adm-sis-sub">{OFICIO_RELOJ[x.cron]}</span></>,
+  },
+  { id: 'cadencia', titulo: 'Cadencia', corta: true, celda: (x) => cadaCuanto(x.l.cadenciaMs) },
+  { id: 'pulso', titulo: 'Pulso', celda: (x) => <StatusChip tono={CHIP_SALUD[x.l.estado].tono}>{CHIP_SALUD[x.l.estado].etiqueta}</StatusChip> },
+  {
+    id: 'ultimo', titulo: 'Último latido',
+    // La fecha exacta ARRIBA y el «hace» debajo: el «hace» se lee de un golpe, la fecha es la que se pega en un reporte.
+    celda: (x) => <>{x.l.ultimoLatido === null ? '—' : fechaHoraMx(x.l.ultimoLatido)}<span className="adm-sis-sub">{desdeHace(x.l.haceMin)}</span></>,
+  },
+  {
+    id: 'resultado', titulo: 'Cómo le fue',
+    celda: (x) => (x.l.ultimoEstado === null ? '—' : <StatusChip tono={CHIP_ULTIMO[x.l.ultimoEstado]?.tono ?? 'neutral'}>{CHIP_ULTIMO[x.l.ultimoEstado]?.etiqueta ?? x.l.ultimoEstado}</StatusChip>),
+  },
+  {
+    id: 'porque', titulo: 'Por qué',
+    celda: (x) => { const p = porQueNoCorrio(x.l); return p.causa === 'ninguna' ? '—' : p.texto; },
+  },
+];
 
 export function VistaCrons({ latidos }: { latidos: Record<CronId, LatidoDetallado> | null }) {
-  const lista = latidos === null ? [] : CRONS.map((c) => ({ cron: c, l: latidos[c] }));
+  const lista: Fila[] = latidos === null ? [] : CRONS.map((c) => ({ cron: c, l: latidos[c] }));
   const { sinLatir, conFallo, parciales } = resumenRelojes(lista);
   const malos = [...sinLatir, ...conFallo];
+  const guias = lista.map((x) => guiaDeArreglo(x.cron, x.l)).filter((g) => g !== null);
+  const nombres = (ids: CronId[]) => ids.map((c) => NOMBRE_RELOJ[c]).join(', ');
 
   return (
-    <main className="p-5 space-y-5">
-      <BarraPagina
-        icono={<AlarmClock width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-        titulo="Relojes"
-      />
-
+    <MarcoPagina titulo="Relojes" apoyo="Los procesos programados del sistema: cuándo latieron por última vez y, si no corrieron, por qué.">
       {latidos === null ? (
-        <EstadoError mensaje="No se pudo leer el pulso de los relojes — la base no respondió. Esto NO significa que estén corriendo: significa que ahora mismo no se sabe." />
+        <EstadoError reintentar>No se pudo leer el pulso de los relojes: la base no respondió. Esto NO significa que estén corriendo: significa que ahora mismo no se sabe.</EstadoError>
       ) : (
         <>
-          <div className="card p-4">
-            {/* El rótulo cuenta lo MEDIDO, no una meta. `CRONS.length` sale de
-                la misma constante que vercel.json cruza en `salud.test.ts`, así
-                que "de 9" no se queda viejo al alta del décimo. */}
-            {malos.length === 0 ? (
-              <p className="text-sm">
-                Los <strong>{CRONS.length}</strong> relojes latieron dentro de su cadencia
-                y ninguno reportó fallo en su última corrida.
-                {parciales.length > 0 && (
-                  <span style={{ color: 'var(--muted)' }}>
-                    {' '}({parciales.join(', ')} {parciales.length === 1 ? 'reportó' : 'reportaron'} corrida parcial — el detalle está abajo.)
-                  </span>
-                )}
-              </p>
-            ) : (
-              <p className="text-sm inline-flex items-start gap-2">
-                <TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--color-bad)', flexShrink: 0 }} />
-                <span>
-                  {sinLatir.length > 0 && (
-                    <>
-                      <strong>{sinLatir.length}</strong> de {CRONS.length} relojes no están latiendo como deberían:{' '}
-                      {sinLatir.join(', ')}.{' '}
-                    </>
-                  )}
-                  {conFallo.length > 0 && (
-                    <>
-                      {conFallo.length === 1 ? 'Un reloj late' : `${conFallo.length} relojes laten`} a tiempo
-                      pero su última corrida reportó <strong>fallo</strong>: {conFallo.join(', ')}.
-                    </>
-                  )}
-                </span>
-              </p>
-            )}
-            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-              El pulso lo escribe cada cron al terminar (cron_latido, 0155). Aquí no se
-              dispara ninguno a mano: el reloj de Vercel no se entera y varios reservan
-              filas — dos pasadas a la vez se pisan. Para apagar uno, su palanca está en
-              Observabilidad.
-            </p>
-          </div>
+          {/* El rótulo cuenta lo MEDIDO, no una meta. `CRONS.length` sale de la misma constante que vercel.json cruza en `salud.test.ts`. */}
+          {malos.length === 0 ? (
+            <Aviso tono={parciales.length > 0 ? 'warn' : 'ok'} titulo={`Los ${CRONS.length} relojes latieron dentro de su cadencia`}>
+              Ninguno reportó fallo en su última corrida.
+              {parciales.length > 0 ? ` ${nombres(parciales)} ${parciales.length === 1 ? 'reportó' : 'reportaron'} corrida parcial: el detalle está abajo.` : ''}
+            </Aviso>
+          ) : (
+            <Aviso tono="error" titulo="Hay relojes que necesitan atención">
+              {sinLatir.length > 0 ? <><strong>{sinLatir.length}</strong> de {CRONS.length} relojes no están latiendo como deberían: {nombres(sinLatir)}. </> : null}
+              {conFallo.length > 0 ? <>{conFallo.length === 1 ? 'Un reloj late' : `${conFallo.length} relojes laten`} a tiempo pero su última corrida reportó <strong>fallo</strong>: {nombres(conFallo)}.</> : null}
+            </Aviso>
+          )}
 
-          <section className="card p-4">
-            <TituloSeccion>Uno por uno</TituloSeccion>
-            <div className="overflow-x-auto">
-              <table aria-label="Relojes del sistema, uno por uno" className="w-full text-left text-sm">
-                <thead>
-                  <tr style={{ color: 'var(--muted)' }}>
-                    <th scope="col" className="py-2 pr-3 font-medium">Reloj</th>
-                    <th scope="col" className="py-2 pr-3 font-medium">Cadencia</th>
-                    <th scope="col" className="py-2 pr-3 font-medium">Pulso</th>
-                    <th scope="col" className="py-2 pr-3 font-medium">Último latido</th>
-                    <th scope="col" className="py-2 pr-3 font-medium">Cómo le fue</th>
-                    <th scope="col" className="py-2 font-medium">Por qué</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lista.map((x) => <Renglon key={x.cron} cron={x.cron} l={x.l} />)}
-                </tbody>
-              </table>
-            </div>
+          {guias.length > 0 ? (
+            <section className="adm-sis-bloque" aria-labelledby="que-falta">
+              <h2 className="adm-sis-titulo" id="que-falta">Qué falta para que corran completos</h2>
+              {guias.map((g) => (
+                <Aviso key={g.cron} tono="warn" titulo={NOMBRE_RELOJ[g.cron]}>
+                  {g.queFalta} {g.quien}
+                  <Disclosure titulo="Cómo arreglarlo" variante="linea">
+                    <ol className="adm-sis-guia">
+                      {g.pasos.map((p) => <li key={p}>{p}</li>)}
+                    </ol>
+                    {g.dicho ? <p className="adm-sis-nota">Lo que el reloj dejó dicho: {g.dicho}</p> : null}
+                  </Disclosure>
+                </Aviso>
+              ))}
+            </section>
+          ) : null}
+
+          <section className="adm-sis-bloque" aria-labelledby="relojes-uno-por-uno">
+            <h2 className="adm-sis-titulo" id="relojes-uno-por-uno">Uno por uno</h2>
+            <TablaLista<Fila>
+              etiqueta="Relojes del sistema, uno por uno" columnas={COLUMNAS} filas={lista} idFila={(x) => x.cron} base="/admin/crons" params={{}}
+            />
+            <p className="adm-sis-nota">
+              El pulso lo escribe cada reloj al terminar. Aquí no se dispara ninguno a mano: el reloj de Vercel no se entera y varios reservan filas, así que dos pasadas a la vez se pisan.
+              Para apagar uno, su palanca está en Observabilidad.
+            </p>
           </section>
         </>
       )}
-    </main>
+    </MarcoPagina>
   );
 }

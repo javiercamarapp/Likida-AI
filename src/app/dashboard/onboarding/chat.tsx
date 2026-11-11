@@ -4,10 +4,12 @@ import MenuAdjuntar from '../menu-adjuntar';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowUp, Search, Paperclip, X, FileText, Check } from 'lucide-react';
-import { mxn, litros, numero } from '@/lib/formato';
+import { Boton, BotonEnlace, Icono, cx } from '@/app/ui-v2/componentes';
+import { AreaMini, DonaMini } from '@/app/ui-v2/graficas';
+import './entrevista.css';
+import { mxn, litros } from '@/lib/formato';
 import { Logo, LogoIcono } from '../../logo';
 import { CampoPixeles } from '../pixeles';
-import { Dona, AreaChartSimple } from '../../admin/charts';
 import type { OpcionChip } from '@/lib/likida/perfil/entrevista';
 
 /**
@@ -78,34 +80,32 @@ interface Turno {
 function VisualRespuesta({ v }: { v: Visual }) {
   if (v.tipo === 'cifra') {
     return (
-      <div className="card px-4 py-3 mt-2 inline-block">
-        <div className="font-display text-[20px] leading-tight font-semibold tabular">{v.valor}</div>
-        {v.nota && <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>{v.nota}</p>}
+      <div className="rv-ob__visual">
+        <div className="rv-ob__cifra tabular">{v.valor}</div>
+        {v.nota && <p className="rv-ob__cifra-nota">{v.nota}</p>}
       </div>
     );
   }
   if (v.tipo === 'dona') {
-    return <div className="card p-3 mt-2"><Dona segmentos={v.segmentos} /></div>;
+    return <div className="rv-ob__visual rv-ob__visual--ancho"><DonaMini gajos={v.segmentos.map((g) => ({ etiqueta: g.etiqueta, valor: g.valor }))} etiqueta="Distribución de la respuesta del asistente" /></div>;
   }
   if (v.tipo === 'serie') {
     return (
-      <div className="card p-3 mt-2">
-        <AreaChartSimple datos={v.puntos} etiquetaValor={v.formato === 'mxn' ? mxn : numero} />
+      <div className="rv-ob__visual rv-ob__visual--ancho">
+        <AreaMini valores={v.puntos.map((p) => p.valor)} etiquetas={v.puntos.map((p) => p.dia)} etiqueta="Serie de la respuesta del asistente" formato={v.formato === 'mxn' ? 'mxn' : 'numero'} />
       </div>
     );
   }
   return (
-    <div className="card p-1.5 mt-2 overflow-x-auto">
-      <table aria-label="Datos de la respuesta del asistente" className="w-full border-collapse text-[13px]">
-        <tbody>
-          {v.filas.map(([k, val]) => (
-            <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
-              <td className="px-2.5 py-1.5" style={{ color: 'var(--muted)' }}>{k}</td>
-              <td className="cifra-mono px-2.5 py-1.5 text-right">{val}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="rv-ob__visual rv-ob__visual--ancho">
+      <dl className="rv-ob__datos" aria-label="Datos de la respuesta del asistente">
+        {v.filas.map(([k, val]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd className="cifra-mono">{val}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
@@ -346,27 +346,16 @@ export function ChatEntrevista({
   const puedeEnviar = Boolean(texto.trim() || documento) && !ocupado;
 
   const caja = (
-    <form
-      onSubmit={(e) => { e.preventDefault(); preguntar(texto); }}
-      className="relative w-full rounded-2xl px-4 pt-3.5 pb-3 transition-shadow focus-within:shadow-lg"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--line)',
-        boxShadow: 'var(--shadow-card)',
-      }}
-    >
+    <form onSubmit={(e) => { e.preventDefault(); preguntar(texto); }} className="rv-ob__caja">
       <MenuAdjuntar abierto={menuAdjuntar} onCerrar={() => setMenuAdjuntar(false)} ancla={botonClip}
       onCamara={() => inputCamara.current?.click()} onImagen={() => inputImagen.current?.click()} onArchivo={() => inputArchivo.current?.click()} />
       {documento && (
-        <div className="mb-2">
-          <span className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium pl-2.5 pr-1.5 py-1 rounded-full" style={{ background: 'var(--canvas)' }}>
-            <FileText width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-            <span className="max-w-[260px] truncate">{documento.nombre}</span>
-            <button type="button" aria-label="Quitar archivo" onClick={() => setDocumento(null)}
-              className="rv-icono-boton">
-              <X width={12} height={12} strokeWidth={2} />
-            </button>
-          </span>
+        <div className="rv-ob__adjunto">
+          <Icono icono={FileText} tam={14} />
+          <span>{documento.nombre}</span>
+          <button type="button" aria-label="Quitar archivo" onClick={() => setDocumento(null)} className="rv-icono-boton">
+            <Icono icono={X} tam={14} />
+          </button>
         </div>
       )}
       <input
@@ -374,41 +363,26 @@ export function ChatEntrevista({
         onChange={(e) => setTexto(e.target.value)}
         placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : 'Pregunta sobre tu operación…'}
         aria-label="Pregunta sobre tu operación"
-        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed" data-anillo="envolvente"
+        className="rv-ob__campo" data-anillo="envolvente"
       />
-      <div className="flex items-center justify-between mt-3 relative">
-        <button type="button" onClick={() => setRecomendar((v) => !v)}
-          className="rv-btn rv-btn--primary rv-btn--sm"
-          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-          <Search width={11} height={11} strokeWidth={2.25} />
+      <div className="rv-ob__barra">
+        <Boton variante="primary" tamano="sm" icono={<Icono icono={Search} tam={14} />} onClick={() => setRecomendar((v) => !v)}>
           Consulta
-        </button>
+        </Boton>
 
-        <div className="flex items-center gap-1.5">
-          <input ref={inputCamara} type="file" accept="image/*" capture="environment" className="hidden"
+        <div className="rv-ob__herramientas">
+          <input ref={inputCamara} type="file" accept="image/*" capture="environment" className="rv-ob__archivo"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-          <input ref={inputImagen} type="file" accept="image/*" className="hidden"
+          <input ref={inputImagen} type="file" accept="image/*" className="rv-ob__archivo"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-          <input ref={inputArchivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="hidden"
+          <input ref={inputArchivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="rv-ob__archivo"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
           <button ref={botonClip} type="button" aria-label="Adjuntar comprobante" title="Adjuntar comprobante"
-            onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
-            className="rv-icono-boton"
-            style={{ color: 'var(--ink2)' }}>
-            <Paperclip width={14} height={14} strokeWidth={2} />
+            onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado} className="rv-icono-boton">
+            <Icono icono={Paperclip} />
           </button>
-          <button
-            type="submit"
-            aria-label="Enviar"
-            disabled={!puedeEnviar}
-            className="rv-icono-boton"
-            style={{
-              background: 'var(--marca)',
-              color: 'var(--marca-fg)',
-              opacity: puedeEnviar ? 1 : 0.35,
-            }}
-          >
-            <ArrowUp width={15} height={15} strokeWidth={2.5} />
+          <button type="submit" aria-label="Enviar" disabled={!puedeEnviar} className="rv-icono-boton rv-ob__enviar">
+            <Icono icono={ArrowUp} />
           </button>
         </div>
       </div>
@@ -416,16 +390,13 @@ export function ChatEntrevista({
   );
 
   const panelConsulta = recomendar && (
-    <div className="w-full max-h-72 overflow-y-auto grid grid-cols-1 sm:grid-cols-3 gap-2.5 pr-0.5">
+    <div className="rv-ob__temas">
       {CATALOGO_CONSULTA.map((c) => (
-        <div key={c.categoria} className="card p-3 self-start">
-          <div className="etiqueta-mono text-[11px] font-medium uppercase mb-1.5" style={{ color: 'var(--muted)' }}>
-            {c.categoria}
-          </div>
+        <div key={c.categoria} className="rv-ob__tema">
+          <div className="rv-ob__tema-titulo">{c.categoria}</div>
           {c.preguntas.map((rq) => (
-            <button key={rq} type="button"
-              onClick={() => { setRecomendar(false); preguntar(rq); }}
-              className="w-full text-left text-[13px] px-2 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]">
+            <button key={rq} type="button" className="rv-ob__pregunta"
+              onClick={() => { setRecomendar(false); preguntar(rq); }}>
               {rq}
             </button>
           ))}
@@ -435,15 +406,9 @@ export function ChatEntrevista({
   );
 
   const chipsRow = chips.length > 0 && (
-    <div className={`flex flex-wrap gap-2 ${vacio ? 'justify-center mt-4' : 'mb-3'}`}>
+    <div className="rv-ob__chips" data-portada={vacio || undefined}>
       {chips.map((c) => (
-        <button
-          key={c.valor}
-          type="button"
-          onClick={() => preguntar(c.valor, c.etiqueta)}
-          className="rv-chip"
-          style={{ color: 'var(--ink2)', background: 'var(--surface)' }}
-        >
+        <button key={c.valor} type="button" onClick={() => preguntar(c.valor, c.etiqueta)} className="rv-chip">
           {c.etiqueta}
         </button>
       ))}
@@ -451,68 +416,55 @@ export function ChatEntrevista({
   );
 
   const pillListo = listo && (
-    <div className="sticky top-0 z-30 h-0 w-full">
-      <a href={`/dashboard${sufijo}`}
-        className="absolute top-3 right-4 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]"
-        style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
-        Ir al panel
-      </a>
+    <div className="rv-ob__listo">
+      <BotonEnlace href={`/dashboard${sufijo}`} variante="secondary" tamano="sm">Ir al panel</BotonEnlace>
     </div>
   );
 
   if (!vacio) {
     return (
-      <div className="min-h-full w-full flex-1 flex">
-        <div className="flex-1 min-w-0 flex flex-col">
-          {pillListo}
-          <div className="flex-1 flex flex-col px-4 pt-4">
-            <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col">
-              <div className="flex-1 space-y-4 py-2">
-                {historial.map((h, i) => (
-                  <div key={i}>
-                    <div className="flex justify-end">
-                      <div className="hairline rounded-2xl rounded-br-md px-3.5 py-2 text-sm max-w-[85%]" style={{ background: 'var(--surface)' }}>
-                        {h.q}
-                      </div>
-                    </div>
-                    <div className="mt-2.5 text-sm max-w-[85%]">
-                      {h.r.pendiente ? (
-                        <div className="flex items-start gap-2.5">
-                          <span className="likida-respira shrink-0 mt-0.5" style={{ color: 'var(--ink)' }}><LogoIcono alto="h-[16px]" /></span>
-                          <div>
-                            <div style={{ color: 'var(--muted)' }}>{fasePensando}</div>
-                            {pasosVivos.length > 0 && (
-                              <div className="mt-2 space-y-1.5">
-                                {pasosVivos.map((p, j) => (
-                                  <div key={j} className="flex items-center gap-2 text-[12px]"
-                                    style={{ color: p.listo ? 'var(--faint)' : 'var(--ink)' }}>
-                                    {p.listo
-                                      ? <Check width={12} height={12} strokeWidth={2} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                                      : <span className="skeleton inline-block w-2.5 h-2.5 rounded-full shrink-0" />}
-                                    {rotuloPaso(p.tool)}{p.listo ? '' : '…'}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+      <div className="rv-ob__lienzo">
+        {pillListo}
+        <div className="rv-ob__conversacion">
+          <div className="rv-ob__hilo-col">
+            <div className="rv-ob__hilo">
+              {historial.map((h, i) => (
+                <div key={i}>
+                  <div className="rv-ob__q-fila"><div className="rv-ob__q">{h.q}</div></div>
+                  <div className="rv-ob__r">
+                    {h.r.pendiente ? (
+                      <div className="rv-ob__pensando">
+                        <span className="likida-respira rv-ob__pensando-icono"><LogoIcono alto="h-[16px]" /></span>
+                        <div>
+                          <div className="rv-ob__fase">{fasePensando}</div>
+                          {pasosVivos.length > 0 && (
+                            <div className="rv-ob__pasos">
+                              {pasosVivos.map((p, j) => (
+                                <div key={j} className="rv-ob__paso" data-listo={p.listo || undefined}>
+                                  {p.listo
+                                    ? <span className="rv-ob__paso-ok"><Icono icono={Check} tam={14} /></span>
+                                    : <span className="skeleton rv-ob__paso-pend" />}
+                                  {rotuloPaso(p.tool)}{p.listo ? '' : '…'}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="whitespace-pre-wrap">{h.r.texto}</div>
-                      )}
-                      {h.r.visual && <VisualRespuesta v={h.r.visual} />}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="rv-ob__r-texto">{h.r.texto}</div>
+                    )}
+                    {h.r.visual && <VisualRespuesta v={h.r.visual} />}
                   </div>
-                ))}
-                <div ref={finConversacion} />
-              </div>
-              <div className="sticky bottom-0 shrink-0 pt-3 pb-4" style={{ background: 'var(--g1)' }}>
-                {panelConsulta}
-                {!recomendar && chipsRow}
-                <div className={recomendar || chips.length > 0 ? 'mt-3' : ''}>{caja}</div>
-                {formulario && (
-                  <div className="mt-3">{formulario}</div>
-                )}
-              </div>
+                </div>
+              ))}
+              <div ref={finConversacion} />
+            </div>
+            <div className="rv-ob__pie">
+              {panelConsulta}
+              {!recomendar && chipsRow}
+              {caja}
+              {formulario}
             </div>
           </div>
         </div>
@@ -521,39 +473,34 @@ export function ChatEntrevista({
   }
 
   return (
-    <div className="min-h-full w-full flex-1 flex">
-      <div className="relative flex-1 min-w-0 flex flex-col">
-        <CampoPixeles />
-        {pillListo}
-        <div className="relative z-10 w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
-          <div className="w-full max-w-2xl flex flex-col items-center">
-            <Logo alto="h-7" className="mb-6" />
-            <h1 data-onboarding="pantalla.titulo" className="text-[20px] leading-tight font-semibold tracking-tight text-center">
-              Configura tu flota
-            </h1>
-            <p className="mt-2 mb-8 text-sm text-center max-w-md" style={{ color: 'var(--muted)' }}>
-              {preguntaInicial
-                ?? (listo
-                  ? 'Puedes corregir lo declarado. El motor usa esto en el próximo cuadre — no se supone nada nuevo.'
-                  : 'Fiscal, sistemas y operación. Adjunta la constancia o un PDF — y responde aquí. No supongo nada.')}
-            </p>
+    <div className="rv-ob__lienzo">
+      <CampoPixeles />
+      {pillListo}
+      <div className="rv-ob__portada">
+        <div className="rv-ob__columna">
+          <Logo alto="h-7" className="rv-ob__marca" />
+          <p className="rv-ob__lead">
+            {preguntaInicial
+              ?? (listo
+                ? 'Puedes corregir lo declarado. El motor usa esto en el próximo cuadre — no se supone nada nuevo.'
+                : 'Fiscal, sistemas y operación. Adjunta la constancia o un PDF — y responde aquí. No supongo nada.')}
+          </p>
 
-            {caja}
+          {caja}
 
-            {recomendar ? (
-              <div className={`w-full mt-4 ${menuAdjuntar ? 'invisible' : ''}`}>{panelConsulta}</div>
-            ) : (
-              <div className={menuAdjuntar ? 'invisible' : ''}>{chipsRow}</div>
-            )}
+          {recomendar ? (
+            <div className={cx('rv-ob__formulario', menuAdjuntar && 'rv-ob__oculto')}>{panelConsulta}</div>
+          ) : (
+            <div className={menuAdjuntar ? 'rv-ob__oculto' : undefined}>{chipsRow}</div>
+          )}
 
-            <p className={`mt-8 text-[11px] leading-relaxed text-center max-w-lg ${menuAdjuntar ? 'invisible' : ''}`} style={{ color: 'var(--faint)' }}>
-              Cada cifra que el motor aplique sale de una declaración tuya o de un comprobante,
-              nunca de un default. El estímulo de peaje (LIF 2026 art. 20-A) no se enciende hasta que lo declares.
-            </p>
-            {formulario && (
-              <div className={`w-full mt-6 ${menuAdjuntar ? 'invisible' : ''}`}>{formulario}</div>
-            )}
-          </div>
+          <p className={cx('rv-ob__nota', menuAdjuntar && 'rv-ob__oculto')}>
+            Cada cifra que el motor aplique sale de una declaración tuya o de un comprobante,
+            nunca de un default. El estímulo de peaje (LIF 2026 art. 20-A) no se enciende hasta que lo declares.
+          </p>
+          {formulario && (
+            <div className={cx('rv-ob__formulario', menuAdjuntar && 'rv-ob__oculto')}>{formulario}</div>
+          )}
         </div>
       </div>
     </div>

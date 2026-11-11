@@ -1,0 +1,5 @@
+/* Topes de gasto · solo lo que las piezas del sistema no traen. */
+.rv-pol__tope { width: 160px; }
+.rv-pol__sin { color: var(--muted); }
+.rv-pol__nota { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
+.rv-pol__nota strong { color: var(--ink); font-weight: 600; }

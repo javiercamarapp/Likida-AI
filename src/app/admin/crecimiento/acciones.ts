@@ -39,7 +39,7 @@ export async function accionRefrescarGasto(): Promise<AccionCampana> {
       const r = await refrescarGastoMeta();
       revalidatePath('/admin/crecimiento');
       if (!r.configurada) {
-        return { ok: false, error: 'META_ADS_TOKEN no está configurado — no hay de dónde leer el gasto.' };
+        return { ok: false, error: 'La conexión con Meta Ads no está configurada: no hay de dónde leer el gasto.' };
       }
       const fallo = r.fallidas.length > 0
         ? ` · fallaron: ${r.fallidas.map((f) => `${f.nombre} (${f.motivo})`).join(', ')}`

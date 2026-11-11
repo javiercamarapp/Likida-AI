@@ -25,7 +25,7 @@ describe('sección GPS de Conexiones', () => {
     expect(h).toContain('3 lo tienen ligado y nunca han reportado');
     expect(h).toContain('https://app.likida.ai/api/gps/push/abc');
     expect(h).toContain('12001');
-    expect(h).toContain('Likida NO crea unidades');
+    expect(h).toContain('Likida no crea unidades');
     expect(h).toContain('Rotar secreto');
   });
   it('sin proveedores dice qué falta; sin secreto ofrece generarlo; un no-dueño no ve botones ni importador', () => {
@@ -39,7 +39,7 @@ describe('sección GPS de Conexiones', () => {
     expect(dueno).toContain('Ligar dispositivos GPS desde Excel');
   });
   it('sin huérfanos lo dice en verde', () => {
-    expect(renderToStaticMarkup(<SeccionGps {...base} huerfanos={[]} />)).toContain('Ningún dispositivo huérfano');
+    expect(renderToStaticMarkup(<SeccionGps {...base} huerfanos={[]} />)).toContain('Ningún dispositivo sin unidad');
   });
   it('el importador de geocercas solo aparece con la tabla propia conectada y para quien administra', () => {
     expect(renderToStaticMarkup(<SeccionGps {...base} />)).not.toContain('Importar mis geocercas');

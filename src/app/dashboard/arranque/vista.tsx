@@ -3,7 +3,9 @@ import { Check, CircleHelp } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import type { PasoMarcha, GrupoPaso, ResumenMarcha } from '@/lib/likida/puesta_en_marcha';
 import { AUTOMATIZACIONES } from '../rutas';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Tarjeta, BotonEnlace, Icono } from '@/app/ui-v2/componentes';
+import { ProgresoAnillo } from '@/app/ui-v2/graficas';
+import './arranque.css';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 const GRUPOS: Array<{ id: GrupoPaso; titulo: string; nota: string; info: InfoClave }> = [
@@ -28,60 +30,50 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
 }) {
   return (
     <MarcoPagina titulo="Puesta en marcha" apoyo="Lo que falta para que tu flota opere sin ayuda, con el estado real de cada paso.">
-      <section className="card p-4" aria-labelledby="titulo-avance">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <TituloRecuadro id="titulo-avance" info="arranque.avance">
-            {resumen.completo ? 'Tu flota está lista para operar' : 'Lo que falta para operar sin ayuda'}
-          </TituloRecuadro>
-          <span className="etiqueta-mono text-[11px]" style={{ color: 'var(--muted)' }}>
-            {numero(resumen.hechos)} de {numero(resumen.total)} pasos
-          </span>
-        </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--canvas)' }}
-          role="progressbar" aria-valuemin={0} aria-valuemax={resumen.total} aria-valuenow={resumen.hechos} aria-label="Avance de la puesta en marcha">
-          <div className="h-full rounded-full" style={{ width: `${resumen.total === 0 ? 0 : (resumen.hechos / resumen.total) * 100}%`, background: 'var(--marca)' }} />
-        </div>
-        {resumen.hayDatoFaltante && (
-          <p className="mt-2 text-[12px]" style={{ color: 'var(--warn)' }}>
-            Algunos pasos no se pudieron comprobar en este momento: el avance de arriba es un mínimo, no una medida.
-          </p>
-        )}
-        {resumen.siguiente && (
-          <p className="mt-3 text-[12px]" style={{ color: 'var(--muted)' }}>
-            Siguiente: <strong style={{ color: 'var(--ink)' }}>{resumen.siguiente.titulo}</strong>
-            {(puedeAdministrar || !resumen.siguiente.soloDueno) && (
-              <> — <Link href={resumen.siguiente.href} className="underline">{resumen.siguiente.cta}</Link></>
+      <Tarjeta titulo={resumen.completo ? 'Tu flota está lista para operar' : 'Lo que falta para operar sin ayuda'} info="arranque.avance"
+        acciones={<span className="rv-ar__nota">{numero(resumen.hechos)} de {numero(resumen.total)} pasos</span>}>
+        <div className="rv-ar__avance">
+          <ProgresoAnillo valor={resumen.total === 0 ? 0 : Math.round((resumen.hechos / resumen.total) * 100)} etiqueta="Avance de la puesta en marcha" />
+          <div className="rv-ar__resumen">
+            {resumen.hayDatoFaltante && (
+              <p className="rv-ar__aviso">Algunos pasos no se pudieron comprobar en este momento: el avance de arriba es un mínimo, no una medida.</p>
             )}
-          </p>
-        )}
-      </section>
+            {resumen.siguiente && (
+              <p className="rv-ar__nota">
+                Siguiente: <strong>{resumen.siguiente.titulo}</strong>
+                {(puedeAdministrar || !resumen.siguiente.soloDueno) && (
+                  <> — <Link href={resumen.siguiente.href} className="rv-ar__enlace">{resumen.siguiente.cta}</Link></>
+                )}
+              </p>
+            )}
+          </div>
+        </div>
+      </Tarjeta>
 
       {GRUPOS.map((g) => (
-        <section key={g.id} className="card p-4" aria-labelledby={`grupo-${g.id}`}>
-          <TituloRecuadro id={`grupo-${g.id}`} info={g.info}>{g.titulo}</TituloRecuadro>
-          <p className="mb-3 text-[12px]" style={{ color: 'var(--muted)' }}>{g.nota}</p>
-          <ol className="space-y-3">
+        <Tarjeta key={g.id} titulo={g.titulo} info={g.info}>
+          <p className="rv-ar__nota-grupo">{g.nota}</p>
+          <ol className="rv-ar__pasos">
             {pasos.filter((p) => p.grupo === g.id).map((p) => <Paso key={p.id} p={p} puedeAdministrar={puedeAdministrar} />)}
           </ol>
-        </section>
+        </Tarjeta>
       ))}
 
-      <section className="card p-4" aria-labelledby="titulo-agentes">
-        <TituloRecuadro id="titulo-agentes" info="arranque.automatizaciones">Las automatizaciones que trabajan con lo que cargaste</TituloRecuadro>
-        <p className="mb-3 text-[12px]" style={{ color: 'var(--muted)' }}>
+      <Tarjeta titulo="Las automatizaciones que trabajan con lo que cargaste" info="arranque.automatizaciones">
+        <p className="rv-ar__nota-grupo">
           Cada una se activa en tu cuenta con Likida y arranca con tus operadores, unidades y política. Aquí puedes ver su pantalla.
         </p>
-        <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        <ul className="rv-ar__lista">
           {AUTOMATIZACIONES.map((a) => {
             const href = hrefAutomatizacion[a.href];
             return (
-              <li key={a.href} className="text-[12px]">
-                {href ? <Link href={href} className="underline">{a.nombre}</Link> : <span style={{ color: 'var(--muted)' }}>{a.nombre}</span>}
+              <li key={a.href}>
+                {href ? <Link href={href} className="rv-ar__enlace">{a.nombre}</Link> : <span>{a.nombre}</span>}
               </li>
             );
           })}
         </ul>
-      </section>
+      </Tarjeta>
     </MarcoPagina>
   );
 }
@@ -91,32 +83,25 @@ function Paso({ p, puedeAdministrar }: { p: PasoMarcha; puedeAdministrar: boolea
   const sinDato = p.estado === 'sin_dato';
   const puedeActuar = puedeAdministrar || !p.soloDueno;
   return (
-    <li className="flex items-center gap-3">
-      <span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px]"
-        style={hecho
-          ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
-          : sinDato ? { border: '1px dashed var(--warn)', color: 'var(--warn)' }
-            : { border: '1px solid var(--line)', color: 'var(--muted)' }}>
-        {hecho ? <Check width={12} height={12} strokeWidth={2.5} /> : sinDato ? <CircleHelp width={12} height={12} strokeWidth={2} /> : null}
+    <li className="rv-ar__paso">
+      <span aria-hidden="true" className="rv-ar__marca" data-estado={p.estado}>
+        {hecho ? <Icono icono={Check} tam={14} /> : sinDato ? <Icono icono={CircleHelp} tam={14} /> : null}
       </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-medium" style={{ color: hecho ? 'var(--muted)' : 'var(--ink)' }}>
+      <div className="rv-ar__texto">
+        <p className="rv-ar__titulo" data-hecho={hecho || undefined}>
           {p.titulo}
-          {p.opcional && <span className="ml-1.5 text-[11px] font-normal" style={{ color: 'var(--faint)' }}>(opcional)</span>}
-          <span className="sr-only">{hecho ? ' — hecho' : sinDato ? ' — no se pudo comprobar' : ' — pendiente'}</span>
+          {p.opcional && <span className="rv-ar__opcional">(opcional)</span>}
+          <span className="rv-sr">{hecho ? ' — hecho' : sinDato ? ' — no se pudo comprobar' : ' — pendiente'}</span>
         </p>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-ar__detalle">
           {sinDato ? 'No pude comprobarlo en este momento. ' : ''}{p.detalle}
         </p>
       </div>
       {!hecho && (
         puedeActuar ? (
-          <Link href={p.href}
-            className="rv-btn rv-btn--secondary rv-btn--sm shrink-0 min-w-[9.5rem]">
-            {p.cta}
-          </Link>
+          <span className="rv-ar__accion"><BotonEnlace href={p.href} variante="secondary" tamano="sm">{p.cta}</BotonEnlace></span>
         ) : (
-          <span className="shrink-0 min-w-[9.5rem] text-center text-[11px]" style={{ color: 'var(--faint)' }}>Lo hace quien administra</span>
+          <span className="rv-ar__accion rv-ar__quien">Lo hace quien administra</span>
         )
       )}
     </li>

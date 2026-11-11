@@ -63,17 +63,21 @@ export function EsqTablaV2({ filas = 6, plana }: { filas?: number; plana?: boole
   );
 }
 
-/** La pantalla entera mientras llega: encabezado, tira de cifras y dos tarjetas. Es lo que muestra `loading.tsx`. */
-export function EsqPagina() {
+/** La pantalla entera mientras llega: encabezado, tira de cifras y dos tarjetas. Es lo que muestra `loading.tsx`.
+ *  `sinEncabezado`: para rutas de hub, donde el encabezado y la barra de pestañas PERSISTEN al cambiar de pestaña; el esqueleto
+ *  solo cubre lo que cambia (cifras y tarjetas), así el título no parpadea. */
+export function EsqPagina({ sinEncabezado = false }: { sinEncabezado?: boolean } = {}) {
   return (
-    <div className="rv-marco rv-esq-pagina" data-carga="pagina" role="status" aria-busy="true" aria-label="Cargando">
-      <div className="rv-encabezado">
-        <div className="rv-encabezado__texto rv-esq-encabezado">
-          <EsqBarra alto={12} ancho="xs" />
-          <EsqBarra alto={24} ancho="titulo" />
-          <EsqBarra alto={14} ancho="lectura" />
+    <div className="rv-marco rv-esq-pagina" data-carga="pagina" data-sin-encabezado={sinEncabezado || undefined} role="status" aria-busy="true" aria-label="Cargando">
+      {!sinEncabezado && (
+        <div className="rv-encabezado">
+          <div className="rv-encabezado__texto rv-esq-encabezado">
+            <EsqBarra alto={12} ancho="xs" />
+            <EsqBarra alto={24} ancho="titulo" />
+            <EsqBarra alto={14} ancho="lectura" />
+          </div>
         </div>
-      </div>
+      )}
       <div className="rv-kpis rv-esq-cifras">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="rv-kpi">

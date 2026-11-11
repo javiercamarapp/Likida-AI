@@ -21,8 +21,8 @@ const sqls = readdirSync(`${DIR}sql`).filter((f) => f.endsWith('.sql')).sort();
 const sinComentarios = (s: string) => s.replace(/--[^\n]*/g, '');
 
 describe('el SQL del seed', () => {
-  it('trae los 10 bloques en orden', () => {
-    expect(sqls).toEqual(['00_guardas_y_ayudas.sql', '01_base.sql', '02_viajes.sql', '03_gps.sql', '04_peajes.sql', '05_liquidacion.sql', '06_cartaporte.sql', '07_vigia_y_conductor.sql', '08_convenios.sql', '09_resumen.sql']);
+  it('trae los 11 bloques en orden (10 + 05b, desglose por correo)', () => {
+    expect(sqls).toEqual(['00_guardas_y_ayudas.sql', '01_base.sql', '02_viajes.sql', '03_gps.sql', '04_peajes.sql', '05_liquidacion.sql', '05b_desglose_correo.sql', '06_cartaporte.sql', '07_vigia_y_conductor.sql', '08_convenios.sql', '09_resumen.sql']);
     const orq = readFileSync(`${DIR}sembrar.sql`, 'utf8');
     for (const f of sqls) expect(orq).toContain(`\\ir sql/${f}`);
   });

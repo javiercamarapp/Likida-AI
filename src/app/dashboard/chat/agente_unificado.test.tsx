@@ -27,6 +27,17 @@ const clases = (html: string): Set<string> => {
 const cliente = renderToStaticMarkup(<AgenteConversacion modo="cliente" kpis={null} acred={null} />);
 const superadmin = renderToStaticMarkup(<AgenteConversacion modo="superadmin" />);
 
+describe('UN solo <h1> por página: el panel lateral del Copiloto no compite con el título de la pantalla', () => {
+  const panel = renderToStaticMarkup(<AgenteConversacion modo="superadmin" variante="panel" marca="simbolo" />);
+  it('la variante panel pinta el título como <h2>', () => {
+    expect(panel).not.toContain('<h1');
+    expect(panel).toMatch(/<h2>[^<]+<\/h2>/);
+  });
+  it('la variante página (el chat de /dashboard y la página del Copiloto) conserva su <h1>', () => {
+    expect((superadmin.match(/<h1/g) ?? []).length).toBe(1);
+  });
+});
+
 describe('el cliente y el superadmin comparten estructura y clases', () => {
   it('las clases rv-* son las mismas salvo el clip de adjuntar (el copiloto no tiene adjuntos)', () => {
     const c = clases(cliente);
@@ -34,7 +45,8 @@ describe('el cliente y el superadmin comparten estructura y clases', () => {
     const soloCliente = [...c].filter((x) => !s.has(x)).sort();
     const soloSuperadmin = [...s].filter((x) => !c.has(x)).sort();
     expect(soloCliente).toEqual(['rv-chat__clip']);
-    expect(soloSuperadmin).toEqual([]);
+    // El briefing «Decide hoy» es de la portada del Copiloto (F5): su estructura propia es lo único que el superadmin tiene de más.
+    expect(soloSuperadmin).toEqual(['rv-btn--sm', 'rv-chat__briefing', 'rv-chat__briefing-acciones', 'rv-chat__briefing-titulo', 'rv-chat__nota']);
   });
 
   it.each([['cliente', cliente], ['superadmin', superadmin]])('%s: portada completa (hero, recuadro, temas con punto, chips, historial) y cero style=', (_n, html) => {
@@ -72,8 +84,9 @@ describe('el cliente y el superadmin comparten estructura y clases', () => {
   it('el panel lateral usa la misma pantalla en variante compacta', () => {
     const panel = renderToStaticMarkup(<AgenteConversacion modo="superadmin" variante="panel" marca="simbolo" />);
     expect(panel).toContain('data-variante="panel"');
+    // El briefing «Decide hoy» es solo de la página: el panel, cerrado, no pide nada a la red.
     // El panel conserva TODAS las clases de la pantalla; solo suma la hoja del historial (el Drawer del motor de overlays).
-    for (const c of [...clases(superadmin)].filter((x) => !x.startsWith('rv-chat__hist') && x !== 'rv-btn--ghost')) expect(clases(panel).has(c), c).toBe(true);
+    for (const c of [...clases(superadmin)].filter((x) => !x.startsWith('rv-chat__hist') && !x.startsWith('rv-chat__briefing') && !['rv-btn--ghost', 'rv-btn--sm', 'rv-chat__nota'].includes(x))) expect(clases(panel).has(c), c).toBe(true);
   });
 
   it('los perfiles son datos puros: ninguna función en textos ni temas (props serializables)', () => {

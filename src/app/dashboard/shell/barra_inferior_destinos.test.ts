@@ -25,10 +25,16 @@ describe('destinos de la barra inferior móvil', () => {
     }
   }
 
-  it('el dueño con el perfil de cinco agentes ve Resumen, Liquidación, Despacho y Viajes (más «Más»)', () => {
+  it('el dueño con el perfil de cinco agentes ve Resumen, Liquidación, Viajes y Equipo (más «Más»)', () => {
     const d = destinosMovil('flota_admin', menuPorPerfil('flota_admin', 'cinco_agentes'));
-    expect(d.map((x) => x.href)).toEqual(['/dashboard', '/dashboard/agentes/liquidacion', '/dashboard/despacho', '/dashboard/viajes']);
-    expect(d.map((x) => x.etiqueta)).toEqual(['Resumen', 'Liquidación', 'Despacho', 'Viajes']);
+    expect(d.map((x) => x.href)).toEqual(['/dashboard', '/dashboard/agentes/liquidacion', '/dashboard/despacho', '/dashboard/operadores']);
+    expect(d.map((x) => x.etiqueta)).toEqual(['Resumen', 'Liquidación', 'Viajes', 'Equipo']);
+  });
+
+  it('una preferencia que nombra una PESTAÑA obtiene la entrada que la contiene, una sola vez (Despacho y Registro son «Viajes»)', () => {
+    const d = destinosMovil('encargado', menuPorPerfil('encargado', null));
+    expect(d.filter((x) => x.etiqueta === 'Viajes')).toHaveLength(1);
+    expect(d.map((x) => x.href)).not.toContain('/dashboard/viajes');
   });
 
   it('el contador nunca recibe el Resumen del dueño: con perfil entra por Liquidación y sin perfil por su propio Resumen', () => {

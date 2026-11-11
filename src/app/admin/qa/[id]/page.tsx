@@ -1,13 +1,10 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { notFound } from 'next/navigation';
-import { Bug } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { leerCorrida, leerManifiesto, leerLecturasDeCorrida, firmarRutas, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
 import { resumenDeLecturas } from '@/lib/admin/qa-medicion';
 import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
-import { BarraPagina } from '../../../dashboard/resumen-visual';
-import { EstadoError } from '../../ui/kit';
 import { CorridaViva, type FotoFirmada, type PdfFirmado } from './corrida-viva';
 
 export const dynamic = 'force-dynamic';
@@ -32,14 +29,7 @@ export default async function CorridaQaPage({ params }: { params: Promise<{ id: 
     // Error DICHO, no tragado: una pantalla en blanco sobre un Storage caído
     // afirmaría "esta corrida no dejó nada", que es lo contrario de un ledger.
     return (
-      <main className="h-full">
-        <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-          <BarraPagina icono={<Bug width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Corrida de QA" />
-          <div className="px-5 py-5">
-            <EstadoError mensaje={`No se pudo leer la corrida. ${r.error} — no es que no exista, es que no se pudo mirar.`} />
-          </div>
-        </div>
-      </main>
+      <CorridaViva errorLectura={r.error} />
     );
   }
   if (r.datos === null) notFound();

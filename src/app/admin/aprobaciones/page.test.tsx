@@ -32,6 +32,15 @@ const dobles = vi.hoisted(() => ({
   enviarPiezaPorCorreo: vi.fn(),
   liberarEnvioAmbiguo: vi.fn(),
   revalidatePath: vi.fn(),
+  contarVencidas: vi.fn(),
+  vaciarVencidas: vi.fn(),
+  leerResumenBandeja: vi.fn(),
+}));
+vi.mock('@/lib/admin/cola-aprobacion', async (importar) => ({
+  ...(await importar<typeof import('@/lib/admin/cola-aprobacion')>()),
+  contarVencidas: dobles.contarVencidas,
+  vaciarVencidas: dobles.vaciarVencidas,
+  leerResumenBandeja: dobles.leerResumenBandeja,
 }));
 
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
@@ -50,6 +59,7 @@ vi.mock('@/lib/likida/agentes/cola', async (importar) => ({
 }));
 
 import { FormaEnvio, FormaLiberarAmbiguo, FormaPieza } from './forma-pieza';
+import { LimpiezaLote } from './lote';
 import PaginaAprobaciones from './page';
 
 /** Recorre el árbol ya renderizado (sin montar DOM) y junta cada elemento
@@ -58,7 +68,8 @@ function buscarElementos(nodo: ReactNode, componente: unknown, salida: Elemento[
   if (Array.isArray(nodo)) { for (const hijo of nodo) buscarElementos(hijo, componente, salida); return salida; }
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === componente) salida.push(nodo);
-  buscarElementos(nodo.props.children as ReactNode, componente, salida);
+  // Recorre TODAS las props con elementos (children y también las vistas que se pasan por nombre).
+  for (const v of Object.values(nodo.props)) if (typeof v === 'object' && v !== null) buscarElementos(v as ReactNode, componente, salida);
   return salida;
 }
 
@@ -82,11 +93,12 @@ beforeEach(() => {
   dobles.ultimasResueltas.mockResolvedValue([]);
   dobles.rebotesRecientes.mockResolvedValue([]);
   dobles.correosSuprimidos.mockResolvedValue([]);
+  dobles.leerResumenBandeja.mockResolvedValue(null);
 });
 
 it('INTEGRACIÓN — "Enviar por correo" de la página real pasa por FormaEnvio, y confirmar (el type="submit" real) SÍ manda el correo', async () => {
   dobles.enviarPiezaPorCorreo.mockResolvedValue({ ok: true, destinatario: 'contacto@x.mx', providerId: 'resend-1' });
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaEnvio);
   expect(forma).toBeDefined();
   expect((forma.props.pieza as { id: string }).id).toBe('pz-1');
@@ -102,7 +114,7 @@ it('INTEGRACIÓN — "Enviar por correo" de la página real pasa por FormaEnvio,
 });
 
 it('INTEGRACIÓN — re-exige requireSuperadmin aunque la action se invoque directo (segunda puerta)', async () => {
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaEnvio);
   const accion = forma.props.accion as AccionEnviar;
   dobles.requireSuperadmin.mockRejectedValueOnce(new Error('REDIRECT:/dashboard'));
@@ -112,7 +124,7 @@ it('INTEGRACIÓN — re-exige requireSuperadmin aunque la action se invoque dire
 
 it('INTEGRACIÓN — si enviarPiezaPorCorreo falla, el detalle llega verbatim y NO se revalida', async () => {
   dobles.enviarPiezaPorCorreo.mockRejectedValue(new Error('Solo una pieza APROBADA y aún no enviada se puede enviar'));
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaEnvio);
   const accion = forma.props.accion as AccionEnviar;
   const r = await accion(null, fd({ pieza: 'pz-1' }));
@@ -130,7 +142,7 @@ it('A36-R11-01 — una pieza ambigua en «Últimas resueltas» muestra su motivo
   dobles.aprobadasSinEnviar.mockResolvedValue([]);
   dobles.ultimasResueltas.mockResolvedValue([AMBIGUA]);
   dobles.liberarEnvioAmbiguo.mockResolvedValue({ reservaLiberada: true });
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaLiberarAmbiguo);
   expect(forma).toBeDefined();
   expect(JSON.stringify(pagina)).toContain('Verificar en Resend');
@@ -144,7 +156,7 @@ it('A36-R11-01 — la reserva de cadencia no borrada se DICE en la respuesta', a
   dobles.aprobadasSinEnviar.mockResolvedValue([]);
   dobles.ultimasResueltas.mockResolvedValue([AMBIGUA]);
   dobles.liberarEnvioAmbiguo.mockResolvedValue({ reservaLiberada: false });
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaLiberarAmbiguo);
   const r = await (forma.props.accion as AccionEnviar)(null, fd({ pieza: 'pz-9' }));
   expect(r.ok).toMatch(/48 h/);
@@ -153,14 +165,14 @@ it('A36-R11-01 — la reserva de cadencia no borrada se DICE en la respuesta', a
 it('A36-R11-01 — una pieza enviada con prueba del proveedor NO ofrece liberar', async () => {
   dobles.aprobadasSinEnviar.mockResolvedValue([]);
   dobles.ultimasResueltas.mockResolvedValue([{ ...AMBIGUA, providerMessageId: 're_1' }]);
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   expect(buscarElementos(pagina, FormaLiberarAmbiguo)).toHaveLength(0);
 });
 
 // A37-S05-08
 it('A37-S05-08 — «Aprobar con mi edición» con el cuerpo vaciado NO aprueba el borrador original', async () => {
   dobles.bandejaPendiente.mockResolvedValue([{ ...PIEZA_POR_ENVIAR, estado: 'pendiente' }]);
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaPieza);
   const accion = forma.props.accion as AccionEnviar;
   const r = await accion(null, fd({ pieza: 'pz-1', operacion: 'aprobar', cuerpoEditado: '   ' }));
@@ -171,4 +183,85 @@ it('A37-S05-08 — «Aprobar con mi edición» con el cuerpo vaciado NO aprueba 
   const ok = await accion(null, fd({ pieza: 'pz-1', operacion: 'aprobar' }));
   expect(ok.ok).toMatch(/tal cual/);
   expect(dobles.aprobarPieza).toHaveBeenCalledWith('pz-1', 'admin-1', undefined);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Vaciado por lotes (auditoría admin, P0): contar no escribe; ejecutar re-cuenta, se niega si la cifra cambió, exige superadmin y firma.
+// ═══════════════════════════════════════════════════════════════════════════
+type AccionLote = (previo: unknown, fd: FormData) => Promise<Record<string, unknown> | null>;
+const RESUMEN = { corte: 'x', dias: 30, vencidas: 100, enElLote: 50, limite: 50, porTipo: { parte_diario: 100 }, porAgente: {}, masViejaCreadaEn: null };
+
+async function accionesLote() {
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
+  const [lote] = buscarElementos(pagina, LimpiezaLote);
+  expect(lote).toBeDefined();
+  return { contar: lote.props.contar as AccionLote, vaciar: lote.props.vaciar as AccionLote };
+}
+
+it('LOTE — contar es solo lectura: llama al dry-run, devuelve el desglose y NO escribe', async () => {
+  dobles.contarVencidas.mockResolvedValue(RESUMEN);
+  const { contar } = await accionesLote();
+  const r = await contar(null, fd({ dias: '30', limite: '50', tipos: '' }));
+  expect(dobles.contarVencidas).toHaveBeenCalledWith({ dias: 30, limite: 50 });
+  expect(dobles.vaciarVencidas).not.toHaveBeenCalled();
+  expect(r).toMatchObject({ resumen: { enElLote: 50 }, entrada: { dias: '30', limite: '50', tipos: '' } });
+});
+
+it('LOTE — un parámetro absurdo (0 días) se rechaza con texto de pantalla: no vacía la bandeja', async () => {
+  const { contar, vaciar } = await accionesLote();
+  expect((await contar(null, fd({ dias: '0', limite: '50' })))?.error).toMatch(/días/);
+  expect((await vaciar(null, fd({ dias: '0', limite: '50', esperadas: '50' })))?.error).toMatch(/días/);
+  expect(dobles.vaciarVencidas).not.toHaveBeenCalled();
+});
+
+it('LOTE — ejecutar sin cifra contada no archiva nada', async () => {
+  const { vaciar } = await accionesLote();
+  const r = await vaciar(null, fd({ dias: '30', limite: '50' }));
+  expect(r?.error).toMatch(/cuenta primero/);
+  expect(dobles.vaciarVencidas).not.toHaveBeenCalled();
+});
+
+it('LOTE — si la cifra cambió desde que se contó, NO se ejecuta a ciegas', async () => {
+  dobles.contarVencidas.mockResolvedValue({ ...RESUMEN, enElLote: 12 });
+  const { vaciar } = await accionesLote();
+  const r = await vaciar(null, fd({ dias: '30', limite: '50', esperadas: '50' }));
+  expect(r?.error).toMatch(/contaste 50 y ahora el lote sería de 12/);
+  expect(dobles.vaciarVencidas).not.toHaveBeenCalled();
+});
+
+it('LOTE — con la cifra confirmada archiva con el actor, dryRun:false, revalida y dice que quedó firmado', async () => {
+  dobles.contarVencidas.mockResolvedValue(RESUMEN);
+  dobles.vaciarVencidas.mockResolvedValue({ ...RESUMEN, dryRun: false, resueltas: 50, ids: [], restantes: 50, bitacoraEscrita: true });
+  const { vaciar } = await accionesLote();
+  const r = await vaciar(null, fd({ dias: '30', limite: '50', tipos: 'parte_diario', esperadas: '50' }));
+  expect(dobles.vaciarVencidas).toHaveBeenCalledWith('admin-1', { dias: 30, limite: 50, tipos: ['parte_diario'], dryRun: false });
+  expect(dobles.revalidatePath).toHaveBeenCalledWith('/admin/aprobaciones');
+  expect(r?.ok).toMatch(/Archivadas 50/);
+  expect(r?.ok).toMatch(/firmado en la bitácora/);
+  expect(r?.ok).toMatch(/Quedan 50/);
+});
+
+it('LOTE — si la bitácora del lote no se pudo escribir, se DICE', async () => {
+  dobles.contarVencidas.mockResolvedValue(RESUMEN);
+  dobles.vaciarVencidas.mockResolvedValue({ ...RESUMEN, dryRun: false, resueltas: 50, ids: [], restantes: 0, bitacoraEscrita: false });
+  const { vaciar } = await accionesLote();
+  expect((await vaciar(null, fd({ dias: '30', limite: '50', esperadas: '50' })))?.ok).toMatch(/bitácora no pudo escribirse/);
+});
+
+it('LOTE — re-exige superadmin dentro de cada acción (segunda puerta)', async () => {
+  const { contar, vaciar } = await accionesLote();
+  dobles.requireSuperadmin.mockRejectedValue(new Error('REDIRECT:/dashboard'));
+  await expect(contar(null, fd({}))).rejects.toThrow('REDIRECT');
+  await expect(vaciar(null, fd({ esperadas: '1' }))).rejects.toThrow('REDIRECT');
+  expect(dobles.contarVencidas).not.toHaveBeenCalled();
+  expect(dobles.vaciarVencidas).not.toHaveBeenCalled();
+});
+
+it('el render: un solo h1, sin style= ni .card, y las tres vistas presentes', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const html = renderToStaticMarkup(await PaginaAprobaciones({ searchParams: Promise.resolve({}) }));
+  expect((html.match(/<h1/g) ?? []).length).toBe(1);
+  expect(html).not.toContain('style=');
+  expect(html).not.toMatch(/class="[^"]*\bcard\b/);
+  for (const t of ['Por aprobar', 'Por enviar', 'Historial', 'Limpiar piezas vencidas']) expect(html).toContain(t);
 });

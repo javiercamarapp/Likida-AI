@@ -84,7 +84,7 @@ describe('H35 — "propia vs heredada" falla cerrado', () => {
 });
 
 describe('H39 — la tabla "Reglas por ruta" desliza en pantallas angostas', () => {
-  it('con reglas por ruta: la tabla va envuelta en overflow-x-auto, como las otras dos', async () => {
+  it('con reglas por ruta: la tabla va en la región desplazable de TablaBase (overflow y foco de teclado)', async () => {
     tenantSelectResultado = { data: { config: { politica: [] } }, error: null };
     politicaConfig = [
       { concepto: 'diesel', topeMonto: 500, requiereCfdi: true },
@@ -93,8 +93,8 @@ describe('H39 — la tabla "Reglas por ruta" desliza en pantallas angostas', () 
     const html = await render();
     const idx = html.indexOf('Reglas por ruta');
     expect(idx, 'debe existir la sección de reglas por ruta').toBeGreaterThan(-1);
-    const seccion = html.slice(idx, idx + 800);
-    expect(seccion).toContain('overflow-x-auto');
+    const seccion = html.slice(idx, idx + 4000);
+    expect(seccion).toContain('rv-tb__region');
     expect(seccion).toContain('CDMX - Nuevo Laredo, Tamaulipas');
   });
 });

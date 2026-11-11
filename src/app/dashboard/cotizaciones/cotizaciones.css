@@ -1,0 +1,17 @@
+/* Cotizador · solo lo que las piezas del sistema no traen. */
+.rv-cot__nota { margin: 0 0 8px; font-size: var(--t-small); color: var(--muted); }
+.rv-cot__nota[data-tono="warn"] { color: var(--warn); }
+.rv-cot__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.rv-cot__fila { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rv-cot__cabeza { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; font-size: var(--t-body); }
+.rv-cot__ruta, .rv-cot__cifras { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.rv-cot__tenue { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.rv-cot__desglose { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; font-size: var(--t-body); }
+.rv-cot__desglose li { display: flex; justify-content: space-between; gap: 16px; }
+.rv-cot__monto { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rv-cot__aviso { display: inline-flex; align-items: center; gap: 4px; color: var(--warn); }
+.rv-cot__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); }
+.rv-cot__acciones { margin-left: auto; }
+.rv-cot__fila-acc { display: grid; justify-items: end; gap: 4px; }
+.rv-cot__fila-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-cot__error { font-size: var(--t-micro); color: var(--bad); }

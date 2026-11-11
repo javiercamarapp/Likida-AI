@@ -1,6 +1,6 @@
-import { Building2, FlaskConical, ArrowLeft, AlertTriangle } from 'lucide-react';
-import Link from 'next/link';
-import { StatusPill } from '../ui/kit';
+import { Building2, FlaskConical } from 'lucide-react';
+import { AvisoCompacto, Boton, BotonEnlace, Icono, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import '../resumen.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL SELECTOR DE FLOTA — la pantalla que mató al tenant implícito.
@@ -38,97 +38,54 @@ export function ElegirFlotaContenido({
   accionElegir: (formData: FormData) => Promise<void>;
   accionQuitar: () => Promise<void>;
 }) {
-  const tarjeta = (f: FlotaElegible, esDemo: boolean) => {
+  const fila = (f: FlotaElegible, esDemo: boolean) => {
     const activa = seleccionActual === f.id;
     return (
-      <form key={f.id} action={accionElegir}>
-        <input type="hidden" name="flota" value={esDemo ? 'demo' : f.id} />
-        <input type="hidden" name="next" value={next} />
-        <button type="submit"
-          className="card w-full text-left p-4 flex items-center gap-3 transition-colors hover:border-[var(--muted)]"
-          style={esDemo ? { borderStyle: 'dashed' } : undefined}>
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-            {esDemo
-              ? <FlaskConical width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              : <Building2 width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium truncate">{f.nombre}</div>
-            <div className="cifra-mono text-[11px] mt-0.5 truncate" style={{ color: 'var(--faint)' }}>
-              {esDemo ? 'datos de demostración — no es un cliente' : f.id}
-            </div>
-          </div>
-          {activa && <StatusPill estado="ok">activa</StatusPill>}
-        </button>
-      </form>
+      <li key={f.id} className="adm-res-fila">
+        <Icono icono={esDemo ? FlaskConical : Building2} />
+        <div className="adm-res-fila__texto">
+          <span className="adm-res-fila__titulo">{f.nombre}</span>
+          <span className="adm-flota-id">{esDemo ? 'Datos de demostración — no es un cliente' : f.id}</span>
+        </div>
+        {activa ? <StatusChip tono="ok">Activa</StatusChip> : null}
+        <form action={accionElegir} className="adm-flota-form">
+          <input type="hidden" name="flota" value={esDemo ? 'demo' : f.id} />
+          <input type="hidden" name="next" value={next} />
+          <Boton type="submit" tamano="sm" variante={activa ? 'secondary' : 'primary'}>{activa ? 'Volver a elegirla' : 'Elegir'}</Boton>
+        </form>
+      </li>
     );
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-4 py-8">
-      <Link href="/admin"
-        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium hover:opacity-70 transition-opacity"
-        style={{ color: 'var(--muted)' }}>
-        <ArrowLeft width={13} height={13} strokeWidth={1.75} /> Volver a la consola
-      </Link>
-
-      <h1 className="text-[22px] leading-tight font-semibold tracking-tight mt-4">
-        ¿Qué flota quieres ver?
-      </h1>
-      <p className="text-sm mt-1.5 max-w-lg" style={{ color: 'var(--muted)' }}>
-        El panel del cliente siempre apunta a UNA flota elegida — aquí no hay
-        default silencioso. La selección dura una jornada y queda en la
-        bitácora de auditoría.
-      </p>
-
+    <MarcoPagina
+      area="Cuenta" titulo="Elegir flota" ancho="lectura"
+      apoyo="El panel del cliente apunta a UNA flota elegida; la selección dura una jornada y queda en la bitácora."
+      acciones={<BotonEnlace variante="ghost" href="/admin">Volver al Resumen</BotonEnlace>}
+    >
       {error && (
-        <div className="card p-3 mt-5 flex items-center gap-2.5" style={{ borderColor: 'var(--bad)' }}>
-          <AlertTriangle width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--bad)' }} />
-          <p className="text-[13px]">
-            {error === 'firma'
-              ? 'No se pudo guardar la selección (falta la llave de firma en el ambiente) — revisa la configuración.'
-              : 'Esa flota no existe o no se pudo verificar — elige una de la lista.'}
-          </p>
-        </div>
+        <AvisoCompacto tono="error" resumen={error === 'firma'
+          ? 'No se pudo guardar la selección (falta la llave de firma en el ambiente) — revisa la configuración.'
+          : 'Esa flota no existe o no se pudo verificar — elige una de la lista.'} />
       )}
 
-      <div className="etiqueta-mono text-[10px] uppercase mt-6 mb-2" style={{ color: 'var(--faint)' }}>
-        Flotas de clientes
-      </div>
       {errorLista ? (
-        <div className="card p-4">
-          <p className="text-sm">
-            No se pudo leer la lista de flotas ahora mismo — reintenta en un
-            momento. La demo de abajo sigue disponible.
-          </p>
-        </div>
+        <Tarjeta titulo="Flotas de clientes" estado="error" mensaje="No se pudo leer la lista de flotas. La demostración sigue disponible." reintentar />
       ) : flotas.length === 0 ? (
-        <div className="card p-4">
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            No hay flotas de clientes dadas de alta todavía.
-          </p>
-        </div>
+        <Tarjeta titulo="Flotas de clientes" estado="vacio" mensaje="Sin flotas de clientes" detalle="Aparecen aquí cuando se da de alta la primera flota." />
       ) : (
-        <div className="space-y-2">
-          {flotas.map((f) => tarjeta(f, false))}
-        </div>
+        <Tarjeta titulo="Flotas de clientes"><ul className="adm-res-lista">{flotas.map((f) => fila(f, false))}</ul></Tarjeta>
       )}
 
-      <div className="etiqueta-mono text-[10px] uppercase mt-6 mb-2" style={{ color: 'var(--faint)' }}>
-        Demostración
-      </div>
-      {tarjeta({ id: demoId, nombre: 'Flota Javier Prueba' }, true)}
+      <Tarjeta titulo="Demostración">
+        <ul className="adm-res-lista">{fila({ id: demoId, nombre: 'Flota Javier Prueba' }, true)}</ul>
+      </Tarjeta>
 
       {seleccionActual && (
-        <form action={accionQuitar} className="mt-6">
-          <button type="submit"
-            className="text-[12.5px] font-medium px-3.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity"
-            style={{ color: 'var(--muted)' }}>
-            Quitar la selección y volver al modo global
-          </button>
+        <form action={accionQuitar}>
+          <Boton type="submit" variante="secondary">Quitar la selección y volver al modo global</Boton>
         </form>
       )}
-    </div>
+    </MarcoPagina>
   );
 }

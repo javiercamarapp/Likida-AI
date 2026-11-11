@@ -4,6 +4,8 @@ import { useState, useActionState, useEffect } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
+import { Boton, Icono } from '@/app/ui-v2/componentes';
+import './peajes.css';
 
 export type ResumenCruce = {
   total: number;
@@ -42,41 +44,35 @@ export function BotonConciliar({ conciliar, desgloseId }: {
   const r = estado?.resumen;
 
   return (
-    <div className="shrink-0">
+    <div className="rv-pj-control">
       {confirmando ? (
-        <form action={accion} onSubmit={() => setConfirmando(false)} className="inline-flex items-center gap-2">
+        <form action={accion} onSubmit={() => setConfirmando(false)} className="rv-pj-confirmar">
           <input type="hidden" name="desglose" value={desgloseId} />
-          <span className="text-[12px]" style={{ color: 'var(--muted)' }}>
+          <span className="rv-pj-sub">
             ¿Re-cruzar el desglose completo contra los gastos de caseta de hoy?
           </span>
           <BotonConfirmar />
-          <button type="button" onClick={() => setConfirmando(false)}
-            className="rv-btn rv-btn--secondary"
-            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-            Cancelar
-          </button>
+          <Boton onClick={() => setConfirmando(false)}>Cancelar</Boton>
         </form>
       ) : (
-        <button type="button" onClick={() => setConfirmando(true)}
-          title="Volver a cruzar todas las líneas del desglose contra los gastos que hay hoy"
-          className="rv-btn rv-btn--primary"
-          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-          <RefreshCw width={13} height={13} strokeWidth={2} /> Conciliar
-        </button>
+        <Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}
+          title="Volver a cruzar todas las líneas del desglose contra los gastos que hay hoy">
+          Conciliar
+        </Boton>
       )}
 
-      {estado?.error && <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
       {r && !confirmando && (
-        <p className="text-[12px] mt-1.5" style={{ color: 'var(--muted)' }}>
-          Crucé <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.total}</span> líneas:{' '}
-          <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.cuadra}</span> cuadran,{' '}
+        <p className="rv-pj-sub" role="status">
+          Crucé <strong className="cifra-mono">{r.total}</strong> líneas:{' '}
+          <strong className="cifra-mono">{r.cuadra}</strong> cuadran,{' '}
           <span className="cifra-mono">{r.noCuadra}</span> con discrepancia,{' '}
           <span className="cifra-mono">{r.sinContraparte}</span> sin contraparte
           {r.gpsConfirma !== undefined && (
             <> · GPS: <span className="cifra-mono">{r.gpsConfirma}</span> confirman, <span className="cifra-mono">{r.gpsNoCoincide ?? 0}</span> no coinciden, <span className="cifra-mono">{r.gpsSinDatos ?? 0}</span> sin datos</>
           )}
           {r.noEscritas > 0 && (
-            <span style={{ color: 'var(--bad)' }}> · {r.noEscritas} no se pudieron escribir — vuelve a conciliar</span>
+            <span className="rv-pj-malo"> · {r.noEscritas} no se pudieron escribir — vuelve a conciliar</span>
           )}.
         </p>
       )}
@@ -87,11 +83,8 @@ export function BotonConciliar({ conciliar, desgloseId }: {
 function BotonConfirmar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <RefreshCw width={13} height={13} strokeWidth={2} className={pending ? 'animate-spin' : ''} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={RefreshCw} />}>
       {pending ? 'Cruzando…' : 'Sí, cruzar'}
-    </button>
+    </Boton>
   );
 }

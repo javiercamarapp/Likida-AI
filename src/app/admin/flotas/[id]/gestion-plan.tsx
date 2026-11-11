@@ -1,0 +1,48 @@
+import { CampoSelect } from '../../../ui-v2/componentes/campos';
+import { FormaConAviso, type AccionDeForma } from '../../ui/forma';
+
+/**
+ * Asignar / cambiar / activar / pausar / cancelar el plan de ESTA flota (sección «Plan y cobro» de la ficha). Presentacional: la acción de
+ * servidor (`accionGestionarPlan`, con su puerta, su segundo factor y su bitácora) llega por prop. Nada de aquí llama a Stripe: crea o mueve
+ * la suscripción local que `emitirMensualidad` sabe cobrar por transferencia. Si el plan no tiene price ligado, la acción lo dice y no escribe.
+ */
+export function GestionPlan({ tenantId, planes, accion }: {
+  tenantId: string;
+  /** `null` = no se pudieron leer los planes: se dice, no se ofrece un selector vacío como si no hubiera. */
+  planes: Array<{ clave: string; nombre: string }> | null;
+  accion: AccionDeForma;
+}) {
+  const operacion = (op: string, boton: string, confirmar?: { titulo: string; descripcion: string; etiquetaConfirmar: string }) => (
+    <FormaConAviso accion={accion} boton={boton} enLinea={!confirmar} columnas="md:grid-cols-1" confirmar={confirmar}>
+      <input type="hidden" name="tenantId" value={tenantId} />
+      <input type="hidden" name="operacion" value={op} />
+    </FormaConAviso>
+  );
+
+  return (
+    <div>
+      {planes === null ? (
+        <p>No se pudieron leer los planes ahora mismo. Reintenta.</p>
+      ) : (
+        <FormaConAviso accion={accion} boton="Asignar o cambiar plan" columnas="md:grid-cols-1">
+          <input type="hidden" name="tenantId" value={tenantId} />
+          <input type="hidden" name="operacion" value="asignar" />
+          <CampoSelect etiqueta="Plan" name="planClave" required defaultValue=""
+            ayuda="Empieza en «prueba»: no cuenta para el MRR hasta que lo actives. Solo se asignan planes con price de Stripe ligado.">
+            <option value="" disabled>Elige un plan</option>
+            {planes.map((p) => <option key={p.clave} value={p.clave}>{p.nombre}</option>)}
+          </CampoSelect>
+        </FormaConAviso>
+      )}
+      <div>
+        {operacion('activar', 'Activar')}
+        {operacion('pausar', 'Pausar')}
+        {operacion('cancelar', 'Cancelar suscripción', {
+          titulo: 'Cancelar la suscripción de esta flota',
+          descripcion: 'La suscripción queda cancelada y la flota vuelve al plan de demostración. No se borra su historial de cobro. Para volver a cobrarle habrá que asignarle un plan de nuevo.',
+          etiquetaConfirmar: 'Sí, cancelar',
+        })}
+      </div>
+    </div>
+  );
+}

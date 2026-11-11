@@ -50,7 +50,7 @@ test('primer ingreso: invita, no abre solo, y «Recorrido corto» abre la tarjet
   await expect(tarjeta(page)).toBeVisible();
   expect(await numeroDePaso(page)).toBe(1);
   // La página sigue operable: el menú recibe clics con la tarjeta abierta (la capa no los captura).
-  await page.locator('[data-tour="nav-viajes"]').first().click({ trial: true });
+  await page.locator('[data-tour="nav-despacho"]').first().click({ trial: true });
 });
 
 test('el recorrido corto se recorre hasta el final y deja «terminado»', async ({ page }) => {
@@ -101,7 +101,7 @@ test('el menú Guía ofrece las pantallas del rol y un recorrido por agente', as
   await expect(page.getByText('Saltar a una pantalla')).toBeVisible();
   await expect(page.getByText('Recorrido por agente')).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Primeros pasos' })).toBeVisible();
-  await page.getByRole('menuitem', { name: 'Operadores', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Equipo · Operadores', exact: true }).click();
   await expect(tarjeta(page)).toBeVisible();
 });
 

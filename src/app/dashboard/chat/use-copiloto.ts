@@ -46,6 +46,19 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
   useEffect(() => { if (listaAlMontar) cargarLista(); }, [listaAlMontar, cargarLista]);
   useEffect(() => () => enVuelo.current?.abort(), []);
 
+  // Atajos: el ⌘K (y cualquier otro punto de /admin) pide una pregunta con `likida:copiloto-preguntar`. Solo escucha el panel lateral
+  // (que vive en todas las pantallas) para que una pregunta no se envíe dos veces cuando la página del Copiloto también está montada.
+  const preguntarRef = useRef<(q: string) => void>(() => {});
+  useEffect(() => {
+    if (listaAlMontar) return;
+    function alPreguntar(e: Event) {
+      const q = (e as CustomEvent<{ pregunta?: unknown }>).detail?.pregunta;
+      if (typeof q === 'string' && q.trim()) preguntarRef.current(q.trim().slice(0, 2000));
+    }
+    window.addEventListener('likida:copiloto-preguntar', alPreguntar);
+    return () => window.removeEventListener('likida:copiloto-preguntar', alPreguntar);
+  }, [listaAlMontar]);
+
   async function cargarConversacion(id: string): Promise<boolean> {
     if (ocupado) return false;
     setErrorCarga(null);
@@ -87,11 +100,6 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
   function detener() {
     detenido.current = true;
     enVuelo.current?.abort();
-  }
-
-  function preguntar(q: string) {
-    if (!q.trim() || ocupado) return;
-    void preguntarCopiloto(q, null);
   }
 
   function repetir(idTurno: string) {
@@ -136,7 +144,8 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
       ]);
       const resp = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }], conversacionId }),
+        // `contexto.ruta`: la pantalla de /admin que Javier tiene abierta AHORA (el panel persiste entre pantallas, así que se lee al enviar).
+        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }], conversacionId, contexto: { ruta: window.location.pathname } }),
         // Las DOS razones para cortar: el techo de espera y el abort del usuario (detener / desmontar / preguntar otra cosa).
         signal: AbortSignal.any([control.signal, AbortSignal.timeout(TIEMPO_MAXIMO_MS)]),
       });
@@ -199,6 +208,14 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
       }
     }
   }
+
+  function preguntar(q: string) {
+    if (!q.trim() || ocupado) return;
+    void preguntarCopiloto(q, null);
+  }
+
+  useEffect(() => { preguntarRef.current = preguntar; });
+
 
   return {
     historial, ocupado, generando, documento: null, setDocumento: () => {}, conversacionId, convs, errorCarga, fasePensando, pasosVivos,

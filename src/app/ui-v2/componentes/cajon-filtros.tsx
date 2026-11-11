@@ -96,8 +96,8 @@ export function CajonFiltros(p: PropsCajonFiltros) {
           titulo={p.titulo ?? 'Filtros'}
           descripcion={p.descripcion}
           pie={<>
-            <BotonEnlace href={p.limpiarHref} variante="secondary" tamano="sm">Limpiar</BotonEnlace>
-            <Boton type="submit" form={idForma} variante="suave" tamano="sm">Aplicar</Boton>
+            <BotonEnlace href={p.limpiarHref} variante="secondary">Limpiar</BotonEnlace>
+            <Boton type="submit" form={idForma} variante="suave">Aplicar</Boton>
           </>}
         >
           <form id={idForma} method="get" action={p.accion} className="rv-cajon" onSubmit={alEnviar}>

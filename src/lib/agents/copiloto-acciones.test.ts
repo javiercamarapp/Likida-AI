@@ -11,9 +11,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const apagar = vi.fn(async () => {});
+const encender = vi.fn(async () => {});
 vi.mock('@/lib/likida/interruptores', async (orig) => {
   const real = (await orig()) as Record<string, unknown>;
-  return { ...real, apagar };
+  return { ...real, apagar, encender };
 });
 
 const correrRunner = vi.fn(async () => ({
@@ -32,23 +33,23 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { ejecutarAccionCopiloto, CATALOGO_ACCIONES, accionDelCatalogo } = await import('./copiloto-acciones');
+const { ejecutarAccionCopiloto, CATALOGO_ACCIONES, accionDelCatalogo, gateoEfectivo } = await import('./copiloto-acciones');
 const { DatoInvalido } = await import('@/lib/likida/errores');
 
 beforeEach(() => {
-  apagar.mockClear(); correrRunner.mockClear(); insertBitacora.mockClear();
+  apagar.mockClear(); encender.mockClear(); correrRunner.mockClear(); insertBitacora.mockClear();
   insertBitacora.mockImplementation(() => ({ error: null }));
 });
 
 describe('el catálogo de acciones', () => {
-  it('las 10 acciones del catálogo existen, y SOLO apagar_agente y correr_runner están implementadas', () => {
+  it('las 10 acciones del catálogo existen, y solo apagar, encender y correr_runner están implementadas', () => {
     expect(CATALOGO_ACCIONES).toHaveLength(10);
     const implementadas = CATALOGO_ACCIONES.filter((a) => a.implementada).map((a) => a.id);
-    expect(implementadas).toEqual(['apagar_agente', 'correr_runner']);
+    expect(implementadas).toEqual(['apagar_agente', 'encender_agente', 'correr_runner']);
   });
 
   it('toda acción 🔴 del diseño está marcada doble — el gateo es contrato, no default', () => {
-    for (const id of ['encender_agente', 'aprobar_pendiente', 'rechazar_pendiente', 'marcar_pago_conciliado', 'reabrir_liquidacion']) {
+    for (const id of ['aprobar_pendiente', 'rechazar_pendiente', 'marcar_pago_conciliado', 'reabrir_liquidacion']) {
       expect(accionDelCatalogo(id)?.gateo, id).toBe('doble');
     }
   });
@@ -106,8 +107,24 @@ describe('ejecutarAccionCopiloto', () => {
   });
 
   it('una acción del catálogo NO implementada se rechaza diciéndolo con esas palabras', async () => {
-    await expect(ejecutarAccionCopiloto('encender_agente', { id: 'agente:cobranza' }, 'u-1'))
+    await expect(ejecutarAccionCopiloto('aprobar_pendiente', { id: 'x' }, 'u-1'))
       .rejects.toThrow(/no está implementada/);
+  });
+
+  it('encender_agente exige motivo, valida el interruptor y delega en encender() con el userId de la sesión', async () => {
+    await expect(ejecutarAccionCopiloto('encender_agente', { id: 'agente:cobranza' }, 'u-1')).rejects.toThrow(/motivo/);
+    await expect(ejecutarAccionCopiloto('encender_agente', { id: 'agente:inventado', motivo: 'x' }, 'u-1')).rejects.toThrow(/no es un interruptor/);
+    expect(encender).not.toHaveBeenCalled();
+    const r = await ejecutarAccionCopiloto('encender_agente', { id: 'agente:cobranza', motivo: 'ya se arregló' }, 'u-javier');
+    expect(r.ok).toBe(true);
+    expect(encender).toHaveBeenCalledWith('agente:cobranza', 'u-javier', 'ya se arregló');
+  });
+
+  it('encender el interruptor global exige doble confirmación; encender uno solo, una', () => {
+    expect(gateoEfectivo('encender_agente', 'global')).toBe('doble');
+    expect(gateoEfectivo('encender_agente', 'agente:cobranza')).toBe('confirma');
+    expect(gateoEfectivo('apagar_agente', 'global')).toBe('confirma');
+    expect(gateoEfectivo('no_existe', 'x')).toBe('doble');
   });
 
   it('apagar_agente con un interruptor que no existe se rechaza sin tocar la palanca', async () => {

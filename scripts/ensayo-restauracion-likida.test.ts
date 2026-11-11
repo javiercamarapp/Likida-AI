@@ -118,7 +118,7 @@ describe('ayudante embebido', () => {
 describe('documento', () => {
   it('referencia scripts y archivos que existen', () => {
     for (const ruta of ['scripts/ensayo-restauracion-likida.sh', 'scripts/respaldo.sh', 'scripts/respaldo-storage.sh', 'scripts/restore-storage-drill.sh', 'docs/operacion/restauracion-guion-y-acta.md', 'docs/operacion/RESILIENCIA-DEPLOY.md', 'docs/conocimiento/DEPLOY.md', 'supabase/APLICAR-EN-PRODUCCION.md']) {
-      expect(doc, ruta).toContain(ruta.replace(/^docs\/operacion\//, '').replace(/^docs\/conocimiento\//, 'docs/conocimiento/'));
+      expect(doc, ruta).toContain(ruta.replace(/^docs\/operacion\//, ''));
       expect(existsSync(ruta), ruta).toBe(true);
     }
   });

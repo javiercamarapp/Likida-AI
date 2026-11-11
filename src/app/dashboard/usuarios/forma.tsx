@@ -3,30 +3,23 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { UserPlus } from 'lucide-react';
-import { CampoSelect } from '@/app/ui-v2/componentes';
+import { AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, Icono, clasesBoton } from '@/app/ui-v2/componentes';
+import './usuarios.css';
 // SOLO TIPOS: el catálogo `ROLES_INVITABLES` viaja como PROP desde la página
 // (mismo patrón que `MODOS_TARIFA` en /dashboard/clientes). `invitar.ts` hoy
 // no importa `supabaseAdmin`, pero importa `errores.ts` → `logger`, y un
 // import de valor ataría este bundle a lo que ese árbol importe mañana.
 import type { OpcionRol } from '@/lib/auth/invitar';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
-import { BotonConfirmar } from '../../admin/ui/confirmar';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
-const AYUDA = 'text-[11px] mt-1';
-
-function Boton() {
+function BotonInvitar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <UserPlus width={14} height={14} strokeWidth={1.75} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={UserPlus} />}>
       {pending ? 'Invitando…' : 'Invitar'}
-    </button>
+    </Boton>
   );
 }
 
@@ -49,25 +42,14 @@ export function FormaInvitar({ accion, roles }: {
   const [estado, despachar] = useActionState(accion, null);
 
   return (
-    <form action={despachar} className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="inv-email" className={ETIQUETA}>Correo</label>
-          <input id="inv-email" name="email" type="email" required maxLength={160}
-            placeholder="contralor@tuflota.mx"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Es su llave de entrada: en el panel teclea este correo y le llega un
-            enlace mágico — no hay contraseña que inventarle.
-          </p>
-        </div>
+    <form action={despachar} className="rv-usu__forma">
+      <div className="rv-usu__rejilla">
+        <CampoTexto etiqueta="Correo" id="inv-email" name="email" tipo="email" required maxLength={160}
+          placeholder="contralor@tuflota.mx"
+          ayuda="Es su llave de entrada: en el panel teclea este correo y le llega un enlace mágico — no hay contraseña que inventarle." />
 
-        <div>
-          <label htmlFor="inv-nombre" className={ETIQUETA}>Nombre (opcional)</label>
-          <input id="inv-nombre" name="nombre" type="text" maxLength={120}
-            placeholder="Como quieres verlo en la lista"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
+        <CampoTexto etiqueta="Nombre (opcional)" id="inv-nombre" name="nombre" maxLength={120}
+          placeholder="Como quieres verlo en la lista" />
 
         <div>
           {/* `contador` primero y por default: es el caso por el que existe
@@ -81,29 +63,22 @@ export function FormaInvitar({ accion, roles }: {
           {/* La ayuda dice la VERDAD de visibilidad.ts, no marketing: qué ve
               y qué NO ve cada rol es exactamente lo que el dueño necesita
               saber antes de repartir accesos. */}
-          <div className={AYUDA} style={{ color: 'var(--faint)' }}>
+          <div className="rv-usu__roles">
             {roles.map((r) => (
-              <p key={r.valor} className="m-0 mt-0.5">
+              <p key={r.valor}>
                 <strong>{r.rotulo}:</strong> {r.detalle}
               </p>
             ))}
           </div>
         </div>
 
-        <div>
-          <label htmlFor="inv-telefono" className={ETIQUETA}>WhatsApp (opcional)</label>
-          <input id="inv-telefono" name="telefono" type="text" maxLength={20}
-            placeholder="10 dígitos" inputMode="tel"
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Para que el bot la reconozca cuando escriba por WhatsApp (avisos
-            contestables, despacho por chat). Sin número, el bot no la reconoce.
-          </p>
-        </div>
+        <CampoTexto etiqueta="WhatsApp (opcional)" id="inv-telefono" name="telefono" maxLength={20}
+          placeholder="10 dígitos" inputMode="tel" claseControl="cifra-mono"
+          ayuda="Para que el bot la reconozca cuando escriba por WhatsApp (avisos contestables, despacho por chat). Sin número, el bot no la reconoce." />
       </div>
 
       <Aviso estado={estado} />
-      <Boton />
+      <div><BotonInvitar /></div>
     </form>
   );
 }
@@ -116,19 +91,12 @@ export function FormaInvitar({ accion, roles }: {
 // action lo vuelve a leer ANCLADO al tenant de la sesión.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function BotonChico({ etiqueta, ocupado, tono = 'neutral' }: {
-  etiqueta: string; ocupado: string; tono?: 'neutral' | 'bad';
-}) {
+function BotonChico({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
   const { pending } = useFormStatus();
-  const estilo = tono === 'bad'
-    ? { color: 'var(--bad)', background: 'var(--badbg)' }
-    : { color: 'var(--ink)', background: 'var(--surface)' };
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary whitespace-nowrap"
-      style={estilo}>
+    <Boton type="submit" tamano="sm" loading={pending}>
       {pending ? ocupado : etiqueta}
-    </button>
+    </Boton>
   );
 }
 
@@ -141,8 +109,8 @@ export function FormaCambiarRol({ accion, id, rolActual, roles }: {
 }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <form action={despachar} className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
+    <form action={despachar} className="rv-usu__fila-forma">
+      <div className="rv-usu__cambiar">
         <input type="hidden" name="id" value={id} />
         <select name="rol" defaultValue={rolActual} aria-label="Nuevo rol" className="rv-ctl">
           {roles.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
@@ -165,14 +133,13 @@ export function FormaDarDeBaja({ accion, id, nombre }: {
 }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <form action={despachar} className="space-y-1.5">
+    <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
       <BotonConfirmar
         etiqueta="Dar de baja" tono="peligro" etiquetaConfirmar="Sí, dar de baja"
         titulo={`Dar de baja a ${nombre}`}
         descripcion="Deja de entrar al panel en su siguiente clic y su sesión se revoca. No se borra nada: queda en la lista como dada de baja y se puede reactivar."
-        className="text-[12px] font-medium select-none inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
-        style={{ color: 'var(--bad)' }}
+        className={clasesBoton('danger', 'sm')}
       />
       <Aviso estado={estado} />
     </form>
@@ -182,7 +149,7 @@ export function FormaDarDeBaja({ accion, id, nombre }: {
 export function FormaReactivar({ accion, id }: { accion: AccionForma; id: string }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <form action={despachar} className="space-y-1.5">
+    <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
       <BotonChico etiqueta="Reactivar" ocupado="Reactivando…" />
       <Aviso estado={estado} />
@@ -193,7 +160,7 @@ export function FormaReactivar({ accion, id }: { accion: AccionForma; id: string
 export function FormaReenviarAcceso({ accion, id }: { accion: AccionForma; id: string }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <form action={despachar} className="space-y-1.5">
+    <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
       <BotonChico etiqueta="Reenviar acceso" ocupado="Enviando…" />
       <Aviso estado={estado} />
@@ -211,7 +178,7 @@ export function FormaReenviarAcceso({ accion, id }: { accion: AccionForma; id: s
 export function FormaCerrarSesiones({ accion, id }: { accion: AccionForma; id: string }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <form action={despachar} className="space-y-1.5">
+    <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
       <BotonChico etiqueta="Cerrar sus sesiones" ocupado="Cerrando…" />
       <Aviso estado={estado} />

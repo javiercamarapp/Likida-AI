@@ -3,8 +3,8 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Inbox } from 'lucide-react';
-import { StatusPill, type Estado } from '../ui/kit';
 import { numero } from '@/lib/formato';
+import './tablero.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO KANBAN DEL PIPELINE — compartido entre /admin/vendedores (todo
@@ -55,8 +55,10 @@ export interface ColumnaTablero {
 
 export type ResultadoAccion = { ok: true; mensaje?: string } | { ok: false; error: string };
 
-/** El tinte del pill por etapa — color + texto siempre, nunca color solo. */
-const PILL_COLUMNA: Record<string, Estado> = {
+type Tono = 'ok' | 'warn' | 'bad' | 'neutral';
+
+/** El tinte del pill por etapa: color + texto siempre, nunca color solo. */
+const PILL_COLUMNA: Record<string, Tono> = {
   nuevo: 'neutral',
   contactado: 'neutral',
   appointment: 'warn',
@@ -109,67 +111,50 @@ function Tarjeta({
   const destinos = transiciones[t.estado] ?? [];
   const idx = orden.indexOf(t.estado);
   const etiquetaDe = (a: string): string => {
-    if (a === 'lost' || a === 'perdido') return '✕ Perdido';
-    if (a === 'won' || a === 'cerrado') return '✓ Ganado';
+    if (a === 'lost' || a === 'perdido') return 'Perdido';
+    if (a === 'won' || a === 'cerrado') return 'Ganado';
     const r = rotulos[a] ?? a;
     return orden.indexOf(a) < idx ? `← ${r}` : `${r} →`;
   };
 
-  const BOTON = 'text-[11px] font-medium px-2 py-1 rounded-md hairline transition-colors hover:bg-[var(--canvas)] disabled:opacity-50';
-
   return (
-    <div className="card p-2.5 space-y-1.5" style={pendiente ? { opacity: 0.6 } : undefined}>
-      <div className="text-[13px] font-medium leading-tight">{t.empresa}</div>
-      {/* La vacante es LA señal del censo — si existe, se enseña siempre. */}
-      {t.vacante && (
-        <div className="text-[11px] truncate" style={{ color: 'var(--muted)' }}>Vacante: {t.vacante}</div>
-      )}
+    <div className="ven-tarjeta" data-pendiente={pendiente || undefined}>
+      <div className="ven-tarjeta__empresa">{t.empresa}</div>
+      {/* La vacante es LA señal del censo: si existe, se enseña siempre. */}
+      {t.vacante && <p className="ven-tarjeta__tenue">Vacante: {t.vacante}</p>}
       {(t.ciudad || conVendedor) && (
-        <div className="text-[11px] flex items-center gap-1.5 min-w-0" style={{ color: 'var(--faint)' }}>
-          {t.ciudad && <span className="truncate">{t.ciudad}</span>}
+        <div className="ven-tarjeta__linea">
+          {t.ciudad && <span>{t.ciudad}</span>}
           {t.ciudad && conVendedor && <span aria-hidden>·</span>}
-          {conVendedor && <span className="truncate">{t.vendedorNombre ?? 'Sin asignar'}</span>}
+          {conVendedor && <span>{t.vendedorNombre ?? 'Sin asignar'}</span>}
         </div>
       )}
-      {t.notas && (
-        <div className="text-[11px] truncate" style={{ color: 'var(--faint)' }}>{t.notas}</div>
-      )}
+      {t.notas && <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t.notas}</p>}
 
       {destinos.length > 0 && (
-        <div className="flex flex-wrap gap-1 pt-0.5">
+        <div className="ven-tarjeta__acciones">
           {destinos.map((a) => (
-            <button key={a} type="button" disabled={pendiente}
-              onClick={() => correr(() => mover(t.id, a))}
-              className={BOTON}
-              style={a === 'lost' || a === 'perdido' ? { color: 'var(--bad)' } : a === 'won' || a === 'cerrado' ? { color: 'var(--ok)' } : undefined}>
+            <button key={a} type="button" disabled={pendiente} className="ven-btn"
+              data-sentido={a === 'lost' || a === 'perdido' ? 'perdido' : a === 'won' || a === 'cerrado' ? 'ganado' : undefined}
+              onClick={() => correr(() => mover(t.id, a))}>
               {etiquetaDe(a)}
             </button>
           ))}
         </div>
       )}
 
-      {/* El Redactor solo para etapas vivas — el servidor lo re-valida (un
-          botón escondido no es una regla, misma nota del encabezado). */}
+      {/* El Redactor solo para etapas vivas: el servidor lo re-valida (un botón escondido no es una regla, misma nota del encabezado). */}
       {redactar && !['won', 'lost', 'cerrado', 'perdido'].includes(t.estado) && (
-        <button type="button" disabled={pendiente}
-          onClick={() => correr(() => redactar(t.id))}
-          className={`${BOTON} w-full`}>
+        <button type="button" disabled={pendiente} className="ven-btn ven-btn--ancho" onClick={() => correr(() => redactar(t.id))}>
           {pendiente ? 'Redactando…' : 'Redactar correo → cola de aprobación'}
         </button>
       )}
 
-      {hecho && (
-        <p className="text-[11px] m-0" style={{ color: 'var(--ok)' }}>{hecho}</p>
-      )}
+      {hecho && <p className="ven-tarjeta__ok">{hecho}</p>}
 
       {asignar && (
-        <select
-          aria-label={`Vendedor de ${t.empresa}`}
-          value={t.vendedorId ?? ''}
-          disabled={pendiente}
-          onChange={(e) => correr(() => asignar(t.id, e.target.value))}
-          className="w-full hairline rounded-md px-1.5 h-7 text-[11px] outline-none"
-          style={{ background: 'var(--surface)' }}>
+        <select aria-label={`Vendedor de ${t.empresa}`} value={t.vendedorId ?? ''} disabled={pendiente} className="ven-select"
+          onChange={(e) => correr(() => asignar(t.id, e.target.value))}>
           <option value="">Sin asignar</option>
           {vendedores.map((v) => (
             <option key={v.id} value={v.id}>{v.nombre}</option>
@@ -178,22 +163,16 @@ function Tarjeta({
       )}
 
       {guardarNota && (
-        <details className="text-[11px]">
-          <summary className="cursor-pointer select-none" style={{ color: 'var(--muted)' }}>Nota</summary>
-          <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={2} maxLength={2000}
-            className="w-full hairline rounded-md px-1.5 py-1 mt-1 text-[11px] outline-none"
-            style={{ background: 'var(--surface)' }} />
-          <button type="button" disabled={pendiente}
-            onClick={() => correr(() => guardarNota(t.id, nota))}
-            className={`${BOTON} mt-1`}>
+        <details className="ven-nota">
+          <summary>Nota</summary>
+          <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={2} maxLength={2000} aria-label={`Nota de ${t.empresa}`} />
+          <button type="button" disabled={pendiente} className="ven-btn" onClick={() => correr(() => guardarNota(t.id, nota))}>
             Guardar nota
           </button>
         </details>
       )}
 
-      {error && (
-        <p className="text-[11px] m-0" style={{ color: 'var(--bad)' }}>{error}</p>
-      )}
+      {error && <p className="ven-tarjeta__error" role="alert">{error}</p>}
     </div>
   );
 }
@@ -225,7 +204,7 @@ export function TableroProspectos({
   // Todas las etapas vacías: UNA sola pista honesta en vez de once columnas repitiendo lo mismo.
   if (columnas.every((c) => c.tarjetas.length === 0 && c.total === 0)) {
     return (
-      <p className="m-0 py-3 text-[13px]" style={{ color: 'var(--muted)' }}>
+      <p className="ven-vacio">
         {hayFiltro
           ? 'Ningún prospecto coincide con el filtro actual en ninguna etapa. Quita los filtros para ver todo el pipeline.'
           : 'Ninguna etapa tiene prospectos todavía.'}
@@ -233,22 +212,20 @@ export function TableroProspectos({
     );
   }
   return (
-    // El tablero scrollea DENTRO de su contenedor (regla de wide content):
-    // seis columnas no caben en un portátil y la página no debe crecer a lo
-    // ancho por ellas.
-    <div className="overflow-x-auto pb-1">
-      <div className="flex gap-2 items-start min-w-max">
+    // El tablero scrollea DENTRO de su contenedor (regla de wide content): seis columnas no caben en un portátil y la página no debe
+    // crecer a lo ancho por ellas.
+    <div className="ven-tablero">
+      <div className="ven-tablero__fila">
         {columnas.map((col) => (
-          <div key={col.estado} className="w-[248px] shrink-0 rounded-xl p-2"
-            style={{ background: 'var(--canvas2)', border: '1px solid var(--line2)' }}>
-            <div className="flex items-center justify-between gap-2 px-1 pb-2">
-              <StatusPill estado={PILL_COLUMNA[col.estado] ?? 'neutral'}>{col.rotulo}</StatusPill>
-              <span className="text-[11px] tabular font-medium" style={{ color: 'var(--muted)' }}>{numero(col.total)}</span>
+          <div key={col.estado} className="ven-col">
+            <div className="ven-col__cab">
+              <span className="ven-pill" data-tono={PILL_COLUMNA[col.estado] ?? 'neutral'}>{col.rotulo}</span>
+              <span className="ven-col__total">{numero(col.total)}</span>
             </div>
-            <div className="space-y-1.5">
+            <div className="ven-col__cuerpo">
               {col.tarjetas.length === 0 ? (
                 // R9: una línea sobria por columna vacía (antes una tarjeta «Sin datos por ahora» repetida en cada etapa).
-                <p className="m-0 px-1 py-2 text-[12px] inline-flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
+                <p className="ven-col__vacia">
                   <Inbox width={13} height={13} strokeWidth={1.75} aria-hidden="true" />
                   {hayFiltro
                     ? 'Ninguno en esta etapa con el filtro actual.'
@@ -262,23 +239,16 @@ export function TableroProspectos({
                 ))
               )}
               {col.mas ? (
-                <Link href={col.mas.href} className="block text-[11px] px-1 underline hover:opacity-70 transition-opacity"
-                  style={{ color: 'var(--muted)' }}>
-                  {col.mas.etiqueta}
-                </Link>
+                <Link href={col.mas.href} className="ven-col__mas">{col.mas.etiqueta}</Link>
               ) : col.total > col.tarjetas.length ? (
-                <p className="text-[11px] px-1 m-0" style={{ color: 'var(--muted)' }}>
-                  {/* Sin link, se DECLARA el recorte y nada más. Antes decía
-                      "filtra para verlos" también donde no hay filtro. */}
+                <p className="ven-col__recorte">
+                  {/* Sin link, se DECLARA el recorte y nada más. Antes decía «filtra para verlos» también donde no hay filtro. */}
                   y {col.total - col.tarjetas.length} más
                   {hayFiltro ? ' — acota el filtro para verlos' : ''}
                 </p>
               ) : null}
               {col.menos && (
-                <Link href={col.menos.href} className="block text-[11px] px-1 underline hover:opacity-70 transition-opacity"
-                  style={{ color: 'var(--muted)' }}>
-                  {col.menos.etiqueta}
-                </Link>
+                <Link href={col.menos.href} className="ven-col__mas">{col.menos.etiqueta}</Link>
               )}
             </div>
           </div>

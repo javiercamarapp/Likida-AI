@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FilaAcciones } from './acciones';
+import { VistaHuerfanos } from './vista';
+import type { HuerfanoDeFlota } from '@/lib/likida/repo';
 import type { OpcionViaje } from '@/lib/likida/repo_paginado';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -37,5 +39,32 @@ describe('Huérfanos — combo de búsqueda de viaje (FE-3)', () => {
     const html = pintar(false);
     expect(html).toContain('Sin viajes abiertos');
     expect(html).not.toContain('role="combobox"');
+  });
+});
+
+describe('Huérfanos — la bandeja migrada conserva lo que decide el humano', () => {
+  const h = (id: string, o: Partial<HuerfanoDeFlota> = {}): HuerfanoDeFlota => ({
+    id, creadoEn: '2026-10-01T15:00:00Z', operadorNombre: 'Chofer Uno', concepto: 'diesel', fecha: '2026-09-30', monto: 350, motivo: 'sin_viaje', ...o,
+  }) as HuerfanoDeFlota;
+  const pintarVista = (pendientes: HuerfanoDeFlota[], total: number | null = pendientes.length) => renderToStaticMarkup(
+    <VistaHuerfanos pendientes={pendientes} hayViajesVivos buscarViaje={buscarOk} totalPendientes={total} acciones={{ adjuntar: accionOk, descartar: accionOk }} />,
+  );
+
+  it('un monto ilegible se dice, no se pinta como $0.00, y no ofrece adjuntar', () => {
+    const html = pintarVista([h('a', { monto: 0 })]);
+    expect(html).toContain('sin monto legible');
+    expect(html).not.toContain('rv-hf__mono">$0.00'); // el único «$0.00» es la explicación de por qué no se adjunta
+    expect(html).toContain('Sin monto legible no se puede adjuntar');
+  });
+  it('declara "N de M" cuando hay más que los listados y cada fila lleva sus dos salidas', () => {
+    const html = pintarVista([h('a'), h('b')], 40);
+    expect(html).toContain('2 de 40');
+    expect((html.match(/aria-label="Descartar el comprobante"/g) ?? []).length).toBe(2);
+    expect(html).toContain('Llegó sin viaje abierto');
+  });
+  it('vacío: dice que todo tiene su viaje; sin tabla', () => {
+    const html = pintarVista([]);
+    expect(html).toContain('Sin comprobantes sueltos');
+    expect(html).not.toContain('<table');
   });
 });

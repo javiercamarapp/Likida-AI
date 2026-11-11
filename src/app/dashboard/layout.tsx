@@ -16,6 +16,7 @@ import DashboardChromeV2 from './shell/chrome-v2';
 import '../ui-v2/tokens.css';
 import '../ui-v2/fonts.css';
 import '../ui-v2/shell.css';
+import '../ui-v2/pie-sidebar.css';
 import '../ui-v2/carga.css';
 // Piezas del carril B (botones, chips, drawers, KPI, gráficas, recorrido) y páginas del carril C. Nadie las importaba todavía.
 import '../ui-v2/componentes.css';
@@ -38,6 +39,8 @@ import { guardarEstadoGuia, leerSenalesDeLaGuia, registrarEventosGuia } from '@/
 import { invitacionEncendida, leerEstado } from '@/lib/likida/guia/repo';
 import type { EstadoGuia } from '@/lib/likida/guia/tipos';
 import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
+import { IdiomaProvider } from '@/lib/i18n/proveedor';
+import { datosParaProveedor } from '@/lib/i18n/servidor';
 
 // Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
 export const metadata: Metadata = { title: { default: 'Likida — Liquidación de viajes', template: '%s · Likida' } };
@@ -87,6 +90,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
 
+  // Nombre de la flota para el selector «Organización» del pie (solo v2). `null` = no se pudo leer: el pie dice «Sin dato».
+  let organizacion: { id: string; nombre: string } | null | undefined;
+  if (ui === 'v2' && tenantDelMenu) {
+    try {
+      const { data, error } = await supabaseAdmin().from('tenant').select('nombre').eq('id', tenantDelMenu).maybeSingle();
+      organizacion = !error && data?.nombre ? { id: tenantDelMenu, nombre: String(data.nombre) } : null;
+    } catch { organizacion = null; }
+  }
+
   async function cerrarSesion() {
     'use server';
     const sb = await supabaseServer();
@@ -131,13 +143,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <Chrome
       nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
       {...(v2 && avance ? { insignias: { '/dashboard/puesta-en-marcha': avance } } : {})}
+      {...(v2 && organizacion !== undefined ? { organizacion } : {})}
     >
       {contenido}
     </Chrome>
   );
 
   // El motor del recorrido envuelve TODO el chrome (no solo la página): el menú Guía vive en la barra superior y necesita su contexto.
-  return onb && onb.principal ? (
+  // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es. El layout RAÍZ no lo lee (públicas estáticas).
+  const idiomaDatos = await datosParaProveedor(['shell']);
+  const arbol = onb && onb.principal ? (
     <TourProvider
       recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
       soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
@@ -147,4 +162,5 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {marco}
     </TourProvider>
   ) : marco;
+  return <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>{arbol}</IdiomaProvider>;
 }

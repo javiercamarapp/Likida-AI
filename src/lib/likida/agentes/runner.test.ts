@@ -1475,3 +1475,82 @@ describe('cortacircuitos por fallos seguidos', () => {
     expect(r.agentes.find((a) => a.agente === 'documentacion')?.resultado).not.toBe('saltado');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// «POR QUÉ NO CORRIÓ» (auditoría admin 10-nov-2026): 48 de 49 agentes frenados
+// por la contrapresión de la bandeja y el latido seguía 'ok'. Parte pura.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('latido del runner — contrapresión visible', () => {
+  const MOTIVO_BANDEJA = 'bandeja con ≥ 40 piezas pendientes (cualquier tipo) — aprobar es humano; el runner no fabrica encima ("bandeja sin atender")';
+
+  it('48 saltados por contrapresión + 1 despachado: latido parcial, con el motivo y la lista', async () => {
+    const { evaluarLatidoRunner } = await import('./runner');
+    const agentes = [
+      { agente: 'enriquecedor', resultado: 'corrio' as const, piezas: 1 },
+      ...Array.from({ length: 48 }, (_, i) => ({ agente: `a${i}`, resultado: 'saltado' as const, motivo: MOTIVO_BANDEJA })),
+    ];
+    const l = evaluarLatidoRunner({ apagadoGlobal: false, agentes, saltadosPorReloj: [] }, { cortesSeguidos: 0 });
+    expect(l.estado).toBe('parcial');
+    expect(l.detalle.despachados).toBe(1);
+    expect(l.detalle.saltadosPorCausa).toEqual({ contrapresion_bandeja: 48 });
+    expect(String(l.detalle.motivo)).toMatch(/48 de 49 agentes no corrieron/);
+    expect((l.detalle.contrapresion as { agentesFrenados: number }).agentesFrenados).toBe(48);
+    expect((l.detalle.saltados as unknown[])).toHaveLength(48);
+  });
+
+  it('el tope NO se toca: el detalle reporta el vigente (40 por defecto)', async () => {
+    const { evaluarLatidoRunner, topeBandejaGlobal } = await import('./runner');
+    const l = evaluarLatidoRunner(
+      { apagadoGlobal: false, agentes: [{ agente: 'x', resultado: 'saltado', motivo: MOTIVO_BANDEJA }], saltadosPorReloj: [] },
+      { cortesSeguidos: 0 },
+    );
+    expect((l.detalle.contrapresion as { topeBandejaGlobal: number }).topeBandejaGlobal).toBe(topeBandejaGlobal());
+    expect(topeBandejaGlobal()).toBe(40);
+  });
+
+  it('una vuelta sana sigue en ok y sin bloque de contrapresión', async () => {
+    const { evaluarLatidoRunner } = await import('./runner');
+    const l = evaluarLatidoRunner(
+      { apagadoGlobal: false, agentes: [{ agente: 'x', resultado: 'corrio', piezas: 1 }], saltadosPorReloj: [] },
+      { cortesSeguidos: 0 },
+    );
+    expect(l.estado).toBe('ok');
+    expect(l.detalle.contrapresion).toBeUndefined();
+    expect(l.detalle.motivo).toBeUndefined();
+  });
+
+  it('saltos que no son contrapresión (techo, apagado) siguen en ok pero quedan con su causa', async () => {
+    const { evaluarLatidoRunner } = await import('./runner');
+    const l = evaluarLatidoRunner({
+      apagadoGlobal: false,
+      agentes: [
+        { agente: 'a', resultado: 'saltado', motivo: 'apagado desde Observabilidad/⌘K' },
+        { agente: 'b', resultado: 'saltado', motivo: 'techo diario alcanzado (1.00 de 1 USD)' },
+        { agente: 'c', resultado: 'saltado', motivo: 'sin presupuesto_dia_usd declarado — el runner no corre agentes sin techo' },
+      ],
+      saltadosPorReloj: [],
+    }, { cortesSeguidos: 0 });
+    expect(l.estado).toBe('ok');
+    expect(l.detalle.saltadosPorCausa).toEqual({ apagado: 1, techo_diario: 1, sin_presupuesto: 1 });
+  });
+
+  it('el reloj sigue volviendo el latido parcial, con o sin contrapresión', async () => {
+    const { evaluarLatidoRunner } = await import('./runner');
+    const l = evaluarLatidoRunner(
+      { apagadoGlobal: false, agentes: [], saltadosPorReloj: ['z'], cortadaPorRelojDuro: false },
+      { cortesSeguidos: 2 },
+    );
+    expect(l.estado).toBe('parcial');
+    expect(l.detalle.cortesSeguidos).toBe(2);
+  });
+
+  it('causaDeSalto: un motivo ausente o desconocido es «otra», no se adivina', async () => {
+    const { causaDeSalto } = await import('./runner');
+    expect(causaDeSalto(undefined)).toBe('otra');
+    expect(causaDeSalto('algo nunca visto')).toBe('otra');
+    expect(causaDeSalto('la pieza pendiente más vieja de la bandeja lleva 70.0 días esperando (> 7) — vencida ("bandeja sin atender")')).toBe('contrapresion_bandeja');
+    expect(causaDeSalto('no se pudo leer la bandeja global — fail closed ("bandeja sin atender")')).toBe('contrapresion_bandeja');
+    expect(causaDeSalto('en pausa: 3 fallos seguidos (último: x) — se sondea una vez cada 24 h')).toBe('pausa_por_fallos');
+    expect(causaDeSalto('3 corrida(s) de hoy con costo NO MEDIDO: ...')).toBe('costo_no_medido');
+  });
+});

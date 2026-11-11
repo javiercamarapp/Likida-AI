@@ -37,7 +37,7 @@ describe('overlays: un solo motor', () => {
   it('ningún velo `fixed inset-0` a mano (el fondo decorativo es la única excepción)', () => {
     const velos: string[] = [];
     for (const f of codigo) {
-      if (/fixed\s+inset-(0|x-0|y-0)|inset-0 z-/.test(sinComentarios(readFileSync(f, 'utf8'))) && !f.endsWith('/app/fondo.tsx') && !f.endsWith('/admin/mapa-prospectos/calles.tsx') && !f.endsWith('/admin/ui/notificaciones.tsx')) velos.push(relative(SRC, f));
+      if (/fixed\s+inset-(0|x-0|y-0)|inset-0 z-/.test(sinComentarios(readFileSync(f, 'utf8'))) && !f.endsWith('/app/fondo.tsx') && !f.endsWith('/admin/mapa-prospectos/calles.tsx') && !f.endsWith('/ui-v2/componentes/notificaciones.tsx')) velos.push(relative(SRC, f));
     }
     expect(velos).toEqual([]);
   });
@@ -72,5 +72,21 @@ describe('overlays: un solo motor', () => {
   it('el motor no escribe style="" en el marcado (CSP con nonce); solo asigna por CSSOM al arrastrar o colocar', () => {
     const src = sinComentarios(readFileSync(MOTOR, 'utf8'));
     expect(src).not.toMatch(/dangerouslySetInnerHTML|<style/);
+  });
+});
+
+describe('identidad Rovaq · paquete C (10-nov-2026)', () => {
+  const leer = (r: string) => readFileSync(join(APP, r), 'utf8');
+  it('notificaciones.tsx: sin style={{ ni Tailwind de posición, contenedor popover manual y piel de Aviso', () => {
+    const src = sinComentarios(leer('ui-v2/componentes/notificaciones.tsx'));
+    expect(src).not.toMatch(/style=\{\{/);
+    expect(src).not.toMatch(/\bfixed\b|z-\[60\]|rounded-|animate-in|hairline/);
+    expect(src).toContain('popover="manual"');
+    expect(src).toMatch(/className="rv-aviso rv-toast"/);
+  });
+  it('los pies de overlay (confirmar, cajón de filtros, resumen) no piden tamano="sm": miden 32 px', () => {
+    for (const f of ['ui-v2/componentes/confirmar.tsx', 'ui-v2/componentes/cajon-filtros.tsx']) expect(leer(f), f).not.toContain('tamano="sm"');
+    expect(leer('dashboard/resumen-cliente.tsx')).not.toMatch(/pie=\{[^\n]*tamano="sm"/);
+    expect(leer('ui-v2/overlay.css')).toMatch(/\.rv-ov__pie \.rv-btn \{ min-height: var\(--ctl-h, 32px\); \}/);
   });
 });

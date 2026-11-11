@@ -206,13 +206,13 @@ describe('etiquetas de estatus — la fuente única cubre el tipo', () => {
 // de agentes llevan además un `bg`). Lo que tiene que coincidir es el NIVEL de
 // severidad, que es lo que el comprador lee.
 describe('etiquetas de estatus — las TRES copias coinciden en la severidad', () => {
-  /** `var(--color-bad)` y `var(--bad)` son el mismo nivel: `bad`. */
+  /** `var(--color-bad)`, `var(--bad)` y el tono `'bad'` (StatusChip de Rovaq, que usa la vista de Liquidación) son el mismo nivel: `bad`. */
   const nivel = (v: string | undefined): string | undefined =>
-    v?.match(/var\(--(?:color-)?(ok|warn|bad)\)/)?.[1];
+    v?.match(/^(ok|warn|bad)$/)?.[1] ?? v?.match(/var\(--(?:color-)?(ok|warn|bad)\)/)?.[1];
 
   const copias: { ruta: string; ancla: string; campo: string }[] = [
     { ruta: '../../app/dashboard/estatus.ts', ancla: 'export const ESTATUS', campo: 'color' },
-    { ruta: '../../app/dashboard/agentes/liquidacion/vista.tsx', ancla: 'const ESTATUS', campo: 'fg' },
+    { ruta: '../../app/dashboard/agentes/liquidacion/vista.tsx', ancla: 'const ESTATUS', campo: 'tono' },
     { ruta: '../../app/dashboard/agentes/liquidacion/cola.tsx', ancla: 'const ROTULO_ESTADO', campo: 'fg' },
   ];
 

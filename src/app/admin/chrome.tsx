@@ -1,9 +1,10 @@
-import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import { CLASES_V2 } from '../marco-v2';
-import SidebarNav, { SidebarAbajoAdmin, MarcaAdmin, AsideAdmin } from './sidebar-nav';
+import SidebarNav, { PieAdmin, MarcaAdmin, AsideAdmin } from './sidebar-nav';
 import CommandPalette from './command-palette';
 import CabeceraAdmin from './cabecera-admin';
+import NavegacionMovilAdmin, { CabeceraMovilAdmin } from './navegacion-movil-admin';
+import ProveedorMarcoAdmin from './pestanas-admin';
 import CapaCarga from '../dashboard/shell/capa-carga';
 import CopilotoPanel from './copiloto-panel';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
@@ -17,22 +18,33 @@ import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
  * El Copiloto (⌘J, `copiloto-panel.tsx`) sigue siendo hermano de la columna dentro de la fila y cancela el gap con su margen -16.
  */
 export default function AdminChrome({
-  nombre, avatarUrl, cerrarSesion, usoIa, children,
+  nombre, avatarUrl, cerrarSesion, flotas, flotaActual, children,
 }: {
   nombre: string | null;
   avatarUrl: string | null;
   /** Server action. Opcional: el render de prueba no cierra sesión de nadie. */
   cerrarSesion?: () => Promise<void>;
-  /** El costo de IA del mes para el widget de uso del sidebar. Omitido (render de prueba) no se pinta. */
-  usoIa?: { mesUsd: number; llamadas: number; etiquetaMes: string } | null;
+  /** Las flotas para el selector del pie (`null` = no se pudo leer; ausente = no se pidió, p. ej. render de prueba). */
+  flotas?: Array<{ id: string; nombre: string }> | null;
+  /** La flota elegida (cookie firmada de `elegir-flota`), o `null`. */
+  flotaActual?: string | null;
   children: React.ReactNode;
 }) {
-  const inicial = ((nombre ?? '').trim() || 'J')[0].toUpperCase();
+  // El <form> de salir se arma AQUÍ (servidor) y baja como elemento: ninguna función cruza al cliente.
+  const salir = cerrarSesion ? (
+    <form action={cerrarSesion} className="rv-cuenta__salir">
+      <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión" className="rv-icono-boton">
+        <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+      </button>
+    </form>
+  ) : null;
   return (
     <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
       {/* El mismo telón de carga con el logo que el dashboard (una vez por sesión): /admin no lo montaba. */}
       <CapaCarga />
       <CommandPalette />
+      {/* Bajo 768 px: cabecera móvil, barra inferior y hoja «Más» del dashboard con los destinos del admin (el aside no se ve). */}
+      <CabeceraMovilAdmin />
       <div className={`${CLASES_V2.fila} adm-fila`}>
         <AsideAdmin>
           <MarcaAdmin />
@@ -40,42 +52,20 @@ export default function AdminChrome({
             <SidebarNav />
           </nav>
           <div className="rv-sb__pie">
-            <div className="rv-pie">
-              <SidebarAbajoAdmin usoIa={usoIa} />
-              <div className="rv-cuenta">
-                <Link href="/admin/mi-perfil" className="rv-cuenta__btn" aria-label="Mi cuenta">
-                  {avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- avatar chico de Storage, mismo criterio que perfil
-                    <img src={avatarUrl} alt="" className="rv-avatar" style={{ objectFit: 'cover' }} />
-                  ) : (
-                    <span className="rv-avatar" aria-hidden>{inicial}</span>
-                  )}
-                  <span className="rv-cuenta__txt">
-                    <span className="rv-cuenta__nombre">{(nombre ?? '').trim() || 'Mi cuenta'}</span>
-                    <span className="rv-cuenta__rol">SUPERADMIN</span>
-                  </span>
-                </Link>
-                {cerrarSesion && (
-                  <form action={cerrarSesion} className="rv-cuenta__salir">
-                    <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión" className="rv-icono-boton">
-                      <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-                    </button>
-                  </form>
-                )}
-              </div>
-            </div>
+            <PieAdmin nombre={nombre} avatarUrl={avatarUrl} flotas={flotas} flotaActual={flotaActual} salir={salir} />
           </div>
         </AsideAdmin>
 
         <div className={`${CLASES_V2.columna} columna-centro`}>
           <CabeceraAdmin />
           <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
-            {children}
+            <ProveedorMarcoAdmin>{children}</ProveedorMarcoAdmin>
           </div>
         </div>
 
         <CopilotoPanel />
       </div>
+      <NavegacionMovilAdmin nombre={nombre} avatarUrl={avatarUrl} flotas={flotas} flotaActual={flotaActual} salir={salir} />
     </div>
   );
 }

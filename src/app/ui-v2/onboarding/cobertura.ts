@@ -1,4 +1,4 @@
-import { hrefsDelMenu, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
+import { hrefsConPestanas, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
 import { TODAS_LAS_RUTAS } from '@/app/dashboard/rutas';
 import { areaDeRuta, esRolNomina, puedeVerArea, puedeVerRuta, rutasConocidas, rutaPermitidaEnPerfil, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { PANTALLAS } from './pantallas';
@@ -38,7 +38,7 @@ export type Celda =
 
 export function rutasDeLaMatriz(): string[] {
   const menu = new Set<string>();
-  for (const perfil of [null, 'cinco_agentes'] as const) for (const rol of ROLES_MATRIZ) for (const h of hrefsDelMenu(menuPorPerfil(rol, perfil))) menu.add(h);
+  for (const perfil of [null, 'cinco_agentes'] as const) for (const rol of ROLES_MATRIZ) for (const h of hrefsConPestanas(menuPorPerfil(rol, perfil))) menu.add(h);
   return [...new Set([...rutasConocidas(), ...TODAS_LAS_RUTAS.map((i) => i.href), ...menu, ...Object.keys(DINAMICAS)])].sort();
 }
 
@@ -76,8 +76,8 @@ function motivoNoVe(ruta: string, rol: string, perfil: PerfilTenant | null): str
 export function celda(ruta: string, rol: string, perfil: PerfilMatriz): Celda {
   const p: PerfilTenant | null = perfil === 'cinco_agentes' ? 'cinco_agentes' : null;
   if (!visible(ruta, rol, p)) return { estado: 'no_aplica', motivo: motivoNoVe(ruta, rol, p) };
-  if (Object.hasOwn(NO_APLICA_DECLARADO, ruta) && !hrefsDelMenu(menuPorPerfil(rol, p)).includes(ruta)) return { estado: 'no_aplica', motivo: NO_APLICA_DECLARADO[ruta] };
-  if (hrefsDelMenu(menuPorPerfil(rol, p)).includes(ruta) && Object.hasOwn(PANTALLAS, ruta)) return { estado: 'cubierta', via: 'paso' };
+  if (Object.hasOwn(NO_APLICA_DECLARADO, ruta) && !hrefsConPestanas(menuPorPerfil(rol, p)).includes(ruta)) return { estado: 'no_aplica', motivo: NO_APLICA_DECLARADO[ruta] };
+  if (hrefsConPestanas(menuPorPerfil(rol, p)).includes(ruta) && Object.hasOwn(PANTALLAS, ruta)) return { estado: 'cubierta', via: 'paso' };
   if (Object.hasOwn(PISTAS_CONTEXTUALES, ruta)) return { estado: 'cubierta', via: 'pista' };
   return { estado: 'sin_cobertura' };
 }

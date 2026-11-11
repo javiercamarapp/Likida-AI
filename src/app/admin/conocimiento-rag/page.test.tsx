@@ -1,24 +1,26 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it, vi } from 'vitest';
-// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
-vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
+import { beforeEach, expect, it, vi } from 'vitest';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// /admin/conocimiento-rag — CERO cobertura. Página síncrona, sin datos ni
-// server actions. Su contrato: declara honestamente que Likida NO tiene RAG
-// hoy — nada de widgets que aparenten una feature inexistente.
-// ═══════════════════════════════════════════════════════════════════════════
+// Stub 308 de /admin/conocimiento-rag (Fase 1): la pantalla se retiró y su dirección vieja sigue sirviendo, hacia /admin. Contrato que se fija:
+// (1) la puerta de superadmin se llama ANTES de redirigir, (2) la redirección es permanente (308, no 307) y (3) conserva la consulta.
+const dobles = vi.hoisted(() => ({ requireSuperadmin: vi.fn(), permanente: vi.fn((destino: string): never => { throw new Error(`NEXT_REDIRECT:${destino}`); }) }));
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
+vi.mock('next/navigation', () => ({ permanentRedirect: dobles.permanente, redirect: vi.fn() }));
 
-import ConocimientoRagPage from './page';
+import Pagina from './page';
 
-it('declara honestamente que Likida no usa RAG hoy, sin aparentar la feature', async () => {
-  const html = renderToStaticMarkup(await ConocimientoRagPage());
-  expect(html).toContain('Likida no usa RAG');
-  expect(html).toContain('no sobre una base de conocimiento documental');
+beforeEach(() => { vi.clearAllMocks(); dobles.requireSuperadmin.mockResolvedValue({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' }); });
+
+it('redirige de forma permanente a /admin', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/admin');
+  expect(dobles.permanente).toHaveBeenCalledTimes(1);
 });
 
-it('no hay widgets que aparenten la feature (ni carga de documentos, ni probador de RAG)', async () => {
-  const html = renderToStaticMarkup(await ConocimientoRagPage());
-  expect(html).toContain('ni carga de documentos');
-  expect(html).toContain('probador de RAG');
+it('conserva la consulta de la dirección vieja', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({ tenant: 't-1' }) })).rejects.toThrow('NEXT_REDIRECT:/admin?tenant=t-1');
+});
+
+it('llama la puerta de superadmin antes de redirigir; sin sesión no redirige', async () => {
+  dobles.requireSuperadmin.mockRejectedValue(new Error('NEXT_REDIRECT:/login'));
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/login');
+  expect(dobles.permanente).not.toHaveBeenCalled();
 });

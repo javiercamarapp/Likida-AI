@@ -229,6 +229,9 @@ function ventanaDeCadena(fuente: string, desde: number): string {
  * una vez en el mismo archivo con destinos distintos.
  */
 const ALLOWLIST: Record<string, string> = {
+  'src/lib/admin/agentes-parados.ts': 'La alerta de agentes parados (/admin, superadmin) lee la última `agente_corrida` POR AGENTE: los agentes son de LIKIDA, no de una flota (misma razón que slo.ts/runner.ts); la salud del agente no se parte por tenant.',
+  'src/lib/admin/calidad-agentes.ts': 'El tablero de calidad por agente (/admin, superadmin) cuenta `agente_corrida`, `cola_aprobacion` y `orquestador_escalacion` a través de TODAS las flotas a propósito: mide al AGENTE de Likida (aprobado/rechazado/costo), igual que calidad.ts y consumo.ts.',
+  'src/lib/admin/cola-aprobacion.ts': 'La cola de aprobación de /admin (superadmin) es la bandeja de las salidas de los agentes de LIKIDA (cola_aprobacion, deny-all, sin flota dueña) y resuelve al actor por su id en app_user para verificar rol; solo la invocan acciones re-gateadas superadmin.',
   'src/lib/admin/slo.ts': 'Los SLOs (fase 7, 17-ago-2026) miden la salud DEL PRODUCTO — tasa de éxito y p95 de agente_corrida de TODOS los tenants a propósito: un SLO por flota mediría a la flota, no al servicio. Solo lo lee la tarjeta de /admin/dev, detrás de requireSuperadmin.',
   'src/lib/admin/capacidad.ts': 'El modelo de capacidad (fase 7, 17-ago-2026) agrega llm_costo y cuenta liquidaciones DE TODA la operación a propósito: mide el costo unitario del PRODUCTO para los escenarios de escala del superadmin (/admin/capacidad-forecast, detrás de requireSuperadmin). Un filtro por tenant mediría la capacidad de una flota, no la de Likida.',
   'src/lib/admin/negocio.ts': 'CLAUDE.md la nombra, textual, como "la única función con ese permiso": la consola /admin (superadmin) cruza TODOS los tenants a propósito para ver costo de IA, flotas y agentes de TODAS las flotas a la vez.',
@@ -320,7 +323,24 @@ const CONDUCTOR_VOLUNTARIOS_ACTIVOS = ".from('operador').select('id', { count: '
 const APP_USER_EXISTE_POR_CORREO = ".from('app_user').select('id').eq('email', email).maybeSingle()";
 // Cortacircuitos del runner (leerPausaPorFallos): las últimas corridas de UN agente del sistema, de cualquier flota o de ninguna.
 const CORRIDAS_PAUSA_POR_FALLOS = ".from('agente_corrida').select('estado, inicio, error').eq('agente', agente).order('inicio', { ascending: false }).order('id', { ascending: false }).limit(FALLOS_PARA_PAUSA)";
+// Personal de LIKIDA (superadmin/vendedor): sus filas de app_user no tienen flota (tenant_id NULL), así que filtrar por tenant_id las ocultaría.
+const BAJA_CONTAR_SUPERADMINS = ".from('app_user').select('id').eq('rol', 'superadmin').eq('activo', true)";
+const BITACORA_PERSONAS_LIKIDA = ".from('app_user').select('id, nombre').in('rol', ['superadmin', 'vendedor']).order('nombre').order('id').limit(200)";
+const BITACORA_NOMBRES_ACTORES = ".from('app_user').select('id, nombre').in('id', actores)";
+const SOPORTE_AVISOS_SLA = ".from('bitacora_auditoria').select('entidad_id, ocurrio_en').eq('accion', ACCIONES_AVISO.sla).in('entidad_id', [...ticketIds].slice(0, 200)).order('ocurrio_en', { ascending: false }).order('id', { ascending: false }).limit(500)";
 const EXENCIONES_CONSULTA = [{
+  archivo: 'src/lib/auth/baja_acceso.ts', tabla: 'app_user', cadena: BAJA_CONTAR_SUPERADMINS,
+  razon: 'El candado «nunca el último superadmin activo» cuenta superadmins de LIKIDA, que no tienen flota (app_user.tenant_id es NULL para ellos): un filtro por tenant_id devolvería siempre 0 y el candado no protegería nada. Solo lo alcanza la acción de baja de /admin/usuarios, detrás de requireSuperadmin y del segundo factor reciente.'
+}, {
+  archivo: 'src/lib/admin/bitacora.ts', tabla: 'app_user', cadena: BITACORA_PERSONAS_LIKIDA,
+  razon: 'Opciones del filtro «actor» de /admin/bitacora: lista al personal de LIKIDA (superadmin y vendedor), que no tiene flota. La página es solo de superadmin (layout de /admin) y la consulta no devuelve nada de ninguna flota: id y nombre de personal propio.'
+}, {
+  archivo: 'src/lib/admin/bitacora.ts', tabla: 'app_user', cadena: BITACORA_NOMBRES_ACTORES,
+  razon: 'Resuelve el NOMBRE de los actores que ya aparecen en la página de accesos de /admin/bitacora (superadmin, cruza flotas a propósito, igual que el resto del archivo). Busca por la clave global app_user.id: no puede traer filas fuera de las ya listadas ni leer más columna que el nombre.'
+}, {
+  archivo: 'src/lib/admin/soporte-escalado.ts', tabla: 'bitacora_auditoria', cadena: SOPORTE_AVISOS_SLA,
+  razon: 'Lee el dedup del aviso de SLA vencido de los tickets que la cola de soporte del SUPERADMIN (/admin/soporte, cruza flotas a propósito; ver admin/soporte.ts en el ALLOWLIST) ya listó: se ancla por entidad_id (UUID de ticket, global) y por la acción exacta, y solo devuelve cuándo se avisó, nunca el detalle del evento.'
+}, {
   archivo: 'src/lib/auth/perfil_tenant.ts', tabla: 'tenant_perfil', cadena: PERFIL_PUNTO_DE_ACCESO,
   razon: 'Es la definición del único punto de acceso a tenant_perfil (`tablaPerfil`, tope de frontera_datos_guardiana): no ejecuta nada por sí misma. Sus dos usos filtran por flota (`perfilDeTenant` con `.eq(tenant_id)`) o barren a propósito todas las flotas con perfil para el cron (`tenantsSinPerfilParaCron` con `.select(tenant_id)`), y esos dos usos sí pasan por esta misma prueba. No exime otro archivo ni otra consulta.',
 }, {

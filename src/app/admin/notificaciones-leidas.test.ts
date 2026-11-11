@@ -17,7 +17,7 @@ const ventana = {
   dispatchEvent: emisor.dispatchEvent.bind(emisor),
 };
 vi.stubGlobal('window', ventana);
-const { leerLeidas, marcarLeida, marcarTodasLeidas } = await import('./notificaciones-leidas');
+const { leerLeidas, marcarLeida, marcarTodasLeidas, claveAlerta, esSilenciable, alertasPendientes, hayAtencionPendiente } = await import('./notificaciones-leidas');
 
 beforeEach(() => { ventana.localStorage.clear(); });
 
@@ -42,5 +42,26 @@ describe('A37-S07-07: notificaciones-leidas (admin)', () => {
     expect(l.size).toBeLessThanOrEqual(500);
     expect(l.has('k:699')).toBe(true);
     expect(l.has('k:0')).toBe(false);
+  });
+});
+
+describe('"leída" no silencia ARCO, vencidos ni fuentes ciegas', () => {
+  const arco = { tipo: 'atencion' as const, texto: '2 solicitudes ARCO esperan respuesta (plazo legal de 20 días hábiles).', href: '/admin/escalaciones' };
+  const vencido = { tipo: 'atencion' as const, texto: '1 ticket de soporte tiene el SLA vencido (3 abiertos en total).' };
+  const ciega = { tipo: 'atencion' as const, texto: 'No se pudo leer: Solicitudes ARCO — ahí puede haber pendientes.' };
+  const costo = { tipo: 'atencion' as const, texto: 'El costo de IA subió 40% esta semana vs la anterior.' };
+
+  it('las críticas no son silenciables y las demás sí', () => {
+    expect(esSilenciable(arco)).toBe(false);
+    expect(esSilenciable(vencido)).toBe(false);
+    expect(esSilenciable(ciega)).toBe(false);
+    expect(esSilenciable(costo)).toBe(true);
+  });
+  it('marcarlas leídas no las saca de pendientes ni apaga la señal', () => {
+    const leidas = new Set([arco, vencido, ciega, costo].map(claveAlerta));
+    expect(alertasPendientes([arco, vencido, ciega, costo], leidas)).toEqual([arco, vencido, ciega]);
+    expect(hayAtencionPendiente([arco], leidas)).toBe(true);
+    expect(hayAtencionPendiente([costo], leidas)).toBe(false);
+    expect(hayAtencionPendiente([costo], new Set())).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- pruebas que leen el árbol de FUENTE del propio repo; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { isValidElement } from 'react';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -103,9 +103,10 @@ const ZONAS = ['dashboard', 'admin', 'vendedor'] as const;
 const DIRECTIVA = /^[ \t]*['"]use server['"];?[ \t]*$/m;
 
 function archivos(dir: string, salida: string[] = []): string[] {
-  for (const nombre of readdirSync(dir)) {
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    const nombre = d.name;
     const ruta = join(dir, nombre);
-    if (statSync(ruta).isDirectory()) archivos(ruta, salida);
+    if (d.isDirectory()) archivos(ruta, salida);
     else if (/\.(ts|tsx)$/.test(nombre) && !/\.test\./.test(nombre) && DIRECTIVA.test(readFileSync(ruta, 'utf8'))) salida.push(relative(SRC, ruta));
   }
   return salida;
@@ -150,6 +151,7 @@ const FUERA_DEL_PERFIL: Record<string, Clase> = {
   'admin/layout.tsx': 'sin_datos',
   'vendedor/layout.tsx': 'sin_datos',
   'admin/agentes/[id]/insumos/page.tsx': 'consola_superadmin',
+  'admin/facturas/acciones.ts': 'consola_superadmin',
   'admin/agentes/page.tsx': 'consola_superadmin',
   'admin/aprobaciones/page.tsx': 'consola_superadmin',
   'admin/compliance/page.tsx': 'consola_superadmin',
@@ -158,7 +160,8 @@ const FUERA_DEL_PERFIL: Record<string, Clase> = {
   'admin/elegir-flota/page.tsx': 'consola_superadmin',
   'admin/evals/page.tsx': 'consola_superadmin',
   'admin/flotas/[id]/page.tsx': 'consola_superadmin',
-  'admin/flotas/page.tsx': 'consola_superadmin',
+  'admin/flotas/acciones.ts': 'consola_superadmin',
+  'admin/flotas/acciones-plan.ts': 'consola_superadmin',
   'admin/mapa-prospectos/acciones-exportar.ts': 'consola_superadmin',
   'admin/marketing/page.tsx': 'consola_superadmin',
   'admin/mcp-clientes/page.tsx': 'consola_superadmin',
@@ -167,7 +170,8 @@ const FUERA_DEL_PERFIL: Record<string, Clase> = {
   'admin/soporte/page.tsx': 'consola_superadmin',
   'admin/techo-ia/acciones.ts': 'consola_superadmin',
   'admin/tu-turno/page.tsx': 'consola_superadmin',
-  'admin/usuarios/nuevo/page.tsx': 'consola_superadmin',
+  'admin/usuarios/acciones.ts': 'consola_superadmin',
+  'admin/usuarios/nuevo/acciones.ts': 'consola_superadmin',
   'admin/vendedores/acciones.ts': 'consola_superadmin',
   'vendedor/panel-vendedor.tsx': 'zona_vendedor',
 };

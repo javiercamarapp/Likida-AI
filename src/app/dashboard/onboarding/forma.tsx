@@ -3,21 +3,28 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
-import { Selector, Campo, Aviso, type ResultadoAccion, type AccionDeForma } from '../../admin/ui/forma';
+import { AvisoResultado, Boton, CampoArchivo, CampoSelect, CampoTexto, Fieldset, Icono, type AccionDeForma, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import './entrevista.css';
 
 export type Opcion = { valor: string; texto: string };
 
-function Boton() {
+function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <span className="inline-flex items-center gap-2">
-        <Save width={14} height={14} strokeWidth={1.75} />
-        {pending ? 'Guardando…' : 'Guardar perfil de la flota'}
-      </span>
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />}>
+      {pending ? 'Guardando…' : 'Guardar perfil de la flota'}
+    </Boton>
+  );
+}
+
+/** Un selector del formulario: etiqueta, opciones y valor inicial (el nombre del campo es también su id). */
+function Selector({ nombre, etiqueta, opciones, valorInicial, requerido, ayuda }: {
+  nombre: string; etiqueta: string; opciones: Opcion[]; valorInicial?: string; requerido?: boolean; ayuda?: string;
+}) {
+  return (
+    <CampoSelect etiqueta={etiqueta} id={nombre} name={nombre} obligatorio={requerido} defaultValue={valorInicial ?? ''} ayuda={ayuda}>
+      {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
+    </CampoSelect>
   );
 }
 
@@ -69,15 +76,10 @@ export function FormaOnboarding({
   const [estado, enviar] = useActionState(accion, null as ResultadoAccion);
 
   return (
-    <form action={enviar} encType="multipart/form-data" className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">Fiscal — lo que ningún comprobante revela</h2>
-        <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          Estas dos son las únicas obligatorias. Sin ellas el estímulo de peaje queda en
-          $0 hasta que las contestes — el motor nunca lo acredita sin esta declaración.
-          El resto se puede dejar en blanco y completarlo después.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <form action={enviar} encType="multipart/form-data" className="rv-ob__forma">
+      <Fieldset leyenda="Fiscal — lo que ningún comprobante revela"
+        ayuda="Estas dos son las únicas obligatorias. Sin ellas el estímulo de peaje queda en $0 hasta que las contestes — el motor nunca lo acredita sin esta declaración. El resto se puede dejar en blanco y completarlo después.">
+        <div className="rv-forma__rejilla">
           <Selector nombre="ingresos" etiqueta="Ingresos anuales del último ejercicio" requerido
             valorInicial={inicial.ingresos}
             opciones={[
@@ -113,26 +115,21 @@ export function FormaOnboarding({
           <Selector nombre="hombreCamion" etiqueta="¿Hay hombre-camión (el dueño maneja)?"
             valorInicial={inicial.hombreCamion} opciones={SI_NO} ayuda="Con hombre-camión los viáticos son práctica fiscal indebida. Nos protege a los dos." />
         </div>
-      </section>
+      </Fieldset>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">Stack — con qué trabajan hoy</h2>
-        <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          Solo lo que el catálogo de Likida sabe conectar. No se inventa un sistema
-          que no esté aquí: si usas otro, márcalo como «Otro» y escríbelo.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <Fieldset leyenda="Stack — con qué trabajan hoy"
+        ayuda="Solo lo que el catálogo de Likida sabe conectar. No se inventa un sistema que no esté aquí: si usas otro, márcalo como «Otro» y escríbelo.">
+        <div className="rv-forma__rejilla">
           <Selector nombre="gps" etiqueta="GPS / rastreo" valorInicial={inicial.gps} opciones={gps} />
           <Selector nombre="erp" etiqueta="ERP / contabilidad" valorInicial={inicial.erp} opciones={erp} />
           <Selector nombre="tag" etiqueta="TAG de peaje" valorInicial={inicial.tag} opciones={tag} />
           <Selector nombre="monedero" etiqueta="Monedero de diésel" valorInicial={inicial.monedero} opciones={monedero} />
-          <Campo nombre="stackOtro" etiqueta="Si marcaste «Otro», ¿cuál?" placeholder="Nombre del sistema" />
+          <CampoTexto etiqueta="Si marcaste «Otro», ¿cuál?" id="stackOtro" name="stackOtro" placeholder="Nombre del sistema" />
         </div>
-      </section>
+      </Fieldset>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">Operación</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <Fieldset leyenda="Operación">
+        <div className="rv-forma__rejilla">
           <Selector nombre="pagoOperador" etiqueta="¿Cómo le pagan al operador?"
             valorInicial={inicial.pagoOperador}
             opciones={[
@@ -143,26 +140,16 @@ export function FormaOnboarding({
             ]} />
           <Selector nombre="tanquePropio" valorInicial={inicial.tanquePropio} etiqueta="¿Tienen tanque propio?" opciones={SI_NO} />
         </div>
-      </section>
+      </Fieldset>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">Políticas de gasto</h2>
-        <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          Los topes que el motor aplica se capturan en Políticas (montos por concepto).
-          Aquí puedes subir además el papel que ya usan (PDF o foto), para que quede
-          en la memoria de la flota.
-        </p>
-        <label className="text-xs" style={{ color: 'var(--muted)' }} htmlFor="politica">
-          Documento (PDF, JPEG o PNG, máximo 8 MB)
-        </label>
-        <input id="politica" type="file" name="politica"
-          accept="application/pdf,image/jpeg,image/png,image/webp"
-          className="text-[13px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium"
-          style={{ color: 'var(--muted)' }} />
-      </section>
+      <Fieldset leyenda="Políticas de gasto"
+        ayuda="Los topes que el motor aplica se capturan en Políticas (montos por concepto). Aquí puedes subir además el papel que ya usan (PDF o foto), para que quede en la memoria de la flota.">
+        <CampoArchivo etiqueta="Documento (PDF, JPEG o PNG, máximo 8 MB)" id="politica" name="politica"
+          accept="application/pdf,image/jpeg,image/png,image/webp" />
+      </Fieldset>
 
-      <Aviso estado={estado} />
-      <div><Boton /></div>
+      <AvisoResultado estado={estado} />
+      <div><BotonGuardar /></div>
     </form>
   );
 }

@@ -40,7 +40,7 @@ test('la hoja «Más» trae el árbol completo, navega y se cierra con Esc devol
 
   await mas.tap();
   await hoja.getByRole('link', { name: 'Viajes', exact: true }).tap();
-  await expect(page).toHaveURL(/\/dashboard\/viajes/);
+  await expect(page).toHaveURL(/\/dashboard\/despacho/); // «Viajes» es el grupo Despacho; el registro es una pestaña suya
   await expect(hoja).toBeHidden();
 });
 

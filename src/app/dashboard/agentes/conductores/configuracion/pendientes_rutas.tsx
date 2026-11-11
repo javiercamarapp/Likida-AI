@@ -4,6 +4,8 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Aviso, type AccionSitio } from '../sitios/formas';
 import type { PendienteRevision } from '@/lib/likida/conductor/rutas';
+import '../conductores.css';
+import { Boton } from '@/app/ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MANTENIMIENTO DE RUTAS (T-A5-50): las rutas autorizadas que llevan tiempo sin revisarse, de la más descuidada a la menos,
@@ -15,12 +17,7 @@ export type FilaPendienteRuta = PendienteRevision;
 
 function Revisada() {
   const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary">
-      {pending ? 'Marcando…' : 'Revisada'}
-    </button>
-  );
+  return <Boton type="submit" tamano="sm" loading={pending}>{pending ? 'Marcando…' : 'Revisada'}</Boton>;
 }
 
 const textoSitios = (r: FilaPendienteRuta['ruta']): string => {
@@ -36,16 +33,16 @@ const textoAntiguedad = (dias: number | null): string =>
 function Fila({ p, accion }: { p: FilaPendienteRuta; accion: AccionSitio }) {
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <li className="py-2.5 space-y-1.5">
-      <form action={enviar} className="flex items-center justify-between gap-3 flex-wrap" aria-label={`Marcar revisada la ruta ${p.ruta.corredor}`}>
+    <li className="rv-cd__item">
+      <form action={enviar} className="rv-cd__linea" aria-label={`Marcar revisada la ruta ${p.ruta.corredor}`}>
         <input type="hidden" name="id" value={p.ruta.id} />
-        <div className="min-w-0">
-          <div className="text-[13px] font-medium">{p.ruta.corredor} <span className="font-normal" style={{ color: 'var(--muted)' }}>· {textoSitios(p.ruta)}</span></div>
-          <div className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <div>
+          <div><span className="rv-cd__medio">{p.ruta.corredor}</span> <span className="rv-cd__muted">· {textoSitios(p.ruta)}</span></div>
+          <div className="rv-cd__nota">
             {textoAntiguedad(p.diasSinRevisar)}{p.vencida ? ' · vencida: el chofer no la recibe hasta que la renueves' : ''}
           </div>
         </div>
-        <Revisada />
+        <span className="rv-cd__fin"><Revisada /></span>
       </form>
       <Aviso r={estado} />
     </li>
@@ -57,7 +54,7 @@ export function PendientesRutas({ pendientes, totalRutas, dias, accionRevisada }
 }) {
   if (pendientes.length === 0) {
     return (
-      <p role="status" className="text-[12px]" style={{ color: 'var(--muted)' }}>
+      <p role="status" className="rv-cd__nota">
         {totalRutas === 0
           ? 'Todavía no hay rutas cargadas; cuando importes las primeras, aquí verás cuáles necesitan revisión.'
           : `Todas las rutas se revisaron en los últimos ${dias} días. No hay nada pendiente.`}
@@ -65,17 +62,17 @@ export function PendientesRutas({ pendientes, totalRutas, dias, accionRevisada }
     );
   }
   return (
-    <div className="space-y-1.5">
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+    <div className="rv-cd__pila--s">
+      <p className="rv-cd__nota">
         {pendientes.length} ruta{pendientes.length === 1 ? '' : 's'} sin revisar en {dias} días o más. Ábrela en Google Maps, confirma que sigue bien y marca «Revisada».
       </p>
-      <ul className="divide-y" aria-label="Rutas pendientes de revisión">
+      <ul className="rv-cd__lista" aria-label="Rutas pendientes de revisión">
         {pendientes.map((p) => (accionRevisada
           ? <Fila key={p.ruta.id} p={p} accion={accionRevisada} />
           : (
-            <li key={p.ruta.id} className="py-2.5">
-              <div className="text-[13px] font-medium">{p.ruta.corredor} <span className="font-normal" style={{ color: 'var(--muted)' }}>· {textoSitios(p.ruta)}</span></div>
-              <div className="text-[12px]" style={{ color: 'var(--muted)' }}>{textoAntiguedad(p.diasSinRevisar)}{p.vencida ? ' · vencida' : ''}</div>
+            <li key={p.ruta.id} className="rv-cd__item">
+              <div><span className="rv-cd__medio">{p.ruta.corredor}</span> <span className="rv-cd__muted">· {textoSitios(p.ruta)}</span></div>
+              <div className="rv-cd__nota">{textoAntiguedad(p.diasSinRevisar)}{p.vencida ? ' · vencida' : ''}</div>
             </li>
           )))}
       </ul>

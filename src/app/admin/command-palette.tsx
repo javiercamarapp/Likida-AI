@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Power, Eye, Siren, AlertTriangle, Check, Sparkles } from 'lucide-react';
 import { Modal } from '../ui-v2/componentes/overlay';
-import { TODAS_LAS_RUTAS } from './rutas';
+import { TODAS_LAS_RUTAS, coincideBusqueda, planoBusqueda } from './rutas';
 import { etiquetaInterruptor } from './observabilidad/etiquetas';
 
 /**
@@ -42,8 +42,11 @@ interface Item {
   detalle?: string;
   apagado?: boolean;
   Icono?: typeof Search;
+  /** Otras palabras que encuentran esta fila («kill switch» → Agentes, «ARCO» → Seguridad y datos). */
+  alias?: readonly string[];
   correr: () => void;
 }
+
 
 export default function CommandPalette() {
   const [abierto, setAbierto] = useState(false);
@@ -191,8 +194,8 @@ export default function CommandPalette() {
   }
 
   const resultados = useMemo((): Item[] => {
-    const q = consulta.trim().toLowerCase();
-    const filtra = (items: Item[]) => (q ? items.filter((i) => i.etiqueta.toLowerCase().includes(q)) : items);
+    const q = planoBusqueda(consulta.trim());
+    const filtra = (items: Item[]) => (q ? items.filter((i) => coincideBusqueda(i.etiqueta, i.alias, q)) : items);
 
     if (modo === 'interruptores') {
       return filtra((datos?.interruptores ?? []).map((i): Item => ({
@@ -231,9 +234,18 @@ export default function CommandPalette() {
         key: 'acc-copiloto', etiqueta: 'Abrir el copiloto (panel lateral)', detalle: '⌘J', Icono: Sparkles,
         correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); },
       },
+      // Verbos del Copiloto (F5, mejora 6): abren el panel lateral y le hacen la pregunta; no ejecutan nada por sí solos.
+      {
+        key: 'acc-copiloto-decide', etiqueta: 'Preguntar al copiloto: ¿qué decido hoy?', Icono: Sparkles,
+        correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); window.dispatchEvent(new CustomEvent('likida:copiloto-preguntar', { detail: { pregunta: '¿Qué espera mi decisión hoy?' } })); },
+      },
+      {
+        key: 'acc-copiloto-resumen', etiqueta: 'Preguntar al copiloto: resumen del día', Icono: Sparkles,
+        correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); window.dispatchEvent(new CustomEvent('likida:copiloto-preguntar', { detail: { pregunta: 'Dame el resumen del día: negocio, agentes y costo de IA.' } })); },
+      },
     ];
     const rutas = TODAS_LAS_RUTAS.map((r): Item => ({
-      key: r.href, etiqueta: r.nombre, Icono: r.Icono, correr: () => ir(r.href),
+      key: r.href, etiqueta: r.nombre, Icono: r.Icono, alias: r.alias, correr: () => ir(r.href),
     }));
     return filtra([...acciones, ...rutas]);
     // eslint-disable-next-line react-hooks/exhaustive-deps

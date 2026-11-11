@@ -23,10 +23,11 @@ import {
 } from './repo_correo';
 import { resolverDestinatarios } from './correo_destinatarios';
 import { MARCA_RETENIDA_OMITIDA } from './desglose_reglas';
+import { esPolizaProvisional } from './poliza_provisional';
 
 /** Las retenciones que una persona puede decidir enviar. */
 export const TIPOS_LIBERABLES = ['neto_negativo', 'tipo_sin_regla'] as const;
-const TIPOS_RETENCION = ['neto_negativo', 'tipo_sin_regla', 'concepto_prohibido'] as const;
+const TIPOS_RETENCION = ['neto_negativo', 'tipo_sin_regla', 'concepto_prohibido', 'sin_poliza'] as const;
 
 export type MotivoRechazoLiberar =
   | 'sin_permiso' | 'no_encontrada' | 'no_retenida' | 'no_liberable' | 'sin_destinatarios' | 'no_disponible'
@@ -115,7 +116,10 @@ export async function liberarEnvio(
   }
 
   const retenciones = excepciones.filter((x) => (TIPOS_RETENCION as readonly string[]).includes(x.tipo));
-  if (retenciones.some((x) => !(TIPOS_LIBERABLES as readonly string[]).includes(x.tipo))) {
+  // Póliza provisional: la falta de póliza SÍ se libera, pero solo en un desglose guardado como provisional (decisión del dueño); la
+  // revisión humana es justamente esta acción. En cualquier otro desglose la falta de póliza no se libera desde aquí.
+  const provisional = esPolizaProvisional(cab.desglose.poliza);
+  if (retenciones.some((x) => !(TIPOS_LIBERABLES as readonly string[]).includes(x.tipo) && !(x.tipo === 'sin_poliza' && provisional))) {
     return rechazo('no_liberable', 'Este desglose trae un concepto que la empresa prohibió enviar: corrígelo en su sistema; no se libera desde aquí.');
   }
 
