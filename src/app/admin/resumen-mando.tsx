@@ -57,7 +57,7 @@ export async function BloqueTuTurno() {
     return <Tarjeta titulo="Tu turno" estado="vacio" mensaje="Nada espera tu decisión" detalle="Cuando algo necesite tu visto bueno aparece aquí, la más urgente primero." />;
   }
   return (
-    <Tarjeta titulo="Tu turno" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/tu-turno">Ver todo</BotonEnlace>}>
+    <Tarjeta titulo="Tu turno" elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/tu-turno">Ver todo</BotonEnlace>}>
       <ul className="adm-res-lista">
         {t.filas.map((f) => (
           <li key={f.clave} className="adm-res-fila">
@@ -81,7 +81,7 @@ export async function BloqueCaja() {
   const [r, mes] = await Promise.all([resumenNegocio(), costoIaMes()]);
   if (r === null && mes === null) return <Tarjeta titulo="Caja y clientes" estado="error" reintentar />;
   return (
-    <Tarjeta titulo="Caja y clientes">
+    <Tarjeta titulo="Caja y clientes" elevar entra="tarjeta">
       <dl className="adm-res-pares">
         <dt>{mes ? `Gasto de IA en ${mes.etiquetaMes}` : 'Gasto de IA del mes'}</dt>
         <dd>{mes ? usd(mes.mesUsd) : '—'}</dd>
