@@ -210,7 +210,7 @@ export default async function ConfiguracionPage({
 
           <Tarjeta titulo={t('cfg.unidades_calibradas')} info="configuracion.unidades">
             <p className="rv-cfg__apoyo">{t('cfg.placas_con_consumo_propio_que_le')}</p>
-            <TablaBase etiqueta={t('cfg.rendimiento_base_por_placa')} columnas={columnasUnidades} filas={filasUnidades} idFila={(u) => u.placa} altoMaximo={false}
+            <TablaBase etiqueta={t('cfg.rendimiento_base_por_placa')} columnas={columnasUnidades} filas={filasUnidades} idFila={(u) => u.placa} densa altoMaximo={false}
               vacio={{ titulo: t('cfg.ninguna_placa_calibrada'), texto: t('cfg.todas_usan_el_rendimiento_por_defecto') }} />
           </Tarjeta>
         </>

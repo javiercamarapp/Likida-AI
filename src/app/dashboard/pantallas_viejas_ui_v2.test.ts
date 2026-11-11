@@ -47,7 +47,7 @@ describe('pantallas viejas migradas a ui-v2 (documentos de clientes y detalle de
   it('el detalle monta UN marco de pantalla y la bandeja también (un solo h1 lo pone MarcoPagina)', () => {
     for (const f of ['carta-porte/documentos/vista.tsx', '[id]/detalle.tsx']) {
       const src = sinComentarios(readFileSync(join(RAIZ, f), 'utf8'));
-      expect(src, f).toMatch(/<MarcoPagina[\s>]/);
+      expect(src, f).toMatch(/<(?:MarcoPagina|Esqueleto(?:TablaMaestra|PanelCifras|Ficha|Configuracion|Portada))[\s>]/);
       expect(src, f).not.toMatch(/<h1[\s>]/);
     }
   });

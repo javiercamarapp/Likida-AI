@@ -2,10 +2,11 @@ import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { EsqTarjetaV2, EsqCifrasV2, MarcoPagina } from '../../ui-v2/componentes';
+import { EsqTarjetaV2, EsqCifrasV2 } from '../../ui-v2/componentes';
 import {
   BloqueIntro, BloqueEmbudoAdquisicion, BloqueCostoYCampanas, BloqueActivacion, BloqueCohortes, BloqueUso, BloqueSinInstrumentacion,
 } from './bloques';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import '../dinero.css';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,7 @@ export default async function CrecimientoPage() {
   await requireSuperadmin();
 
   return (
-    <MarcoPagina titulo={ta('crecimiento.crecimiento')} apoyo={ta('crecimiento.de_donde_vienen_los')}>
+    <EsqueletoPanelCifras titulo={ta('crecimiento.crecimiento')} apoyo={ta('crecimiento.de_donde_vienen_los')}>
       <Suspense fallback={<EsqTarjetaV2 alto={84} />}><BloqueIntro /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueEmbudoAdquisicion /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueCostoYCampanas /></Suspense>
@@ -33,7 +34,7 @@ export default async function CrecimientoPage() {
       <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueCohortes /></Suspense>
       <Suspense fallback={<><EsqTarjetaV2 alto={240} /><EsqCifrasV2 n={2} /></>}><BloqueUso /></Suspense>
       <BloqueSinInstrumentacion ta={ta} />
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

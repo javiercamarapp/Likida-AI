@@ -13,8 +13,9 @@ import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDe
 import { Aviso, BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
 import {
-  Aviso as AvisoV2, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, Tarjeta,
+  Aviso as AvisoV2, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, EstadoError, EstadoVacio, Icono, Tarjeta,
 } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
@@ -251,30 +252,43 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
   const clientesVisibles = k === '' ? clientes : clientes.filter((c) => llaveTexto(c.nombre).includes(k));
   const vacio = catalogo !== null && catalogo.numero === null && catalogo.productos.length === 0 && catalogo.partes.length === 0;
   return (
-    <MarcoPagina titulo={tx('rest.catalogo_del_cliente')} apoyo={tx('rest.lo_que_el_agente_aprende_una')} acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte')}</BotonEnlace>}>
-      <AvisoV2 tono="info">{tx('rest.un_dato_del_catalogo_nunca_pisa')}</AvisoV2>
-
-      <Importador ver={ver} importar={acciones.importar} />
-
-      <Tarjeta titulo={tx('vigia.vista.cliente')} info="carta_porte_catalogo.cliente" estado={clientes.length === 0 ? 'vacio' : 'ok'} mensaje={tx('rest.aun_no_hay_clientes_en_tu')}
-        detalle={tx('rest.aun_no_hay_clientes_en_tu_2')}>
-        <div className="rv-cp__pila">
+    <EsqueletoTablaMaestra
+      titulo={tx('rest.catalogo_del_cliente')}
+      apoyo={tx('rest.lo_que_el_agente_aprende_una')}
+      acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte')}</BotonEnlace>}
+      filtros={(
+        <div className="rv-cp__pila" role="group" aria-label={tx('vigia.vista.cliente')}>
           {clientes.length > 8 && (
             <div className="rv-cp__form">
               <CampoTexto id="cat-buscar-cliente" etiqueta={tx('rest.buscar_cliente')} value={buscar} onChange={(e) => setBuscar(e.target.value)} autoComplete="off" />
             </div>
           )}
-          <ul className="rv-cp__acciones">
-            {clientesVisibles.map((c) => (
-              <li key={c.id}>
-                <Link href={hrefDe(sufijo, c.id)} aria-current={c.id === clienteId ? 'true' : undefined} className={clasesBoton(c.id === clienteId ? 'primary' : 'secondary', 'sm')}>
-                  {c.nombre}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {clientes.length === 0 ? <p className="rv-cp__nota">{tx('rest.aun_no_hay_clientes_en_tu')}</p> : (
+            <ul className="rv-cp__acciones">
+              {clientesVisibles.map((c) => (
+                <li key={c.id}>
+                  <Link href={hrefDe(sufijo, c.id)} aria-current={c.id === clienteId ? 'true' : undefined} className={clasesBoton(c.id === clienteId ? 'primary' : 'secondary', 'sm')}>
+                    {c.nombre}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      </Tarjeta>
+      )}
+      avisos={(
+        <>
+          <AvisoV2 tono="info">{tx('rest.un_dato_del_catalogo_nunca_pisa')}</AvisoV2>
+          {elegido !== null && catalogo?.truncado ? <AvisoV2 tono="warn">{tx('rest.el_catalogo_de_este_cliente_es')}</AvisoV2> : null}
+        </>
+      )}
+      cifras={elegido !== null && !lecturaFallida && catalogo !== null ? [
+        { etiqueta: tx('f26d.catalogo.productos'), valor: `${fmtNumero(catalogo.productos.length)}${catalogo.truncado ? '+' : ''}` },
+        { etiqueta: tx('f26d.catalogo.partes'), valor: `${fmtNumero(catalogo.partes.length)}${catalogo.truncado ? '+' : ''}` },
+      ] : undefined}
+      etiquetaCifras={tx('rest.catalogo_del_cliente')}
+    >
+      <Importador ver={ver} importar={acciones.importar} />
 
       {elegido === null ? (
         clientes.length > 0 && <p className="rv-cp__nota">{tx('rest.elige_un_cliente_para_ver_y')}</p>
@@ -283,14 +297,11 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
       ) : (
         <>
           {vacio && <EstadoVacio titulo={tx('rest.aun_sin_catalogo')} contenido>{fraseSinCatalogo(tx)}</EstadoVacio>}
-          {catalogo.truncado && (
-            <AvisoV2 tono="warn">{tx('rest.el_catalogo_de_este_cliente_es')}</AvisoV2>
-          )}
           <Numero fila={catalogo.numero} clienteId={elegido.id} ver={ver} acciones={acciones} />
           <Tabla tipo="producto" titulo={tx('rest.productos')} filas={catalogo.productos} clienteId={elegido.id} ver={ver} acciones={acciones} />
           <Tabla tipo="parte" titulo={tx('rest.remitentes_y_destinatarios')} filas={catalogo.partes} clienteId={elegido.id} ver={ver} acciones={acciones} />
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

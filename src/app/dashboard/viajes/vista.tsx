@@ -7,7 +7,8 @@ import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { BarraFiltros, BotonEnlace, Disclosure, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './registro.css';
-import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { ahoraMs } from '@/lib/saludo';
+import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
@@ -163,7 +164,6 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
       apoyo={t('viajes.apoyo')}
       cifras={cifras}
       etiquetaCifras={t('viajes.sello')}
-      selloCifras={t('viajes.sello')}
       filtros={(
         // GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
         // campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente.
@@ -227,6 +227,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
           params={{}}
           pie={(
             <>
+              <div className="rv-tl__sellos"><SelloDato tipo="observado" fuente={t('viajes.sello')} leidoEn={ahoraMs()} edad={false} /></div>
               {verDinero ? <p className="rv-tl__nota">{t('viajes.nota.diferencia')}</p> : null}
               {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de `porPagina` filas por render. No se dice "página N de M": el
                   cursor es la posición del último viaje visto y "Siguientes" continúa desde ahí. Hacia atrás sirve el botón del navegador o

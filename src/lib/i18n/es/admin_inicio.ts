@@ -336,4 +336,7 @@ export const admin_inicio = {
   'selector_vista.no_hay_ninguna_flota': 'No hay ninguna flota dada de alta, así que las tres vistas abren VACÍAS y lo dicen en pantalla — sirven para mirar el frontend, no para leer una cifra.',
   'selector_vista.dar_de_alta_una': 'Dar de alta una flota',
   'selector_vista.cambian_lo_que_se': 'Cambian lo que se te ENSEÑA, no lo que puedes hacer: tu sesión sigue siendo la de superadmin y cada vista lleva una cinta que lo dice, con el regreso a esta consola.',
+  'ficha_conv.eyebrow': 'Ficha de conversación',
+  'ficha_conv.mensajes': 'Mensajes',
+  'ficha_conv.ultima': 'Última actividad',
 } as const;

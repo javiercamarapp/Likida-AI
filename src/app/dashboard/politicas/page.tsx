@@ -11,9 +11,10 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Metadata } from 'next';
 import {
-  AvisoCompacto, CamposSistema, CampoTexto, Casilla, EstadoError, EstadoVacio, FormaConAviso, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  AvisoCompacto, CamposSistema, CampoTexto, Casilla, EstadoError, EstadoVacio, FormaConAviso, StatusChip, TablaBase,
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
+import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
 import type { PoliticaGasto } from '@/lib/likida/cuadre/engine';
 import './politicas.css';
 export async function generateMetadata(): Promise<Metadata> {
@@ -183,19 +184,17 @@ export default async function PoliticasPage({
   ];
 
   return (
-    <MarcoPagina titulo={tr('politicas.page.configuracion')} apoyo={tr('politicas.page.losTopesContraLos')}>
-      {config === null ? (
-        <EstadoError reintentar>{tr('politicas.page.noSePudoLeer')}</EstadoError>
-      ) : (
-        <>
-          <Tarjeta
-            titulo={tr('politicas.page.topesPorConcepto')} info="politicas.topes"
-            acciones={politicaPropiaFalloLectura ? (
-              <StatusChip tono="warn">{tr('politicas.page.noSePudoSaber')}</StatusChip>
-            ) : (
-              !politicaPropia && <StatusChip tono="neutral">{tr('politicas.page.heredadaDeLaBase')}</StatusChip>
-            )}
-          >
+    <EsqueletoConfiguracion
+      titulo={tr('politicas.page.configuracion')} apoyo={tr('politicas.page.losTopesContraLos')}
+      avisos={config === null ? <EstadoError reintentar>{tr('politicas.page.noSePudoLeer')}</EstadoError> : undefined}
+      secciones={config === null ? [] : [
+        {
+          id: 'topes', titulo: tr('politicas.page.topesPorConcepto'),
+          estado: politicaPropiaFalloLectura
+            ? { texto: tr('politicas.page.noSePudoSaber'), tono: 'warn' }
+            : !politicaPropia ? { texto: tr('politicas.page.heredadaDeLaBase'), tono: 'neutral' } : undefined,
+          contenido: (
+            <>
             {puedeEditar ? (
               <>
                 <FormaConAviso accion={accionGuardar} boton={tr('politicas.page.guardarPolitica')} columnas="md:grid-cols-1">
@@ -217,33 +216,42 @@ export default async function PoliticasPage({
               <TablaBase<PoliticaGasto> etiqueta={tr('politicas.page.topesPorComprobantePor')} columnas={columnasLectura} filas={politica}
                 idFila={(p) => `${p.concepto}-${p.ruta ?? ''}`} altoMaximo={false} />
             )}
-          </Tarjeta>
-
-          {porRuta.length > 0 && (
-            <Tarjeta titulo={tr('politicas.page.reglasPorRuta')} info="politicas.reglas_ruta">
+            </>
+          ),
+        },
+        ...(porRuta.length > 0 ? [{
+          id: 'rutas', titulo: tr('politicas.page.reglasPorRuta'),
+          contenido: (
+            <>
               {/* H39 (auditoría 24): con nombres de ruta largos en un celular la fila se cortaba sin forma de deslizar; la región de TablaBase desliza y se alcanza con teclado. */}
               <TablaBase<PoliticaGasto> etiqueta={tr('politicas.page.reglasPorRuta')} columnas={columnasRuta} filas={porRuta}
                 idFila={(p) => `${p.concepto}-${p.ruta}`} altoMaximo={false} />
               <p className="rv-pol__nota">
                 {tr('politicas.page.deSoloLecturaEl')}
               </p>
-            </Tarjeta>
-          )}
-
-          <Tarjeta titulo={tr('politicas.page.topesFiscalesQueAplica')} info="politicas.topes_fiscales">
+            </>
+          ),
+        }] : []),
+        {
+          id: 'fiscales', titulo: tr('politicas.page.topesFiscalesQueAplica'),
+          contenido: (
+            <>
             <CamposSistema etiqueta={tr('politicas.page.topesFiscales')} campos={[
               { etiqueta: tr('politicas.page.topeDiarioDeAlimentacion'), valor: mxn(config.estimulos.viaticosTopeFiscalDiarioMxn), nota: tr('politicas.page.lisrArt28V') },
               { etiqueta: tr('politicas.page.topeDeGastoEn'), valor: mxn(config.estimulos.efectivoTopeMxn), nota: tr('politicas.page.lisrArt27Iii') },
               { etiqueta: 'Peaje acreditable', valor: `${Math.round(config.estimulos.peajeFactor * 100)}%`, nota: tr('politicas.page.estimuloDeAutopistasLif') },
               { etiqueta: tr('politicas.page.desviacionDeConsumo'), valor: `${Math.round(config.tabulador.umbralDesviacion * 100)}%`, nota: tr('politicas.page.aPartirDeAqui') },
             ]} />
-          </Tarjeta>
-
+            </>
+          ),
+          pie: undefined,
+        },
+      ]}
+      contexto={config === null ? undefined : (
           <AvisoCompacto tono="info"
             resumen={tr('politicas.page.losTopesFiscalesDe')}
             mas={tr('politicas.page.losViaticosPorRuta')} />
-        </>
       )}
-    </MarcoPagina>
+    />
   );
 }

@@ -9,9 +9,13 @@
 .rv-usu__pie { margin: 0; font-size: var(--t-micro); color: var(--faint); }
 .rv-usu__aislamiento { margin: 0; font-size: var(--t-small); color: var(--muted); }
 .rv-usu__forma { display: grid; gap: 12px; }
-.rv-usu__rejilla { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rv-usu__rejilla { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; }
+@media (max-width: 1100px) { .rv-usu__rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .rv-usu__rejilla { grid-template-columns: minmax(0, 1fr); } }
 .rv-usu__roles { margin: 0; display: grid; gap: 2px; font-size: var(--t-micro); color: var(--faint); }
 .rv-usu__roles p { margin: 0; }
 .rv-usu__fila-forma { display: grid; gap: 6px; }
 .rv-usu__cambiar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rv-usu__roles--lista { margin: 0 0 8px; font-size: var(--t-small); color: var(--muted); gap: 4px; }
+.rv-usu__roles--lista strong { color: var(--ink); font-weight: 600; }
+.rv-usu__aislamiento strong { color: var(--ink); font-weight: 600; }

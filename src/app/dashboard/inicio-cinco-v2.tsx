@@ -5,8 +5,10 @@ import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import type { Insight, AgenteInsight } from '@/lib/likida/insights/tipos';
 import { moduloProximamenteDeRuta, rutaProximamente } from '@/lib/auth/visibilidad';
-import { Chip, EncabezadoPagina, EsqTarjetaV2, Tarjeta } from '@/app/ui-v2/componentes';
+import { Chip, EsqTarjetaV2, Tarjeta } from '@/app/ui-v2/componentes';
 import { Columnas } from '@/app/ui-v2/graficas';
+import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
+import { itemsKpi } from './resumen-tarjetas';
 import { getT } from '@/lib/i18n/servidor';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 import { AvisoSinFlota } from './sin-flota';
@@ -72,18 +74,21 @@ export async function InicioCincoV2({
   const serieCierres = !flotaNueva && d.cierres && d.cierres.some((c) => c.valor > 0) ? d.cierres : null;
   const ambito = `${tenantId}:${userId}`;
 
+  // La tira de cifras de la portada (Rovaq «Hoy»): las MISMAS cuatro del Resumen de las cuentas generales, sin pesos (esta lectura va con
+  // `veDinero=false`). En una flota nueva «0 por revisar» leería como medición de algo que no existe: ahí cada celda dice «sin dato».
+  const cifras = itemsKpi(d, sufijo, puede, t).map((c) => (flotaNueva ? { ...c, valor: null, sello: undefined } : c));
+
   return (
-    <main className="rv-res rv-ic">
-      <EncabezadoPagina
-        area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
-        titulo={t('op.resumen')}
-        apoyo={t('op.tus_cinco_agentes_de_un_vistazo_2', { saludo: saludo(), v: nombre ?? 'equipo' })}
-        acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}
-      />
-
-      {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
-
-      <FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />
+    <EsqueletoPortada
+      area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
+      titulo={t('op.resumen')}
+      apoyo={t('op.tus_cinco_agentes_de_un_vistazo_2', { saludo: saludo(), v: nombre ?? 'equipo' })}
+      acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}
+      avisos={!tenantExiste ? <AvisoSinFlota tenantId={tenantId} /> : undefined}
+      filtros={<FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />}
+      cifras={cifras}
+      etiquetaCifras={t('op.tu_flota_en_likida')}
+    >
 
       {/* 1 · Lo que espera decisión HOY, con la puesta en marcha al lado: lo primero que se lee. */}
       <div className={`rv-ic__fila ${senales ? 'rv-ic__fila--7-5' : 'rv-ic__fila--12'}`}>
@@ -138,7 +143,7 @@ export async function InicioCincoV2({
       </div>
 
       <TarjetaAtajos t={t} atajos={atajos} sufijo={sufijo} />
-    </main>
+    </EsqueletoPortada>
   );
 }
 

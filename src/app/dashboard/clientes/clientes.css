@@ -18,3 +18,6 @@
 .rv-cl__cartera { display: grid; gap: 8px; }
 .rv-cl__nopasa { white-space: nowrap; color: var(--muted); }
 .rv-cl__aviso-texto { color: var(--warn); }
+
+/* F26: los bloques de la tabla maestra (clientes, tarifas, viajes sin ingreso) van apilados a 12 px, como el resto del marco. */
+.rv-cl__bloques { display: grid; gap: var(--sp-gap, 12px); min-width: 0; }

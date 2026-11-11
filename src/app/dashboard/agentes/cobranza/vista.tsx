@@ -4,8 +4,9 @@ import type { ConfigCobranza } from '@/lib/likida/agentes/cobranza_pura';
 import { numero, fechaCorta } from '@/lib/formato';
 import { BotonEjecutar, BotonPausa, type AccionSimple, type AccionEjecutar } from './controles';
 import { FormaEstrategia } from './estrategia';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { Disclosure, EstadoVacio, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { Disclosure, EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, selloHoyTr, rotuloDiasTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
 
@@ -51,19 +52,22 @@ export function VistaAgenteCobranza({
   const idioma = tr.idioma;
   const ventana = `${rotuloDiasTr(config.diasSemana, tx)} · ${config.horaInicio}–${config.horaFin} ${tx('comun.horas_sufijo')}`;
 
+  const cifras: PropsCifra[] = [
+    { info: 'cobranza.para_contactar', etiqueta: tx('cobranza.vista.para_contactar'), valor: numero(cola.paraContactar.length), nota: tx('cobranza.vista.alcanzaron_un_tier_sin_contacto') },
+    { info: 'cobranza.no_puede_contactar', etiqueta: tx('cobranza.vista.no_puede_contactar'), valor: numero(cola.sinTelefono.length), nota: tx('cobranza.vista.sin_telefono_capturado'), tono: cola.sinTelefono.length > 0 ? 'warn' : undefined },
+    { info: 'cobranza.viajes_vigilados', etiqueta: tx('cobranza.vista.viajes_vigilados'), valor: numero(cola.vigilados), nota: tx('cobranza.vista.abiertos_o_en_cuadre') },
+    { info: 'cobranza.estado', etiqueta: tx('cobranza.vista.estado'), valor: config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado'), nota: ventana, tono: config.activo ? undefined : 'warn' },
+  ];
+
   return (
-    <MarcoPagina titulo={tx('cobranza.vista.seguimiento_de_comprobantes')} apoyo={tx('cobranza.vista.a_quien_insistira_el_agente')}>
-
-      <TiraCifras sello={selloHoyTr(tr, tx('cobranza.vista.cola_de_seguimiento'))}>
-        <Cifra info="cobranza.para_contactar" etiqueta={tx('cobranza.vista.para_contactar')} valor={numero(cola.paraContactar.length)}
-          nota={tx('cobranza.vista.alcanzaron_un_tier_sin_contacto')} />
-        <Cifra info="cobranza.no_puede_contactar" etiqueta={tx('cobranza.vista.no_puede_contactar')} valor={numero(cola.sinTelefono.length)}
-          nota={tx('cobranza.vista.sin_telefono_capturado')} tono={cola.sinTelefono.length > 0 ? 'warn' : undefined} />
-        <Cifra info="cobranza.viajes_vigilados" etiqueta={tx('cobranza.vista.viajes_vigilados')} valor={numero(cola.vigilados)} nota={tx('cobranza.vista.abiertos_o_en_cuadre')} />
-        <Cifra info="cobranza.estado" etiqueta={tx('cobranza.vista.estado')} valor={config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado')} nota={ventana}
-          tono={config.activo ? undefined : 'warn'} />
-      </TiraCifras>
-
+    <EsqueletoTablaMaestra
+      titulo={tx('cobranza.vista.seguimiento_de_comprobantes')}
+      apoyo={tx('cobranza.vista.a_quien_insistira_el_agente')}
+      cifras={cifras}
+      etiquetaCifras={tx('cobranza.vista.cola_de_seguimiento')}
+      selloCifras={selloHoyTr(tr, tx('cobranza.vista.cola_de_seguimiento'))}
+    >
+      <div className="flex flex-col gap-3">
       <FilaTarjetas variante="8-4">
         {/* ── La cola honesta ── */}
         <Tarjeta
@@ -148,7 +152,8 @@ export function VistaAgenteCobranza({
       </Tarjeta>
 
       {notificaciones}
-    </MarcoPagina>
+      </div>
+    </EsqueletoTablaMaestra>
   );
 }
 

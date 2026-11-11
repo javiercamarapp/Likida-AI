@@ -1,7 +1,8 @@
 import { fechaHoraMx } from '@/lib/formato';
 import { CRONS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
-import { Aviso, Disclosure, EstadoError, MarcoPagina, StatusChip, type TonoEstado } from '../../ui-v2/componentes';
+import { Aviso, Disclosure, EstadoError, StatusChip, type TonoEstado } from '../../ui-v2/componentes';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import {
   nombreReloj, oficioReloj, cadaCuanto, desdeHace, guiaDeArreglo, porQueNoCorrio, resumenDetalle, resumenRelojes,
 } from './estado-relojes';
@@ -73,7 +74,11 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
   const nombres = (ids: CronId[]) => ids.map((c) => nombreReloj(t)[c]).join(', ');
 
   return (
-    <MarcoPagina titulo={t('crons_vista.relojes')} apoyo={t('crons_vista.los_procesos_programados_del_sistema_cuando')}>
+    <EsqueletoTablaMaestra
+      titulo={t('crons_vista.relojes')}
+      apoyo={t('crons_vista.los_procesos_programados_del_sistema_cuando')}
+      cifras={latidos === null ? undefined : [{ etiqueta: t('salud_sistema.relojes_a_tiempo'), valor: CRONS.length - malos.length, formato: 'entero', tono: malos.length > 0 ? 'bad' : parciales.length > 0 ? 'warn' : 'ok' }]}
+    >
       {latidos === null ? (
         <EstadoError reintentar>{t('crons_vista.no_se_pudo_leer_el_pulso')}</EstadoError>
       ) : (
@@ -115,6 +120,6 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
           </section>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

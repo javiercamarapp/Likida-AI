@@ -14,11 +14,12 @@ import { SeccionCorreoAvisos, type CorreoAvisosVista } from './correo-avisos';
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
 import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
 import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
-import { MarcoPagina, BotonEnlace, EstadoVacio, Icono, StatusChip, TituloRecuadro, Boton, Disclosure, Tooltip } from '@/app/ui-v2/componentes';
+import { BotonEnlace, EstadoVacio, Icono, StatusChip, TituloRecuadro, Boton, Disclosure, Tooltip } from '@/app/ui-v2/componentes';
 import { SeccionConfig } from './seccion';
 import '../peajes.css';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
+import { MarcoConfigAgente } from '@/app/dashboard/agentes/marco-config';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -84,7 +85,7 @@ export function VistaConfiguracionPeajes({
 }) {
   const { t: tx } = tr;
   return (
-    <MarcoPagina titulo={tx('rest.configuracion_del_conciliador_de_peajes')} apoyo={tx('rest.buzon_entradas_y_mapeos_con_los')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}>
+    <MarcoConfigAgente titulo={tx('rest.configuracion_del_conciliador_de_peajes')} apoyo={tx('rest.buzon_entradas_y_mapeos_con_los')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}>
       {aviso && <p role="status" className="rv-pj-caja text-[12px] rv-pj-c-ink">{aviso}</p>}
       {error && <p role="alert" className="rv-pj-caja text-[12px] rv-pj-c-bad">{error}</p>}
       {agenteApagado && <p role="status" className="rv-pj-caja text-[12px] rv-pj-c-warn">{agenteApagado}</p>}
@@ -103,7 +104,7 @@ export function VistaConfiguracionPeajes({
       <SeccionCasetas tr={tr} casetas={casetas} acciones={acciones} />
       {(superficie?.gps ?? true) && <SeccionGeocercas tr={tr} geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />}
       {(superficie?.cursos ?? true) && <SeccionCursos tr={tr} cursos={cursos} unidades={unidades} convenios={convenios} acciones={acciones} />}
-    </MarcoPagina>
+    </MarcoConfigAgente>
   );
 }
 
