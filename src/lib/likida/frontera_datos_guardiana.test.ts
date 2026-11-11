@@ -349,7 +349,11 @@ import { join, relative } from 'node:path';
 // Entrega 3 (w12, 10-nov-2026): +1 archivo (349 -> 350), `lib/likida/fuentes/leer.ts` (w10/f19): las lecturas de estado de las seis fuentes de datos de una flota (gasto, tms_sincronizacion, unidad,
 // peaje_ingesta_archivo, buzon_recepcion, sat_descarga_solicitud: todas por `acotada`, con `.eq('tenant_id')`, límite y falla cerrado) y la regla de silencio del webhook (wa_ventana_contacto, wa_meta_receipt y
 // viaje abiertos: del sistema, o de la flota si se pasa tenantId; exención nominal en consultas_admin_filtran_tenant). Lecturas nuevas, solo lectura; no es código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 350;
+// Entrega 4 (w15, 11-nov-2026): +1 archivo (350 -> 351), `lib/avisos/estado.ts` (w14/notif): el estado de los avisos POR PERSONA de la mig. 1002 (`aviso_leido`, `aviso_preferencia`, `aviso_silencio`
+// y la función `aviso_marcar`). Rutas que lo leen: /admin/notificaciones (puerta `requireSuperadmin`) y /dashboard/notificaciones (puerta `resolverTenantEfectivo`), más el número de «Avisos» del pie de los
+// dos layouts. Todas las funciones reciben la persona y el ámbito YA resueltos por la sesión (`ui-v2/avisos/acciones.ts#contexto`, nunca del navegador), filtran por `usuario_id` y `ambito` y fallan
+// cerradas (`{ ok: false }`, jamás «no hay nada»); el cliente es `lib/avisos/cliente.ts` (service_role, porque anon y authenticated no tienen privilegios sobre esas tablas). Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 351;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -726,7 +730,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 350;
 // Entrega 3 (w12, 10-nov-2026): +12 llamadas (2,546 -> 2,558), todas de `lib/likida/fuentes/leer.ts` (ver arriba): 10 de las seis fuentes (whatsapp 2, tms 1, gps 1, peajes 1, correo 3, sat 2) y 2 del silencio del webhook (la tabla de último evento y los viajes abiertos).
 // `intake/__fixtures__/fotos_sinteticas.ts` dejó de contar (`Buffer.from` no es acceso a datos).
 // w14/org (10-nov-2026): +1 llamada (2,558 -> 2,559), `dashboard/layout.tsx`: la lista de flotas (`tenant`: id, nombre; orden por nombre e id, limit 1000) que SOLO lee el superadmin para que el pie resuelva `?tenant=` (un layout no ve searchParams). Cruce intencional de superadmin; exención nominal en consultas_admin_filtran_tenant.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_559;
+// Entrega 4 (w15, 11-nov-2026): +6 llamadas (2,559 -> 2,565), todas de `lib/avisos/estado.ts` (ver el techo de archivos): leer las claves leídas, marcar/desmarcar (`rpc aviso_marcar`), leer y guardar
+// las preferencias por canal y leer y guardar el horario de silencio. Cada una con `usuario_id` + `ambito` de la sesión; las lecturas con límite y orden. Medidas con el guardián.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_565;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
