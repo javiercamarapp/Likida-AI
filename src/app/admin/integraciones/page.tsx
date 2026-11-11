@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
@@ -87,7 +88,7 @@ export default async function IntegracionesPage() {
     <EsqueletoTablaMaestra
       titulo={t('integraciones.integraciones')}
       apoyo={t('integraciones.los_servicios_reales_de_los_que')}
-      cifras={[
+      cifras={uniformes([
         { etiqueta: t('integraciones.conectores'), valor: conectores.length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : conectores.some((c) => c.tono === 'warn') ? 'warn' : 'ok' },
         { etiqueta: t('integraciones.kpi_ok'), valor: conectores.filter((c) => c.tono === 'ok').length, formato: 'entero' },
         { etiqueta: t('integraciones.kpi_atencion'), valor: conectores.filter((c) => c.tono === 'warn').length, formato: 'entero', tono: conectores.some((c) => c.tono === 'warn') ? 'warn' : undefined },
@@ -95,7 +96,7 @@ export default async function IntegracionesPage() {
         r === null
           ? { etiqueta: t('integraciones.kpi_modelos'), valor: null, estado: 'vacio' as const, mensaje: t('integraciones.no_se_pudo_leer_el_gasto') }
           : { etiqueta: t('integraciones.kpi_modelos'), valor: r.porModelo.length, formato: 'entero' as const },
-      ]}
+      ])}
     >
       <Tarjeta titulo={t('integraciones.conectores')}>
         <TablaRenglones

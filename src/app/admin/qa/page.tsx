@@ -82,5 +82,5 @@ export default async function QaPage({ searchParams }: { searchParams?: Promise<
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('admin_sistema');
-  return { title: t('qa.qa_autonomo') };
+  return { title: t('qa_corrida_viva.calidad') };
 }
