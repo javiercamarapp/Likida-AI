@@ -67,7 +67,7 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
 
   it('"Cerrar sesión" existe en la tarjeta de cuenta y en la hoja móvil, y la etiqueta del rol viene del servidor', () => {
     expect(html.match(/aria-label="Cerrar sesión"/g)?.length).toBe(1);
-    expect(html).toContain('ADMIN FLOTA');
+    expect(html).toContain('Dueño de la flota');
   });
 
   it('hay cabecera móvil, barra inferior con el botón «Más» y la hoja existe (cerrada = sin open)', () => {

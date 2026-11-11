@@ -36,7 +36,7 @@ export function BarraInferiorVista({ destinos, sufijo, activo, masAbierta, alAbr
           const esActivo = d.href === activo;
           return (
             <li key={d.href}>
-              <Link href={`${d.href}${sufijo}`} className="rv-nav-inf__item" aria-current={esActivo ? 'page' : undefined} title={d.nombre}>
+              <Link href={`${d.href}${sufijo}`} className="rv-nav-inf__item" aria-current={esActivo ? 'page' : undefined}>
                 <d.Icono className="rv-nav-inf__ico" width={22} height={22} strokeWidth={TRAZO_ICONO} aria-hidden />
                 <span className="rv-nav-inf__txt">{d.etiqueta}</span>
               </Link>

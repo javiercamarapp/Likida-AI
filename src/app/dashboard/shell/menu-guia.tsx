@@ -4,7 +4,9 @@ import { useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BellOff, CircleHelp, Compass, LifeBuoy, ListChecks, Play, RotateCcw, Zap } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
-import { Popover, MenuList } from '../../ui-v2/componentes/overlay';
+import { Popover, MenuList, Tooltip } from '../../ui-v2/componentes/overlay';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
 import { useTourOpcional, useProgresoTour } from '../../ui-v2/movimiento/tour';
 import { hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
@@ -19,6 +21,7 @@ const HREF_AYUDA = '/dashboard/soporte';
  * icono, 44 px). Solo ofrece lo que existe y el rol puede abrir; una entrada vacía no se pinta, y sin ninguna fila el botón no existe.
  */
 export default function MenuGuia({ rol, perfil, compacto = false, alineacion = 'fin' }: { rol: string; perfil?: PerfilTenant | null; compacto?: boolean; alineacion?: 'inicio' | 'fin' }) {
+  const { t } = useT('shell', shellEs);
   const [abierto, setAbierto] = useState(false);
   const gatillo = useRef<HTMLButtonElement>(null);
   const idMenu = useId();
@@ -33,21 +36,27 @@ export default function MenuGuia({ rol, perfil, compacto = false, alineacion = '
   if (!(hayRecorrido || asistente || ayuda)) return null;
   return (
     <div className="rv-guia">
-      <button ref={gatillo} type="button" className={compacto ? 'rv-icono-boton' : 'rv-guia__btn'} aria-haspopup="menu" aria-expanded={abierto}
-        aria-controls={abierto ? idMenu : undefined} aria-label={compacto ? 'Guía' : undefined} title="Guía" data-onboarding="recorrido.boton"
-        onClick={() => setAbierto((a) => !a)}>
-        <CircleHelp width={compacto ? 18 : 14} height={compacto ? 18 : 14} strokeWidth={TRAZO_ICONO} aria-hidden />
-        {!compacto && <span>Guía</span>}
-        {tour?.nuevo ? <span className="rv-guia__punto" aria-hidden /> : null}
-      </button>
-      <Popover abierto={abierto} onCerrar={cerrar} ancla={gatillo} etiqueta="Guía" alineacion={alineacion}>
+      {(() => {
+        const boton = (
+          <button ref={gatillo} type="button" className={compacto ? 'rv-icono-boton' : 'rv-guia__btn'} aria-haspopup="menu" aria-expanded={abierto}
+            aria-controls={abierto ? idMenu : undefined} aria-label={compacto ? t('cab.guia') : undefined} data-onboarding="recorrido.boton"
+            onClick={() => setAbierto((a) => !a)}>
+            <CircleHelp width={compacto ? 18 : 14} height={compacto ? 18 : 14} strokeWidth={TRAZO_ICONO} aria-hidden />
+            {!compacto && <span>{t('cab.guia')}</span>}
+            {tour?.nuevo ? <span className="rv-guia__punto" aria-hidden /> : null}
+          </button>
+        );
+        // Solo el botón de icono (móvil) necesita tooltip: el de escritorio ya dice «Guía» con texto.
+        return compacto ? <Tooltip texto={t('cab.guia')}>{boton}</Tooltip> : boton;
+      })()}
+      <Popover abierto={abierto} onCerrar={cerrar} ancla={gatillo} etiqueta={t('cab.guia')} alineacion={alineacion}>
         <div id={idMenu} onKeyDownCapture={(e) => {
           if (e.key === 'Tab') { cerrar(); return; }
           const lista = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')].filter((x) => x.getClientRects().length > 0);
           const nuevo = indiceDeMenu(e.key, lista.indexOf(document.activeElement as HTMLElement), lista.length);
           if (nuevo !== null) { e.preventDefault(); e.stopPropagation(); lista[nuevo]?.focus(); }
         }}>
-          <MenuList etiqueta="Guía">
+          <MenuList etiqueta={t('cab.guia')}>
             {hayRecorrido ? <FilasRecorrido alElegir={cerrar} hrefs={hrefs} /> : null}
             {asistente && (
               <Link role="menuitem" tabIndex={-1} href={`${asistente.href}${sufijo}`} className="rv-menu__item" onClick={cerrar}>
