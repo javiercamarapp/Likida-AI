@@ -1,0 +1,16 @@
+/* Calculadora pública: formulario y resultado con las piezas del sistema; solo la rejilla y el tipo de cifra viven aquí. */
+.rv-calc { display: grid; gap: 24px; margin-top: 24px; }
+.rv-calc__datos { display: grid; gap: 12px; }
+.rv-calc__dos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 560px) { .rv-calc__dos { grid-template-columns: minmax(0, 1fr); } }
+.rv-calc__resultado { display: grid; gap: 12px; }
+.rv-calc__pila { display: grid; gap: 8px; }
+.rv-calc__texto { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.rv-calc__texto strong { color: var(--ink); }
+.rv-calc__texto a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.rv-calc__cifra { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; color: var(--ink); }
+.rv-calc__cifra--total { font-size: 24px; }
+.rv-calc__rotulo { margin: 8px 0 0; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-calc__lista { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+/* Honeypot: fuera de la vista y sin tamaño; un humano jamás lo llena. */
+.rv-calc__trampa { position: absolute; left: -9999px; width: 0; height: 0; opacity: 0; }

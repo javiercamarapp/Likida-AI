@@ -11,7 +11,7 @@ import { Chip } from '../ui-v2/componentes/chip';
 interface Comprobante { concepto: 'diesel' | 'caseta' | 'factura'; monto: number; folio?: string; cfdiUuid?: string; rfcReceptor?: string; clave: 'diesel1' | 'diesel2' | 'caseta' | 'factura' }
 interface Bubble { from: 'op' | 'likida'; text: string }
 
-// 🔴 INVENTADO: escenario de demo Silao→Laredo. Anticipo = total comprobado,
+// INVENTADO: escenario de demo Silao→Laredo. Anticipo = total comprobado,
 // así la ÚNICA diferencia es el diésel $200 sobre política (luce el diferenciador).
 const ANTICIPO = 10600;
 const PRESETS: Comprobante[] = [
@@ -46,8 +46,8 @@ export default function Demo() {
     setAdded((a) => [...a, c]);
     setBubbles((b) => [
       ...b,
-      { from: 'op', text: `📎 ${t(`dem.p.${c.clave}`)}` },
-      { from: 'likida', text: t(c.cfdiUuid ? 'dem.recibi.cfdi' : 'dem.recibi', { concepto: t(`dem.concepto.${c.concepto}`), monto: mxn(c.monto), marca: '✅' }) },
+      { from: 'op', text: t(`dem.p.${c.clave}`) },
+      { from: 'likida', text: t(c.cfdiUuid ? 'dem.recibi.cfdi' : 'dem.recibi', { concepto: t(`dem.concepto.${c.concepto}`), monto: mxn(c.monto) }) },
     ]);
   };
 
@@ -63,17 +63,17 @@ export default function Demo() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = await res.json();
       const lines: string[] = [
-        t('dem.cuadre.encabezado', { mano: '👇' }),
+        t('dem.cuadre.encabezado'),
         t('dem.cuadre.comprobado', { monto: mxn(r.totalComprobado) }),
         t('dem.cuadre.anticipo', { monto: mxn(r.totalAnticipo) }),
-        r.diferencia > 0 ? t('dem.cuadre.sobro', { monto: mxn(r.diferencia) }) : r.diferencia < 0 ? t('dem.cuadre.bolsa', { monto: mxn(-r.diferencia) }) : t('dem.cuadre.exacto', { marca: '✅' }),
+        r.diferencia > 0 ? t('dem.cuadre.sobro', { monto: mxn(r.diferencia) }) : r.diferencia < 0 ? t('dem.cuadre.bolsa', { monto: mxn(-r.diferencia) }) : t('dem.cuadre.exacto'),
       ];
       const obs = r.diferencias.filter((d: { tipo: string }) => d.tipo !== 'anticipo');
       setBubbles((b) => [...b, { from: 'likida', text: lines.join('\n') }]);
       if (obs.length) {
         setBubbles((b) => [...b, { from: 'likida', text: t('dem.ojo') + '\n' + obs.map((d: { nota: string }) => `• ${d.nota}`).join('\n') }]);
       }
-      setBubbles((b) => [...b, { from: 'likida', text: t('dem.pdf', { doc: '📄', camion: '🚛' }) }]);
+      setBubbles((b) => [...b, { from: 'likida', text: t('dem.pdf') }]);
     } catch {
       // ME-16: si el cuadre falla (red/servidor), avisar en vez de colgar el demo.
       setBubbles((b) => [...b, { from: 'likida', text: t('dem.falla') }]);

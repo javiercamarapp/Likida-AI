@@ -17,6 +17,10 @@ import {
 } from '@/lib/likida/marketing/calculadora';
 import { mxn as mxnFmt, numero as numeroFmt, hoyMx } from '@/lib/formato';
 import { Boton } from '../ui-v2/componentes/boton';
+import { Aviso } from '../ui-v2/componentes/aviso';
+import { CampoTexto } from '../ui-v2/componentes/campos';
+import { Tarjeta } from '../ui-v2/componentes/tarjeta';
+import './calculadora.css';
 import { atribucionDeUrl } from '@/lib/marketing/atribucion';
 import { useIdioma, useT } from '@/lib/i18n/proveedor';
 import { rico } from '@/lib/i18n/rico';
@@ -88,146 +92,119 @@ export function Calculadora() {
     }
   };
 
-  const campo = 'rv-pub__campo mt-1';
-
   return (
-    <div>
+    <div className="rv-calc">
       {/* ── Los tres datos ── */}
-      <section className="mt-8 grid gap-4">
-        <div>
-          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{t('cal.litros')}</label>
-          <input className={campo} inputMode="decimal" value={litros}
-            onChange={(e) => setLitros(e.target.value)} placeholder={t('cal.litros.ph')} />
-          <p className="mt-1 text-xs">{t('cal.litros.alt')}</p>
-          <div className="mt-2 grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs">{t('cal.gasto')}</label>
-              <input className={campo} inputMode="decimal" value={gastoDiesel}
-                onChange={(e) => setGastoDiesel(e.target.value)} placeholder={t('cal.gasto.ph')} />
-            </div>
-            <div>
-              <label className="text-xs">{t('cal.precio')}</label>
-              <input className={campo} inputMode="decimal" value={precioLitro}
-                onChange={(e) => setPrecioLitro(e.target.value)} />
-              <p className="mt-1 text-xs">{t('cal.precio.nota')}</p>
-            </div>
-          </div>
+      <section className="rv-calc__datos">
+        <CampoTexto etiqueta={t('cal.litros')} inputMode="decimal" value={litros}
+          onChange={(e) => setLitros(e.target.value)} placeholder={t('cal.litros.ph')} ayuda={t('cal.litros.alt')} />
+        <div className="rv-calc__dos">
+          <CampoTexto etiqueta={t('cal.gasto')} inputMode="decimal" value={gastoDiesel}
+            onChange={(e) => setGastoDiesel(e.target.value)} placeholder={t('cal.gasto.ph')} />
+          <CampoTexto etiqueta={t('cal.precio')} inputMode="decimal" value={precioLitro}
+            onChange={(e) => setPrecioLitro(e.target.value)} ayuda={t('cal.precio.nota')} />
         </div>
+        <CampoTexto etiqueta={t('cal.casetas')} inputMode="decimal" value={casetas}
+          onChange={(e) => setCasetas(e.target.value)} placeholder={t('cal.casetas.ph')} />
+        <CampoTexto etiqueta={t('cal.unidades')} inputMode="numeric" value={unidades}
+          onChange={(e) => setUnidades(e.target.value)} placeholder={t('cal.unidades.ph')} />
         <div>
-          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{t('cal.casetas')}</label>
-          <input className={campo} inputMode="decimal" value={casetas}
-            onChange={(e) => setCasetas(e.target.value)} placeholder={t('cal.casetas.ph')} />
+          <Boton variante="primary" onClick={calcular}>{t('cal.calcular')}</Boton>
         </div>
-        <div>
-          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{t('cal.unidades')}</label>
-          <input className={campo} inputMode="numeric" value={unidades}
-            onChange={(e) => setUnidades(e.target.value)} placeholder={t('cal.unidades.ph')} />
-        </div>
-        <Boton variante="primary" onClick={calcular} className="mt-2 w-fit">
-          {t('cal.calcular')}
-        </Boton>
       </section>
 
       {/* ── El resultado — antes de pedir nada ── */}
       {r && (
-        <section className="mt-10 space-y-6">
+        <section className="rv-calc__resultado">
           {/* Diésel */}
-          <div className="rounded-md px-4 py-4" style={{ border: '1px solid var(--line)' }}>
-            <p className="text-xs font-medium uppercase tracking-wider">{t('cal.dsl.titulo')}</p>
+          <Tarjeta titulo={t('cal.dsl.titulo')}>
             {'faltante' in r.diesel ? (
-              <p className="mt-2 text-sm">{r.diesel.faltante}</p>
+              <p className="rv-calc__texto">{r.diesel.faltante}</p>
             ) : (
-              <>
-                <p className="mt-2 text-xl font-semibold" style={{ color: 'var(--ink)' }}>
-                  {t('cal.dsl.mes', { litros: litrosFmt(r.diesel.litrosMes) })}
-                </p>
-                <p className="text-sm">{t('cal.dsl.anio', { litros: litrosFmt(r.diesel.litrosAnio) })}</p>
+              <div className="rv-calc__pila">
+                <p className="rv-calc__cifra">{t('cal.dsl.mes', { litros: litrosFmt(r.diesel.litrosMes) })}</p>
+                <p className="rv-calc__texto">{t('cal.dsl.anio', { litros: litrosFmt(r.diesel.litrosAnio) })}</p>
                 {r.diesel.estimacionMesMxn !== null ? (
-                  <p className="mt-3 text-sm">
+                  <p className="rv-calc__texto">
                     {rico(t('cal.dsl.cuota', { pesos: r.diesel.cuota.pesosPorLitro, fecha: r.diesel.cuota.registradaEl }), {
-                      strong: (c) => <strong style={{ color: 'var(--ink)' }}>{c}</strong>,
-                      enlace: (c) => <a href={(r.diesel as Extract<typeof r.diesel, { cuota: unknown }>).cuota.fuenteUrl} className="underline underline-offset-2" target="_blank" rel="noopener noreferrer">{c}</a>,
+                      strong: (c) => <strong>{c}</strong>,
+                      enlace: (c) => <a href={(r.diesel as Extract<typeof r.diesel, { cuota: unknown }>).cuota.fuenteUrl} target="_blank" rel="noopener noreferrer">{c}</a>,
                     })}
-                    <br />{rico(t('cal.dsl.estimacion', { monto: mxn(r.diesel.estimacionMesMxn) }), { strong: (c) => <strong style={{ color: 'var(--ink)' }}>{c}</strong> })}
+                    <br />{rico(t('cal.dsl.estimacion', { monto: mxn(r.diesel.estimacionMesMxn) }), { strong: (c) => <strong>{c}</strong> })}
                   </p>
                 ) : (
-                  <p className="mt-3 text-sm">
-                    {t('cal.dsl.vencida')}
-                  </p>
+                  <p className="rv-calc__texto">{t('cal.dsl.vencida')}</p>
                 )}
-              </>
+              </div>
             )}
-          </div>
+          </Tarjeta>
 
           {/* Peaje */}
-          <div className="rounded-md px-4 py-4" style={{ border: '1px solid var(--line)' }}>
-            <p className="text-xs font-medium uppercase tracking-wider">{t('cal.peaje.titulo')}</p>
+          <Tarjeta titulo={t('cal.peaje.titulo')}>
             {'faltante' in r.peaje ? (
-              <p className="mt-2 text-sm">{r.peaje.faltante}</p>
+              <p className="rv-calc__texto">{r.peaje.faltante}</p>
             ) : (
-              <>
-                <p className="mt-2 text-xl font-semibold" style={{ color: 'var(--ink)' }}>
-                  {t('cal.peaje.cifra', { mes: mxn(r.peaje.estimuloMesMxn), anio: mxn(r.peaje.estimuloAnioMxn) })}
-                </p>
-                <p className="mt-1 text-sm">{t('cal.peaje.subtotal', { subtotal: mxn(r.peaje.subtotalEstimadoMes) })}</p>
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
+              <div className="rv-calc__pila">
+                <p className="rv-calc__cifra">{t('cal.peaje.cifra', { mes: mxn(r.peaje.estimuloMesMxn), anio: mxn(r.peaje.estimuloAnioMxn) })}</p>
+                <p className="rv-calc__texto">{t('cal.peaje.subtotal', { subtotal: mxn(r.peaje.subtotalEstimadoMes) })}</p>
+                <ul className="rv-calc__lista">
                   {r.peaje.condiciones.map((c, i) => <li key={i}>{c}</li>)}
                 </ul>
-              </>
+              </div>
             )}
-          </div>
+          </Tarjeta>
 
           {/* Total + advertencias */}
-          <div className="rounded-md px-4 py-4" style={{ border: '1px solid var(--marca)' }}>
-            <p className="text-xs font-medium uppercase tracking-wider">{t('cal.total.titulo')}</p>
-            <p className="mt-2 text-2xl font-semibold" style={{ color: 'var(--ink)' }}>
-              {r.totalAnualMxn !== null ? mxn(r.totalAnualMxn) : t('cal.total.sin_datos')}
-            </p>
-            <p className="mt-1 text-sm">{r.notaDelTotal}</p>
-            {r.supuestos.length > 0 && (
-              <>
-                <p className="mt-4 text-xs font-medium uppercase tracking-wider">{t('cal.supuestos')}</p>
-                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                  {r.supuestos.map((s, i) => <li key={i}>{s}</li>)}
-                </ul>
-              </>
-            )}
-            <p className="mt-4 text-xs font-medium uppercase tracking-wider">{t('cal.advertencias')}</p>
-            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-              {r.advertencias.map((a, i) => <li key={i}>{a}</li>)}
-            </ul>
-          </div>
+          <Tarjeta titulo={t('cal.total.titulo')}>
+            <div className="rv-calc__pila">
+              <p className="rv-calc__cifra rv-calc__cifra--total">
+                {r.totalAnualMxn !== null ? mxn(r.totalAnualMxn) : t('cal.total.sin_datos')}
+              </p>
+              <p className="rv-calc__texto">{r.notaDelTotal}</p>
+              {r.supuestos.length > 0 && (
+                <>
+                  <p className="rv-calc__rotulo">{t('cal.supuestos')}</p>
+                  <ul className="rv-calc__lista">
+                    {r.supuestos.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </>
+              )}
+              <p className="rv-calc__rotulo">{t('cal.advertencias')}</p>
+              <ul className="rv-calc__lista">
+                {r.advertencias.map((a, i) => <li key={i}>{a}</li>)}
+              </ul>
+            </div>
+          </Tarjeta>
 
           {/* ── El contacto — después del resultado, nunca antes ── */}
-          <div className="rounded-md px-4 py-4" style={{ border: '1px solid var(--line)' }}>
-            {envio === 'listo' ? (
-              <p className="text-sm" style={{ color: 'var(--ink)' }}>
-                {t('cal.contacto.listo')}
-              </p>
-            ) : (
-              <>
-                <p className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{t('cal.contacto.pregunta')}</p>
-                <p className="mt-1 text-xs">
-                  {rico(t('cal.contacto.nota'), { enlace: (c) => <Link href="/aviso/prospectos" className="underline underline-offset-2">{c}</Link> })}
+          {envio === 'listo' ? (
+            <Aviso tono="ok">{t('cal.contacto.listo')}</Aviso>
+          ) : (
+            <Tarjeta titulo={t('cal.contacto.pregunta')}>
+              <div className="rv-calc__pila">
+                <p className="rv-calc__texto">
+                  {rico(t('cal.contacto.nota'), { enlace: (c) => <Link href="/aviso/prospectos">{c}</Link> })}
                 </p>
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <input className={campo} placeholder={t('cal.contacto.nombre')} value={nombre} onChange={(e) => setNombre(e.target.value)} />
-                  <input className={campo} placeholder={t('cal.contacto.empresa')} value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
-                  <input className={campo} placeholder={t('cal.contacto.correo')} inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
-                  <input className={campo} placeholder={t('cal.contacto.whatsapp')} inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+                <div className="rv-calc__dos">
+                  <CampoTexto etiqueta={t('cal.contacto.nombre')} etiquetaOculta placeholder={t('cal.contacto.nombre')} value={nombre} onChange={(e) => setNombre(e.target.value)} />
+                  <CampoTexto etiqueta={t('cal.contacto.empresa')} etiquetaOculta placeholder={t('cal.contacto.empresa')} value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
+                  <CampoTexto etiqueta={t('cal.contacto.correo')} etiquetaOculta placeholder={t('cal.contacto.correo')} inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
+                  <CampoTexto etiqueta={t('cal.contacto.whatsapp')} etiquetaOculta placeholder={t('cal.contacto.whatsapp')} inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
                 </div>
                 {/* Honeypot: fuera de la vista; un humano jamás lo llena. */}
                 <input
-                  className="absolute -left-[9999px] h-0 w-0 opacity-0" tabIndex={-1} autoComplete="off"
+                  className="rv-calc__trampa" tabIndex={-1} autoComplete="off"
                   aria-hidden="true" value={sitioWeb} onChange={(e) => setSitioWeb(e.target.value)} placeholder={t('cal.contacto.honeypot')}
                 />
-                {errorEnvio && <p className="mt-2 text-sm" style={{ color: 'var(--warn)' }}>{errorEnvio}</p>}
-                <Boton variante="primary" onClick={pedirCopia} disabled={envio === 'mandando'} className="mt-3">
-                  {envio === 'mandando' ? t('cal.contacto.mandando') : t('cal.contacto.boton')}
-                </Boton>
-              </>
-            )}
-          </div>
+                {errorEnvio && <Aviso tono="warn">{errorEnvio}</Aviso>}
+                <div>
+                  <Boton variante="primary" onClick={pedirCopia} loading={envio === 'mandando'}>
+                    {envio === 'mandando' ? t('cal.contacto.mandando') : t('cal.contacto.boton')}
+                  </Boton>
+                </div>
+              </div>
+            </Tarjeta>
+          )}
         </section>
       )}
     </div>

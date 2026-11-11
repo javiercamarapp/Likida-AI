@@ -28,7 +28,6 @@ export const BASE_EMOJIS: Record<string, number> = {
   'app/api/webhook/whatsapp/route.ts': 4,
   'app/aviso/prospectos/page.tsx': 2,
   'app/dashboard/opera-whatsapp.tsx': 2,
-  'app/demo/page.tsx': 7,
   'app/privacidad/page.tsx': 4,
   'app/terminos/page.tsx': 8,
   'lib/admin/calidad.ts': 2,
