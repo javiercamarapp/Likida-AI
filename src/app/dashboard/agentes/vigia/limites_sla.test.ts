@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { agentes as textosEs } from '@/lib/i18n/es/agentes';
 
 // T-A4-30: los plazos de aviso (el «5» y el «10» que se oyen en las llamadas son EJEMPLOS) se fijan por flota. Lo que cada capa
 // dice que acepta tiene que ser lo mismo: la pantalla (texto de ayuda), la validación del servidor, el CHECK de la base y la
@@ -21,7 +22,10 @@ function rangoEnPantalla(idCampo: string): [number, number] {
   const fuente = leer('src/app/dashboard/agentes/vigia/controles.tsx');
   const desde = fuente.indexOf(`id="${idCampo}"`);
   expect(desde, `campo ${idCampo} en controles.tsx`).toBeGreaterThan(-1);
-  const m = /Entre ([\d,]+) y ([\d,]+)/.exec(fuente.slice(desde, desde + 900));
+  // El texto de ayuda vive en el diccionario es: el fuente trae `tx('clave')` tras el campo.
+  const claves = [...fuente.slice(desde, desde + 900).matchAll(/tx\('([^']+)'\)/g)].map((x) => x[1]);
+  const texto = claves.map((k) => (textosEs as Record<string, string>)[k] ?? '').find((x) => /Entre ([\d,]+) y ([\d,]+)/.test(x)) ?? '';
+  const m = /Entre ([\d,]+) y ([\d,]+)/.exec(texto);
   expect(m, `rango «Entre A y B» tras ${idCampo}`).not.toBeNull();
   return [num(m![1]), num(m![2])];
 }

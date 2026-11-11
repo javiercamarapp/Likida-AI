@@ -7,6 +7,10 @@ import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Upload } from 'lucide-react';
 import { recortarRellenoCsv, TOPE_SUBIDA_BYTES } from './recortar_relleno';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PANTALLA DE CARGA DEL PROGRAMA DE DESPACHO (Agente 4, T-A4-07).
@@ -76,24 +80,26 @@ function dia(fecha: string): string {
 
 const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios);
 
-const MOTIVOS: Record<string, string> = {
-  sin_caja_unidad_ni_cliente: 'no traía caja, unidad ni cliente',
-};
+const motivos = (tx: TAgentes = TR_ES.t): Record<string, string> => ({
+  sin_caja_unidad_ni_cliente: tx('rest.no_traia_caja_unidad_ni_cliente'),
+});
 
 function Aviso({ children }: { children: React.ReactNode }) {
   return <AvisoV2 tono="error">{children}</AvisoV2>;
 }
 
 function Enviar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" loading={pending} icono={<Icono icono={Upload} tam={14} />}>{pending ? 'Leyendo el archivo…' : 'Subir y leer'}</Boton>
+    <Boton type="submit" loading={pending} icono={<Icono icono={Upload} tam={14} />}>{pending ? 'Leyendo el archivo…' : tx('rest.subir_y_leer')}</Boton>
   );
 }
 
-const VACIO = 'Aún no has cargado un programa. Sube el archivo de hoy y aquí verás qué entendí de él.';
+const vacioTr = (tx: TAgentes = TR_ES.t) => (tx('rest.aun_no_has_cargado_un_programa'));
 
 function FormaSubir({ accion }: { accion: AccionPrograma }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, despachar] = useActionState(accion, null);
   const [local, setLocal] = useState<string | null>(null);
   // A39-A4-02: antes de subir, se quita el relleno de `;` y se comprueba el tope REAL, con un mensaje claro en vez de un fallo genérico.
@@ -107,7 +113,7 @@ function FormaSubir({ accion }: { accion: AccionPrograma }) {
         listo = new File([recortado], archivo.name, { type: archivo.type || 'text/csv' });
       }
       if (listo.size > TOPE_ARCHIVO_PROGRAMA_BYTES) {
-        setLocal(`El archivo pesa ${(listo.size / (1024 * 1024)).toFixed(1)} MB incluso sin las columnas vacías, y la subida admite hasta ${TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB. Sube solo los últimos días del programa.`);
+        setLocal(tx('rest.el_archivo_pesa_mb_incluso_sin', { toFixed: (listo.size / (1024 * 1024)).toFixed(1), v: TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024) }));
         return;
       }
       fd.set('archivo', listo);
@@ -118,93 +124,87 @@ function FormaSubir({ accion }: { accion: AccionPrograma }) {
     <div className="rv-vg__pila">
       <form action={preparar} className="rv-vg__pila">
         <div className="rv-vg__cuad">
-          <CampoTexto etiqueta="Terminal" name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" autoComplete="off" />
-          <CampoArchivo etiqueta={`Archivo del programa (CSV, hasta ${TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB, sin contar las columnas vacías)`} name="archivo" required accept=".csv,.txt,text/csv" />
+          <CampoTexto etiqueta={tx('rest.terminal')} name="terminal" required maxLength={40} placeholder={tx('rest.por_ejemplo_gdl')} autoComplete="off" />
+          <CampoArchivo etiqueta={tx('rest.archivo_del_programa_csv_hasta_mb', { v: TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024) })} name="archivo" required accept=".csv,.txt,text/csv" />
         </div>
-        <p className="rv-vg__nota">
-          Sube el archivo completo del día: si ya lo habías subido, no se duplica nada; si cambió, se guarda qué cambió.
-          El Excel con colores (.xlsx) todavía no se puede leer: guárdalo como CSV.
-        </p>
+        <p className="rv-vg__nota">{tx('rest.sube_el_archivo_completo_del_dia')}</p>
         <div><Enviar /></div>
       </form>
       {local && <Aviso>{local}</Aviso>}
-      <Salida estado={estado} />
+      <Salida estado={estado} tx={tx} />
     </div>
   );
 }
 
 /** Lo que hay debajo del formulario: el error en llano, lo que se entendió, o el estado vacío. */
-export function Salida({ estado }: { estado: ResultadoPrograma }) {
+export function Salida({ estado, tx = TR_ES.t }: { estado: ResultadoPrograma; tx?: TAgentes }) {
   if (estado && !estado.ok) return <AvisoResultado estado={estado} />;
   if (estado?.ok) return <Resultado resumen={estado.resumen} />;
-  return <p className="rv-vg__nota" data-testid="vacio">{VACIO}</p>;
+  return <p className="rv-vg__nota" data-testid="vacio">{vacioTr(tx)}</p>;
 }
 
 function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const g = r.guardado;
   const columnas: readonly ColumnaBase<DiaPrograma>[] = [
-    { id: 'dia', titulo: 'Día', principal: true, celda: (d) => dia(d.fecha) },
-    { id: 'filas', titulo: 'Filas', alinear: 'der', celda: (d) => miles(d.filas) },
-    { id: 'sincaja', titulo: 'Sin caja', alinear: 'der', celda: (d) => miles(d.sinCaja) },
-    { id: 'conaviso', titulo: 'Con aviso', alinear: 'der', celda: (d) => miles(d.conAviso) },
+    { id: 'dia', titulo: tx('rest.dia'), principal: true, celda: (d) => dia(d.fecha) },
+    { id: 'filas', titulo: tx('rest.filas'), alinear: 'der', celda: (d) => miles(d.filas) },
+    { id: 'sincaja', titulo: tx('rest.sin_caja'), alinear: 'der', celda: (d) => miles(d.sinCaja) },
+    { id: 'conaviso', titulo: tx('rest.con_aviso'), alinear: 'der', celda: (d) => miles(d.conAviso) },
   ];
   return (
     <div className="rv-vg__pila" aria-live="polite">
-      <Tarjeta titulo="Qué entendí" info="vigia_programa.entendi">
+      <Tarjeta titulo={tx('rest.que_entendi')} info="vigia_programa.entendi">
         <div className="rv-vg__pila--s">
-          <p>
-            Leí {miles(r.leidas)} {plural(r.leidas, 'fila', 'filas')} de {miles(r.dias)} {plural(r.dias, 'día', 'días')} en la terminal {r.terminal}.
-            {r.totalDescartadas > 0
-              ? ` ${miles(r.totalDescartadas)} no se pudieron leer.`
+          <p>{tx('rest.lei_de_en_la_terminal', { miles: miles(r.leidas), plural: plural(r.leidas, tx('rest.w_fila'), tx('rest.w_filas')), miles2: miles(r.dias), plural2: plural(r.dias, tx('rest.w_dia'), tx('rest.w_dias')), terminal: r.terminal })}{r.totalDescartadas > 0
+              ? tx('rest.no_se_pudieron_leer', { miles: miles(r.totalDescartadas) })
               : ' Todas se pudieron leer.'}
           </p>
           <p data-testid="guardado">
             {g.yaCargado
-              ? 'Este archivo ya estaba cargado: no cambié nada.'
-              : `Guardé ${miles(g.nuevas)} ${plural(g.nuevas, 'fila nueva', 'filas nuevas')}, ${miles(g.cambiadas)} ${plural(g.cambiadas, 'con cambios', 'con cambios')} y ${miles(g.sinCambio)} sin cambios.`
-              + (g.desaparecidas > 0 ? ` ${miles(g.desaparecidas)} ${plural(g.desaparecidas, 'ya no viene', 'ya no vienen')} en el archivo: las dejé ocultas, no las borré.` : '')}
+              ? tx('rest.este_archivo_ya_estaba_cargado_no')
+              : tx('rest.guarde_y_sin_cambios', { miles: miles(g.nuevas), plural: plural(g.nuevas, tx('rest.w_fila_nueva'), tx('rest.w_filas_nuevas')), miles2: miles(g.cambiadas), plural2: plural(g.cambiadas, tx('rest.w_con_cambios'), tx('rest.w_con_cambios')), miles3: miles(g.sinCambio) })
+              + (g.desaparecidas > 0 ? tx('rest.en_el_archivo_las_deje_ocultas', { miles: miles(g.desaparecidas), plural: plural(g.desaparecidas, tx('rest.w_ya_no_viene'), tx('rest.w_ya_no_vienen')) }) : '')}
           </p>
           {r.sinFecha > 0 ? (
-            <p className="rv-vg__nota" data-tono="bad">
-              {miles(r.sinFecha)} {plural(r.sinFecha, 'fila', 'filas')} no tenían fecha de sección y no se guardaron.
-            </p>
+            <p className="rv-vg__nota" data-tono="bad">{tx('rest.no_tenian_fecha_de_seccion_y_2', { miles: miles(r.sinFecha), plural: plural(r.sinFecha, tx('rest.w_fila'), tx('rest.w_filas')) })}</p>
           ) : null}
         </div>
       </Tarjeta>
 
       {r.avisosArchivo.length > 0 ? (
-        <ul className="rv-vg__bullets" aria-label="Avisos del archivo">
+        <ul className="rv-vg__bullets" aria-label={tx('rest.avisos_del_archivo')}>
           {r.avisosArchivo.map((a, i) => <li key={i}>{a}</li>)}
         </ul>
       ) : null}
 
       {r.descartadas.length > 0 ? (
-        <Tarjeta titulo="Lo que descarté" info="vigia_programa.descarte">
+        <Tarjeta titulo={tx('rest.lo_que_descarte')} info="vigia_programa.descarte">
           <ul className="rv-vg__bullets">
-            {r.descartadas.map((d) => <li key={d.lineaCsv}>Línea {miles(d.lineaCsv)} del archivo: {MOTIVOS[d.motivo] ?? 'no se pudo entender'}.</li>)}
+            {r.descartadas.map((d) => <li key={d.lineaCsv}>{tx('rest.linea_del_archivo', { miles: miles(d.lineaCsv) })}{' '}{motivos(tx)[d.motivo] ?? tx('rest.no_se_pudo_entender')}.</li>)}
           </ul>
           {r.totalDescartadas > r.descartadas.length ? (
-            <p className="rv-vg__micro">Y {miles(r.totalDescartadas - r.descartadas.length)} más.</p>
+            <p className="rv-vg__micro">{tx('rest.y_mas_2', { miles: miles(r.totalDescartadas - r.descartadas.length) })}</p>
           ) : null}
         </Tarjeta>
       ) : null}
 
-      <Tarjeta titulo="Por día" info="vigia_programa.por_dia">
-        <TablaBase etiqueta="Por día" columnas={columnas} filas={r.porDia} idFila={(d) => d.fecha} densa tarjetaMovil />
+      <Tarjeta titulo={tx('rest.por_dia')} info="vigia_programa.por_dia">
+        <TablaBase etiqueta={tx('rest.por_dia')} columnas={columnas} filas={r.porDia} idFila={(d) => d.fecha} densa tarjetaMovil />
       </Tarjeta>
 
       {r.filasConAviso.length > 0 ? (
-        <Tarjeta titulo="Filas que conviene revisar" info="vigia_programa.revisar">
+        <Tarjeta titulo={tx('rest.filas_que_conviene_revisar')} info="vigia_programa.revisar">
           <ul className="rv-vg__lista rv-vg__nota">
             {r.filasConAviso.map((f) => (
               <li key={f.lineaCsv}>
-                <span className="rv-vg__medio">Línea {miles(f.lineaCsv)}{f.fecha ? ` (${dia(f.fecha)})` : ''}:</span>{' '}
+                <span className="rv-vg__medio">{tx('rest.linea_2')}{' '}{miles(f.lineaCsv)}{f.fecha ? ` (${dia(f.fecha)})` : ''}:</span>{' '}
                 {f.avisos.join(' ')}
               </li>
             ))}
           </ul>
           {r.totalConAviso > r.filasConAviso.length ? (
-            <p className="rv-vg__micro">Y {miles(r.totalConAviso - r.filasConAviso.length)} filas más con aviso.</p>
+            <p className="rv-vg__micro">{tx('rest.y_filas_mas_con_aviso', { miles: miles(r.totalConAviso - r.filasConAviso.length) })}</p>
           ) : null}
         </Tarjeta>
       ) : null}
@@ -220,26 +220,25 @@ export function VistaProgramaVigia({ sufijo, puedeEscribir, vigiaEncendido, acci
   vigiaEncendido: boolean | null;
   accion: AccionPrograma;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   return (
-    <MarcoPagina titulo="Programa de despacho" apoyo="Sube el archivo del programa de despacho para que el Vigía avise a tus clientes.">
-      <nav aria-label="Volver">
-        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">Volver a servicio al cliente</Link>
-      </nav>
+    <MarcoPagina titulo={tx('rest.programa_de_despacho')} apoyo={tx('rest.sube_el_archivo_del_programa_de')}>
+      <nav aria-label={tx('rest.volver')}>{ricoT(tx('rest.e0_volver_a_servicio_al_cliente'), { e0: (c) => <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">{c}</Link> })}</nav>
 
       {vigiaEncendido === false ? (
-        <Aviso>El Vigía está apagado: el programa se guarda, pero no se avisa a ningún cliente hasta que el dueño lo encienda.</Aviso>
+        <Aviso>{tx('rest.el_vigia_esta_apagado_el_programa')}</Aviso>
       ) : null}
       {vigiaEncendido === null ? (
-        <p className="rv-vg__nota">No pude confirmar si el Vigía está encendido.</p>
+        <p className="rv-vg__nota">{tx('rest.no_pude_confirmar_si_el_vigia')}</p>
       ) : null}
 
-      <Tarjeta titulo="Subir el programa del día" info="vigia_programa.subir">
+      <Tarjeta titulo={tx('rest.subir_el_programa_del_dia')} info="vigia_programa.subir">
         {puedeEscribir ? (
           <FormaSubir accion={accion} />
         ) : (
           <div className="rv-vg__pila">
-            <p className="rv-vg__nota">Solo el dueño o el encargado de la flota sube el programa. Tú puedes ver esta pantalla pero no cargar archivos.</p>
-            <p className="rv-vg__nota" data-testid="vacio">{VACIO}</p>
+            <p className="rv-vg__nota">{tx('rest.solo_el_dueno_o_el_encargado_7')}</p>
+            <p className="rv-vg__nota" data-testid="vacio">{vacioTr(tx)}</p>
           </div>
         )}
       </Tarjeta>

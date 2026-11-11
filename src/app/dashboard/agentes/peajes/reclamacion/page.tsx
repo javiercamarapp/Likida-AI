@@ -26,7 +26,11 @@ import { filasDeCandidatos, filtrosAQuery, normalizarFiltros, tablaDeCandidatos,
 import { aplicablesDelFiltro, ejecutarAccionDeFormulario } from '../acciones-candidatos';
 import { VistaReclamacionPeajes } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Reporte de reclamación de peajes' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.reporte_de_reclamacion_de_peajes') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -35,9 +39,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** La puerta de cada acción: rol con acceso al área de dinero y, salvo superadmin, la flota de la propia sesión. */
 async function puertaReclamos(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string): Promise<string | null> {
+  const { t: tx } = await getT('agentes');
   const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-  if (!puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede operar reclamos de peaje.';
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta flota no es la tuya.';
+  if (!puedeVerArea(sesion.rol, 'dinero')) return tx('rest.tu_rol_no_puede_operar_reclamos');
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return tx('rest.esta_flota_no_es_la_tuya');
   return null;
 }
 const volverReclamos = (sufijo: string, msg: string, desgloseId?: string, filtros?: string): never => {
@@ -60,6 +65,7 @@ export default async function PaginaReclamacionPeajes({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string; mes?: string; meses?: string; nota?: string; aviso?: string; error?: string; cat?: string; estado?: string; unidad?: string; caseta?: string; desde?: string; hasta?: string; orden?: string; pag?: string }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -77,12 +83,12 @@ export default async function PaginaReclamacionPeajes({
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
     const categoria = String(fd.get('categoria') ?? '');
-    if (!UUID.test(desgloseId) || !(CATEGORIAS_COBRO as readonly string[]).includes(categoria)) volverReclamos(sufijo, 'error:Falta el desglose o la categoría del reclamo.');
+    if (!UUID.test(desgloseId) || !(CATEGORIAS_COBRO as readonly string[]).includes(categoria)) volverReclamos(sufijo, tx('rest.error_falta_el_desglose_o_la'));
     const r = await crearReclamoDeCategoria(tenantId, {
       desgloseId, categoria: categoria as CategoriaCobro,
       enviadoEn: String(fd.get('enviado_en') ?? '').trim() || null, referenciaPortal: String(fd.get('referencia') ?? '') || null,
     });
-    volverReclamos(sufijo, r.ok ? 'Reclamo registrado. El plazo de 3 meses corre desde el cobro más antiguo.' : `error:${r.motivo}`, desgloseId);
+    volverReclamos(sufijo, r.ok ? tx('rest.reclamo_registrado_el_plazo_de_3') : `error:${r.motivo}`, desgloseId);
   }
   async function accionMarcarEnviado(fd: FormData) {
     'use server';
@@ -101,16 +107,16 @@ export default async function PaginaReclamacionPeajes({
       reclamoId: String(fd.get('reclamo') ?? ''), monto: importe.ok ? importe.monto : Number.NaN, fecha: String(fd.get('fecha') ?? ''), referencia: String(fd.get('referencia') ?? '') || null,
       versionVista: fd.has('version_vista') ? String(fd.get('version_vista')) : null, // A33-06: idempotencia del doble envío (migración 0860)
     });
-    volverReclamos(sufijo, r.ok ? 'Nota de crédito registrada.' : `error:${r.motivo}`);
+    volverReclamos(sufijo, r.ok ? tx('rest.nota_de_credito_registrada') : `error:${r.motivo}`);
   }
   async function accionJustificarCruce(fd: FormData) {
     'use server';
     const no = await puertaReclamos(sp, tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
-    if (!UUID.test(desgloseId)) volverReclamos(sufijo, 'error:Falta el desglose del cruce.');
+    if (!UUID.test(desgloseId)) volverReclamos(sufijo, tx('rest.error_falta_el_desglose_del_cruce'));
     const r = await justificarCruce(tenantId, { desgloseId, indice: Number(String(fd.get('indice') ?? '').trim()), motivo: String(fd.get('motivo') ?? '') });
-    volverReclamos(sufijo, r.ok ? 'Cruce justificado. Sigue en el historial, marcado con su motivo.' : `error:${r.motivo}`, desgloseId);
+    volverReclamos(sufijo, r.ok ? tx('rest.cruce_justificado_sigue_en_el_historial') : `error:${r.motivo}`, desgloseId);
   }
   // T-A2-28b: reclamar / descartar / justificar un candidato (o un lote por filtro). La puerta, el motivo y la idempotencia
   // viven en `acciones-candidatos.ts`; aquí solo se captura la flota y se decide a dónde volver.
@@ -133,7 +139,7 @@ export default async function PaginaReclamacionPeajes({
     if (no) volverReclamos(sufijo, `error:${no}`, volver);
     const texto = String(fd.get('margen') ?? '').trim();
     const r = await guardarMargenLejosM(tenantId, /^\d{1,5}$/.test(texto) ? Number(texto) : null);
-    volverReclamos(sufijo, r.ok ? `Margen guardado: ${r.valor} m. Vuelve a conciliar el desglose para que aplique.` : `error:${r.motivo}`, volver);
+    volverReclamos(sufijo, r.ok ? tx('rest.margen_guardado_m_vuelve_a_conciliar', { valor: r.valor }) : `error:${r.motivo}`, volver);
   }
   async function accionRechazar(fd: FormData) {
     'use server';
@@ -142,8 +148,8 @@ export default async function PaginaReclamacionPeajes({
     const res = await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''));
     volverReclamos(sufijo,
       res === 'rechazado' ? 'Reclamo marcado como rechazado.'
-        : res === 'sin_cambio' ? 'error:El reclamo no cambió: ya no está enviado (quizá ya lo rechazaron o lo acreditaron desde otra pestaña) o no es de tu flota. Recarga la pantalla.'
-          : 'error:No se pudo actualizar el reclamo.');
+        : res === 'sin_cambio' ? tx('rest.error_el_reclamo_no_cambio_ya')
+          : tx('rest.error_no_se_pudo_actualizar_el'));
   }
 
   const desglose = (sp.desglose ?? '').trim();
@@ -221,7 +227,7 @@ export default async function PaginaReclamacionPeajes({
   if (textoNota) {
     const importe = importeDeNota(textoNota);
     if (!importe.ok) propuestaNota = { texto: textoNota, importe: null, resultado: null, motivo: importe.motivo };
-    else if (!(importe.monto > 0)) propuestaNota = { texto: textoNota, importe: null, resultado: null, motivo: 'El importe de la nota debe ser mayor que cero.' };
+    else if (!(importe.monto > 0)) propuestaNota = { texto: textoNota, importe: null, resultado: null, motivo: tx('rest.el_importe_de_la_nota_debe') };
     else {
       try {
         propuestaNota = { texto: textoNota, importe: importe.monto, resultado: casarNota({ importe: importe.monto }, await reclamosParaCasar(tenantId)) };

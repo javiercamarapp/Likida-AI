@@ -10,6 +10,8 @@ import '../vigia.css';
 import { Aviso, BotonEnlace, StatusChip, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { BarList } from '@/app/ui-v2/graficas';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 export interface AccionesGrupos { alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionLote; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
 
@@ -27,7 +29,7 @@ function duracion(min: number | null): string {
   return `${numero(Math.floor(min / 60))} h ${numero(min % 60)} min`;
 }
 
-export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendientes, grupoElegido, truncado, umbralMin, puedeEditar, puedeAprobar, rapidas, acciones, standby = false }: {
+export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendientes, grupoElegido, truncado, umbralMin, puedeEditar, puedeAprobar, rapidas, acciones, standby = false, tr = TR_ES }: {
   /** T-A4-32: perfil cinco_agentes → las respuestas rápidas (stand-by) no se muestran ni se aprueban. */
   standby?: boolean;
   sufijo: string;
@@ -46,76 +48,73 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
   puedeAprobar: boolean;
   /** Respuestas rápidas aprobadas; `null` = la base aún no tiene la 0647. */
   rapidas: RespuestaRapidaFila[] | null;
-  acciones: AccionesGrupos;
+  acciones: AccionesGrupos; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   // La exportación respeta el mismo recorte del reporte que se ve (grupo elegido o todos).
   const qExport = `${grupoElegido ? `grupo=${grupoElegido}&` : ''}`;
   const aprobadas = new Set((rapidas ?? []).map((r) => r.pregunta.trim().toLowerCase()));
   const columnasGrupos: readonly ColumnaBase<GrupoVigia>[] = [
-    { id: 'cliente', titulo: 'Cliente', principal: true, celda: (g) => g.clienteNombre ?? '—' },
-    { id: 'grupo', titulo: 'Grupo', celda: (g) => <Link href={`/dashboard/agentes/vigia/historial?grupo=${g.id}${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">{g.nombre}</Link> },
-    { id: 'critico', titulo: 'Crítico', celda: (g) => (g.critico ? <StatusChip tono="warn">Sí</StatusChip> : 'No') },
-    { id: 'historico', titulo: 'Histórico', celda: (g) => (g.importaciones === 0 ? 'Sin subir' : `${numero(g.mensajes)} mensajes · ${g.ultimaImportacion ? fechaHoraMx(g.ultimaImportacion) : ''}`) },
+    { id: 'cliente', titulo: tx('vigia.vista.cliente'), principal: true, celda: (g) => g.clienteNombre ?? '—' },
+    { id: 'grupo', titulo: tx('cartaporte.vista.grupo'), celda: (g) => <Link href={`/dashboard/agentes/vigia/historial?grupo=${g.id}${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">{g.nombre}</Link> },
+    { id: 'critico', titulo: tx('rest.critico'), celda: (g) => (g.critico ? <StatusChip tono="warn">{tx('rest.si')}</StatusChip> : 'No') },
+    { id: 'historico', titulo: tx('rest.historico'), celda: (g) => (g.importaciones === 0 ? 'Sin subir' : `${numero(g.mensajes)} mensajes · ${g.ultimaImportacion ? fechaHoraMx(g.ultimaImportacion) : ''}`) },
     {
-      id: 'acciones', titulo: 'Acciones', alinear: 'der',
+      id: 'acciones', titulo: tx('rest.acciones'), alinear: 'der',
       celda: (g) => (puedeEditar ? <span className="rv-vg__linea"><FilaCritico accion={acciones.critico} grupoId={g.id} critico={g.critico} /><FilaBorrar accion={acciones.borrar} grupoId={g.id} /></span> : null),
     },
   ];
   const columnasTemas: readonly ColumnaBase<ReporteHistorial['tendencias'][number]>[] = [
-    { id: 'tema', titulo: 'Tema', principal: true, celda: (t) => t.etiqueta },
-    { id: 'total', titulo: 'Mensajes', alinear: 'der', celda: (t) => numero(t.total) },
-    { id: 'u4', titulo: 'Últimas 4 semanas', alinear: 'der', celda: (t) => numero(t.ultimas4Semanas) },
-    { id: 'p4', titulo: '4 anteriores', alinear: 'der', celda: (t) => numero(t.previas4Semanas) },
-    { id: 'delta', titulo: 'Cambio', alinear: 'der', celda: (t) => (t.delta === null ? 'Histórico corto' : `${t.delta > 0 ? '+' : ''}${numero(t.delta)}`) },
+    { id: 'tema', titulo: tx('rest.tema'), principal: true, celda: (t) => t.etiqueta },
+    { id: 'total', titulo: tx('rest.mensajes'), alinear: 'der', celda: (t) => numero(t.total) },
+    { id: 'u4', titulo: tx('rest.ultimas_4_semanas'), alinear: 'der', celda: (t) => numero(t.ultimas4Semanas) },
+    { id: 'p4', titulo: tx('rest.4_anteriores'), alinear: 'der', celda: (t) => numero(t.previas4Semanas) },
+    { id: 'delta', titulo: tx('rest.cambio'), alinear: 'der', celda: (t) => (t.delta === null ? tx('rest.historico_corto') : `${t.delta > 0 ? '+' : ''}${numero(t.delta)}`) },
   ];
   return (
-    <MarcoPagina titulo="Grupos de clientes e histórico" apoyo="Marca los grupos de WhatsApp de tus clientes críticos y sube el chat exportado para ver qué preguntan más." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>Volver al tablero</BotonEnlace>}>
-      <Aviso tono="info">
-        Sube el chat exportado para ver cómo cambian los temas y cuánto tarda tu equipo en contestar. El Vigía todavía no lee los grupos en vivo: hoy se alimentan con el histórico que tú subes.
-      </Aviso>
+    <MarcoPagina titulo={tx('rest.grupos_de_clientes_e_historico')} apoyo={tx('rest.marca_los_grupos_de_whatsapp_de')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
+      <Aviso tono="info">{tx('rest.sube_el_chat_exportado_para_ver')}</Aviso>
 
       {grupos === null ? (
-        <Aviso tono="error">Los grupos de clientes todavía no están disponibles en tu cuenta, por eso aquí no hay nada que mostrar. Avísale a Likida.</Aviso>
+        <Aviso tono="error">{tx('rest.los_grupos_de_clientes_todavia_no')}</Aviso>
       ) : (
         <>
-          <Seccion id="grupos" titulo="Grupos" info="vigia_historial.grupos">
+          <Seccion id="grupos" titulo={tx('rest.grupos')} info="vigia_historial.grupos">
             {grupos.length === 0 ? (
-              <p className="rv-vg__nota">Aún no hay grupos. Agrega el primero abajo.</p>
+              <p className="rv-vg__nota">{tx('rest.aun_no_hay_grupos_agrega_el')}</p>
             ) : (
-              <TablaBase etiqueta="Grupos del Vigía" columnas={columnasGrupos} filas={grupos} idFila={(g) => g.id} densa tarjetaMovil />
+              <TablaBase etiqueta={tx('rest.grupos_del_vigia')} columnas={columnasGrupos} filas={grupos} idFila={(g) => g.id} densa tarjetaMovil />
             )}
           </Seccion>
 
           {puedeEditar ? (
             <>
-              <Seccion id="alta" titulo="Agregar un grupo" info="vigia_historial.alta"><FormaAltaGrupo accion={acciones.alta} clientes={clientes} /></Seccion>
+              <Seccion id="alta" titulo={tx('rest.agregar_un_grupo')} info="vigia_historial.alta"><FormaAltaGrupo accion={acciones.alta} clientes={clientes} /></Seccion>
               {grupos.length > 0 && (
-                <Seccion id="importar" titulo="Subir el chat exportado" info="vigia_historial.importar">
+                <Seccion id="importar" titulo={tx('rest.subir_el_chat_exportado')} info="vigia_historial.importar">
                   <FormaImportar accion={acciones.importar} grupos={grupos.map((g) => ({ id: g.id, nombre: g.nombre, cliente: g.clienteNombre }))} clientes={clientes} sufijo={sufijo} />
-                  <p className="rv-vg__nota"><Link href={`/dashboard/agentes/vigia/sin-atender${sufijo}`} className="rv-vg__enlace">Después de subir un chat, revisa las conversaciones sin atender</Link>.</p>
+                  <p className="rv-vg__nota">{ricoT(tx('rest.e0_despues_de_subir_un_chat'), { e0: (c) => <Link href={`/dashboard/agentes/vigia/sin-atender${sufijo}`} className="rv-vg__enlace">{c}</Link> })}</p>
                 </Seccion>
               )}
             </>
           ) : (
-            <p className="rv-vg__nota" data-tono="faint">Solo el dueño de la flota agrega grupos y sube histórico.</p>
+            <p className="rv-vg__nota" data-tono="faint">{tx('rest.solo_el_dueno_de_la_flota_14')}</p>
           )}
 
-          {!standby && <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas" info="vigia_historial.rapidas">
+          {!standby && <Seccion id="rapidas" titulo={tx('rest.respuestas_rapidas_aprobadas')} info="vigia_historial.rapidas">
             {rapidas === null ? (
-              <Aviso tono="error">Las respuestas rápidas todavía no están disponibles en tu cuenta. Mientras tanto el Vigía contesta como siempre.</Aviso>
+              <Aviso tono="error">{tx('rest.las_respuestas_rapidas_todavia_no_estan')}</Aviso>
             ) : (
               <>
-                <p className="rv-vg__nota">
-                  Cuando un cliente escribe algo que el Vigía no entiende y se parece a una de estas preguntas, el borrador sale con la respuesta que aprobaste. Siempre te llega para aprobar antes de enviarse. Apruébalas desde las preguntas frecuentes del reporte de abajo.
-                </p>
+                <p className="rv-vg__nota">{tx('rest.cuando_un_cliente_escribe_algo_que')}</p>
                 {rapidas.length === 0 ? (
-                  <p className="rv-vg__nota">Aún no hay respuestas rápidas aprobadas.</p>
+                  <p className="rv-vg__nota">{tx('rest.aun_no_hay_respuestas_rapidas_aprobadas')}</p>
                 ) : (
                   <ul className="rv-vg__lista">
                     {rapidas.map((r) => (
                       <li key={r.id} className="rv-vg__linea rv-vg__nota">
                         <div>
-                          <div><strong>{r.pregunta}</strong> <span className="rv-vg__faint">· {numero(r.usos)} {r.usos === 1 ? 'uso' : 'usos'}{r.ultimoUsoEn ? ` · último ${fechaHoraMx(r.ultimoUsoEn)}` : ''}</span></div>
+                          <div><strong>{r.pregunta}</strong> <span className="rv-vg__faint">· {numero(r.usos)} {r.usos === 1 ? 'uso' : 'usos'}{r.ultimoUsoEn ? tx('rest.ultimo', { fechaHoraMx: fechaHoraMx(r.ultimoUsoEn) }) : ''}</span></div>
                           <div>«{r.texto}»</div>
                         </div>
                         {puedeAprobar && <span className="rv-vg__fin"><FilaRetirarRapida accion={acciones.retirarRapida} respuestaId={r.id} /></span>}
@@ -127,37 +126,28 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
             )}
           </Seccion>}
 
-          <Seccion id="reporte" titulo={grupoElegido ? 'Reporte del grupo elegido' : 'Reporte de todos los grupos'} info="vigia_historial.reporte">
+          <Seccion id="reporte" titulo={grupoElegido ? tx('rest.reporte_del_grupo_elegido') : tx('rest.reporte_de_todos_los_grupos')} info="vigia_historial.reporte">
             {reporte === null || reporte.mensajes === 0 ? (
-              <p className="rv-vg__nota">Todavía no hay histórico subido: sube el chat de un grupo y aquí aparecen sus preguntas frecuentes, sus temas y los tiempos de respuesta.</p>
+              <p className="rv-vg__nota">{tx('rest.todavia_no_hay_historico_subido_sube')}</p>
             ) : (
               <div className="rv-vg__pila">
-                <p className="rv-vg__linea rv-vg__nota">
-                  <span>Descargar el reporte de preguntas frecuentes y tendencias:</span>
-                  <a href={`/api/export/vigia-faqs?${qExport}formato=xlsx${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">Excel</a>
-                  <a href={`/api/export/vigia-faqs?${qExport}formato=pdf${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">PDF</a>
-                </p>
-                {truncado && <Aviso tono="error">El histórico es más grande de lo que se analiza de una vez: el reporte usa solo los 50,000 mensajes más recientes.</Aviso>}
-                <p className="rv-vg__nota">
-                  {numero(reporte.mensajes)} mensajes ({numero(reporte.mensajesCliente)} de clientes, {numero(reporte.mensajesEquipo)} de tu equipo)
-                  {reporte.desde && reporte.hasta ? ` del ${fechaHoraMx(reporte.desde)} al ${fechaHoraMx(reporte.hasta)}` : ''}. Los temas se detectan por palabras clave, sin modelo: lo que no encaja queda en «Otros».
-                </p>
+                <p className="rv-vg__linea rv-vg__nota">{ricoT(tx('rest.e0_descargar_el_reporte_de_preguntas'), { e0: (c) => <span>{c}</span>, e1: (c) => <a href={`/api/export/vigia-faqs?${qExport}formato=xlsx${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">{c}</a>, e2: (c) => <a href={`/api/export/vigia-faqs?${qExport}formato=pdf${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">{c}</a> })}</p>
+                {truncado && <Aviso tono="error">{tx('rest.el_historico_es_mas_grande_de')}</Aviso>}
+                <p className="rv-vg__nota">{tx('rest.mensajes_de_clientes_de_tu_equipo', { numero: numero(reporte.mensajes), numero2: numero(reporte.mensajesCliente), numero3: numero(reporte.mensajesEquipo) })}{reporte.desde && reporte.hasta ? tx('rest.del_al_2', { fechaHoraMx: fechaHoraMx(reporte.desde), fechaHoraMx2: fechaHoraMx(reporte.hasta) }) : ''}{tx('rest.los_temas_se_detectan_por_palabras')}</p>
 
                 {pendientes && (
-                  <Tarjeta titulo="Pendientes de contestar en el chat subido" info="vigia_historial.pendientes">
+                  <Tarjeta titulo={tx('rest.pendientes_de_contestar_en_el_chat')} info="vigia_historial.pendientes">
                     <div className="rv-vg__pila">
-                      <p className="rv-vg__micro">
-                        Foto del momento de la exportación{pendientes.fotoEn ? ` (${fechaHoraMx(pendientes.fotoEn)})` : ''}, no en vivo: el Vigía no lee los grupos al instante. Se ocultan los «gracias», los avisos de monitoreo y lo que el equipo ya contestó.
-                      </p>
+                      <p className="rv-vg__micro">{tx('rest.foto_del_momento_de_la_exportacion')}{pendientes.fotoEn ? ` (${fechaHoraMx(pendientes.fotoEn)})` : ''}{tx('rest.no_en_vivo_el_vigia_no')}</p>
                       {pendientes.pendientes.length === 0 ? (
-                        <p className="rv-vg__nota">No quedó ningún mensaje de cliente sin contestar en este chat.</p>
+                        <p className="rv-vg__nota">{tx('rest.no_quedo_ningun_mensaje_de_cliente')}</p>
                       ) : (
                         <ul className="rv-vg__lista">
                           {pendientes.pendientes.map((p) => (
                             <li key={`${p.enviadoEn}|${p.texto}`} className="rv-vg__nota">
                               <div>
-                                <StatusChip tono={p.nivel === 2 ? 'bad' : 'neutral'}>{p.nivel === 2 ? 'Alta' : 'Normal'}</StatusChip>{' '}
-                                <span className="rv-vg__faint">· {p.grupo ? `${p.grupo} · ` : ''}esperando {duracion(p.antiguedadMin)} · {fechaHoraMx(p.enviadoEn)}</span>
+                                <StatusChip tono={p.nivel === 2 ? 'bad' : 'neutral'}>{p.nivel === 2 ? tx('rest.alta') : tx('rest.normal')}</StatusChip>{' '}
+                                <span className="rv-vg__faint">· {p.grupo ? `${p.grupo} · ` : ''}{tx('rest.esperando', { duracion: duracion(p.antiguedadMin) })}{' '}{fechaHoraMx(p.enviadoEn)}</span>
                               </div>
                               <div>«{p.texto}»</div>
                             </li>
@@ -168,25 +158,22 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                   </Tarjeta>
                 )}
 
-                <Tarjeta titulo="Tiempo de respuesta del equipo" info="vigia_historial.tiempos">
-                  <p className="rv-vg__nota">
-                    Mediana {duracion(reporte.tiempos.medianaMin)} · 9 de cada 10 respuestas en {duracion(reporte.tiempos.p90Min)} ·{' '}
-                    <strong>{numero(reporte.tiempos.sobreUmbral)}</strong> esperas pasaron de {numero(umbralMin)} min (incluye {numero(reporte.tiempos.sinRespuesta)} mensajes que nadie contestó).
-                  </p>
+                <Tarjeta titulo={tx('rest.tiempo_de_respuesta_del_equipo')} info="vigia_historial.tiempos">
+                  <p className="rv-vg__nota">{tx('rest.mediana_9_de_cada_10_respuestas', { duracion: duracion(reporte.tiempos.medianaMin), duracion2: duracion(reporte.tiempos.p90Min) })}{' '}<strong>{numero(reporte.tiempos.sobreUmbral)}</strong>{' '}{tx('rest.esperas_pasaron_de_min_incluye_mensajes', { numero: numero(umbralMin), numero2: numero(reporte.tiempos.sinRespuesta) })}</p>
                 </Tarjeta>
 
-                <Tarjeta titulo="Preguntas frecuentes" info="vigia_historial.faqs" estado={reporte.faqs.length === 0 ? 'vacio' : 'ok'}
-                  mensaje="Sin preguntas frecuentes" detalle="No hay preguntas que se repitan lo suficiente (al menos 2 veces) para llamarlas frecuentes.">
+                <Tarjeta titulo={tx('rest.preguntas_frecuentes')} info="vigia_historial.faqs" estado={reporte.faqs.length === 0 ? 'vacio' : 'ok'}
+                  mensaje={tx('rest.sin_preguntas_frecuentes')} detalle={tx('rest.no_hay_preguntas_que_se_repitan')}>
                   <div className="rv-vg__pila">
-                    <BarList etiqueta="Veces que se repite cada pregunta" formato={numero}
-                      items={reporte.faqs.slice(0, 8).map((f) => ({ clave: f.pregunta, etiqueta: f.pregunta, valor: f.veces, texto: `${numero(f.veces)} veces`, nota: `en ${numero(f.dias)} días` }))} />
+                    <BarList etiqueta={tx('rest.veces_que_se_repite_cada_pregunta')} formato={numero}
+                      items={reporte.faqs.slice(0, 8).map((f) => ({ clave: f.pregunta, etiqueta: f.pregunta, valor: f.veces, texto: `${numero(f.veces)} veces`, nota: tx('rest.en_dias', { numero: numero(f.dias) }) }))} />
                     <ul className="rv-vg__lista">
                       {reporte.faqs.map((f) => (
                         <li key={f.pregunta} className="rv-vg__nota">
-                          <div><strong>{f.pregunta}</strong> <span className="rv-vg__faint">· {numero(f.veces)} veces en {numero(f.dias)} días</span></div>
-                          <div>{f.respuestaTipica ? <>Lo que suele contestar tu equipo: «{f.respuestaTipica}»</> : 'Sin una respuesta del equipo en la hora siguiente.'}</div>
+                          <div><strong>{f.pregunta}</strong>{' '}{ricoT(tx('rest.e0_veces_en_dias_e0', { numero: numero(f.veces), numero2: numero(f.dias) }), { e0: (c) => <span className="rv-vg__faint">{c}</span> })}</div>
+                          <div>{f.respuestaTipica ? <>{tx('rest.lo_que_suele_contestar_tu_equipo', { respuestaTipica: f.respuestaTipica })}</> : tx('rest.sin_una_respuesta_del_equipo_en')}</div>
                           {!standby && puedeAprobar && rapidas !== null && (aprobadas.has(f.pregunta.trim().toLowerCase())
-                            ? <div className="rv-vg__micro" data-tono="ok">Ya es una respuesta rápida aprobada.</div>
+                            ? <div className="rv-vg__micro" data-tono="ok">{tx('rest.ya_es_una_respuesta_rapida_aprobada')}</div>
                             : <FormaAprobarRapida accion={acciones.aprobarRapida} tema={f.tema} pregunta={f.pregunta} textoInicial={f.respuestaTipica ?? ''} />)}
                         </li>
                       ))}
@@ -194,10 +181,10 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                   </div>
                 </Tarjeta>
 
-                <Tarjeta titulo="Temas y tendencia" info="vigia_historial.temas">
+                <Tarjeta titulo={tx('rest.temas_y_tendencia')} info="vigia_historial.temas">
                   <div className="rv-vg__pila">
-                    <TablaBase etiqueta="Temas y tendencia" columnas={columnasTemas} filas={reporte.tendencias} idFila={(t) => t.tema} densa tarjetaMovil />
-                    <p className="rv-vg__micro">«Histórico corto»: se necesitan al menos 8 semanas de chat para comparar.</p>
+                    <TablaBase etiqueta={tx('rest.temas_y_tendencia')} columnas={columnasTemas} filas={reporte.tendencias} idFila={(t) => t.tema} densa tarjetaMovil />
+                    <p className="rv-vg__micro">{tx('rest.historico_corto_se_necesitan_al_menos')}</p>
                   </div>
                 </Tarjeta>
               </div>

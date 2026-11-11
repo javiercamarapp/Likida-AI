@@ -5,6 +5,9 @@ import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
 import '../vigia.css';
 import { Aviso as AvisoV2, AvisoResultado, Boton, BotonEnlace, Campo, CampoSelect, CampoTexto, Casilla, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONFIGURACIÓN DEL AVISO DE VIAJE (Agente 4, T-A4-23). Requisitos E4, E5 y E6.
@@ -54,22 +57,24 @@ export interface OpcionesConfigPantalla {
 }
 
 /** Texto del mapa de colores mientras no exista la leyenda real (B1, E4). */
-export const TEXTO_COLORES = 'Esperando el archivo con colores';
-export const TEXTO_ALIAS =
-  'Aquí se verán los nombres del programa que todavía no están ligados a un cliente (hoy ese aviso queda «sin destinatario»). '
-  + 'La tabla de equivalencias aún no tiene pantalla de captura.';
-export const TEXTO_PRIVACIDAD =
-  'Al cliente siempre le llegan la caja, sus placas y estado, la unidad, sus placas y el nombre del operador. '
-  + 'La licencia, su vigencia y el teléfono del operador son datos personales de un tercero: solo salen si la dueña de la flota '
-  + 'los habilita aquí, y el cambio queda registrado con su nombre y la fecha.';
+export const textoColores = (tx: TAgentes = TR_ES.t) => (tx('rest.esperando_el_archivo_con_colores'));
+export const TEXTO_COLORES = textoColores();
+export const textoAlias = (tx: TAgentes = TR_ES.t) => (tx('rest.aqui_se_veran_los_nombres_del')
+  + tx('rest.la_tabla_de_equivalencias_aun_no'));
+export const TEXTO_ALIAS = textoAlias();
+export const textoPrivacidad = (tx: TAgentes = TR_ES.t) => (tx('rest.al_cliente_siempre_le_llegan_la')
+  + tx('rest.la_licencia_su_vigencia_y_el')
+  + tx('rest.los_habilita_aqui_y_el_cambio'));
+export const TEXTO_PRIVACIDAD = textoPrivacidad();
 
 function Aviso({ children }: { children: React.ReactNode }) {
   return <AvisoV2 tono="error">{children}</AvisoV2>;
 }
 
 function Guardar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
-  return <Boton type="submit" loading={pending} icono={<Icono icono={Save} tam={14} />}>Guardar configuración</Boton>;
+  return <Boton type="submit" loading={pending} icono={<Icono icono={Save} tam={14} />}>{tx('conductores.forma.guardar_configuracion')}</Boton>;
 }
 
 function Seccion({ id, titulo, children }: { id: string; titulo: string; children: React.ReactNode }) {
@@ -112,87 +117,86 @@ export function VistaConfiguracionAviso({
   sinMigrar: boolean;
   accion: AccionConfig;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, despachar] = useActionState(accion, null);
   const base = `/dashboard/agentes/vigia/avisos${sufijo}`;
   const lim = opciones.limites;
   const sd = !puedeEditar;
   const sdEnvio = sd || !(puedeEditarEnvio ?? puedeEditarPrivacidad);
   return (
-    <MarcoPagina titulo="Configuración del aviso de viaje" apoyo="Cuándo se arman y se envían los avisos, qué cuenta como servicio listo y qué datos del operador reciben tus clientes."
-      acciones={<BotonEnlace tamano="sm" href={base}>Volver a los avisos</BotonEnlace>}>
-      {sinMigrar ? <Aviso>La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.</Aviso> : null}
+    <MarcoPagina titulo={tx('rest.configuracion_del_aviso_de_viaje')} apoyo={tx('rest.cuando_se_arman_y_se_envian')}
+      acciones={<BotonEnlace tamano="sm" href={base}>{tx('rest.volver_a_los_avisos')}</BotonEnlace>}>
+      {sinMigrar ? <Aviso>{tx('rest.la_base_de_datos_todavia_no')}</Aviso> : null}
       {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
       {!puedeEditar && config ? (
-        <p className="rv-vg__nota">Solo el dueño o el encargado de la flota cambia esta configuración. Tú puedes verla.</p>
+        <p className="rv-vg__nota">{tx('rest.solo_el_dueno_o_el_encargado')}</p>
       ) : null}
 
       {config ? (
-        <form action={despachar} className="rv-vg__pila" aria-label="Configuración del aviso de viaje">
+        <form action={despachar} className="rv-vg__pila" aria-label={tx('rest.configuracion_del_aviso_de_viaje')}>
           {ventanaIlegible ? (
-            <Aviso>El horario de envío guardado no se puede leer, así que por seguridad ningún aviso sale. Escribe la hora de inicio y de fin, o déjalas vacías para enviar a cualquier hora, y guarda.</Aviso>
+            <Aviso>{tx('rest.el_horario_de_envio_guardado_no')}</Aviso>
           ) : null}
 
-          <Seccion id="cfg-envio" titulo="Envío">
-            <Casilla name="habilitado" value="1" defaultChecked={config.habilitado} disabled={sdEnvio} etiqueta="Aviso de viaje encendido" />
+          <Seccion id="cfg-envio" titulo={tx('rest.envio')}>
+            <Casilla name="habilitado" value="1" defaultChecked={config.habilitado} disabled={sdEnvio} etiqueta={tx('rest.aviso_de_viaje_encendido')} />
             {sdEnvio && !sd ? (
               <>
                 {config.habilitado ? <input type="hidden" name="habilitado" value="1" /> : null}
                 <input type="hidden" name="modo" value={config.modo} />
                 <input type="hidden" name="canal" value={config.canalDefault} />
-                <p className="rv-vg__nota">Solo la dueña de la flota enciende o apaga el aviso y cambia el modo y el canal. Tú ajustas el resto.</p>
+                <p className="rv-vg__nota">{tx('rest.solo_la_duena_de_la_flota')}</p>
               </>
             ) : null}
-            <p className="rv-vg__nota">Apagado: no se arma ni se envía ningún aviso. Cada aviso nuevo espera tu confirmación mientras el modo sea «confirmar».</p>
+            <p className="rv-vg__nota">{tx('rest.apagado_no_se_arma_ni_se')}</p>
             <div className="rv-vg__cuad">
-              <CampoSelect id="cfg-modo" etiqueta="Modo" name={sdEnvio ? undefined : 'modo'} defaultValue={config.modo} disabled={sdEnvio}>
-                <option value="confirmar">Confirmar cada aviso (recomendado)</option>
-                <option value="autonomo">Autónomo (solo clientes con avisos confirmados sin cambios)</option>
+              <CampoSelect id="cfg-modo" etiqueta={tx('rest.modo')} name={sdEnvio ? undefined : 'modo'} defaultValue={config.modo} disabled={sdEnvio}>
+                <option value="confirmar">{tx('rest.confirmar_cada_aviso_recomendado')}</option>
+                <option value="autonomo">{tx('rest.autonomo_solo_clientes_con_avisos_confirmados')}</option>
               </CampoSelect>
-              <CampoSelect id="cfg-canal" etiqueta="Canal por defecto" name={sdEnvio ? undefined : 'canal'} defaultValue={config.canalDefault} disabled={sdEnvio}>
-                <option value="ejecutivo_copia">Copia para el ejecutivo (tú lo mandas)</option>
-                <option value="cliente_1a1">WhatsApp directo al cliente</option>
+              <CampoSelect id="cfg-canal" etiqueta={tx('rest.canal_por_defecto')} name={sdEnvio ? undefined : 'canal'} defaultValue={config.canalDefault} disabled={sdEnvio}>
+                <option value="ejecutivo_copia">{tx('rest.copia_para_el_ejecutivo_tu_lo')}</option>
+                <option value="cliente_1a1">{tx('rest.whatsapp_directo_al_cliente')}</option>
               </CampoSelect>
             </div>
             <div className="rv-vg__cuad">
-              <Campo id="cfg-desde" etiqueta="Enviar desde (hora)"><input name="ventana_desde" type="time" defaultValue={config.ventana?.desde ?? ''} disabled={sd} className="rv-ctl" /></Campo>
-              <Campo id="cfg-hasta" etiqueta="Enviar hasta (hora)"><input name="ventana_hasta" type="time" defaultValue={config.ventana?.hasta ?? ''} disabled={sd} className="rv-ctl" /></Campo>
+              <Campo id="cfg-desde" etiqueta={tx('rest.enviar_desde_hora')}><input name="ventana_desde" type="time" defaultValue={config.ventana?.desde ?? ''} disabled={sd} className="rv-ctl" /></Campo>
+              <Campo id="cfg-hasta" etiqueta={tx('rest.enviar_hasta_hora')}><input name="ventana_hasta" type="time" defaultValue={config.ventana?.hasta ?? ''} disabled={sd} className="rv-ctl" /></Campo>
             </div>
-            <p className="rv-vg__nota">Fuera de ese horario el aviso espera. Vacío = a cualquier hora. Si el fin es menor que el inicio, el horario cruza la medianoche.</p>
+            <p className="rv-vg__nota">{tx('rest.fuera_de_ese_horario_el_aviso')}</p>
           </Seccion>
 
-          <Seccion id="cfg-listo" titulo="Cuándo un servicio está «listo»">
-            <p className="rv-vg__nota" data-testid="ayuda-listo">
-              Regla provisional: caja + unidad + carta porte (CCP) en alguno de los estatus que marques. Cambiará cuando tengamos la leyenda de colores.
-            </p>
+          <Seccion id="cfg-listo" titulo={tx('rest.cuando_un_servicio_esta_listo')}>
+            <p className="rv-vg__nota" data-testid="ayuda-listo">{tx('rest.regla_provisional_caja_unidad_carta_porte')}</p>
             <div className="rv-vg__pila--s">
-              <p className="rv-vg__rotulo">Estatus de CCP que cuentan como listo</p>
+              <p className="rv-vg__rotulo">{tx('rest.estatus_de_ccp_que_cuentan_como')}</p>
               <Casillas nombre="ccp" opciones={opciones.ccp} marcadas={config.ccpListos} deshabilitado={sd} />
             </div>
-            <Casilla name="exigir_transito" value="1" defaultChecked={config.exigirTransito} disabled={sd} etiqueta="Además, que el tránsito no esté bloqueado (p. ej. pendiente de cruce)" />
+            <Casilla name="exigir_transito" value="1" defaultChecked={config.exigirTransito} disabled={sd} etiqueta={tx('rest.ademas_que_el_transito_no_este')} />
             <div className="rv-vg__pila--s">
-              <p className="rv-vg__rotulo">Secciones del programa que generan aviso</p>
+              <p className="rv-vg__rotulo">{tx('rest.secciones_del_programa_que_generan_aviso')}</p>
               <Casillas nombre="seccion" opciones={opciones.secciones} marcadas={config.secciones} deshabilitado={sd} />
-              <p className="rv-vg__nota">Las cancelaciones nunca generan este aviso.</p>
+              <p className="rv-vg__nota">{tx('rest.las_cancelaciones_nunca_generan_este_aviso')}</p>
             </div>
-            <CampoTexto id="cfg-horas" etiqueta="Horas antes de la cita (vacío = en cuanto esté listo)" name="horas_antes" tipo="number" inputMode="numeric" step={1}
+            <CampoTexto id="cfg-horas" etiqueta={tx('rest.horas_antes_de_la_cita_vacio')} name="horas_antes" tipo="number" inputMode="numeric" step={1}
               min={lim.horasAntes.min} max={lim.horasAntes.max} defaultValue={config.horasAntesCita ?? ''} disabled={sd} />
             <div className="rv-vg__pila--s">
-              <p className="rv-vg__rotulo">Mapa de colores</p>
-              <p className="rv-vg__bloque rv-vg__nota" aria-disabled="true" data-testid="colores">{TEXTO_COLORES}</p>
+              <p className="rv-vg__rotulo">{tx('rest.mapa_de_colores')}</p>
+              <p className="rv-vg__bloque rv-vg__nota" aria-disabled="true" data-testid="colores">{textoColores(tx)}</p>
             </div>
           </Seccion>
 
-          <Seccion id="cfg-cambios" titulo="Cambios y reenvíos">
+          <Seccion id="cfg-cambios" titulo={tx('rest.cambios_y_reenvios')}>
             <div className="rv-vg__cuad">
-              <CampoTexto id="cfg-debounce" etiqueta={`Minutos de calma antes de reenviar (${lim.debounce.min} a ${lim.debounce.max})`} name="debounce_min" tipo="number" inputMode="numeric" step={1} required
+              <CampoTexto id="cfg-debounce" etiqueta={tx('rest.minutos_de_calma_antes_de_reenviar', { min: lim.debounce.min, max: lim.debounce.max })} name="debounce_min" tipo="number" inputMode="numeric" step={1} required
                 min={lim.debounce.min} max={lim.debounce.max} defaultValue={config.debounceMin} disabled={sd} />
-              <CampoTexto id="cfg-reenvios" etiqueta={`Máximo de reenvíos por servicio (${lim.reenvios.min} a ${lim.reenvios.max})`} name="max_reenvios" tipo="number" inputMode="numeric" step={1} required
+              <CampoTexto id="cfg-reenvios" etiqueta={tx('rest.maximo_de_reenvios_por_servicio_a', { min: lim.reenvios.min, max: lim.reenvios.max })} name="max_reenvios" tipo="number" inputMode="numeric" step={1} required
                 min={lim.reenvios.min} max={lim.reenvios.max} defaultValue={config.maxReenvios} disabled={sd} />
             </div>
           </Seccion>
 
-          <Seccion id="cfg-privacidad" titulo="Datos del operador que recibe el cliente">
-            <p className="rv-vg__nota" data-testid="privacidad">{TEXTO_PRIVACIDAD}</p>
+          <Seccion id="cfg-privacidad" titulo={tx('rest.datos_del_operador_que_recibe_el')}>
+            <p className="rv-vg__nota" data-testid="privacidad">{textoPrivacidad(tx)}</p>
             {puedeEditarPrivacidad ? <input type="hidden" name="op_presente" value="1" /> : null}
             <div className="rv-vg__linea">
               {opciones.operador.map((o) => (
@@ -200,12 +204,12 @@ export function VistaConfiguracionAviso({
               ))}
             </div>
             {puedeEditar && !puedeEditarPrivacidad ? (
-              <p className="rv-vg__nota" data-testid="solo-duena">Solo la dueña de la flota puede cambiar estos tres datos.</p>
+              <p className="rv-vg__nota" data-testid="solo-duena">{tx('rest.solo_la_duena_de_la_flota_2')}</p>
             ) : null}
           </Seccion>
 
-          <Seccion id="cfg-alias" titulo="Clientes sin ligar">
-            <p className="rv-vg__nota" data-testid="alias">{TEXTO_ALIAS}</p>
+          <Seccion id="cfg-alias" titulo={tx('rest.clientes_sin_ligar')}>
+            <p className="rv-vg__nota" data-testid="alias">{textoAlias(tx)}</p>
           </Seccion>
 
           {puedeEditar ? <div><Guardar /></div> : null}

@@ -4,6 +4,8 @@ import { mxn, numero } from '@/lib/formato';
 import type { TarifaVista } from '@/lib/likida/peajes/datos';
 import { Tarjeta, Icono } from '@/app/ui-v2/componentes';
 import '../peajes.css';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -25,83 +27,69 @@ export interface TarifarioVista {
 /** Tarifas que se pintan a la vez (el tarifario real son cientos de filas). */
 const MAX_TARIFAS_VISIBLES = 300;
 
-const ETIQUETA_ORIGEN: Record<string, string> = {
-  declarada: 'declarada por la flota',
-  inferida: 'inferida de los archivos',
+const etiquetaOrigen = (tx: TAgentes = TR_ES.t): Record<string, string> => ({
+  declarada: tx('rest.declarada_por_la_flota'),
+  inferida: tx('rest.inferida_de_los_archivos'),
   proveedor: 'del proveedor',
-};
+});
 
 /**
  * El TARIFARIO: cuánto cuesta cruzar cada caseta con cada clase. NADA viene precargado.
  * Solo una tarifa CONFIRMADA puede convertir un candidato en cobro con monto reclamable;
  * una tarifa inferida o declarada se confirma aquí con un clic y queda quién la confirmó.
  */
-export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
+export function SeccionTarifario({ datos, tr = TR_ES }: { datos: TarifarioVista; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   const { tarifas, acciones } = datos;
   const sinConfirmar = tarifas ? tarifas.filter((t) => !t.confirmada).length : 0;
   return (
     <div id="tarifario">
-    <Tarjeta titulo="Tarifario">
-      <p className="text-[11px] mb-3 rv-pj-c-faint">
-        Cuánto cuesta cruzar cada caseta con cada clase de vehículo. <b>Nace vacío a propósito</b>: el proveedor no entrega un catálogo, así que se
-        carga uno propio o se confirma el que se infiere de los archivos. Una tarifa sin confirmar <b>no</b> convierte un candidato en cobro indebido;
-        solo una confirmada lo hace. Carga tu CSV o Excel con las columnas <span className="cifra-mono">caseta; clase; importe; desde; hasta</span>
-        (si no trae «desde», la vigencia empieza hoy). Volver a cargar el mismo archivo es seguro.
-      </p>
+    <Tarjeta titulo={tx('rest.tarifario')}>
+      <p className="text-[11px] mb-3 rv-pj-c-faint">{ricoT(tx('rest.cuanto_cuesta_cruzar_cada_caseta_con'), { b: (c) => <b>{c}</b>, e2: (c) => <span className="cifra-mono">{c}</span> })}</p>
 
       <form action={acciones.importarTarifas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
-        <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label="Archivo de tarifas"
+        <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label={tx('rest.archivo_de_tarifas')}
           className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
-        <label className="flex items-center gap-1.5">
-          <span className="text-[11px] rv-pj-c-muted">Este archivo es</span>
-          <select name="origen" defaultValue="declarada" className="w-[210px] rv-ctl" aria-label="Origen del archivo de tarifas">
-            <option value="declarada">una tarifa que declaro (por confirmar)</option>
-            <option value="proveedor">el tarifario oficial del proveedor (queda confirmado)</option>
+        <label className="flex items-center gap-1.5">{ricoT(tx('rest.e0_este_archivo_es_e0'), { e0: (c) => <span className="text-[11px] rv-pj-c-muted">{c}</span> })}<select name="origen" defaultValue="declarada" className="w-[210px] rv-ctl" aria-label={tx('rest.origen_del_archivo_de_tarifas')}>
+            <option value="declarada">{tx('rest.una_tarifa_que_declaro_por_confirmar')}</option>
+            <option value="proveedor">{tx('rest.el_tarifario_oficial_del_proveedor_queda')}</option>
           </select>
         </label>
-        <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Upload} /> Cargar tarifario</button>
+        <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Upload} />{' '}{tx('rest.cargar_tarifario')}</button>
       </form>
 
       {tarifas === null ? (
-        <p className="text-[12px] mt-3 rv-pj-c-muted">No se pudo leer el tarifario ahora mismo.</p>
+        <p className="text-[12px] mt-3 rv-pj-c-muted">{tx('rest.no_se_pudo_leer_el_tarifario_2')}</p>
       ) : tarifas.length === 0 ? (
-        <p className="text-[12px] mt-3 rv-pj-c-muted">
-          Aún no hay tarifas: sin tarifario confirmado, la revisión de cobros solo marca candidatos sin monto reclamable.
-        </p>
+        <p className="text-[12px] mt-3 rv-pj-c-muted">{tx('rest.aun_no_hay_tarifas_sin_tarifario')}</p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[360px] overflow-y-auto">
-          <p className="text-[11px] rv-pj-c-faint">
-            {numero(tarifas.length)} tarifas · {numero(tarifas.length - sinConfirmar)} confirmadas · {numero(sinConfirmar)} por confirmar
-          </p>
+          <p className="text-[11px] rv-pj-c-faint">{tx('rest.tarifas_confirmadas_por_confirmar', { numero: numero(tarifas.length), numero2: numero(tarifas.length - sinConfirmar), numero3: numero(sinConfirmar) })}</p>
           {tarifas.slice(0, MAX_TARIFAS_VISIBLES).map((t) => (
             <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]">
               <span className="font-medium">{t.casetaNorm}</span>
               <span className="cifra-mono text-[11px] rv-pj-c-muted">clase {t.clase}</span>
               <span className="cifra-mono">{mxn(t.importe)}</span>
               <span className="text-[11px] rv-pj-c-faint">
-                desde {t.vigenteDesde}{t.vigenteHasta ? ` hasta ${t.vigenteHasta}` : ' sin fin'} · {ETIQUETA_ORIGEN[t.origen] ?? t.origen}
+                desde {t.vigenteDesde}{t.vigenteHasta ? ` hasta ${t.vigenteHasta}` : ' sin fin'} · {etiquetaOrigen(tx)[t.origen] ?? t.origen}
               </span>
               {t.confirmada ? (
-                <span className="text-[11px] ml-auto rv-pj-c-ok">Confirmada{t.confirmadaPor ? ` por ${t.confirmadaPor}` : ''}</span>
+                <span className="text-[11px] ml-auto rv-pj-c-ok">{tx('rest.confirmada')}{t.confirmadaPor ? ` por ${t.confirmadaPor}` : ''}</span>
               ) : (
-                <form action={acciones.confirmarTarifa} className="ml-auto flex items-center gap-2">
-                  <span className="text-[11px] rv-pj-c-warn">Por confirmar</span>
-                  <input type="hidden" name="tarifa" value={t.id} />
-                  <button type="submit" className="rv-btn rv-btn--secondary" aria-label={`Confirmar la tarifa de ${t.casetaNorm}, clase ${t.clase}`}>Confirmar</button>
+                <form action={acciones.confirmarTarifa} className="ml-auto flex items-center gap-2">{ricoT(tx('rest.e0_por_confirmar_e0'), { e0: (c) => <span className="text-[11px] rv-pj-c-warn">{c}</span> })}<input type="hidden" name="tarifa" value={t.id} />
+                  <button type="submit" className="rv-btn rv-btn--secondary" aria-label={tx('rest.confirmar_la_tarifa_de_clase', { casetaNorm: t.casetaNorm, clase: t.clase })}>{tx('rest.confirmar')}</button>
                 </form>
               )}
             </div>
           ))}
-          {tarifas.length > MAX_TARIFAS_VISIBLES && <p className="text-[11px] rv-pj-c-faint">Se muestran {MAX_TARIFAS_VISIBLES} de {numero(tarifas.length)}.</p>}
+          {tarifas.length > MAX_TARIFAS_VISIBLES && <p className="text-[11px] rv-pj-c-faint">{tx('rest.se_muestran_de_2', { maxTarifasVisibles: MAX_TARIFAS_VISIBLES, numero: numero(tarifas.length) })}</p>}
         </div>
       )}
 
       {acciones.sugerirPasada && (
         <form action={acciones.sugerirPasada} className="mt-4">
-          <p className="text-[11px] mb-1.5 rv-pj-c-faint">
-            ¿Hay casetas con tarifa por pasada? Revisa el último desglose: te dice dónde casi todos los cruces son clase 1. Es solo una sugerencia; tú la declaras en «Reglas de cobro».
-          </p>
-          <button type="submit" className="rv-btn rv-btn--secondary">Buscar sugerencias en el último desglose</button>
+          <p className="text-[11px] mb-1.5 rv-pj-c-faint">{tx('rest.hay_casetas_con_tarifa_por_pasada')}</p>
+          <button type="submit" className="rv-btn rv-btn--secondary">{tx('rest.buscar_sugerencias_en_el_ultimo_desglose')}</button>
         </form>
       )}
     </Tarjeta>

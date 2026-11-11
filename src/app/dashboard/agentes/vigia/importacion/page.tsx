@@ -10,7 +10,11 @@ import { derivarEstatusImportacion, estatusACsv } from '@/lib/likida/vigia/impor
 import { sufijoTenant } from '../../../sufijo';
 import { VistaImportacionVigia, TOPE_ARCHIVO_IMPORTACION_BYTES, type ResultadoImportacion } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Estatus de importación' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.estatus_de_importacion') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -34,16 +38,17 @@ const error = (texto: string): ResultadoImportacion => ({ ok: false, error: text
 
 /** Lee el programa subido y calcula el estatus. No guarda nada: no toca la base ni ningún sistema externo. */
 async function calcular(fd: FormData): Promise<ResultadoImportacion> {
+  const { t: tx } = await getT('agentes');
   const terminal = String(fd.get('terminal') ?? '').trim().toUpperCase().replace(/\s+/g, ' ');
-  if (!TERMINAL_VALIDA.test(terminal)) return error('Escribe la terminal con su código corto, por ejemplo GDL (letras y números, hasta 40).');
+  if (!TERMINAL_VALIDA.test(terminal)) return error(tx('rest.escribe_la_terminal_con_su_codigo'));
 
   const archivo = fd.get('archivo');
-  if (!(archivo instanceof File) || archivo.size === 0) return error('Elige el archivo del programa (CSV).');
+  if (!(archivo instanceof File) || archivo.size === 0) return error(tx('rest.elige_el_archivo_del_programa_csv'));
   if (archivo.size > TOPE_ARCHIVO_IMPORTACION_BYTES) {
-    return error(`El archivo pesa más de ${TOPE_ARCHIVO_IMPORTACION_BYTES / (1024 * 1024)} MB. Sube solo el programa de los últimos días.`);
+    return error(tx('rest.el_archivo_pesa_mas_de_mb_2', { v: TOPE_ARCHIVO_IMPORTACION_BYTES / (1024 * 1024) }));
   }
   if (/\.(xlsx|xlsm|xls)$/i.test(archivo.name)) {
-    return error('Los archivos de Excel (.xlsx) todavía no se pueden leer. En Excel usa «Guardar como» y elige CSV, y vuelve a subirlo.');
+    return error(tx('rest.los_archivos_de_excel_xlsx_todavia'));
   }
 
   const texto = decodificar(new Uint8Array(await archivo.arrayBuffer()));
@@ -52,13 +57,13 @@ async function calcular(fd: FormData): Promise<ResultadoImportacion> {
     lector = leerProgramaCsv(texto, { terminal });
   } catch (e) {
     if (e instanceof ErrorLectorPrograma) {
-      return error(/encabezados/.test(e.message) ? `El archivo no parece un programa de despacho. ${e.message}` : e.message);
+      return error(/encabezados/.test(e.message) ? tx('rest.el_archivo_no_parece_un_programa', { message: e.message }) : e.message);
     }
     throw e;
   }
   const normalizado = normalizarPrograma(lector);
   if (normalizado.filas.length === 0) {
-    return error('El archivo no parece un programa de despacho: no encontré ninguna fila con caja, unidad o cliente que pueda leer.');
+    return error(tx('rest.el_archivo_no_parece_un_programa_2'));
   }
 
   const d = derivarEstatusImportacion(normalizado.filas);
@@ -84,6 +89,7 @@ async function calcular(fd: FormData): Promise<ResultadoImportacion> {
  * día, rotulado como NO verificado contra Track & Trace. Cero pesos; solo lee el archivo, no guarda ni escribe afuera.
  */
 export default async function PaginaImportacionVigia({ searchParams }: { searchParams: Promise<Busqueda> }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { rol, tenantId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -92,7 +98,7 @@ export default async function PaginaImportacionVigia({ searchParams }: { searchP
     'use server';
     // La sesión se vuelve a resolver aquí: la acción no confía en lo que decidió el render.
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return error('No tienes permiso para ver esta pantalla.');
+    if (!puedeVerRuta(s.rol, RUTA)) return error(tx('rest.no_tienes_permiso_para_ver_esta'));
     try {
       return await calcular(fd);
     } catch (e) {

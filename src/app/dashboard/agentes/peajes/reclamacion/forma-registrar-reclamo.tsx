@@ -6,6 +6,8 @@ import { numero } from '@/lib/formato';
 import { ETIQUETA_CATEGORIA_COBRO, type CategoriaCobro } from '@/lib/likida/peajes/reglas_cobro';
 import { Boton, CampoFecha, CampoSelect, CampoTexto } from '@/app/ui-v2/componentes';
 import '../peajes.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «REGISTRAR RECLAMO» — auditoría adversarial, HALLAZGO ALTO #1.
@@ -30,10 +32,11 @@ import '../peajes.css';
 type Accion = (fd: FormData) => Promise<void>;
 
 function BotonRegistrar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending}>
-      {pending ? 'Registrando…' : 'Registrar reclamo'}
+      {pending ? 'Registrando…' : tx('rest.registrar_reclamo')}
     </Boton>
   );
 }
@@ -44,6 +47,7 @@ export function FormaRegistrarReclamo({ accion, desglose, opciones }: {
   /** Solo las categorías con candidatos (`conCandidatos` en `revision.tsx`), con su conteo. */
   opciones: ReadonlyArray<{ categoria: CategoriaCobro; n: number }>;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   // El `null` nunca se lee: ver la nota de arriba sobre por qué esta acción no
   // "regresa" un estado útil (siempre redirige).
   const [, despachar] = useActionState(async (_previo: null, fd: FormData) => {
@@ -54,11 +58,11 @@ export function FormaRegistrarReclamo({ accion, desglose, opciones }: {
   return (
     <form action={despachar} className="rv-pj-forma">
       <input type="hidden" name="desglose" value={desglose} />
-      <CampoSelect etiqueta="Registrar reclamo de" name="categoria" required>
+      <CampoSelect etiqueta={tx('rest.registrar_reclamo_de')} name="categoria" required>
         {opciones.map(({ categoria, n }) => <option key={categoria} value={categoria}>{ETIQUETA_CATEGORIA_COBRO[categoria]} ({numero(n)})</option>)}
       </CampoSelect>
-      <CampoFecha etiqueta="Enviado el (si ya lo enviaste)" name="enviado_en" />
-      <CampoTexto etiqueta="Folio del portal (opc.)" name="referencia" maxLength={120} />
+      <CampoFecha etiqueta={tx('rest.enviado_el_si_ya_lo_enviaste')} name="enviado_en" />
+      <CampoTexto etiqueta={tx('rest.folio_del_portal_opc')} name="referencia" maxLength={120} />
       <BotonRegistrar />
     </form>
   );
