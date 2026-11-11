@@ -24,6 +24,7 @@
 
 import { alertasIaDeDetalle } from './alertas-ia';
 import { esApagadoPorInterruptor, esHuecoDeConfiguracion, type EstadoLatido } from './salud';
+import type { ResultadoSilencio } from '@/lib/likida/fuentes/silencio';
 
 export interface LatidoParaAlerta {
   estado: 'ok' | 'vencido' | 'sin_latido';
@@ -44,9 +45,11 @@ export interface EntradaAlertasExtra {
   credencial?: CredencialParaAlerta | null;
   /** Resultado de `sondearLlave()` si el integrador la corrió (más fiable que el circuito, que es por instancia). */
   sonda?: { estado: 'ok' | 'llave_invalida' | 'sin_saldo' | 'sin_llave' | 'inalcanzable' } | null;
+  /** F19: la regla de silencio del webhook de WhatsApp (`evaluarSilencio`). `null`/ausente = sin dato: no suena ni afirma calma. */
+  silencio?: ResultadoSilencio | null;
 }
 
-export type IdAlertaExtra = 'cron_sin_latido' | 'cron_estado_no_ok' | 'crons_ilegibles' | 'ia_credito_agotado' | 'ia_sin_registro' | 'ia_respaldo_alto';
+export type IdAlertaExtra = 'cron_sin_latido' | 'cron_estado_no_ok' | 'crons_ilegibles' | 'ia_credito_agotado' | 'ia_sin_registro' | 'ia_respaldo_alto' | 'webhook_en_silencio';
 
 export interface AlertaExtra {
   id: IdAlertaExtra;
@@ -135,6 +138,14 @@ export function alertasExtra(e: EntradaAlertasExtra): AlertaExtra[] {
       texto: `${Math.round((ia.respaldo.tasa ?? 0) * 1000) / 10} % de las ${ia.respaldo.muestra} llamadas de IA de la última hora corrieron en el modelo de respaldo: el primario puede estar fallando.`,
     });
   }
+  // F19: silencio del canal. UNA alerta agrupada (no una por evento ni por flota), y solo con viajes abiertos y en horas hábiles.
+  if (e.silencio?.hayAlerta) {
+    const horas = e.silencio.horasHabilesSinEvento;
+    out.push({
+      id: 'webhook_en_silencio', tipo: 'atencion', href: HREF_SALUD, items: ['webhook_whatsapp'],
+      texto: `Ningún evento del webhook de WhatsApp ${horas === null ? 'registrado' : `en ${Math.floor(horas)} horas hábiles`} con ${plural(e.silencio.viajesAbiertos ?? 0, 'viaje abierto', 'viajes abiertos')}: el canal puede estar caído o los choferes no están escribiendo.`,
+    });
+  }
   return out;
 }
 
@@ -164,5 +175,10 @@ export async function leerEntradaAlertasExtra(opts: { sondear?: boolean } = {}):
     credencial = { abierto: c.abierto, clase: c.clase };
     if (opts.sondear) sonda = await m.sondearLlave();
   } catch { /* sin dato: la alerta de crédito no suena, y tampoco afirma que todo esté bien */ }
-  return { latidos, credencial, sonda };
+  let silencio: ResultadoSilencio | null = null;
+  try {
+    const m = await import('@/lib/likida/fuentes/leer');
+    silencio = await m.leerSilencioWebhook();
+  } catch { /* sin dato: el silencio no suena y tampoco afirma calma */ }
+  return { latidos, credencial, sonda, silencio };
 }

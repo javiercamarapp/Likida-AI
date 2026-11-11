@@ -58,3 +58,28 @@ describe('alertasExtra', () => {
     for (const x of a) expect(x).toMatchObject({ tipo: 'atencion', texto: expect.any(String), href: expect.stringMatching(/^\/admin\//) });
   });
 });
+
+describe('alertasExtra · silencio del webhook (F19)', () => {
+  const silencio = (o: Partial<import('@/lib/likida/fuentes/silencio').ResultadoSilencio>) => ({
+    estado: 'silencio' as const, hayAlerta: true, viajesAbiertos: 4, horasHabilesSinEvento: 11.4, umbralHoras: 10, ...o,
+  });
+  it('con viajes abiertos y silencio: UNA alerta agrupada que suma 1 a la campana', () => {
+    const a = alertasExtra({ latidos: { gps: ok() }, silencio: silencio({}) });
+    expect(a).toHaveLength(1);
+    expect(a[0]).toMatchObject({ id: 'webhook_en_silencio', tipo: 'atencion', href: '/admin/salud-sistema' });
+    expect(a[0].texto).toMatch(/11 horas hábiles/);
+    expect(a[0].texto).toMatch(/4 viajes abiertos/);
+  });
+  it('cero eventos registrados nunca: sigue siendo UNA alerta y lo dice', () => {
+    const a = alertasExtra({ latidos: { gps: ok() }, silencio: silencio({ horasHabilesSinEvento: null, viajesAbiertos: 1 }) });
+    expect(a).toHaveLength(1);
+    expect(a[0].texto).toMatch(/1 viaje abierto/);
+  });
+  it('sin viajes abiertos, sin dato o sin la entrada: no hay alerta', () => {
+    expect(alertasExtra({ latidos: { gps: ok() }, silencio: silencio({ estado: 'sin_viajes', hayAlerta: false, viajesAbiertos: 0 }) })).toEqual([]);
+    expect(alertasExtra({ latidos: { gps: ok() }, silencio: silencio({ estado: 'sin_dato', hayAlerta: false, viajesAbiertos: null }) })).toEqual([]);
+    expect(alertasExtra({ latidos: { gps: ok() }, silencio: null })).toEqual([]);
+    expect(alertasExtra({ latidos: { gps: ok() } })).toEqual([]);
+  });
+});
+

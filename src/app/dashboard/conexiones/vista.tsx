@@ -38,8 +38,10 @@ function Marca({ id }: { id: Conector['id'] }) {
  * en palabras de persona; las decisiones de negocio (el candado del
  * timbrado) se declaran como decisiones, no como fallas.
  */
-export function VistaConexiones({ conectores, credenciales, integraciones, gps }: {
+export function VistaConexiones({ conectores, estado, credenciales, integraciones, gps }: {
   conectores: Conector[];
+  /** La sección «Estado» por fuente de datos (F19, `SeccionEstado`), ya armada en el servidor. Va primero: lo que está atrasado se ve antes que el catálogo. */
+  estado?: React.ReactNode;
   /** La sección "Credenciales de tus sistemas", ya armada en el servidor
    *  (`SeccionCredenciales` + acciones). Entra como ReactNode y no como
    *  datos: esta vista no debe importar el motor, que trae `supabaseAdmin`
@@ -54,6 +56,8 @@ export function VistaConexiones({ conectores, credenciales, integraciones, gps }
 }) {
   return (
     <MarcoPagina titulo="Conexiones" apoyo="Lo que tu flota tiene conectado y lo que le falta; cada estado sale de una medición, no de un semáforo de adorno.">
+      {estado}
+
       <div data-tour="conexiones.estado">
         <Tarjeta titulo="Estado de las conexiones">
           <ul className="rv-cx__lista">
