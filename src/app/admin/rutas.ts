@@ -84,8 +84,6 @@ export const CONTROL: Item[] = [
   ] },
   { href: '/admin/equipo', nombre: 'Equipo', Icono: Users, pestanas: [
     { href: '/admin/equipo', nombre: 'Personas' },
-    // La URL no cambia (enlaces entrantes y correos ya enviados); solo cambia dónde cuelga.
-    { href: '/admin/usuarios/nuevo', nombre: 'Nuevo acceso' },
   ] },
 ];
 
