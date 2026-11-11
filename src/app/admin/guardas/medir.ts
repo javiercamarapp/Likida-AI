@@ -37,7 +37,7 @@ export function barrasDePestanas(src: string): number {
 // ── admin_encabezados_contrato ─────────────────────────────────────────────
 export const barraPagina = (src: string): number => cuenta(sinComentarios(src), /<BarraPagina(?=[\s/>])/g);
 export const h1Propio = (src: string): number => cuenta(sinComentarios(src), /<h1(?=[\s/>])/g);
-export const marcosDePagina = (src: string): number => cuenta(sinComentarios(src), /<MarcoPagina(?=[\s/>])/g);
+export const marcosDePagina = (src: string): number => cuenta(sinComentarios(src), /<(?:MarcoPagina|Esqueleto(?:Portada|TablaMaestra|PanelCifras|Ficha|Configuracion))(?=[\s/>])/g);
 /** `apoyo` escrito como literal con más de 140 caracteres (los dinámicos no se pueden medir aquí). */
 export function apoyosLargos(src: string): number {
   let n = 0;

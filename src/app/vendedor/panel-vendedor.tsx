@@ -11,8 +11,8 @@ import {
 } from '@/lib/likida/vendedores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { anotarAccionVendedor, type AccionRegistrada } from '@/lib/likida/vendedores_registro';
-import { MarcoPagina, Tarjeta, Icono, Aviso } from '../ui-v2/componentes';
-import { TiraCifras } from '../ui-v2/graficas';
+import { Tarjeta, Icono, Aviso } from '../ui-v2/componentes';
+import { EsqueletoPortada } from '../ui-v2/esqueletos';
 import { TableroProspectos, type ColumnaTablero, type ResultadoAccion } from '../admin/vendedores/tablero';
 
 const RUTA = '/vendedor';
@@ -176,9 +176,16 @@ export async function PanelVendedor({
   const vivos = ESTADOS_VIVOS.reduce((sum, e) => sum + totales[e], 0);
   const comision = reglaComision();
 
+  const cifras = prospectos === null ? undefined : [
+    { etiqueta: esVendedor ? 'Mi cartera viva' : 'Cartera viva (todos)', valor: vivos, formato: 'entero' as const, icono: <Icono icono={Activity} /> },
+    { etiqueta: esVendedor ? 'Mis ganados' : 'Ganados (todos)', valor: totales.won, formato: 'entero' as const, icono: <Icono icono={CheckCircle2} /> },
+    { etiqueta: 'Propuesta o piloto', valor: totales.proposal + totales.pilot, formato: 'entero' as const, icono: <Icono icono={Inbox} /> },
+  ];
+
   return (
-    <MarcoPagina
+    <EsqueletoPortada
       titulo={esVendedor ? 'Mis prospectos' : 'Prospectos (soporte)'}
+      cifras={cifras} etiquetaCifras={esVendedor ? 'Mi cartera' : 'Cartera (todos)'}
     >
       {prospectos === null ? (
         <Aviso tono="error">
@@ -187,12 +194,6 @@ export async function PanelVendedor({
         </Aviso>
       ) : (
         <>
-          <TiraCifras etiqueta={esVendedor ? 'Mi cartera' : 'Cartera (todos)'} items={[
-            { etiqueta: esVendedor ? 'Mi cartera viva' : 'Cartera viva (todos)', valor: vivos, formato: 'entero', icono: <Icono icono={Activity} /> },
-            { etiqueta: esVendedor ? 'Mis ganados' : 'Ganados (todos)', valor: totales.won, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
-            { etiqueta: 'Propuesta o piloto', valor: totales.proposal + totales.pilot, formato: 'entero', icono: <Icono icono={Inbox} /> },
-          ]} />
-
           {/* La regla de comisión, con su aclaración pegada: 50/20 es la regla pactada; el dinero sale de cobros reales, hoy $0. */}
           <Tarjeta titulo="Tu comisión">
             <div className="vnd-comision">
@@ -227,6 +228,6 @@ export async function PanelVendedor({
           </Tarjeta>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }

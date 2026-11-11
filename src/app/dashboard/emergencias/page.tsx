@@ -3,7 +3,8 @@ import { revalidatePath } from 'next/cache';
 import { ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
 import { fechaMx, hoyMx, numero } from '@/lib/formato';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -20,7 +21,7 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
 import type { Metadata } from 'next';
 import {
-  CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoVacio, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, type ResultadoAccion,
+  CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoVacio, FormaConAviso, StatusChip, Tarjeta, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import { AccionFila } from './accion-fila';
 import './emergencias.css';
@@ -221,8 +222,16 @@ export default async function PaginaEmergencias({
   const polizaVencida = poliza?.vigenciaHasta ? poliza.vigenciaHasta < hoyMx() : false;
   const sinConfirmar = proveedores.filter((p) => !p.verificadoEn).length;
 
+  const cifras: PropsCifra[] | undefined = leyoOk ? [
+    { etiqueta: t('emg.cifra.poliza'), valor: poliza ? (polizaVencida ? t('emg.poliza.vencida') : t('emg.poliza.vigente')) : t('emg.poliza.sin'),
+      tono: !poliza || polizaVencida ? 'warn' : undefined, info: 'emergencias.poliza' },
+    { etiqueta: t('emg.cifra.proveedores'), valor: numero(proveedores.length, idioma), info: 'emergencias.proveedores' },
+    { etiqueta: t('emg.cifra.sinconfirmar'), valor: numero(sinConfirmar, idioma), tono: sinConfirmar > 0 ? 'warn' : undefined, info: 'emergencias.sin_confirmar' },
+    { etiqueta: t('emg.cifra.contactos'), valor: numero(contactos.length, idioma), info: 'emergencias.contactos' },
+  ] : undefined;
+
   return (
-    <MarcoPagina titulo={t('emg.titulo')} apoyo={t('emg.apoyo')}>
+    <EsqueletoTablaMaestra titulo={t('emg.titulo')} apoyo={t('emg.apoyo')} cifras={cifras} selloCifras={selloHoy('Directorio de emergencia')}>
       {!leyoOk && (
         <EstadoVacio pantalla contenido icono={ShieldCheck} titulo={t('emg.error.titulo')}>
           {t('emg.error')}
@@ -231,14 +240,6 @@ export default async function PaginaEmergencias({
 
       {leyoOk && (
         <>
-          <TiraCifras sello={selloHoy('Directorio de emergencia')}>
-            <Cifra etiqueta={t('emg.cifra.poliza')} valor={poliza ? (polizaVencida ? t('emg.poliza.vencida') : t('emg.poliza.vigente')) : t('emg.poliza.sin')}
-              tono={!poliza || polizaVencida ? 'warn' : undefined} info="emergencias.poliza" />
-            <Cifra etiqueta={t('emg.cifra.proveedores')} valor={numero(proveedores.length, idioma)} info="emergencias.proveedores" />
-            <Cifra etiqueta={t('emg.cifra.sinconfirmar')} valor={numero(sinConfirmar, idioma)} tono={sinConfirmar > 0 ? 'warn' : undefined} info="emergencias.sin_confirmar" />
-            <Cifra etiqueta={t('emg.cifra.contactos')} valor={numero(contactos.length, idioma)} info="emergencias.contactos" />
-          </TiraCifras>
-
           {/* ── Póliza ──────────────────────────────────────────────────── */}
           <Tarjeta titulo={t('emg.poliza.titulo')} info="emergencias.poliza"
             estado={poliza ? 'ok' : 'vacio'} contenida iconoVacio={ShieldCheck}
@@ -363,6 +364,6 @@ export default async function PaginaEmergencias({
           </Tarjeta>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

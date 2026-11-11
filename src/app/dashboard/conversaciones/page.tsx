@@ -3,12 +3,15 @@ import { MessageCircle, MessagesSquare } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getHilosDeFlota, contarHilosDeFlota, TOPE_HILOS } from '@/lib/likida/conversaciones';
-import { fechaHoraMx } from '@/lib/formato';
+import { fechaHoraMx, numero } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import type { Metadata } from 'next';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { BotonEnlace, EstadoError, EstadoVacio, Icono } from '@/app/ui-v2/componentes';
+import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { sufijoTenant } from '../sufijo';
 import './conversaciones.css';
 import { getT } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
@@ -43,9 +46,9 @@ const RUTA = '/dashboard/conversaciones';
  * hay — se dice, no se insinúa lo contrario.
  */
 export default async function ConversacionesFlotaPage({ searchParams }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; ver?: string }>;
 }) {
-  const { t, tp, idioma } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -65,61 +68,75 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
   const mensajes = hilos.reduce((s, h) => s + h.turns.length, 0);
   const recortado = total !== null && total > hilos.length;
 
-  return (
-    <MarcoPagina titulo={t('conv.titulo')} apoyo={t('conv.apoyo')}>
-      <TiraCifras sello={selloHoy(t('conv.sello'))}>
-        <Cifra
-          icono={<Icono icono={MessageCircle} />}
-          etiqueta={t('conv.hilos')} info="conversaciones.hilos" valor={total} formato="entero"
-          mensaje={total === null ? t('conv.hilos.nocuenta') : undefined}
-        />
-        <Cifra
-          icono={<Icono icono={MessagesSquare} />}
-          etiqueta={t('conv.mensajes.etiqueta', { n: hilos.length })} info="conversaciones.mensajes" valor={mensajes} formato="entero"
-        />
-      </TiraCifras>
+  type Hilo = (typeof hilos)[number];
+  const hrefVer = (tel: string | null) => {
+    const qs = new URLSearchParams(sufijoTenant(sp).replace(/^\?/, ''));
+    if (tel) qs.set('ver', tel); else qs.delete('ver');
+    const q = qs.toString();
+    return `${RUTA}${q ? `?${q}` : ''}`;
+  };
+  // El cajón solo abre un hilo que la lectura del tenant trajo: un `?ver=` ajeno no muestra nada.
+  const verTel = (sp.ver ?? '').trim().slice(0, 40);
+  const seleccion = verTel ? hilos.findIndex((h) => h.telefono === verTel) : -1;
+  const sel = seleccion >= 0 ? hilos[seleccion] : null;
 
-      <Tarjeta titulo={recortado ? t('conv.tarjeta.recientes', { tope: TOPE_HILOS, total: total ?? 0 }) : t('conv.tarjeta.todos')} info="conversaciones.hilos">
-        {errorCarga !== null ? (
-          <EstadoError reintentar>
-            {t('conv.error')}
-          </EstadoError>
-        ) : hilos.length === 0 ? (
-          <EstadoVacio icono={MessageCircle} contenido titulo={t('conv.vacio.titulo')}>
-            {t('conv.vacio')}
-          </EstadoVacio>
-        ) : (
-          <div className="rv-cv__hilos">
-            {hilos.map((h) => (
-              <Disclosure key={h.telefono} variante="tarjeta"
-                titulo={(
-                  <>
-                    {h.operadorNombre ?? h.telefono}
-                    <span className="rv-cv__sub">
-                      {h.operadorNombre ? `${h.telefono} · ` : ''}
-                      {h.viajeFolio ? t('conv.viaje', { folio: h.viajeFolio }) : ''}
-                      {fechaHoraMx(h.actualizadaEn, idioma)}
-                    </span>
-                  </>
-                )}
-                resumen={h.turns.length > 0 ? tp('conv.mensajes', h.turns.length) : t('conv.sinmensajes')}>
-                {h.turns.length > 0 && (
-                  <div className="rv-cv__turnos">
-                    {h.turns.map((turno, i) => (
-                      <div key={i} className="rv-cv__turno" data-rol={turno.role === 'user' ? 'chofer' : 'bot'}>
-                        <div className="rv-cv__burbuja">{turno.content}</div>
-                      </div>
-                    ))}
-                    <p className="rv-cv__nota">
-                      {t('conv.nota')}
-                    </p>
-                  </div>
-                )}
-              </Disclosure>
-            ))}
-          </div>
-        )}
-      </Tarjeta>
-    </MarcoPagina>
+  const cifras: PropsCifra[] = [
+    { icono: <Icono icono={MessageCircle} />, etiqueta: t('conv.hilos'), info: 'conversaciones.hilos', valor: total, formato: 'entero', mensaje: total === null ? t('conv.hilos.nocuenta') : undefined },
+    { icono: <Icono icono={MessagesSquare} />, etiqueta: t('conv.mensajes.etiqueta', { n: hilos.length }), info: 'conversaciones.mensajes', valor: mensajes, formato: 'entero' },
+  ];
+  const columnas: ColumnaTabla<Hilo>[] = [
+    { id: 'chofer', titulo: t('conv.col.chofer'), principal: true, celda: (h) => (<>{h.operadorNombre ?? h.telefono}{h.operadorNombre ? <span className="rv-tl__sub">{h.telefono}</span> : null}</>) },
+    { id: 'viaje', titulo: t('conv.col.viaje'), corta: true, celda: (h) => h.viajeFolio ?? <span className="rv-tl__tenue rv-tl__nada">—</span> },
+    { id: 'mensajes', titulo: t('conv.col.mensajes'), corta: true, alinear: 'der', celda: (h) => (h.turns.length > 0 ? numero(h.turns.length, idioma) : <span className="rv-tl__tenue">{t('conv.sinmensajes')}</span>) },
+    { id: 'actividad', titulo: t('conv.col.actualizada'), corta: true, celda: (h) => <span className="rv-tl__apagado">{fechaHoraMx(h.actualizadaEn, idioma)}</span> },
+    { id: 'accion', titulo: t('conv.vr.ver'), alinear: 'der', tituloOculto: true, celda: (h) => <BotonEnlace variante="ghost" tamano="sm" href={hrefVer(h.telefono)} className="rv-tl__enlace">{t('conv.vr.ver')}</BotonEnlace> },
+  ];
+
+  return (
+    <EsqueletoTablaMaestra
+      titulo={t('conv.titulo')}
+      apoyo={t('conv.apoyo')}
+      cifras={cifras}
+      selloCifras={selloHoy(t('conv.sello'))}
+      pie={errorCarga === null && hilos.length > 0 ? (recortado ? t('conv.tarjeta.recientes', { tope: TOPE_HILOS, total: total ?? 0 }) : t('conv.tarjeta.todos')) : undefined}
+      vistaRapida={sel ? (
+        <CajonVistaRapida
+          titulo={sel.operadorNombre ?? sel.telefono}
+          subtitulo={t('conv.vr.sub', { n: numero(seleccion + 1, idioma), total: numero(hilos.length, idioma) })}
+          hrefCerrar={hrefVer(null)}
+          cifras={[
+            { etiqueta: t('conv.col.mensajes'), valor: numero(sel.turns.length, idioma) },
+            { etiqueta: t('conv.vr.chofer'), valor: numero(sel.turns.filter((x) => x.role === 'user').length, idioma) },
+            { etiqueta: t('conv.vr.bot'), valor: numero(sel.turns.filter((x) => x.role !== 'user').length, idioma) },
+            { etiqueta: t('conv.col.actualizada'), valor: fechaHoraMx(sel.actualizadaEn, idioma) },
+          ]}
+        >
+          {sel.turns.length > 0 && (
+            <div className="rv-cv__turnos">
+              {sel.turns.map((turno, i) => (
+                <div key={i} className="rv-cv__turno" data-rol={turno.role === 'user' ? 'chofer' : 'bot'}>
+                  <div className="rv-cv__burbuja">{turno.content}</div>
+                </div>
+              ))}
+              <p className="rv-cv__nota">
+                {t('conv.nota')}
+              </p>
+            </div>
+          )}
+        </CajonVistaRapida>
+      ) : null}
+    >
+      {errorCarga !== null ? (
+        <EstadoError reintentar>
+          {t('conv.error')}
+        </EstadoError>
+      ) : hilos.length === 0 ? (
+        <EstadoVacio icono={MessageCircle} contenido titulo={t('conv.vacio.titulo')}>
+          {t('conv.vacio')}
+        </EstadoVacio>
+      ) : (
+        <TablaLista<Hilo> etiqueta={t('conv.tabla')} columnas={columnas} filas={hilos} idFila={(h) => h.telefono} base={RUTA} params={{}} />
+      )}
+    </EsqueletoTablaMaestra>
   );
 }

@@ -1,6 +1,7 @@
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { fechaHoraMx } from '@/lib/formato';
-import { Disclosure, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Disclosure, EstadoVacio, type TonoChip } from '@/app/ui-v2/componentes';
+import type { SeccionConfig } from '@/app/ui-v2/esqueletos';
 import './reglas.css';
 import type { ReglaEnPantalla } from '@/lib/likida/reglas/repo';
 import { BotonDeRegla, BorrarRegla, FormaFrecuencia, type AccionForma } from './forma';
@@ -72,25 +73,21 @@ function HistorialAvisos({ regla, tr = trEs }: { regla: ReglaEnPantalla; tr?: Tr
   );
 }
 
-function Ficha({ regla, acciones, tr = trEs }: { regla: ReglaEnPantalla; acciones: AccionesRegla; tr?: Tr }) {
+/** Una regla = una SECCIÓN de configuración (Rovaq `/settings`): título = la frase, chip de estado, la cita y la evidencia como contenido
+ *  y las acciones de ESTA regla en el pie. Nada se inventa: una regla que nunca sonó dice «todavía no ha sonado», no «0 avisos». */
+function seccionDeRegla(regla: ReglaEnPantalla, acciones: AccionesRegla, tr: Tr): SeccionConfig {
   const pendiente = regla.estado === 'pendiente';
-  return (
-    <Tarjeta titulo={regla.frase} acciones={
-      <StatusChip tono={pendiente ? 'warn' : regla.estado === 'activa' ? 'ok' : 'neutral'}>
-        {pendiente ? tr('reglas.vista.esperandoTuConfirmacion') : regla.estado === 'activa' ? tr('reglas.vista.vigilando') : tr('reglas.vista.pausada')}
-      </StatusChip>
-    }>
+  const tono: TonoChip = pendiente ? 'warn' : regla.estado === 'activa' ? 'ok' : 'neutral';
+  return {
+    id: `regla-${regla.id}`,
+    titulo: regla.frase,
+    estado: { tono, texto: pendiente ? tr('reglas.vista.esperandoTuConfirmacion') : regla.estado === 'activa' ? tr('reglas.vista.vigilando') : tr('reglas.vista.pausada') },
+    contenido: (
       <div className="rv-reglas__ficha">
         {/* La cita de lo que la persona escribió. Está aquí para que pueda juzgar la traducción — no porque el sistema la vuelva a leer. */}
-        <p className="rv-reglas__cita">
-          {tr('reglas.vista.tuEscribiste', { texto: regla.textoOriginal })}
-        </p>
-        <p className="rv-reglas__tenue">
-          {regla.titulo} · {canal(tr)[regla.canal] ?? regla.canal}
-        </p>
-
+        <p className="rv-reglas__cita">{tr('reglas.vista.tuEscribiste', { texto: regla.textoOriginal })}</p>
+        <p className="rv-reglas__tenue">{regla.titulo} · {canal(tr)[regla.canal] ?? regla.canal}</p>
         {!pendiente && <Evidencias tr={tr} regla={regla} />}
-
         {!pendiente && (
           <Disclosure variante="linea" titulo={tr('reglas.vista.historialDeAvisosY')}>
             <div className="rv-reglas__avisos">
@@ -100,57 +97,43 @@ function Ficha({ regla, acciones, tr = trEs }: { regla: ReglaEnPantalla; accione
             </div>
           </Disclosure>
         )}
-
-        <div className="rv-reglas__botones">
-          {pendiente ? (
-            <>
-              <BotonDeRegla accion={acciones.confirmar} id={regla.id}
-                etiqueta={tr('reglas.vista.siVigilalo')} ocupado="Encendiendo…" tono="marca" />
-              <BorrarRegla accion={acciones.borrar} id={regla.id} />
-            </>
-          ) : regla.estado === 'activa' ? (
-            <>
-              <BotonDeRegla accion={acciones.pausar} id={regla.id} etiqueta={tr('reglas.vista.pausar')} ocupado="Pausando…" />
-              <BorrarRegla accion={acciones.borrar} id={regla.id} />
-            </>
-          ) : (
-            <>
-              <BotonDeRegla accion={acciones.reanudar} id={regla.id} etiqueta={tr('reglas.vista.reanudar')} ocupado="Reanudando…" />
-              <BorrarRegla accion={acciones.borrar} id={regla.id} />
-            </>
-          )}
-        </div>
       </div>
-    </Tarjeta>
-  );
+    ),
+    pie: pendiente ? (
+      <>
+        <BorrarRegla accion={acciones.borrar} id={regla.id} />
+        <BotonDeRegla accion={acciones.confirmar} id={regla.id} etiqueta={tr('reglas.vista.siVigilalo')} ocupado="Encendiendo…" tono="marca" />
+      </>
+    ) : regla.estado === 'activa' ? (
+      <>
+        <BorrarRegla accion={acciones.borrar} id={regla.id} />
+        <BotonDeRegla accion={acciones.pausar} id={regla.id} etiqueta={tr('reglas.vista.pausar')} ocupado="Pausando…" />
+      </>
+    ) : (
+      <>
+        <BorrarRegla accion={acciones.borrar} id={regla.id} />
+        <BotonDeRegla accion={acciones.reanudar} id={regla.id} etiqueta={tr('reglas.vista.reanudar')} ocupado="Reanudando…" />
+      </>
+    ),
+  };
 }
 
-export function ListaReglas({ reglas, acciones, tr = trEs }: {
-  reglas: readonly ReglaEnPantalla[];
-  acciones: AccionesRegla; tr?: Tr;
-}) {
+/** Las secciones de las reglas: primero las que esperan confirmación (el aviso de tono cálido las distingue), luego las vigentes y pausadas. */
+export function seccionesDeReglas(reglas: readonly ReglaEnPantalla[], acciones: AccionesRegla, tr: Tr = trEs): SeccionConfig[] {
   const pendientes = reglas.filter((r) => r.estado === 'pendiente');
   const resto = reglas.filter((r) => r.estado !== 'pendiente');
-
-  return (
-    <>
-      {pendientes.length > 0 && (
-        <>
-          <h2 className="rv-reglas__seccion" data-tono="warn">
-            {tr('reglas.vista.esperandoTuConfirmacionTodav')}
-          </h2>
-          {pendientes.map((r) => <Ficha tr={tr} key={r.id} regla={r} acciones={acciones} />)}
-        </>
-      )}
-
-      <h2 className="rv-reglas__seccion">{tr('reglas.vista.tusReglas')}</h2>
-      {resto.length === 0 ? (
+  const out: SeccionConfig[] = pendientes.map((r) => seccionDeRegla(r, acciones, tr));
+  if (resto.length === 0) {
+    out.push({
+      id: 'reglas-vacio', titulo: tr('reglas.vista.tusReglas'),
+      contenido: (
         <EstadoVacio titulo={tr('reglas.vista.sinReglasConfirmadas')} contenido>
           {tr('reglas.vista.escribeArribaDeQue')}
         </EstadoVacio>
-      ) : (
-        resto.map((r) => <Ficha tr={tr} key={r.id} regla={r} acciones={acciones} />)
-      )}
-    </>
-  );
+      ),
+    });
+  } else {
+    out.push(...resto.map((r) => seccionDeRegla(r, acciones, tr)));
+  }
+  return out;
 }

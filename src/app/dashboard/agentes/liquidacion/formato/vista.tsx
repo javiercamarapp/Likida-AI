@@ -4,10 +4,11 @@ import { ArrowLeft, Upload, Trash2, Save } from 'lucide-react';
 import type { ConfigFormatoFlota, TelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { ETIQUETA_CAMPO_RENGLON, ETIQUETA_CAMPO_ENCABEZADO } from '@/lib/likida/liquidacion_externa/formato_flota';
 import {
-  AvisoCompacto, Boton, BotonEnlace, Casilla, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Icono, MarcoPagina, Tarjeta,
+  AvisoCompacto, Boton, BotonEnlace, Casilla, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Icono, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import '../liquidacion.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { MarcoConfigAgente } from '@/app/dashboard/agentes/marco-config';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -35,7 +36,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
   const { t: tx } = tr;
   const f = config?.formato ?? null;
   return (
-    <MarcoPagina titulo={tx('rest.formato_de_las_liquidaciones')} apoyo={tx('rest.tu_formato_de_liquidacion_likida_toma')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}>
+    <MarcoConfigAgente titulo={tx('rest.formato_de_las_liquidaciones')} apoyo={tx('rest.tu_formato_de_liquidacion_likida_toma')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}>
       {aviso && <AvisoCompacto tono="info" resumen={aviso} />}
       {error && <AvisoCompacto tono="error" resumen={error} />}
 
@@ -123,6 +124,6 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
           </form>
         </Tarjeta>
       )}
-    </MarcoPagina>
+    </MarcoConfigAgente>
   );
 }

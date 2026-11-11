@@ -11,7 +11,8 @@ import {
 import { AGENTES_FINANCIEROS } from '@/lib/likida/agentes/finanzas';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { Aviso, EstadoVacio, MarcoPagina, Tarjeta } from '../../../../ui-v2/componentes';
+import { Aviso, EstadoVacio, Tarjeta } from '../../../../ui-v2/componentes';
+import { EsqueletoFicha } from '../../../../ui-v2/esqueletos';
 import { type ResultadoAccion } from '../../../ui/forma';
 import { FormularioInsumo, ListaInsumos } from './zona-insumos';
 import { getT } from '@/lib/i18n/servidor';
@@ -96,11 +97,15 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
   }));
 
   return (
-    <MarcoPagina titulo={t('agentes_insumos.bandeja_de_contexto', { agente: agente.nombre })}>
+    <EsqueletoFicha
+      titulo={t('agentes_insumos.bandeja_de_contexto', { agente: agente.nombre })}
+      volver={{ href: '/admin/agentes', etiqueta: t('agentes_insumos.volver_a_agentes') }}
+      avisos={
       <Aviso tono="info">{t('agentes_insumos.id', { rotuloDepartamento })}{' '}<code className="cifra-mono">{agente.id}</code>{' '}{t('agentes_insumos.entre_mas_le_das_mas_entiende')}{' '}{LEE_INSUMOS
           ? <>{t('agentes_insumos.todo_lo_que_sueltes_aqui_se')}{' '}{s.nombre ?? 'superadmin'}.</>
           : <>{rico(t('agentes_insumos.strong_este_agente_aun_no_lee'), { strong: (c) => <strong>{c}</strong> })}{' '}{s.nombre ?? 'superadmin'}.</>}
-      </Aviso>
+      </Aviso>}
+    >
 
       <Tarjeta titulo={t('agentes_insumos.soltar_un_insumo_nuevo')}>
         <p className="m-0 mb-3 text-xs text-muted">{t('agentes_insumos.este_agente_acepta', { tiposAceptados: tiposAceptados.join(', ') })}</p>
@@ -118,7 +123,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
           <ListaInsumos insumos={insumosConUrl} />
         )}
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }
 

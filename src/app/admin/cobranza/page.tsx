@@ -48,7 +48,7 @@ async function leer<T>(nombre: string, f: () => Promise<T>): Promise<{ dato: T |
 }
 
 
-export default async function CobranzaPage({ searchParams }: { searchParams?: Promise<{ ver?: string }> } = {}) {
+export default async function CobranzaPage({ searchParams }: { searchParams?: Promise<{ ver?: string }> }) {
   const { t } = await getT('admin_dinero');
   // La puerta de la PÁGINA, no solo la del layout: en Next un layout no se vuelve a ejecutar si la petición RSC declara que el cliente
   // ya lo tiene, así que lo único que protege estos datos de TODAS las flotas (service role) es esta llamada.

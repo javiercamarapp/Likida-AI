@@ -4,9 +4,10 @@ import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
 import { textoParaSistemaDeLaFlota } from '@/lib/likida/convenios/importador';
 import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
 import { FormaConvenio, FormaCorregirConvenio, FormaImportarConvenios, type AccionConvenio, type CatalogosFormaConvenio } from './formas';
-import { MarcoPagina, Aviso, AvisoCompacto, Boton, Disclosure, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, Boton, Disclosure, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import './convenios.css';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { FileText } from 'lucide-react';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -72,31 +73,35 @@ export function VistaConvenios(p: PropsVistaConvenios) {
   // La base sin la 0656 no trae versiones: la edición se apaga y se dice (importar sigue funcionando).
   const edicionDisponible = puedeEditarEnPantalla && lista.every((c) => c.version !== null);
   const descarga = (tipo: string) => `/api/export/convenios?tipo=${tipo}${p.sufijo.startsWith('?') ? `&${p.sufijo.slice(1)}` : ''}`;
+  const sinInstrucciones = lista.filter((c) => c.activo && c.instrucciones.length === 0).length;
+  const cifras: PropsCifra[] | undefined = p.estado === 'ok' ? [
+    { etiqueta: t('op.convenios_activos'), valor: numero(lista.filter((c) => c.activo).length), info: 'convenios.activos' },
+    { etiqueta: t('op.sin_instrucciones'), valor: numero(sinInstrucciones), tono: sinInstrucciones > 0 ? 'warn' : undefined, info: 'convenios.sin_instrucciones' },
+  ] : undefined;
   return (
-    <MarcoPagina titulo={t('op.clientes')} apoyo={p.verDinero
+    <EsqueletoTablaMaestra
+      titulo={t('op.clientes')}
+      apoyo={p.verDinero
         ? t('op.por_cliente_puntos_a_a_b')
-        : t('op.por_cliente_puntos_a_a_b_2')}>
-      <AvisoCompacto tono="info"
-        resumen={t('op.todo_nace_del_convenio_el_punto')}
-        mas={(
-          <p>{t('op.las_instrucciones_cubren_por_donde_entrar')}{p.verDinero ? t('op.mas_la_tarifa_y_los_requisitos') : ''}{t('op.al_acercarse_a_la_planta_se')}</p>
-        )} />
-
-      {p.estado === 'ok' && (
-        <TiraCifras sello={selloHoy('Convenios')}>
-          <Cifra etiqueta={t('op.convenios_activos')} valor={numero(lista.filter((c) => c.activo).length)} info="convenios.activos" />
-          <Cifra etiqueta={t('op.sin_instrucciones')} valor={numero(lista.filter((c) => c.activo && c.instrucciones.length === 0).length)}
-            tono={lista.some((c) => c.activo && c.instrucciones.length === 0) ? 'warn' : undefined} info="convenios.sin_instrucciones" />
-        </TiraCifras>
+        : t('op.por_cliente_puntos_a_a_b_2')}
+      cifras={cifras}
+      selloCifras={selloHoy('Convenios')}
+      avisos={(
+        <>
+          <AvisoCompacto tono="info"
+            resumen={t('op.todo_nace_del_convenio_el_punto')}
+            mas={(
+              <p>{t('op.las_instrucciones_cubren_por_donde_entrar')}{p.verDinero ? t('op.mas_la_tarifa_y_los_requisitos') : ''}{t('op.al_acercarse_a_la_planta_se')}</p>
+            )} />
+          {p.estado === 'no_disponible' && (
+            <Aviso tono="warn">{t('op.los_convenios_todavia_no_estan_disponibles')}</Aviso>
+          )}
+          {p.estado === 'error' && (
+            <Aviso tono="error">{t('op.no_se_pudieron_leer_los_convenios')}</Aviso>
+          )}
+        </>
       )}
-
-      {p.estado === 'no_disponible' && (
-        <Aviso tono="warn">{t('op.los_convenios_todavia_no_estan_disponibles')}</Aviso>
-      )}
-      {p.estado === 'error' && (
-        <Aviso tono="error">{t('op.no_se_pudieron_leer_los_convenios')}</Aviso>
-      )}
-
+    >
       {p.estado === 'ok' && (
         <Tarjeta titulo={t('op.convenios_registrados')} info="convenios.registrados"
           acciones={p.puedeExportar ? (
@@ -220,6 +225,6 @@ export function VistaConvenios(p: PropsVistaConvenios) {
         <p className="rv-cv__pie">{t('op.solo_el_dueno_de_la_flota')}</p>
       )}
       <p className="rv-cv__pie">{rico(t('op.las_instrucciones_que_ya_se_le'), { e0: (c) => <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="rv-cv__enlace">{c}</Link> })}</p>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

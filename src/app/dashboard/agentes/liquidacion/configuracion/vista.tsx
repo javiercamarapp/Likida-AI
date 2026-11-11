@@ -5,9 +5,10 @@ import '../liquidacion.css';
 import type { ConfigCorreo, CanalEntrega, Revisor } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { hoyMx } from '@/lib/formato';
 import {
-  AvisoCompacto, Boton, BotonEnlace, Casilla, CampoFecha, CampoSelect, CampoTexto, CampoTextarea, Fieldset, Icono, MarcoPagina, Tarjeta,
+  AvisoCompacto, Boton, BotonEnlace, Casilla, CampoFecha, CampoSelect, CampoTexto, CampoTextarea, Fieldset, Icono, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { MarcoConfigAgente } from '@/app/dashboard/agentes/marco-config';
 
 type Accion = (fd: FormData) => Promise<void>;
 export interface AccionesConfiguracion { guardar: Accion }
@@ -195,7 +196,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
   const off = !puedeAdministrar || !disponible;
   const renombres = (Array.isArray(config.renombres) ? config.renombres : []).filter(esRenombre);
   return (
-    <MarcoPagina titulo={tx('rest.configuracion_del_desglose')} apoyo={tx('rest.como_se_entrega_el_desglose_de')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}>
+    <MarcoConfigAgente titulo={tx('rest.configuracion_del_desglose')} apoyo={tx('rest.como_se_entrega_el_desglose_de')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}>
       {aviso && <AvisoCompacto tono="info" resumen={aviso} />}
       {error && <AvisoCompacto tono="error" resumen={error} />}
 
@@ -284,6 +285,6 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
           </div>
         )}
       </form>
-    </MarcoPagina>
+    </MarcoConfigAgente>
   );
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { Aviso, Boton, CampoTexto, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
@@ -100,8 +100,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   ];
 
   return (
-    <EsqueletoTablaMaestra
-      titulo={TITULO}
+    <PantallaTecho
       etiquetaCifras={t('techo_ia.flotas')}
       cifras={cifras}
       avisos={(
@@ -137,12 +136,12 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
           vacio={{ titulo: t('techo_ia.sin_flotas'), texto: t('techo_ia.todavia_no_hay_flotas') }}
         />
       </Tarjeta>
-    </EsqueletoTablaMaestra>
+    </PantallaTecho>
   );
 }
 
-function PantallaTecho({ children }: { children: ReactNode }) {
-  return <EsqueletoTablaMaestra titulo={TITULO}>{children}</EsqueletoTablaMaestra>;
+function PantallaTecho({ children, ...resto }: { children: ReactNode } & Omit<ComponentProps<typeof EsqueletoTablaMaestra>, 'titulo' | 'children'>) {
+  return <EsqueletoTablaMaestra titulo={TITULO} {...resto}>{children}</EsqueletoTablaMaestra>;
 }
 
 export async function generateMetadata(): Promise<Metadata> {

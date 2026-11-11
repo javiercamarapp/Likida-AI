@@ -1,5 +1,6 @@
 import { Clock } from 'lucide-react';
-import { Aviso, BotonEnlace, Chip, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BotonEnlace, Chip, EstadoVacio, MarcoPagina } from '@/app/ui-v2/componentes';
+import './proximamente.css';
 
 /** Lo que muestra la pantalla «Próximamente» de un módulo: texto fijo, jamás datos de la flota. */
 export interface ContenidoProximamente {
@@ -22,19 +23,16 @@ export interface ContenidoProximamente {
  */
 export function Proximamente({ contenido, hrefResumen }: { contenido: ContenidoProximamente; hrefResumen: string }) {
   return (
-    <MarcoPagina area="Próximamente" titulo={contenido.nombre} idTitulo="proximamente-titulo" ancho="lectura"
+    <MarcoPagina area="Próximamente" titulo={contenido.nombre} idTitulo="proximamente-titulo" apoyo={contenido.queHara}
       acciones={<Chip><Clock width={12} height={12} strokeWidth={2} aria-hidden="true" /> Próximamente</Chip>}>
-      <p className="text-[14px] text-[var(--muted)]">{contenido.queHara}</p>
-      <section className="rv-tarjeta">
-        <TituloRecuadro info="proximamente.que_hara">Qué hará por tu operación</TituloRecuadro>
-        <ul className="space-y-1.5 text-[14px] list-disc pl-5">
+      {/* Vacío de página (Rovaq): borde sólido de 12, icono, título, qué hará (lista corta) y UNA acción. */}
+      <EstadoVacio pantalla icono={Clock} titulo="Qué hará por tu operación"
+        accion={<BotonEnlace href={hrefResumen} variante="secondary" tamano="sm">Volver al Resumen</BotonEnlace>}>
+        <ul className="rv-prox__puntos">
           {contenido.puntos.map((p) => <li key={p}>{p}</li>)}
         </ul>
-      </section>
-      <Aviso tono="info">Todavía no está activo en tu cuenta: no muestra datos ni envía mensajes. Te avisaremos cuando esté listo.</Aviso>
-      <div>
-        <BotonEnlace href={hrefResumen}>Volver al Resumen</BotonEnlace>
-      </div>
+        <span className="rv-prox__nota">Todavía no está activo en tu cuenta: no muestra datos ni envía mensajes. Te avisaremos cuando esté listo.</span>
+      </EstadoVacio>
     </MarcoPagina>
   );
 }

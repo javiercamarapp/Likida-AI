@@ -3,9 +3,14 @@ import { datosParaProveedor } from '@/lib/i18n/servidor';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import {
-  CamposSistema, CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoError, EstadoVacio, Fieldset, FormaConAviso, Icono, MarcoPagina, StatusChip, Tarjeta,
-  type AccionDeForma, type ResultadoAccion, type TonoEstado,
+  Aviso, BotonEnlace, CamposSistema, CampoFecha, CampoSelect, CampoTexto, EstadoError, Fieldset, FormaConAviso, Icono, StatusChip, TablaBase,
+  type AccionDeForma, type ColumnaBase, type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra, CajonVistaRapida } from '@/app/ui-v2/esqueletos';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { CajonAlta } from '../clientes/forma';
+import { sufijoTenant } from '../sufijo';
+import { urlRegistro } from '../paginar-registro';
 import './cotizaciones.css';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -53,7 +58,7 @@ const RUTA = '/dashboard/cotizaciones';
 export default async function PaginaCotizaciones({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; ver?: string; nuevo?: string }>;
 }) {
   const { t: tr } = await getT('dinero');
   const sp = await searchParams;
@@ -180,140 +185,200 @@ export default async function PaginaCotizaciones({
     ...(panel?.clientes ?? []).map((x) => ({ valor: x.id, texto: x.nombre })),
   ];
 
+  const sufijo = sufijoTenant(sp);
+  const hrefNuevo = (que: 'cotizacion' | 'costos') => urlRegistro(RUTA, sufijo, { nuevo: que });
+  const hrefSinNuevo = urlRegistro(RUTA, sufijo, { nuevo: null });
+  const hrefVer = (id: string) => urlRegistro(RUTA, sufijo, { ver: id });
+  const hrefSinVer = urlRegistro(RUTA, sufijo, { ver: null });
+  const cot = panel?.cotizaciones ?? [];
+  const elegida = sp.ver ? cot.find((q) => q.id === sp.ver) : undefined;
+
+  // Cifras solo de lo que se puede afirmar: la ganancia exige precio Y costo completo (`gananciaReal` devuelve null si falta uno).
+  const ganancias = cot.map((q) => gananciaReal(q.precio, q.costoEstimado));
+  const dejan = ganancias.filter((g) => g !== null && g.pesos >= 0).length;
+  const pierden = ganancias.filter((g) => g !== null && g.pesos < 0).length;
+  const sinCalcular = ganancias.filter((g) => g === null).length;
+  const cifras: PropsCifra[] | undefined = panel && cot.length > 0 ? [
+    { etiqueta: tr('cotizaciones.page.k.total'), valor: cot.length, formato: 'entero', nota: tr('cotizaciones.page.k.total.nota') },
+    { etiqueta: tr('cotizaciones.page.k.vivas'), valor: cot.filter((q) => q.estado === 'borrador' || q.estado === 'enviada').length, formato: 'entero', nota: tr('cotizaciones.page.k.vivas.nota') },
+    { etiqueta: tr('cotizaciones.page.k.dejan'), valor: dejan, formato: 'entero', nota: sinCalcular > 0 ? tr('cotizaciones.page.k.sincalcular', { n: numero(sinCalcular) }) : tr('cotizaciones.page.k.dejan.nota') },
+    { etiqueta: tr('cotizaciones.page.k.pierden'), valor: pierden, formato: 'entero', nota: tr('cotizaciones.page.k.pierden.nota'), ...(pierden > 0 ? { tono: 'bad' as const } : {}) },
+  ] : undefined;
+
+  const columnas: ColumnaBase<CotizacionRow>[] = [
+    {
+      id: 'ruta', titulo: tr('cotizaciones.page.col.ruta'), principal: true,
+      celda: (q) => (
+        <>
+          <strong>{q.origen} → {q.destino}</strong>
+          <span className="rv-cot__tenue">{q.clienteNombre ?? tr('cotizaciones.page.sinCliente')}{q.folio ? ` · ${q.folio}` : ''}{q.km !== null ? ` · ${numero(q.km)} ${tr('cotizaciones.page.km')}` : ''}</span>
+        </>
+      ),
+    },
+    { id: 'costo', titulo: tr('cotizaciones.page.col.costo'), alinear: 'der', celda: (q) => (q.costoEstimado !== null ? mxn(q.costoEstimado) : <span className="rv-cot__tenue">{tr('cotizaciones.page.incompleto')}</span>) },
+    { id: 'precio', titulo: tr('cotizaciones.page.col.precio'), alinear: 'der', celda: (q) => (q.precio !== null ? mxn(q.precio) : <span className="rv-cot__tenue">{tr('cotizaciones.page.aMediasSinPrecio')}</span>) },
+    {
+      id: 'ganancia', titulo: tr('cotizaciones.page.col.ganancia'), alinear: 'der',
+      // `null` = todavía no se puede afirmar; nunca «$0.00», que se leería como un viaje que sale a mano.
+      celda: (q) => {
+        const g = gananciaReal(q.precio, q.costoEstimado);
+        if (g === null) return <span className="rv-cot__tenue">{q.precio === null ? tr('cotizaciones.page.faltaElPrecio') : tr('cotizaciones.page.faltaUnDatoDel')}</span>;
+        return (
+          <>
+            {mxn(g.pesos)}
+            <StatusChip tono={g.pesos < 0 ? 'bad' : 'ok'}>{g.pesos < 0 ? tr('cotizaciones.page.pierdeDinero') : tr('cotizaciones.page.dejaGanancia')}</StatusChip>
+          </>
+        );
+      },
+    },
+    { id: 'estado', titulo: tr('cotizaciones.page.col.estado'), celda: (q) => <StatusChip tono={TONO_ESTADO[q.estado] ?? 'neutral'}>{q.estado}</StatusChip> },
+    {
+      id: 'acciones', titulo: tr('cotizaciones.page.col.acciones'), alinear: 'der',
+      celda: (q) => (
+        <span className="rv-cot__acciones-fila">
+          {(q.estado === 'borrador' || q.estado === 'enviada') && (
+            <FilaAccionesCotizacion
+              id={q.id} puedeEnviar={q.estado === 'borrador'} puedeCrearViaje={puedeAsignar(rol)} precio={q.precio}
+              enviada={accionEnviada} convertir={accionConvertir} perdida={accionPerdida}
+            />
+          )}
+          <BotonEnlace href={hrefVer(q.id)} variante="ghost" tamano="sm">{tr('cotizaciones.page.vistaRapida')}</BotonEnlace>
+        </span>
+      ),
+    },
+  ];
+
   const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
   return (
     <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
-    <MarcoPagina titulo={tr('cotizaciones.page.margenYCostos')} apoyo={tr('cotizaciones.page.laGananciaRealDel')}>
-      {!panel && (
-        <EstadoError reintentar>{tr('cotizaciones.page.noSePudoLeer')}</EstadoError>
-      )}
-
-      {panel && (
+    <EsqueletoTablaMaestra
+      titulo={tr('cotizaciones.page.margenYCostos')}
+      apoyo={tr('cotizaciones.page.laGananciaRealDel')}
+      acciones={panel ? (
         <>
-          <Tarjeta titulo={tr('cotizaciones.page.costosDeclaradosDeLa')} info="cotizaciones.costos">
-            <Disclosure titulo={tr('cotizaciones.page.costosDeLaFlota')} resumen={costosSinDeclarar === 0 ? tr('cotizaciones.page.completos') : tr('cotizaciones.page.sinDeclarar', { costosSinDeclarar })} abierto={costosSinDeclarar > 0}>
-              <p className="rv-cot__nota">
-                {tr('cotizaciones.page.loQueTuDeclaras')}
-              </p>
-              <FormaConAviso accion={guardarConfig} boton="Guardar costos" columnas="md:grid-cols-1">
-                <Fieldset leyenda={tr('cotizaciones.page.porKilometro')}>
-                  <div className="rv-forma__rejilla">
-                    <CampoTexto id="dieselPorKm" name="dieselPorKm" etiqueta={tr('cotizaciones.page.dieselKm')} defaultValue={vInicial(c?.dieselPorKm)} ayuda={tr('cotizaciones.page.combustiblePorKmComo')} />
-                    <CampoTexto id="fijosPorKm" name="fijosPorKm" etiqueta={tr('cotizaciones.page.fijosKm')} defaultValue={vInicial(c?.fijosPorKm)} ayuda={tr('cotizaciones.page.segurosAdminDepreciacionPror')} />
-                  </div>
-                </Fieldset>
-                <Fieldset leyenda={tr('cotizaciones.page.operador')}>
-                  <div className="rv-forma__rejilla">
-                    <CampoTexto id="salarioDia" name="salarioDia" etiqueta={tr('cotizaciones.page.salarioOperadorDia')} defaultValue={vInicial(c?.salarioDia)} />
-                    <CampoTexto id="viaticosDia" name="viaticosDia" etiqueta={tr('cotizaciones.page.viaticosDia')} defaultValue={vInicial(c?.viaticosDia)} ayuda={tr('cotizaciones.page.siNoPagasViaticos')} />
-                  </div>
-                </Fieldset>
-                <Fieldset leyenda={tr('cotizaciones.page.regresoYMarkup')}>
-                  <div className="rv-forma__rejilla">
-                    <CampoTexto id="factorRegresoVacio" name="factorRegresoVacio" etiqueta={tr('cotizaciones.page.factorDeRegreso1')} defaultValue={vInicial(c?.factorRegresoVacio)} ayuda={tr('cotizaciones.page.1RegresoCargado2')} />
-                    <CampoTexto id="margenObjetivoPct" name="margenObjetivoPct" etiqueta={tr('cotizaciones.page.markupObjetivoSobreEl')} defaultValue={vInicial(c?.margenObjetivoPct)} ayuda={tr('cotizaciones.page.precioSugeridoCosto1')} />
-                  </div>
-                </Fieldset>
-              </FormaConAviso>
-            </Disclosure>
-          </Tarjeta>
-
-          <Tarjeta titulo={tr('cotizaciones.page.nuevaCotizacion')} info="cotizaciones.nueva">
-            <p className="rv-cot__nota">
-              {tr('cotizaciones.page.siEstaRutaTiene')}
-            </p>
-            <FormaConAviso accion={cotizar} boton="Cotizar" columnas="md:grid-cols-1">
-              <Fieldset leyenda={tr('cotizaciones.page.ruta')}>
-                <div className="rv-forma__rejilla">
-                  <CampoSelect id="clienteId" name="clienteId" etiqueta={tr('cotizaciones.page.cliente')} defaultValue="">
-                    {opcionesCliente.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
-                  </CampoSelect>
-                  <CampoTexto id="origen" name="origen" etiqueta={tr('cotizaciones.page.origen')} obligatorio />
-                  <CampoTexto id="destino" name="destino" etiqueta={tr('cotizaciones.page.destino')} obligatorio />
-                  <CampoTexto id="km" name="km" etiqueta={tr('cotizaciones.page.kmDeLaRuta')} ayuda={tr('cotizaciones.page.deIdaElFactor')} />
-                  <CampoTexto id="dias" name="dias" etiqueta={tr('cotizaciones.page.diasDeViaje')} ayuda={tr('cotizaciones.page.losDeclaraQuienCotiza')} />
-                </div>
-              </Fieldset>
-              <Fieldset leyenda={tr('cotizaciones.page.precioYVigencia')}>
-                <div className="rv-forma__rejilla">
-                  <CampoTexto id="casetasManual" name="casetasManual" etiqueta={tr('cotizaciones.page.casetasSiNoHay')} />
-                  <CampoTexto id="precio" name="precio" etiqueta={tr('cotizaciones.page.precioACotizar')} ayuda={tr('cotizaciones.page.tuDecisionElSugerido')} />
-                  <CampoTexto id="folio" name="folio" etiqueta={tr('cotizaciones.page.folio')} />
-                  <CampoFecha id="vigenteHasta" name="vigenteHasta" etiqueta={tr('cotizaciones.page.vigenteHasta')} />
-                </div>
-              </Fieldset>
-            </FormaConAviso>
-          </Tarjeta>
-
-          <Tarjeta titulo={`Cotizaciones (${panel.cotizaciones.length})`} info="cotizaciones.lista">
-            {panel.cotizaciones.length === 0 && (
-              <EstadoVacio titulo={tr('cotizaciones.page.sinCotizaciones')} contenido>
-                {tr('cotizaciones.page.laPrimeraSeArma')}
-              </EstadoVacio>
-            )}
-            <ul className="rv-cot__lista">
-              {panel.cotizaciones.map((q) => <Fila tr={tr} key={q.id} q={q} puedeCrearViaje={puedeAsignar(rol)} enviada={accionEnviada} perdida={accionPerdida} convertir={accionConvertir} />)}
-            </ul>
-          </Tarjeta>
+          <BotonEnlace href={hrefNuevo('costos')} variante="secondary" tamano="sm">{tr('cotizaciones.page.costosDeclaradosDeLa')}</BotonEnlace>
+          <BotonEnlace href={hrefNuevo('cotizacion')} variante="primary" tamano="sm">{tr('cotizaciones.page.nuevaCotizacion')}</BotonEnlace>
         </>
+      ) : undefined}
+      avisos={panel && costosSinDeclarar > 0 ? (
+        <Aviso tono="warn" acciones={<BotonEnlace href={hrefNuevo('costos')} variante="secondary" tamano="sm">{tr('cotizaciones.page.costosDeLaFlota')}</BotonEnlace>}>
+          {tr('cotizaciones.page.sinDeclarar', { costosSinDeclarar })}. {tr('cotizaciones.page.loQueTuDeclaras')}
+        </Aviso>
+      ) : undefined}
+      cifras={cifras}
+      etiquetaCifras={tr('cotizaciones.page.cotizaciones')}
+      pie={panel && cot.length > 0 ? tr('cotizaciones.page.pie', { n: numero(cot.length) }) : undefined}
+    >
+      {!panel ? (
+        <EstadoError reintentar>{tr('cotizaciones.page.noSePudoLeer')}</EstadoError>
+      ) : (
+        <TablaCotizaciones
+          columnas={columnas} filas={cot} etiqueta={tr('cotizaciones.page.cotizaciones')}
+          vacio={{ titulo: tr('cotizaciones.page.sinCotizaciones'), texto: tr('cotizaciones.page.laPrimeraSeArma') }}
+          puedeCrearViaje={puedeAsignar(rol)} enviada={accionEnviada} perdida={accionPerdida} convertir={accionConvertir}
+        />
       )}
-    </MarcoPagina>
+
+      {panel && elegida && (() => {
+        const g = gananciaReal(elegida.precio, elegida.costoEstimado);
+        return (
+          <CajonVistaRapida
+            titulo={`${elegida.origen} → ${elegida.destino}`}
+            subtitulo={`${elegida.clienteNombre ?? tr('cotizaciones.page.sinCliente')}${elegida.folio ? ` · ${elegida.folio}` : ''}`}
+            hrefCerrar={hrefSinVer}
+            cifras={[
+              { etiqueta: tr('cotizaciones.page.col.costo'), valor: elegida.costoEstimado !== null ? mxn(elegida.costoEstimado) : '—' },
+              { etiqueta: tr('cotizaciones.page.col.precio'), valor: elegida.precio !== null ? mxn(elegida.precio) : '—' },
+              { etiqueta: tr('cotizaciones.page.col.ganancia'), valor: g === null ? '—' : mxn(g.pesos) },
+              { etiqueta: tr('cotizaciones.page.col.margen'), valor: g === null || g.margenPct === null ? '—' : porcentaje(g.margenPct) },
+            ]}
+          >
+            <DetalleCotizacion tr={tr} q={elegida} />
+          </CajonVistaRapida>
+        );
+      })()}
+
+      {panel && sp.nuevo === 'costos' && (
+        <CajonAlta titulo={tr('cotizaciones.page.costosDeclaradosDeLa')} hrefCerrar={hrefSinNuevo}>
+          <p className="rv-cot__nota">{tr('cotizaciones.page.loQueTuDeclaras')}</p>
+          <FormaConAviso accion={guardarConfig} boton="Guardar costos" columnas="md:grid-cols-1">
+            <Fieldset leyenda={tr('cotizaciones.page.porKilometro')}>
+              <div className="rv-forma__rejilla">
+                <CampoTexto id="dieselPorKm" name="dieselPorKm" etiqueta={tr('cotizaciones.page.dieselKm')} defaultValue={vInicial(c?.dieselPorKm)} ayuda={tr('cotizaciones.page.combustiblePorKmComo')} />
+                <CampoTexto id="fijosPorKm" name="fijosPorKm" etiqueta={tr('cotizaciones.page.fijosKm')} defaultValue={vInicial(c?.fijosPorKm)} ayuda={tr('cotizaciones.page.segurosAdminDepreciacionPror')} />
+              </div>
+            </Fieldset>
+            <Fieldset leyenda={tr('cotizaciones.page.operador')}>
+              <div className="rv-forma__rejilla">
+                <CampoTexto id="salarioDia" name="salarioDia" etiqueta={tr('cotizaciones.page.salarioOperadorDia')} defaultValue={vInicial(c?.salarioDia)} />
+                <CampoTexto id="viaticosDia" name="viaticosDia" etiqueta={tr('cotizaciones.page.viaticosDia')} defaultValue={vInicial(c?.viaticosDia)} ayuda={tr('cotizaciones.page.siNoPagasViaticos')} />
+              </div>
+            </Fieldset>
+            <Fieldset leyenda={tr('cotizaciones.page.regresoYMarkup')}>
+              <div className="rv-forma__rejilla">
+                <CampoTexto id="factorRegresoVacio" name="factorRegresoVacio" etiqueta={tr('cotizaciones.page.factorDeRegreso1')} defaultValue={vInicial(c?.factorRegresoVacio)} ayuda={tr('cotizaciones.page.1RegresoCargado2')} />
+                <CampoTexto id="margenObjetivoPct" name="margenObjetivoPct" etiqueta={tr('cotizaciones.page.markupObjetivoSobreEl')} defaultValue={vInicial(c?.margenObjetivoPct)} ayuda={tr('cotizaciones.page.precioSugeridoCosto1')} />
+              </div>
+            </Fieldset>
+          </FormaConAviso>
+        </CajonAlta>
+      )}
+
+      {panel && sp.nuevo === 'cotizacion' && (
+        <CajonAlta titulo={tr('cotizaciones.page.nuevaCotizacion')} hrefCerrar={hrefSinNuevo} ancho="xl">
+          <p className="rv-cot__nota">{tr('cotizaciones.page.siEstaRutaTiene')}</p>
+          <FormaConAviso accion={cotizar} boton="Cotizar" columnas="md:grid-cols-1">
+            <Fieldset leyenda={tr('cotizaciones.page.ruta')}>
+              <div className="rv-forma__rejilla">
+                <CampoSelect id="clienteId" name="clienteId" etiqueta={tr('cotizaciones.page.cliente')} defaultValue="">
+                  {opcionesCliente.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
+                </CampoSelect>
+                <CampoTexto id="origen" name="origen" etiqueta={tr('cotizaciones.page.origen')} obligatorio />
+                <CampoTexto id="destino" name="destino" etiqueta={tr('cotizaciones.page.destino')} obligatorio />
+                <CampoTexto id="km" name="km" etiqueta={tr('cotizaciones.page.kmDeLaRuta')} ayuda={tr('cotizaciones.page.deIdaElFactor')} />
+                <CampoTexto id="dias" name="dias" etiqueta={tr('cotizaciones.page.diasDeViaje')} ayuda={tr('cotizaciones.page.losDeclaraQuienCotiza')} />
+              </div>
+            </Fieldset>
+            <Fieldset leyenda={tr('cotizaciones.page.precioYVigencia')}>
+              <div className="rv-forma__rejilla">
+                <CampoTexto id="casetasManual" name="casetasManual" etiqueta={tr('cotizaciones.page.casetasSiNoHay')} />
+                <CampoTexto id="precio" name="precio" etiqueta={tr('cotizaciones.page.precioACotizar')} ayuda={tr('cotizaciones.page.tuDecisionElSugerido')} />
+                <CampoTexto id="folio" name="folio" etiqueta={tr('cotizaciones.page.folio')} />
+                <CampoFecha id="vigenteHasta" name="vigenteHasta" etiqueta={tr('cotizaciones.page.vigenteHasta')} />
+              </div>
+            </Fieldset>
+          </FormaConAviso>
+        </CajonAlta>
+      )}
+    </EsqueletoTablaMaestra>
     </IdiomaProvider>
   );
+}
+
+/** La tabla de cotizaciones. Es un componente (y no un `TablaBase` suelto en la página) para que las tres acciones de servidor sigan viajando
+ *  como props visibles de un elemento: la prueba de la puerta de «Crear viaje» las lee de aquí. */
+function TablaCotizaciones({ columnas, filas, etiqueta, vacio }: {
+  columnas: readonly ColumnaBase<CotizacionRow>[];
+  filas: readonly CotizacionRow[];
+  etiqueta: string;
+  vacio: { titulo: string; texto: string };
+  puedeCrearViaje: boolean;
+  enviada: AccionDeForma;
+  perdida: AccionDeForma;
+  convertir: AccionDeForma;
+}) {
+  return <TablaBase<CotizacionRow> etiqueta={etiqueta} columnas={columnas} filas={filas} idFila={(q) => q.id} vacio={vacio} tarjetaMovil />;
 }
 
 const TONO_ESTADO: Record<string, TonoEstado> = {
   borrador: 'neutral', enviada: 'info', aceptada: 'ok', convertida: 'ok', perdida: 'bad', vencida: 'warn',
 };
 
-function Fila({
-  q, puedeCrearViaje, enviada, perdida, convertir, tr = trEs,
-}: {
-  q: CotizacionRow;
-  enviada: AccionDeForma;
-  perdida: AccionDeForma;
-  convertir: AccionDeForma;
-  puedeCrearViaje: boolean; tr?: Tr;
-}) {
-  const viva = q.estado === 'borrador' || q.estado === 'enviada';
-  // EL NÚMERO QUE EL TÍTULO DE ESTA PANTALLA PROMETE. `null` = todavía no se
-  // puede afirmar (falta el precio o falta un renglón del costo), y entonces
-  // se dice eso — nunca "$0.00", que se leería como un viaje que sale a mano.
-  const g = gananciaReal(q.precio, q.costoEstimado);
+function DetalleCotizacion({ q, tr = trEs }: { q: CotizacionRow; tr?: Tr }) {
   return (
-    <li className="rv-cot__fila">
-      <div className="rv-cot__cabeza">
-        <div className="rv-cot__ruta">
-          <strong>{q.origen} → {q.destino}</strong>
-          {q.folio && <span className="rv-cot__tenue">({q.folio})</span>}
-          <span className="rv-cot__tenue">{q.clienteNombre ?? tr('cotizaciones.page.sinCliente')}</span>
-          {q.km !== null && <span className="rv-cot__tenue">{numero(q.km)} {tr('cotizaciones.page.km')}</span>}
-        </div>
-        <div className="rv-cot__cifras">
-          <span>{tr('cotizaciones.page.costoDosPuntos')} {q.costoEstimado !== null ? mxn(q.costoEstimado) : tr('cotizaciones.page.incompleto')}</span>
-          <strong>{tr('cotizaciones.page.precioDosPuntos')} {q.precio !== null ? mxn(q.precio) : tr('cotizaciones.page.aMediasSinPrecio')}</strong>
-          <strong>
-            {tr('cotizaciones.page.gananciaDosPuntos')}{' '}
-            {g === null ? (
-              <span className="rv-cot__tenue">
-                {q.precio === null ? tr('cotizaciones.page.faltaElPrecio') : tr('cotizaciones.page.faltaUnDatoDel')}
-              </span>
-            ) : (
-              <>
-                {mxn(g.pesos)}
-                {g.margenPct !== null && (
-                  <span className="rv-cot__tenue"> {tr('cotizaciones.page.delPrecio', { v: porcentaje(g.margenPct) })}</span>
-                )}
-                <StatusChip tono={g.pesos < 0 ? 'bad' : 'ok'}>{g.pesos < 0 ? tr('cotizaciones.page.pierdeDinero') : tr('cotizaciones.page.dejaGanancia')}</StatusChip>
-              </>
-            )}
-          </strong>
-          <StatusChip tono={TONO_ESTADO[q.estado] ?? 'neutral'}>{q.estado}</StatusChip>
-        </div>
-      </div>
-
+    <div className="rv-cot__detalle">
       {q.desglose && (
-        <Disclosure variante="linea" titulo={tr('cotizaciones.page.desgloseCitableComoSe')}>
+        <>
           <ul className="rv-cot__desglose">
             {q.desglose.lineas.map((l, i) => (
               <li key={i}>
@@ -344,22 +409,14 @@ function Fila({
           {q.desglose.notas.map((nota, i) => (
             <p key={i} className="rv-cot__nota">{nota}</p>
           ))}
-        </Disclosure>
+        </>
       )}
 
       <div className="rv-cot__pie">
         <span>{tr('cotizaciones.page.creada', { v: fechaHoraMx(q.creadaEn) })}</span>
         {q.vigenteHasta && <span>{tr('cotizaciones.page.vigenteHasta2', { v: fechaMx(q.vigenteHasta) })}</span>}
         {q.viajeId && <span>{tr('cotizaciones.page.viajeCreado')}</span>}
-        {viva && (
-          <span className="rv-cot__acciones">
-            <FilaAccionesCotizacion
-              id={q.id} puedeEnviar={q.estado === 'borrador'} puedeCrearViaje={puedeCrearViaje} precio={q.precio}
-              enviada={enviada} convertir={convertir} perdida={perdida}
-            />
-          </span>
-        )}
       </div>
-    </li>
+    </div>
   );
 }

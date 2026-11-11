@@ -44,7 +44,7 @@ const POR_PAGINA = TOPE_PAGINA;
 export default async function PaginaViajes({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; f?: string; q?: string; c?: string; p?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; f?: string; q?: string; c?: string; p?: string; ver?: string }>;
 }) {
   const sp = await searchParams;
   // Querystring REAL (filtros `?f=`/`?q=`/`?c=`, también `?tenant=`/`?vista=`/
@@ -169,6 +169,7 @@ export default async function PaginaViajes({
       siguiente={siguiente}
       hayMas={hayMas}
       porPagina={POR_PAGINA}
+      ver={(sp.ver ?? '').trim().slice(0, 64) || null}
     />
   );
 }

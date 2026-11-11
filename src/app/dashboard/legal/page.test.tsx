@@ -36,7 +36,9 @@ function accionDe(nodo: ReactNode, boton: string): Accion | undefined {
   if (Array.isArray(nodo)) return nodo.map((n) => accionDe(n, boton)).find(Boolean);
   if (!isValidElement<{ boton?: string; accion?: Accion; children?: ReactNode }>(nodo)) return;
   if (nodo.props.boton === boton) return nodo.props.accion;
-  return accionDe(nodo.props.children, boton);
+  // F26: las secciones de `EsqueletoConfiguracion` viajan en `props.secciones[].contenido`.
+  const secs = (nodo.props as { secciones?: Array<{ contenido?: ReactNode }> }).secciones;
+  return accionDe(nodo.props.children, boton) ?? (secs ? accionDe(secs.map((s) => s.contenido), boton) : undefined);
 }
 const sp = { searchParams: Promise.resolve({}) };
 

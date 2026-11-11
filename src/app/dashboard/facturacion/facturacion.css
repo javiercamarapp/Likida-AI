@@ -1,0 +1,2 @@
+/* Facturación · bloques de cada pestaña apilados a 12 px, como el resto del marco (F26). */
+.rv-fact__bloques { display: grid; gap: var(--sp-gap, 12px); min-width: 0; }
