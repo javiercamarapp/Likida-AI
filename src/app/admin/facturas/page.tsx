@@ -62,8 +62,9 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
   const completa = lectura !== null && !recortada;
   const errorCifra = (etiqueta: string) => ({ etiqueta, valor: null, estado: 'error' as const, mensaje: recortada ? t('facturas.la_lista_esta_recortada') : t('facturas.no_se_pudo_leer'), reintentar: true });
 
-  const hrefVer = (id: string) => hrefConParams('/admin/facturas', filtros, { ver: id });
-  const hrefCerrar = hrefConParams('/admin/facturas', filtros, {});
+  const paramsFiltros: Record<string, string | undefined> = { ...filtros };
+  const hrefVer = (id: string) => hrefConParams('/admin/facturas', paramsFiltros, { ver: id });
+  const hrefCerrar = hrefConParams('/admin/facturas', paramsFiltros, {});
   const posicion = ver ? filas.findIndex((f) => f.id === ver) : -1;
   const sel = posicion >= 0 ? filas[posicion] : null;
 
