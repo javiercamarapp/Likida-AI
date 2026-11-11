@@ -45,7 +45,7 @@ export function horasHabilesEntre(desdeMs: number, hastaMs: number): number {
   return habilesMs / HORA_MS;
 }
 
-export type EstadoSilencio = 'silencio' | 'ok' | 'sin_viajes' | 'sin_dato';
+export type EstadoSilencio = 'silencio' | 'ok' | 'sin_viajes' | 'sin_dato' | 'sin_conectar';
 
 export interface EntradaSilencio {
   /** Viajes abiertos (sistema o flota); `null` = no se pudo leer. */
@@ -72,8 +72,9 @@ export function evaluarSilencio(e: EntradaSilencio): ResultadoSilencio {
     return { ...base, estado: 'sin_dato', hayAlerta: false, horasHabilesSinEvento: null };
   }
   if (e.viajesAbiertos <= 0) return { ...base, estado: 'sin_viajes', hayAlerta: false, horasHabilesSinEvento: null };
-  // Leído y sin ningún evento: cero eventos con viajes abiertos es silencio, no «sin dato».
-  if (e.ultimoEvento.ms === null) return { ...base, estado: 'silencio', hayAlerta: true, horasHabilesSinEvento: null };
+  // Leído y SIN NINGÚN evento jamás: la fuente no está conectada todavía (flota nueva). Eso no es silencio: alarmar aquí contradice
+  // la fila «Sin conectar · No es una falla» y le saldría a toda flota nueva con viajes abiertos (ronda visual 5).
+  if (e.ultimoEvento.ms === null) return { ...base, estado: 'sin_conectar', hayAlerta: false, horasHabilesSinEvento: null };
   const horas = horasHabilesEntre(e.ultimoEvento.ms, e.ahoraMs);
   return horas >= umbralHoras
     ? { ...base, estado: 'silencio', hayAlerta: true, horasHabilesSinEvento: horas }

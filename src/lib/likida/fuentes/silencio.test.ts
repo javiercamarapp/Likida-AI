@@ -26,10 +26,11 @@ describe('horasHabilesEntre (lunes a sábado, 8:00 a 20:00 CDMX)', () => {
 
 describe('regla de silencio del webhook', () => {
   const ahora = lunes10 + h(HORAS_HABILES_SILENCIO + 1);
-  it('con viajes abiertos y 0 eventos produce UNA alerta', () => {
+  it('con viajes abiertos y 0 eventos jamás NO alarma: es una fuente sin conectar', () => {
+    // Nunca hubo un evento: la fuente no está conectada (flota nueva). No es silencio y no alarma.
     const r = evaluarSilencio({ viajesAbiertos: 3, ultimoEvento: { leido: true, ms: null }, ahoraMs: ahora });
-    expect(r.estado).toBe('silencio');
-    expect(r.hayAlerta).toBe(true);
+    expect(r.estado).toBe('sin_conectar');
+    expect(r.hayAlerta).toBe(false);
   });
   it('con viajes abiertos y el último evento hace más del umbral hábil: alerta', () => {
     const r = evaluarSilencio({ viajesAbiertos: 24, ultimoEvento: { leido: true, ms: lunes10 }, ahoraMs: ahora });
