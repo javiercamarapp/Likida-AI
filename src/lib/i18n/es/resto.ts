@@ -943,6 +943,8 @@ export const resto = {
   'op.tareas_del_asistente': 'Tareas del asistente',
   'op.no_pude_leer_las_tareas_abiertas': 'No pude leer las tareas abiertas; recarga la página. Esto no significa que no haya pendientes.',
   'op.no_hay_tareas_abiertas_cuando_el': 'No hay tareas abiertas. Cuando el asistente derive algo delicado a una persona, aparece aquí.',
+  'op.sin_tareas_abiertas': 'Sin tareas abiertas',
+  'op.con_seguimiento_del_conductor': '{n} con seguimiento del conductor',
   'op.e0_para_e0': '<e0>Para {etiquetaDestino}</e0>',
   'op.marcar_atendida': 'Marcar atendida',
   'op.viajes_en_vivo': 'Viajes en vivo',

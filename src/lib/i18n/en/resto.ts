@@ -945,6 +945,8 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.tareas_del_asistente': 'Assistant tasks',
   'op.no_pude_leer_las_tareas_abiertas': 'I could not read the open tasks; reload the page. This does not mean there is nothing pending.',
   'op.no_hay_tareas_abiertas_cuando_el': 'There are no open tasks. When the assistant hands something sensitive to a person, it appears here.',
+  'op.sin_tareas_abiertas': 'No open tasks',
+  'op.con_seguimiento_del_conductor': '{n} followed by the driver',
   'op.e0_para_e0': '<e0>For {etiquetaDestino}</e0>',
   'op.marcar_atendida': 'Mark as handled',
   'op.viajes_en_vivo': 'Live trips',
