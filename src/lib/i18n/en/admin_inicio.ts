@@ -397,4 +397,5 @@ export const admin_inicio: Record<keyof typeof admin_inicioEs, string> = {
   'a1r4.eb_atencion': 'Attention',
   'a1r4.eb_dinero': 'Money',
   'a1r4.eb_calidad': 'Quality',
+  'a1r4.exportar_csv': 'Export CSV',
 };

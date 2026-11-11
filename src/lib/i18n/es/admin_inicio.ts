@@ -395,4 +395,5 @@ export const admin_inicio = {
   'a1r4.eb_atencion': 'Atención',
   'a1r4.eb_dinero': 'Dinero',
   'a1r4.eb_calidad': 'Calidad',
+  'a1r4.exportar_csv': 'Exportar CSV',
 } as const;

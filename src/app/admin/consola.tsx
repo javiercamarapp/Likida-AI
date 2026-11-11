@@ -163,12 +163,32 @@ const columnasFlotas = (t: TrDe<'admin_inicio'>): ColumnaBase<FilaFlota>[] => [
   },
 ];
 
+/** CSV de la tabla de flotas tal como se ve (nada que la pantalla no muestre). Una celda que empieza con = + - @ se neutraliza para que una hoja de cálculo no la lea como fórmula. */
+function csvFlotas(filas: ReadonlyArray<FilaFlota>, t: TrDe<'admin_inicio'>): string {
+  const celda = (v: string | number) => {
+    const x = String(v);
+    const seguro = /^[=+\-@]/.test(x) ? `'${x}` : x;
+    return /[",\n]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
+  };
+  return [
+    [t('consola.flota'), t('consola.plan'), t('consola.viajes'), t('consola.costo_de_ia_historico')].map(celda).join(','),
+    ...filas.map((f) => [f.nombre, f.plan, f.viajes, f.costoIaUsd].map(celda).join(',')),
+  ].join('\n');
+}
+
 async function BloqueFlotas() {
   const { t } = await getT('admin_inicio');
   const r = await resumenNegocio();
   return (
     <section id="flotas" aria-label={t('consola.flotas')}>
-      <Tarjeta titulo={t('consola.flotas')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace>}>
+      <Tarjeta titulo={t('consola.flotas')} elevar entra="tarjeta" acciones={(
+        <>
+          {r && r.flotas.length > 0 ? (
+            <BotonEnlace tamano="sm" variante="secondary" download="flotas.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${csvFlotas(r.flotas, t)}`)}`}>{t('a1r4.exportar_csv')}</BotonEnlace>
+          ) : null}
+          <BotonEnlace tamano="sm" variante="ghost" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace>
+        </>
+      )}>
         <TablaBase
           etiqueta={t('consola.flotas_con_plan_viajes')}
           columnas={columnasFlotas(t)}
