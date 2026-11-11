@@ -16,6 +16,9 @@
 [data-ui="v2"] .adm-sis-fila__cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
 [data-ui="v2"] .adm-sis-fila__texto { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 [data-ui="v2"] .adm-sis-fila__enlace { font-size: 12px; }
+/* Enlace externo con el ícono EN LÍNEA con el texto, como Rovaq (medido en vivo: el SVG caía 18 px debajo y el bloque medía 30 px para una línea de 12). */
+[data-ui="v2"] .adm-sis-fila__enlace { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; line-height: 1.4; }
+[data-ui="v2"] .adm-sis-fila__enlace svg { flex: none; width: 12px; height: 12px; }
 [data-ui="v2"] .adm-sis-guia { margin: 6px 0 0; padding: 8px 12px; font-size: 12px; line-height: 1.5; color: var(--ink2); background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
 [data-ui="v2"] .adm-sis-guia > b { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 [data-ui="v2"] .adm-sis-guia code { font: inherit; font-weight: 600; }
