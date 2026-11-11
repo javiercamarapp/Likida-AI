@@ -40,3 +40,8 @@
 .rv-vg__bullets[data-tono="bad"] { color: var(--bad); }
 .rv-vg__campos { border: 0; margin: 0; padding: 0; min-width: 0; }
 .rv-vg__icono-linea { display: flex; align-items: flex-start; gap: 6px; }
+
+/* Bandeja de avisos: día como subtítulo dentro de la única tarjeta de lista, y las notas de regla/privacidad juntas al pie. */
+.rv-vg__dia { margin: 0; font-size: var(--t-card, 14px); font-weight: 600; color: var(--ink); }
+.rv-vg__notas { display: grid; gap: 4px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.rv-vg__notas:empty { display: none; }
