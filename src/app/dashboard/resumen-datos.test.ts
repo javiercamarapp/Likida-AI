@@ -79,6 +79,15 @@ describe('siguiente acción', () => {
     expect(a.map((x) => x.id)).toEqual(['marcha', 'insight-liquidacion', 'escalados', 'por-revisar']);
     expect(R.elegirAcciones({ marcha: null, filas: [] })).toEqual([]);
   });
+
+  it('un pendiente sin enlace (el rol no abre la pantalla) NO se lee como «nada urgente»: se enumera sin botón', () => {
+    const puede = (ruta: string) => !ruta.includes('liquidacion');
+    const filas = R.filasAtencion({ kpis: { viajesLiquidados: 1, montoComprobado: 0, diferenciaDetectada: 0, conDiferencias: 0, porRevisar: 1, tasaCuadre: 0 }, escalados: 0 }, [], '', 3, { puede });
+    expect(filas.find((f) => f.id === 'por-revisar')?.href).toBeNull();
+    const a = R.elegirAcciones({ marcha: null, filas });
+    expect(a.map((x) => x.id)).toEqual(['por-revisar']);
+    expect(a[0].href).toBeNull();
+  });
 });
 
 describe('frontera cliente/servidor', () => {
