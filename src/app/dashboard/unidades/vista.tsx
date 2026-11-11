@@ -235,7 +235,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
 
   // `—` y no 0 cuando no se pudo contar: un 0 aquí diría «no hay ninguna vencida», que es la afirmación más cara que esta pantalla puede
   // hacer en falso. `unidades` y no `activas`: con todo el parque dado de baja, «todavía no hay unidades» sería falso.
-  const cifras: PropsCifra[] | undefined = vacio ? undefined : [
+  const cifras: PropsCifra[] = [
     { etiqueta: t('un.cifra.vencidos'), valor: conteos?.vencidos, tono: conteos && conteos.vencidos > 0 ? 'bad' : undefined, info: 'unidades.vencidas' },
     { etiqueta: t('un.cifra.vencen', { n: DIAS_AVISO }), valor: conteos?.porVencer, tono: conteos && conteos.porVencer > 0 ? 'warn' : undefined, info: 'unidades.por_vencer' },
     { etiqueta: t('un.cifra.enregla'), valor: conteos?.vigentes, info: 'unidades.en_regla' },
@@ -250,7 +250,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
       acciones={acciones}
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy(t('un.tabla.etiqueta'))}
-      filtros={vacio ? undefined : (
+      filtros={(
         <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
           sustantivo="unidades" camposOcultos={camposOcultos} />
       )}

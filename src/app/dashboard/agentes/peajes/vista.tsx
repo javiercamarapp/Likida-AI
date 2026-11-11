@@ -19,7 +19,7 @@ import { RevisionCobros, type EstadoRevisionCobros } from './revision-cobros';
 import type { SuperficiePeajes } from '@/lib/likida/peajes/superficie_perfil';
 import { Cifra, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import {
-  BotonEnlace, EstadoError, EstadoVacio, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta, TituloRecuadro,
+  BotonEnlace, EstadoError, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta, TituloRecuadro,
 } from '@/app/ui-v2/componentes';
 import { VacioAgente } from '../vacio-agente';
 import './peajes.css';
@@ -154,9 +154,9 @@ export function VistaAgentePeajes({
           {lineas === null ? (
             <EstadoError compacto>{tx('peajes.vista.no_se_pudo_leer_la')}</EstadoError>
           ) : lineas.length === 0 ? (
-            <EstadoVacio icono={Inbox} titulo={tx('peajes.vista.nada_espera_a_un_humano')}>
+            <VacioAgente icono={Inbox} titulo={tx('peajes.vista.nada_espera_a_un_humano')}>
               {tx('peajes.vista.cada_linea_nueva_que_el')}
-            </EstadoVacio>
+            </VacioAgente>
           ) : (
             <ul className="rv-pj-lista">
               {lineas.slice(0, 6).map((l) => (
@@ -182,9 +182,9 @@ export function VistaAgentePeajes({
           {desgloses === null ? (
             <EstadoError compacto>{tx('peajes.vista.no_se_pudo_leer_la_2')}</EstadoError>
           ) : desgloses.length === 0 ? (
-            <EstadoVacio icono={Inbox} titulo={tx('peajes.vista.aun_sin_estados_de_cuenta_2')}>
+            <VacioAgente icono={Inbox} titulo={tx('peajes.vista.aun_sin_estados_de_cuenta_2')}>
               {tx('peajes.vista.subelo_arriba_o_reenvialo_por')}
-            </EstadoVacio>
+            </VacioAgente>
           ) : (
             <ul className="rv-pj-lista">
               {desgloses.map((d) => (

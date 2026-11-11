@@ -10,7 +10,12 @@
 .rv-conocimiento__detalle { display: grid; gap: 12px; }
 .rv-conocimiento__ver { white-space: nowrap; }
 .rv-conocimiento__chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.rv-conocimiento__tabla td { padding-block: 9px; }
+/* Filas de dos líneas (título 13 + instrumento 11): 56 px con 8 de aire arriba y abajo (Rovaq: 49 a 64 px con dos líneas), y la primera columna a 14 px como la cabecera. */
+[data-ui="v2"] .rv-conocimiento__tabla table tbody :is(th, td) { height: 56px; padding-block: 8px; }
+[data-ui="v2"] .rv-conocimiento__tabla table tbody tr > :first-child { padding-left: 14px; }
+.rv-conocimiento__norma { gap: 2px; }
+.rv-conocimiento__norma strong { line-height: 1.3; }
+.rv-conocimiento__nota { line-height: 1.35; }
 
 /* La tira de tres cifras: la celda con ⓘ (32 px) fija el alto del rótulo de TODAS, así las cifras quedan a la misma altura. */
 [data-ui="v2"] .rv-esq:has(.rv-conocimiento__tabla) .rv-kpi__cab { min-height: 32px; }

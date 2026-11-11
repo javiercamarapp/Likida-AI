@@ -246,16 +246,18 @@ export default async function SoportePage({
       ) : undefined}
       // La acción principal vive en la cabecera de la página, junto al h1 (Rovaq), no en una fila propia entre la tira y la tabla.
       acciones={tickets ? (
-        <FormaEnCajon id="abrir-ticket" titulo={t('cfg.abrir_un_ticket')} accion={accionAbrirTicket} boton={t('cfg.abrir_ticket')} disparador={t('cfg.abrir_ticket')} abiertoInicial={false}>
-          <CampoTexto etiqueta={t('cfg.asunto')} name="asunto" required placeholder={t('cfg.que_paso_en_una_linea')} />
-          <CampoSelect etiqueta={t('cfg.categoria')} name="categoria" defaultValue="otro">
-              {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{rotCategoria(c)}</option>)}
-          </CampoSelect>
-          <CampoSelect etiqueta={t('cfg.prioridad')} name="prioridad" defaultValue="media">
-              {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{rotPrioridad(p)}</option>)}
-          </CampoSelect>
-          <CampoTexto etiqueta={t('cfg.detalle')} name="descripcion" placeholder={t('cfg.opcional_folios_pantalla_que_esperabas')} />
-        </FormaEnCajon>
+        <span className="rv-sop__cab">
+          <FormaEnCajon id="abrir-ticket" titulo={t('cfg.abrir_un_ticket')} accion={accionAbrirTicket} boton={t('cfg.abrir_ticket')} disparador={t('cfg.abrir_ticket')} abiertoInicial={false}>
+            <CampoTexto etiqueta={t('cfg.asunto')} name="asunto" required placeholder={t('cfg.que_paso_en_una_linea')} />
+            <CampoSelect etiqueta={t('cfg.categoria')} name="categoria" defaultValue="otro">
+                {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{rotCategoria(c)}</option>)}
+            </CampoSelect>
+            <CampoSelect etiqueta={t('cfg.prioridad')} name="prioridad" defaultValue="media">
+                {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{rotPrioridad(p)}</option>)}
+            </CampoSelect>
+            <CampoTexto etiqueta={t('cfg.detalle')} name="descripcion" placeholder={t('cfg.opcional_folios_pantalla_que_esperabas')} />
+          </FormaEnCajon>
+        </span>
       ) : undefined}
       cifras={tickets ? [
         { etiqueta: t('cfg.abiertos'), info: 'soporte.abiertos', valor: abiertos.length, nota: t('e27.sop_abiertos_nota') },

@@ -18,6 +18,7 @@ import { quienDe } from './quien';
 import { FiltroFechaIso } from './filtro-fecha-iso';
 import { etiquetaAccion, etiquetaEntidad, rotuloTipoAcceso } from './etiquetas';
 import '../sistema.css';
+import { ChipCopiable } from './chip-copiable';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
@@ -31,7 +32,8 @@ function columnasAcciones(t: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES, 
   return [
     { id: 'cuando', titulo: t('bitacora.cuando'), corta: true, celda: (e) => fechaHoraMx(e.ocurrioEn, idioma) },
     { id: 'que', titulo: t('bitacora.que_se_hizo'), principal: true, celda: (e) => etiquetaAccion(e.accion, ts) },
-    { id: 'quien', titulo: t('bitacora.quien'), celda: (e) => quienDe(e.actor) },
+    { id: 'quien', titulo: t('bitacora.quien'), celda: (e) => <ChipCopiable texto={quienDe(e.actor)} mono={false} copiar={ts('bitacora.copiar')} copiado={ts('bitacora.copiado')} /> },
+    { id: 'registro', titulo: ts('bitacora.col_registro'), corta: true, celda: (e) => <ChipCopiable texto={`#${e.id}`} copiar={ts('bitacora.copiar')} copiado={ts('bitacora.copiado')} /> },
     { id: 'flota', titulo: t('bitacora.flota'), celda: (e) => e.tenantNombre ?? (e.tenantId === null ? ts('bitacora_etiquetas.plataforma') : '—') },
     { id: 'sobre', titulo: t('bitacora.sobre_que'), celda: (e) => etiquetaEntidad(e.entidad, ts) },
   ];
@@ -40,7 +42,7 @@ function columnasAcciones(t: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES, 
 function columnasAccesos(t: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaTabla<AccesoSuperadmin>[] {
   return [
     { id: 'cuando', titulo: t('bitacora.cuando'), corta: true, celda: (a) => fechaHoraMx(a.creadoEn, idioma) },
-    { id: 'quien', titulo: t('bitacora.quien'), principal: true, celda: (a) => quienDe(a.actor) },
+    { id: 'quien', titulo: t('bitacora.quien'), principal: true, celda: (a) => <ChipCopiable texto={quienDe(a.actor)} mono={false} copiar={ts('bitacora.copiar')} copiado={ts('bitacora.copiado')} /> },
     { id: 'tipo', titulo: t('bitacora.que_hizo'), celda: (a) => <StatusChip tono={a.tipo === 'descarga' ? 'warn' : 'neutral'}>{rotuloTipoAcceso(ts)[a.tipo]}</StatusChip> },
     { id: 'flota', titulo: t('bitacora.flota'), celda: (a) => a.tenantNombre ?? '—' },
     { id: 'ruta', titulo: t('bitacora.pantalla'), celda: (a) => <span className="adm-sis-dato">{a.ruta}</span> },
@@ -117,6 +119,7 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
     <EsqueletoTablaMaestra
       titulo={t('bitacora.bitacora')}
       apoyo={t('bitacora.lo_que_se_hizo')}
+      acciones={<BotonEnlace href="/admin/copiloto" variante="secondary" tamano="sm">Copiloto</BotonEnlace>}
       filtros={<>
       {hayAccesos ? (
         <div className="adm-sis-acciones" role="group" aria-label={t('bitacora.que_registro_ver')}>

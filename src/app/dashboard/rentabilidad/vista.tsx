@@ -9,14 +9,17 @@ import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
   BotonEnlace, StatusChip, TablaBase, Tarjeta, type ColumnaBase,
 } from '@/app/ui-v2/componentes';
+import { BarraPeriodo } from '@/app/ui-v2/componentes';
+import { PERIODOS_RENTABILIDAD, type PeriodoRentabilidad } from './periodo';
 import './rentabilidad.css';
 
 
 /** El href de otra página de la cartera, conservando el sufijo de
  *  previsualización (`?tenant=`/`?vista=`/`?rol=`): si un link lo pierde, el
  *  siguiente clic devuelve al superadmin a otra flota sin avisar. */
-export function hrefPagina(sufijo: string, pagina: number): string {
+export function hrefPagina(sufijo: string, pagina: number, periodo: PeriodoRentabilidad = 'todo'): string {
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
+  if (periodo !== 'todo') params.set('periodo', periodo); else params.delete('periodo');
   if (pagina > 1) params.set('p', String(pagina)); else params.delete('p');
   const qs = params.toString();
   return `/dashboard/rentabilidad${qs ? `?${qs}` : ''}`;
@@ -31,12 +34,14 @@ export function hrefPagina(sufijo: string, pagina: number): string {
 type FilaCartera = NonNullable<Cobranza['facturas']>[number];
 
 export function VistaRentabilidad({
-  rentabilidad, cobranza, sufijo = '', tr = trEs,
+  rentabilidad, cobranza, sufijo = '', periodo = 'todo', tr = trEs,
 }: {
   rentabilidad: Rentabilidad | null;
   cobranza: Cobranza | null;
   /** El `?tenant=`/`?vista=`/`?rol=` que hay que conservar al pasar de página. */
   sufijo?: string; tr?: Tr;
+  /** La ventana de viajes que mide el margen (`?periodo=`). */
+  periodo?: PeriodoRentabilidad;
 }) {
   const sinNada = rentabilidad !== null && cobranza !== null
     && rentabilidad.viajesConIngreso === 0 && cobranza.total === 0;
@@ -81,12 +86,13 @@ export function VistaRentabilidad({
   // UNA tira de cinco (Rovaq `pc-kpis`): cada celda dice su propio estado — una lectura caída es «No disponible ahora. No es cero.», nunca un 0.
   // Cuatro cifras con rótulo de UNA línea (lo largo vive en la ⓘ). El vencido es nota de «Por cobrar». Sin NINGUNA lectura útil no hay tira: las dos tarjetas de abajo
   // ya dicen por qué (no se repite «Sin dato» cinco veces); si una lectura cayó pero la otra no, la celda caída lo dice («No disponible ahora. No es cero.»).
-  const cifras: PropsCifra[] | undefined = sinRent === 'ok' || sinCob === 'ok' ? [
+  // La tira SIEMPRE está (Rovaq PC): una cifra sin dato dice «—» con su pista punteada, nunca un cero; el estado de cada celda es el de su propia lectura.
+  const cifras: PropsCifra[] = [
     { etiqueta: tr('e27.rent_ingreso'), matiz: 1, info: 'rentabilidad.ingreso', formato: 'mxn', valor: sinRent === 'ok' ? rentabilidad!.ingreso : null, estado: sinRent, reintentar: sinRent === 'error' },
     { etiqueta: tr('e27.rent_costo'), matiz: 1, info: 'rentabilidad.costo', formato: 'mxn', valor: sinRent === 'ok' ? rentabilidad!.costoComprobado : null, estado: sinRent, nota: sinRent === 'ok' ? tr('e27.rent_costo_nota') : undefined },
     { etiqueta: tr('e27.rent_contrib'), matiz: 1, info: 'rentabilidad.contribucion', formato: 'mxn', valor: sinRent === 'ok' ? rentabilidad!.contribucion : null, estado: sinRent },
     { etiqueta: tr('e27.rent_por_cobrar'), matiz: 1, info: 'rentabilidad.por_cobrar', formato: 'mxn', valor: sinCob === 'ok' ? cobranza!.porCobrar : null, estado: sinCob, reintentar: sinCob === 'error', nota: sinCob === 'ok' ? tr('e27.rent_nota_vencido', { v: mxn(cobranza!.vencido) }) : undefined, tono: sinCob === 'ok' && cobranza!.vencido > 0 ? 'bad' : undefined },
-  ] : undefined;
+  ];
 
   // «Qué se sabe / Qué no se sabe» (Rovaq PC): solo hechos leídos de las dos consultas; lo que no se mide se DICE, no se rellena.
   const seSabe: string[] = [];
@@ -105,6 +111,11 @@ export function VistaRentabilidad({
   if (cobranza === null) noSeSabe.push(tr('rentabilidad.vista.noPudeLeerLas'));
   if (seSabe.length === 0) seSabe.push(tr('e26b.rent_se_sabe_nada'));
 
+  const hrefPeriodo = (p: PeriodoRentabilidad) => hrefPagina(sufijo, 1, p);
+  const filtros = (
+    <BarraPeriodo etiqueta={tr('r4.rent_periodo')}
+      periodo={{ etiqueta: tr('r4.rent_periodo'), valor: periodo, opciones: PERIODOS_RENTABILIDAD.map((p) => ({ valor: p, etiqueta: tr(`r4.rent_p_${p}` as 'r4.rent_p_todo'), href: hrefPeriodo(p) })) }} />
+  );
   const accionRegistrar = <BotonEnlace href={`/dashboard/facturacion${sufijo}`} variante="secondary" tamano="sm">{tr('rentabilidad.vista.registrarUnaFactura')}</BotonEnlace>;
   const titular = sinRent === 'ok' && rentabilidad!.margenPct !== null
     ? tr('e26b.rent_titular', { pct: porcentaje(rentabilidad!.margenPct), n: numero(rentabilidad!.viajesConIngreso) })
@@ -143,7 +154,7 @@ export function VistaRentabilidad({
 
   return (
     <EsqueletoPanelCifras
-      titulo={tr('rentabilidad.vista.margenYCostos')} apoyo={tr('rentabilidad.vista.margenRealContraLo')} titular={titular}
+      titulo={tr('rentabilidad.vista.margenYCostos')} apoyo={tr('rentabilidad.vista.margenRealContraLo')} titular={titular} filtros={filtros} metodo={tr('r4.rent_metodo')}
       cifras={cifras} etiquetaCifras={tr('rentabilidad.vista.margenYCostos')}
       selloCifras={sinNada ? tr('rentabilidad.vista.sinDatosTodavia') : selloHoy(tr('rentabilidad.vista.selloViajesLiquidados'))}
       graficas={[graficaMargen, graficaCartera]}
@@ -169,8 +180,8 @@ export function VistaRentabilidad({
             </span>
             {(cobranza.pagina > 1 || hayMas) && (
               <NavPaginas>
-                {cobranza.pagina > 1 && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina - 1)} direccion="anterior" />}
-                {hayMas && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina + 1)} direccion="siguiente" />}
+                {cobranza.pagina > 1 && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina - 1, periodo)} direccion="anterior" />}
+                {hayMas && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina + 1, periodo)} direccion="siguiente" />}
               </NavPaginas>
             )}
           </div>

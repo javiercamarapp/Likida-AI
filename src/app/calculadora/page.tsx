@@ -26,6 +26,7 @@ export default async function PaginaCalculadora() {
       titulo={t('cal.titulo')}
       apoyo={t('cal.apoyo')}
     >
+      <div className="rv-flujo" aria-hidden="true" />
       <PulsoSitio pagina="calculadora" />
       <div className="rv-pub__prosa">
         <Calculadora />

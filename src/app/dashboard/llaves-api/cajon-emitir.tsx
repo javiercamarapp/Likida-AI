@@ -28,7 +28,7 @@ export function CajonEmitirLlave({ titulo, disparador, descripcion, abiertoInici
   const [estado, despachar, pendiente] = useActionState(accion, null);
   return (
     <div className="rv-lla__barra">
-      <Boton variante="primary" tamano="sm" aria-haspopup="dialog" icono={<Icono icono={KeyRound} />} onClick={abrir}>{disparador}</Boton>
+      <Boton variante="primary" aria-haspopup="dialog" icono={<Icono icono={KeyRound} />} onClick={abrir}>{disparador}</Boton>
       <Drawer abierto={abierto} onCerrar={cerrar} titulo={titulo} descripcion={descripcion} tamano="m" cierraConFondo={false}
         pie={<Boton type="submit" form={idForma} variante="primary" tamano="sm" loading={pendiente} icono={<Icono icono={KeyRound} />}>{pendiente ? t('llaves.emitiendo') : t('llaves.emitir_llave')}</Boton>}>
         <FormaEmision estado={estado} despachar={despachar} idForma={idForma} areas={areas} vigencias={vigencias} vigenciaDefault={vigenciaDefault} />

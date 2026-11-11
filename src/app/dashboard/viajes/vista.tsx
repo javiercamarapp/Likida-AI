@@ -8,7 +8,7 @@ import { PillAviso, PillEstatusViaje } from './pills';
 import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
-import { BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './registro.css';
 import { ahoraMs } from '@/lib/saludo';
@@ -189,6 +189,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
           titulo={sel.folio}
           subtitulo={t('viajes.vr.sub', { n: numero(seleccion + 1, idioma), total: numero(filas.length, idioma) })}
           hrefCerrar={hrefCerrar}
+          aviso={<AvisoCompacto tono="info" resumen={t('viajes.vr.aviso')} />}
           cifras={[
             { etiqueta: t('viajes.col.estatus'), valor: t(`viajes.estatus.${sel.estatus}` as 'viajes.estatus.abierto') },
             { etiqueta: t('viajes.col.operador'), valor: sel.operadorNombre ?? '—' },

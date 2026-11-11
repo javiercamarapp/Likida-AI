@@ -27,6 +27,8 @@
 .rv-fact__linea .rv-campo { flex: 1; min-width: 220px; }
 .rv-fact__pila { display: grid; gap: 12px; }
 .rv-fact__tres { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; }
+.rv-fact__pie { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+.rv-fact__pie .rv-btn { height: 32px; width: auto; }
 .rv-btn[data-copiado] { color: var(--ok); }
 .rv-fact__enlace { font-size: var(--t-small, 12px); font-weight: 500; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; gap: 4px; }
 .rv-fact__reglones { list-style: none; margin: 0; padding: 0; display: grid; }
@@ -49,3 +51,6 @@
 /* Raíz del cajón «Vista rápida» dentro de una celda numérica: el panel hereda `text-align: start`, no el `right` de la celda. */
 .rv-fact__cajon-raiz { display: contents; text-align: start; }
 .rv-fact__cajon-raiz .rv-ov, .rv-fact__cajon-raiz .rv-ov__panel { text-align: start; }
+
+/* Cajón del portal: los botones fantasma alinean su texto con «Abrir el portal» (sin 8 px de sangría). */
+.rv-fact__cajon-raiz .rv-fact__pila .rv-btn--ghost { margin-inline-start: -8px; }

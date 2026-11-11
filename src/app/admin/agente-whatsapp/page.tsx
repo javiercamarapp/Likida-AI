@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo, contarConversacionesActivas } from '@/lib/admin/negocio';
@@ -6,6 +7,7 @@ import { Columnas } from '@/app/ui-v2/graficas';
 import { numero as num, usd as dolares, fechaCorta } from '@/lib/formato';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { TablaModelosFase } from '../tarjeta-fase';
+import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
@@ -27,19 +29,21 @@ export default async function AgenteWhatsappPage() {
   return (
     <EsqueletoPanelCifras
       area="Agentes"
-      titulo={t('model_ops.agentes')}
+      titulo="WhatsApp"
       apoyo={t('agente_whatsapp.whatsapp_la_conversacion_completa_con_el')}
       acciones={<BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm">{t('agente_whatsapp.ver_conversaciones')}</BotonEnlace>}
       avisos={<Aviso tono="info">{t('agente_whatsapp.el_whatsapp_del_producto_sigue_en')}</Aviso>}
       etiquetaCifras="WhatsApp"
-      cifras={[
+      cifras={uniformes([
           { etiqueta: t('agente_whatsapp.gastado_en_whatsapp'), valor: whatsapp ? whatsapp.costoUsd : 0, formato: 'usd', nota: t('agente_cuadre.costo_medido_en_llm_costo') },
           { etiqueta: t('agente_whatsapp.llamadas_de_whatsapp'), valor: whatsapp ? whatsapp.n : 0, formato: 'entero' },
           { etiqueta: t('whatsapp_infra.conversaciones_activas'), valor: activas, estado: activas === null ? 'error' : 'ok', formato: 'entero', href: '/admin/conversaciones' },
-      ]}
+      ])}
       graficas={[
-        <Tarjeta key="serie" titulo={t('agente_fase.serie_costo_dia')} estado={r.porDia.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_actividad_de_ia')} detalle={t('agente_cuadre.el_costo_por_dia_no_se')} contenida>
-          <Columnas etiqueta={t('capacidad_forecast.costo_de_ia_por_dia')} datos={r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.costoUsd }))} formato="usd" />
+        <Tarjeta key="serie" titulo={t('agente_fase.serie_costo_dia')} contenida>
+          {r.porDia.length > 0
+            ? <Columnas etiqueta={t('capacidad_forecast.costo_de_ia_por_dia')} datos={r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.costoUsd }))} formato="usd" />
+            : <p className="adm-sis-vacio-linea" role="status"><b>{t('model_ops.sin_actividad_de_ia')}</b> {t('agente_cuadre.el_costo_por_dia_no_se')}</p>}
         </Tarjeta>,
         <TablaModelosFase
           key="modelos"

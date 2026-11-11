@@ -145,20 +145,22 @@ describe('las fichas', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-15T18:00:00Z'));
     const html = await pintar(ok([fila()]));
-    for (const t of ['Enviados · 30 días', 'Entregados · 30 días', 'Rebotados · 30 días']) expect(html).toContain(t);
+    // Rovaq pc-kpis de 4: Entregados y rebotados (misma ventana) van en la nota de Enviados.
+    expect(html).toContain('Enviados · 30 días');
+    expect(html).toContain('Entregados');
     // Retenidos / Sin póliza / Recibidos hoy no son de 30 días: no llevan el rótulo.
     expect(html).not.toContain('Retenidos · 30');
     expect(html).not.toContain('Sin póliza · 30');
     // La ventana de la ficha (hoy y los 29 días anteriores) es la misma del filtro de la lista.
-    for (const estado of ['enviado', 'entregado', 'rebotado']) {
+    for (const estado of ['enviado']) {
       expect(html).toContain(`des_estado=${estado}&amp;des_desde=2026-09-16`);
     }
     expect(html).not.toMatch(/des_estado=retenido&amp;des_desde/);
   });
 
-  it('con números de verdad los pinta, con los seis rótulos', async () => {
+  it('con números de verdad los pinta, con sus rótulos (cuatro celdas)', async () => {
     const html = await pintar(ok([fila()]));
-    for (const t of ['Recibidos hoy', 'Enviados', 'Entregados', 'Rebotados', 'Retenidos', 'Sin póliza']) expect(html).toContain(t);
+    for (const t of ['Recibidos hoy', 'Enviados', 'Entregados', 'rebotados', 'Retenidos', 'Sin póliza']) expect(html).toContain(t);
   });
 
   it('un conteo `null` es «—» con su leyenda, no un cero', async () => {

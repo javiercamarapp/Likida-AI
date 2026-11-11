@@ -25,6 +25,7 @@
 // Todo el formato de moneda, fecha y número sale de lib/formato.ts.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import { useMemo, useState } from 'react';
 import { Camera, ScanLine } from 'lucide-react';
 import { Aviso, Boton, Casilla, Disclosure, Icono, StatusChip, Tarjeta, TablaBase, Tooltip, type ColumnaBase } from '@/app/ui-v2/componentes';
@@ -155,7 +156,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
         {/* ── Los números de arriba ──────────────────────────────────────────── */}
         <TiraCifras
           etiqueta={t('qa_banco_verdad.banco_de_comprobantes_reales_verdad_de')}
-          items={[
+          items={uniformes([
             { etiqueta: t('qa_banco_verdad.fotos_en_el_banco'), valor: numero(fotos.length, idioma), nota: t('qa_banco_verdad.listadas_todas_sin_recorte') },
             {
               etiqueta: t('qa_banco_verdad.con_verdad_de_terreno'),
@@ -177,7 +178,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
                 ? t('qa_banco_verdad.no_hay_ni_un_campo_medido')
                 : t('qa_banco_verdad.sobre_campos_con_valor', { n: numero(resumen.medidos, idioma) }),
             },
-          ]}
+          ])}
         />
 
         {lecturasError !== null && (

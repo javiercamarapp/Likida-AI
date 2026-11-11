@@ -6,6 +6,7 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Upload } from 'lucide-react';
 import { Boton, CampoArchivo, Icono } from '@/app/ui-v2/componentes';
+import { ZonaSoltar } from '../zona-soltar';
 import './peajes.css';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
@@ -33,7 +34,9 @@ export function SubirDesglose({ subirDesglose }: { subirDesglose: AccionSubir })
   return (
     <div className="rv-pj-control">
       <form action={accion} className="rv-pj-forma">
-        <CampoArchivo etiqueta={tx('rest.xml_del_cfdi_consolidado')} name="archivo" accept=".xml,text/xml,application/xml" required />
+        <ZonaSoltar>
+          <CampoArchivo etiqueta={tx('rest.xml_del_cfdi_consolidado')} name="archivo" accept=".xml,text/xml,application/xml" required />
+        </ZonaSoltar>
         <BotonSubir />
       </form>
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}

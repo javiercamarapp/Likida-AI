@@ -10,7 +10,6 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/dashboard/chat/historial.tsx': 1,
   'app/dashboard/chat/traza.tsx': 1,
   'app/dashboard/proximamente/proximamente.tsx': 1,
-  'app/dashboard/puesta-en-marcha/vista.tsx': 1,
   'app/dashboard/sidebar-nav.tsx': 2,
   'app/login/vista-login.tsx': 2,
   'app/ui-v2/componentes/overlay.tsx': 1,

@@ -3,3 +3,6 @@
 .rv-evals__nota { margin: 8px 0; font-size: var(--t-body); }
 .rv-evals__huella { font-variant-numeric: tabular-nums; color: var(--muted); }
 .rv-evals__juez { display: inline-flex; gap: 4px; }
+
+/* F26 ronda 4: el vacío dentro de una tarjeta va punteado (Rovaq `ac-vacio`: 1 px, radio 8, 20×14). */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
