@@ -1,5 +1,4 @@
 import { StatusChip, type TonoEstado } from '@/app/ui-v2/componentes';
-import { PILL_ESTATUS } from '../resumen-visual';
 import type { ViajeEnCursoRow } from '@/lib/likida/repo_paginado';
 import type { Semaforo } from '@/lib/likida/conductor/tablero';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
@@ -17,11 +16,15 @@ const CLAVE_ESTATUS = {
   liquidado: 'viajes.estatus.liquidado', en_cuadre: 'viajes.estatus.en_cuadre', abierto: 'viajes.estatus.abierto',
 } as const;
 
-/** `viaje.estatus`: la fuente es `PILL_ESTATUS` (resumen-visual); aquí solo se pinta. */
+/** El tono de cada `viaje.estatus` (el dominio lo fija el constraint `viaje_estatus_dominio`). */
+const TONO_ESTATUS: Record<keyof typeof CLAVE_ESTATUS, TonoEstado> = { liquidado: 'ok', en_cuadre: 'warn', abierto: 'neutral' };
+
+/** `viaje.estatus`: el rótulo sale del diccionario y el tono de `TONO_ESTATUS`; un valor fuera del dominio se pinta crudo en neutro. */
 export function PillEstatusViaje({ estatus, tr = TR_OPERACION_ES }: { estatus: string; tr?: TrOperacion }) {
-  const e = PILL_ESTATUS[estatus] ?? { etiqueta: estatus, estado: 'neutral' as TonoEstado };
-  const clave = (CLAVE_ESTATUS as Record<string, (typeof CLAVE_ESTATUS)[keyof typeof CLAVE_ESTATUS]>)[estatus];
-  return <StatusChip tono={e.estado}>{clave ? tr.t(clave) : e.etiqueta}</StatusChip>;
+  const conocido = estatus in CLAVE_ESTATUS;
+  const clave = conocido ? CLAVE_ESTATUS[estatus as keyof typeof CLAVE_ESTATUS] : null;
+  const tono = conocido ? TONO_ESTATUS[estatus as keyof typeof CLAVE_ESTATUS] : 'neutral';
+  return <StatusChip tono={tono}>{clave ? tr.t(clave) : estatus}</StatusChip>;
 }
 
 /** El estado del aviso, con las marcas reales de la confirmación (0058): sin avisar → avisado (con el conteo) → aceptó / escalado. */

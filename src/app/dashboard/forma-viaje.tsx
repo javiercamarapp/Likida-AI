@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { ComboCatalogo, type BuscarCatalogo } from './combo-catalogo';
 import { mxn } from '@/lib/formato';
-import { CampoFecha, CampoTexto } from '@/app/ui-v2/componentes';
+import { Aviso, Boton, CampoFecha, CampoTexto, Icono } from '@/app/ui-v2/componentes';
 
 /**
  * El formulario de NUEVO VIAJE — pieza REUSABLE a propósito (12-ago-2026):
@@ -34,12 +34,9 @@ export type AccionCrearViaje = (
 function BotonCrear() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Plus width={15} height={15} strokeWidth={2} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Plus} />}>
       {pending ? 'Creando…' : 'Crear viaje'}
-    </button>
+    </Boton>
   );
 }
 
@@ -150,9 +147,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
       )}
 
       {estado?.error && (
-        <div className="rounded-lg px-3 py-2.5 text-[13px]" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-          {estado.error}
-        </div>
+        <Aviso tono="error">{estado.error}</Aviso>
       )}
 
       <div>
