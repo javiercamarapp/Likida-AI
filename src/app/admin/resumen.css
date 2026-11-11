@@ -142,3 +142,30 @@
 [data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] > * { background: var(--ink); color: var(--surface); }
 [data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] :is(.adm-res-fila__titulo, .adm-flota-id, svg) { color: var(--surface); }
 [data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] .rv-btn { background: transparent; color: var(--surface); border-color: var(--surface); }
+
+/* ── Ronda 6 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
+/* pf-tile (Rovaq, medido): 130 px de alto, padding 20, rótulo 12/600 con «● Observado» a la DERECHA en la misma fila, cifra 26/600 con tracking -0.91 px. */
+[data-ui="v2"] .adm-res-tiles .rv-kpi { min-height: 130px; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__pie { min-height: 0; margin-top: 0; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-size: 26px; letter-spacing: -.035em; }
+@media (min-width: 1100px) {
+  [data-ui="v2"] .adm-res-tiles .rv-kpi__sello { position: absolute; top: 20px; right: 20px; flex: 0 0 auto; width: auto; height: auto; overflow: visible; clip-path: none; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--muted); }
+  [data-ui="v2"] .adm-res-tiles .rv-kpi__cab { padding-right: 92px; }
+}
+/* Los paneles de una fila 6-6 se igualan: el pie del más corto baja al fondo en vez de dejar un vacío bajo el cuerpo. */
+[data-ui="v2"] .rv-tarjeta .adm-res-pares ~ .adm-res-pie { margin-top: auto; }
+/* El semáforo dentro de «Operación»: un aviso del panel, no un banner de página. */
+[data-ui="v2"] .rv-tarjeta .rv-aviso, [data-ui="v2"] .rv-tarjeta .rv-aviso-compacto { margin: 0; }
+/* Notificaciones: el punto de «sin leer» marca algo que requiere acción, así que usa la señal burdeos (decisión 12); el leído queda vacío. */
+[data-ui="v2"] .adm-notif .av-fila:not([data-leido="si"]) .av-punto { background: var(--senal, var(--ink)); }
+@media (max-width: 640px) {
+  /* En móvil el punto se queda en la fila del título (no solo en una línea sobre el chip «Crítico»). */
+  [data-ui="v2"] .adm-notif .av-fila { flex-wrap: nowrap; }
+  [data-ui="v2"] .adm-notif .av-punto { margin-top: 6px; }
+}
+
+/* Móvil: en «Invitar integrante» los campos llenan la columna (Rovaq: 100 % de ancho, 36 px de alto, 44 px táctil). */
+@media (max-width: 640px) {
+  [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control { width: 100%; }
+  [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control :is(input, select) { max-width: none; min-height: 36px; }
+}
