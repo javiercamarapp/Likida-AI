@@ -54,3 +54,16 @@
 [data-ui="v2"] .adm-pila { display: flex; flex-direction: column; gap: var(--sp-gap, 12px); min-width: 0; }
 [data-ui="v2"] .adm-forma-fina .rv-btn:disabled,
 [data-ui="v2"] .adm-forma-fina button[type="submit"]:disabled { background: transparent; color: var(--muted); border: 1px dashed #bfbfc2; opacity: 1; }
+
+/* Equipo (Rovaq CF): filas rótulo-control en el formulario de alta, select de rol de 28 px y acciones de fila. */
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila-control { min-width: 0; }
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila-control :is(input, select) { width: 100%; max-width: 320px; }
+[data-ui="v2"] .adm-persona { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+[data-ui="v2"] .adm-persona__nombre { font-weight: 500; color: var(--ink); }
+[data-ui="v2"] .adm-persona__correo, [data-ui="v2"] .adm-persona__meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+[data-ui="v2"] .adm-rol-celda { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+[data-ui="v2"] .adm-rol-select { height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input, var(--line)); background: var(--campo-bg, var(--surface)); color: var(--ink); font: 500 13px/1 var(--font-sans-ui, inherit); }
+[data-ui="v2"] .adm-rol-select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+[data-ui="v2"] .adm-rol-aviso { font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .adm-rol-aviso[data-error] { color: var(--bad); }
+[data-ui="v2"] .adm-acciones-fila { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
