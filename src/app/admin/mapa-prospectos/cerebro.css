@@ -88,15 +88,16 @@
 @media (min-width: 1100px) { .cer-rank { height: calc(100dvh - 17rem); min-height: 480px; overflow-y: auto; } }
 .cer-rank__bloque { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .cer-rank__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.cer-rank__fila { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: minmax(70px, 1.1fr) minmax(40px, 1.4fr) auto; align-items: center; gap: 8px; min-height: 26px; padding: 0 6px; border-radius: 8px; cursor: pointer; font-size: var(--t-small); color: var(--ink); }
-.cer-rank__fila:hover:not(:disabled) { background: var(--canvas); }
-.cer-rank__fila[aria-pressed="true"] { background: var(--seg-activo-bg); color: var(--seg-activo-fg); }
-.cer-rank__fila:disabled { cursor: default; }
-.cer-rank__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+[data-ui="v2"] .rv-btn.cer-rank__fila::after { content: none; }
+[data-ui="v2"] .rv-btn.cer-rank__fila { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: minmax(70px, 1.1fr) minmax(40px, 1.4fr) auto; align-items: center; gap: 8px; min-height: 26px; padding: 0 6px; border-radius: 8px; cursor: pointer; font-size: var(--t-small); color: var(--ink); }
+[data-ui="v2"] .rv-btn.cer-rank__fila:hover:not(:disabled) { background: var(--canvas); }
+[data-ui="v2"] .rv-btn.cer-rank__fila[aria-pressed="true"] { background: var(--seg-activo-bg); color: var(--seg-activo-fg); }
+[data-ui="v2"] .rv-btn.cer-rank__fila:disabled { cursor: default; }
+[data-ui="v2"] .rv-btn.cer-rank__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 .cer-rank__nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cer-rank__pista { display: block; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .cer-rank__barra { fill: var(--chart-3, var(--muted)); }
-.cer-rank__fila b { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; min-width: 32px; }
+[data-ui="v2"] .rv-btn.cer-rank__fila b { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; min-width: 32px; }
 .cer-rank__cifra { margin: 0; font-size: var(--t-body); color: var(--muted); }
 .cer-rank__cifra b { font-size: 22px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 

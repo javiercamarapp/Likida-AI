@@ -18,7 +18,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { COLOR_EMBUDO, type ProspectoMapa, type TextosProspecto } from '@/lib/admin/prospectos-mapa-client';
 import { Undo2 } from 'lucide-react';
-import { Icono, clasesBoton } from '../../ui-v2/componentes';
+import { Boton, Icono } from '../../ui-v2/componentes';
 import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 import './cerebro.css';
 import { useT } from '@/lib/i18n/proveedor';
@@ -127,8 +127,8 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
 
   return (
     <div className="cer-calles">
-      <div className="cer-calles__cab">{rico(tx('mapa_prospectos_calles.strong_nivel_calle_strong_e1_de', { titulo, conCoords, length: prospectos.length }), { strong: (c) => <strong>{c}</strong>, e1: (c) => <span>{c}</span> })}<button type="button" onClick={onCerrar} className={clasesBoton('secondary', 'sm')}>
-          <Icono icono={Undo2} tam={14} />{tx('mapa_prospectos_calles.volver_al_pais')}</button>
+      <div className="cer-calles__cab">{rico(tx('mapa_prospectos_calles.strong_nivel_calle_strong_e1_de', { titulo, conCoords, length: prospectos.length }), { strong: (c) => <strong>{c}</strong>, e1: (c) => <span>{c}</span> })}<Boton tamano="sm" onClick={onCerrar} icono={<Icono icono={Undo2} tam={14} />}>
+          {tx('mapa_prospectos_calles.volver_al_pais')}</Boton>
       </div>
       <div ref={ref} className="cer-calles__mapa" />
     </div>

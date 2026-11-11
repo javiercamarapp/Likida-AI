@@ -42,7 +42,6 @@
   "src/app/admin/mcp-clientes/page.tsx": 5,
   "src/app/admin/mi-perfil/page.tsx": 8,
   "src/app/admin/pie-paginas.tsx": 2,
-  "src/app/admin/rango-costo.tsx": 1,
   "src/app/admin/renglon-sistema.tsx": 1,
   "src/app/admin/requiere-accion.ts": 1,
   "src/app/admin/rutas.ts": 10,

@@ -32,7 +32,7 @@ import { useT } from '@/lib/i18n/proveedor';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import {
-  Boton, Campo, CampoSelect, EsqTarjetaV2, Fieldset, Disclosure, Drawer, FilaTarjetas, Icono, SegmentedControl, Tarjeta, clasesBoton, cx,
+  Boton, Campo, CampoSelect, EsqTarjetaV2, Fieldset, Disclosure, Drawer, FilaTarjetas, FiltroChip, Icono, SegmentedControl, Tarjeta, Tooltip, clasesBoton, cx,
 } from '../../ui-v2/componentes';
 import { BarList, TiraCifras } from '../../ui-v2/graficas';
 import { idsSinTextos } from './csv_prospectos';
@@ -88,10 +88,10 @@ const TAMANOS_UI: Array<Tamano | 'n/d'> = [...TAMANOS, 'n/d'];
 /** Opción de un conjunto aditivo (giro, etapa, tamaño, fuente): botón de dos estados, el activo con el azul del sistema. */
 function Opcion({ activo, etapa, onClick, children }: { activo: boolean; etapa?: string; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" className="cer-op" aria-pressed={activo} onClick={onClick}>
+    <FiltroChip activo={activo} onClick={onClick}>
       {etapa ? <i className="cer-punto" data-etapa={etapa} aria-hidden="true" /> : null}
       {children}
-    </button>
+    </FiltroChip>
   );
 }
 
@@ -187,11 +187,11 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
               <Icono icono={Navigation} tam={14} />{tx('mapa_prospectos_calles.como_llegar')}</a>
           )}
           {onAfinar && !esProspectoTerminal(p.estado) && (p.telefono || p.correo) && (
-            <button type="button" onClick={() => onAfinar(p.id)} disabled={afinando}
-              title={tx('mapa_prospectos_cerebro.el_agente_experto_redacta_el_primer')} className={BTN}>
-              <Icono icono={p.mensajesGeneradosEn ? RefreshCw : Sparkles} tam={14} />
-              {afinando ? tx('mapa_prospectos_detalle.redactando') : p.mensajesGeneradosEn ? 'IA' : tx('mapa_prospectos_cerebro.mensaje_ia')}
-            </button>
+            <Tooltip texto={tx('mapa_prospectos_cerebro.el_agente_experto_redacta_el_primer')}>
+              <Boton tamano="sm" onClick={() => onAfinar(p.id)} disabled={afinando} icono={<Icono icono={p.mensajesGeneradosEn ? RefreshCw : Sparkles} tam={14} />}>
+                {afinando ? tx('mapa_prospectos_detalle.redactando') : p.mensajesGeneradosEn ? 'IA' : tx('mapa_prospectos_cerebro.mensaje_ia')}
+              </Boton>
+            </Tooltip>
           )}
         </div>
       )}
@@ -706,7 +706,9 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
         </p>
         <div className="cer-barra__acciones">
           {(camK > 1.02 || seleccion) && (
-            <Boton tamano="sm" icono={<Icono icono={Undo2} />} onClick={alPais} title={tx('mapa_prospectos_calles.volver_al_pais')}>{tx('mapa_prospectos_cerebro.pais')}</Boton>
+            <Tooltip texto={tx('mapa_prospectos_calles.volver_al_pais')}>
+              <Boton tamano="sm" icono={<Icono icono={Undo2} />} onClick={alPais}>{tx('mapa_prospectos_cerebro.pais')}</Boton>
+            </Tooltip>
           )}
           {/* Los dos atajos más pedidos: un clic, sin abrir el cajón. Mismo estado que los criterios de adentro. */}
           <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.soloDecisor} icono={<Icono icono={UserCheck} />} disabled={!listo}
@@ -716,9 +718,11 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
           <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} disabled={!listo} onClick={() => setFiltrosAbiertos(true)}>
             {tx('mapa_prospectos_cerebro.filtros')}{filtrosActivos ? ` · ${filtrosActivos}` : ''}
           </Boton>
-          <Boton tamano="sm" onClick={alternarPantalla} title={tx('mapa_prospectos_cerebro.pantalla_completa')} icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />}>
-            <span className="rv-sr">{tx('mapa_prospectos_cerebro.pantalla_completa')}</span>
-          </Boton>
+          <Tooltip texto={tx('mapa_prospectos_cerebro.pantalla_completa')}>
+            <Boton tamano="sm" onClick={alternarPantalla} icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />}>
+              <span className="rv-sr">{tx('mapa_prospectos_cerebro.pantalla_completa')}</span>
+            </Boton>
+          </Tooltip>
         </div>
       </div>
 
@@ -831,7 +835,9 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
               {listaSeleccion.some((p) => p.lat !== null) && (
                 <Boton tamano="sm" variante="primary" onClick={() => setCalles(true)}>{tx('mapa_prospectos_cerebro.calles')}</Boton>
               )}
-              <Boton tamano="sm" variante="ghost" onClick={() => elegirEstado(null)} title={tx('mapa_prospectos_cerebro.cerrar')} icono={<Icono icono={X} />}>{rico(tx('mapa_prospectos_cerebro.e0_cerrar_el_estado_e0'), { e0: (c) => <span className="rv-sr">{c}</span> })}</Boton>
+              <Tooltip texto={tx('mapa_prospectos_cerebro.cerrar')}>
+                <Boton tamano="sm" variante="ghost" onClick={() => elegirEstado(null)} icono={<Icono icono={X} />}>{rico(tx('mapa_prospectos_cerebro.e0_cerrar_el_estado_e0'), { e0: (c) => <span className="rv-sr">{c}</span> })}</Boton>
+              </Tooltip>
             </div>
             <div className="cer-lista">
               {!listo ? (
@@ -876,14 +882,14 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
                 const geo = ESTADOS_GEO.find((x) => x.nombre === r.nombre) ?? null;
                 return (
                   <li key={r.nombre}>
-                    <button type="button" className="cer-rank__fila" aria-pressed={seleccion?.nombre === r.nombre} disabled={geo === null}
+                    <Boton variante="ghost" className="cer-rank__fila" aria-pressed={seleccion?.nombre === r.nombre} disabled={geo === null}
                       onClick={() => { if (!geo) return; setCalles(false); setFiltrosAbiertos(false); elegirEstado(seleccion?.id === geo.id ? null : geo); }}>
                       <span className="cer-rank__nombre">{r.nombre}</span>
                       <svg className="cer-rank__pista" width="100%" height="6" aria-hidden="true">
                         <rect className="cer-rank__barra" x="0" y="0" height="6" rx="3" width={`${Math.max(2, (r.n / maxEstado) * 100).toFixed(2)}%`} />
                       </svg>
                       <b>{numero(r.n, idioma)}</b>
-                    </button>
+                    </Boton>
                   </li>
                 );
               })}

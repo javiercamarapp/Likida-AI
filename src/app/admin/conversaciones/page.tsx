@@ -2,19 +2,21 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { destinatarioEnmascarado } from '@/lib/meta/client';
 import { requireSuperadmin } from '@/lib/auth/guard';
+import { numero } from '@/lib/formato';
 import {
   getConversacionesActivas, contarConversacionesActivas, buscarConversaciones, TOPE_CONVERSACIONES,
   type ConversacionActiva,
 } from '@/lib/admin/negocio';
 import { MessageCircle, Search } from 'lucide-react';
 import { Boton, BotonEnlace, EstadoVacio, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../ui-v2/graficas';
-import { HBars } from '../ui/graficas';
+import { BarList, Cifra, TiraCifras } from '../../ui-v2/graficas';
 import { FilaConversacion } from './hilo';
 
 export const dynamic = 'force-dynamic';
 
 interface SearchParams { q?: string; p?: string }
+
+const TITULO_MENSAJES = 'Mensajes por conversación';
 
 /**
  * Conversaciones de WhatsApp — versión dedicada y de ancho completo de la
@@ -85,8 +87,8 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
           ranking con HBars entre conversaciones es genuino — no una serie inventada. Solo con 2+ conversaciones: con 1 sola, un
           "ranking" de una barra no compara nada. */}
       {conversaciones.length > 1 && (
-        <Tarjeta titulo="Mensajes por conversación">
-          <HBars datos={conversaciones.map((c) => ({ etiqueta: destinatarioEnmascarado(c.telefono), valor: c.turns.length }))} formato="entero" />
+        <Tarjeta titulo={TITULO_MENSAJES}>
+          <BarList etiqueta={TITULO_MENSAJES} items={conversaciones.map((c, i) => ({ clave: `${i}-${c.telefono}`, etiqueta: destinatarioEnmascarado(c.telefono), valor: c.turns.length }))} formato={(v) => numero(v)} />
         </Tarjeta>
       )}
 

@@ -126,7 +126,7 @@ function Tarjeta({
   return (
     <div className="ven-tarjeta" data-pendiente={pendiente || undefined}>
       {/* La tarjeta es un botón: el detalle (mover, asignar, nota, redactar) vive en el cajón, como en Rovaq. */}
-      <button type="button" className="ven-tarjeta__abrir" onClick={() => setAbierto(true)} aria-haspopup="dialog">
+      <Boton variante="ghost" className="ven-tarjeta__abrir" onClick={() => setAbierto(true)} aria-haspopup="dialog">
         <span className="ven-tarjeta__empresa">{t.empresa}</span>
         {/* La vacante es LA señal del censo: si existe, se enseña siempre. */}
         {t.vacante && <span className="ven-tarjeta__tenue">{tr('mapa_prospectos_cerebro.vacante')}{' '}{t.vacante}</span>}
@@ -138,7 +138,7 @@ function Tarjeta({
           </span>
         )}
         {t.notas && <span className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t.notas}</span>}
-      </button>
+      </Boton>
 
       <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={t.empresa}
         descripcion={[t.vacante ? `Vacante: ${t.vacante}` : null, t.ciudad].filter(Boolean).join(' · ') || undefined}>

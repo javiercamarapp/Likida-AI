@@ -6,9 +6,8 @@ import { ahoraMs } from '@/lib/saludo';
 import { numero } from '@/lib/formato';
 import { usd } from '@/lib/utils';
 import { proyectarCosto } from './proyeccion';
-import { AreaChartSimple } from '../charts';
 import { EstadoVacio, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { AreaMini, Cifra, TiraCifras } from '../../ui-v2/graficas';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
@@ -52,9 +51,9 @@ export default async function CapacidadForecastPage() {
 
           <Tarjeta titulo={t('capacidad_forecast.costo_de_ia_por_dia')}>
             {r.porDia.length > 1 ? (
-              <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={(v) => usd(v)} etiquetaSerie={t('capacidad_forecast.costo_de_ia_por_dia_usd')} />
+              <AreaMini valores={r.porDia.map((d) => d.costoUsd)} etiquetas={r.porDia.map((d) => d.dia)} formato="usd" etiqueta={t('capacidad_forecast.costo_de_ia_por_dia_usd')} />
             ) : (
-              <p className="m-0 flex h-40 items-center text-sm text-muted">{t('capacidad_forecast.sin_historial_suficiente_todavia_para_una')}</p>
+              <EstadoVacio titulo={t('capacidad_forecast.sin_datos')} contenido>{t('capacidad_forecast.sin_historial_suficiente_todavia_para_una')}</EstadoVacio>
             )}
             <p className="m-0 mt-3 text-xs text-muted">{t('capacidad_forecast.proyeccion_simple_costo_diario_promedio_30')}{proyeccion.diasVentana < 7 && t('capacidad_forecast.con_tan_poca_historia_esta_cifra')}
             </p>

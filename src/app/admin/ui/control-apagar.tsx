@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Boton } from '../../ui-v2/componentes/boton';
+import { CampoTexto } from '../../ui-v2/componentes/campos';
+import './control-apagar.css';
 
 /**
  * Palanca encender/apagar en UNA línea (~40 px por fila). Estado normal: [Apagar] o [Encender]. El «Motivo» NO ocupa la fila: aparece
@@ -39,7 +41,7 @@ function ControlApagarInterno({ id, apagado, pendiente, enviar, etiquetaMotivo =
         <Boton type="submit" variante="primary" tamano="sm" disabled={pendiente}>{pendiente ? 'Guardando…' : 'Encender'}</Boton>
       ) : pidiendo ? (
         <>
-          <input name="motivo" required autoFocus aria-label="Motivo del apagado" placeholder={etiquetaMotivo} className="rv-ctl" style={{ width: '12rem' }} />
+          <CampoTexto name="motivo" required autoFocus etiqueta="Motivo del apagado" etiquetaOculta placeholder={etiquetaMotivo} className="rv-apagar__motivo" />
           <Boton type="submit" variante="danger" tamano="sm" disabled={pendiente}>{pendiente ? 'Guardando…' : 'Confirmar apagado'}</Boton>
           <Boton type="button" variante="ghost" tamano="sm" onClick={() => setPidiendo(false)}>Cancelar</Boton>
         </>
