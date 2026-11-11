@@ -31,6 +31,10 @@ import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { MAX_CHAT_BYTES } from './limites';
 import { medirRuta } from '@/lib/observability/latencia';
 import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
+import { getT } from '@/lib/i18n/servidor';
+
+/** El traductor, pedido SOLO cuando hay un texto que decir. */
+const T = () => getT('mensajes');
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -55,7 +59,7 @@ async function manejarPOST(req: NextRequest) {
   // gasta dinero de modelo, autenticada solo por la cookie de sesión.
   if (!vieneDeNuestroSitio(req)) {
     logger.warn('chat.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
-    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+    return NextResponse.json({ error: (await T()).t('dash.otro_sitio') }, { status: 403 });
   }
 
   const sesion = await getSessionTenant();
@@ -83,12 +87,12 @@ async function manejarPOST(req: NextRequest) {
   const { tenantId, nombreFlota } = efectivo;
 
   const lectura = await leerTextoAcotado(req, MAX_CHAT_BYTES);
-  if (!lectura.ok) return NextResponse.json({ error: lectura.motivo === 'demasiado_grande' ? 'cuerpo demasiado grande' : 'cuerpo inválido' },
+  if (!lectura.ok) return NextResponse.json({ error: (await T()).t(lectura.motivo === 'demasiado_grande' ? 'dash.cuerpo_grande' : 'dash.cuerpo_invalido') },
     { status: lectura.motivo === 'demasiado_grande' ? 413 : 400 });
   let cuerpo: unknown;
-  try { cuerpo = JSON.parse(lectura.texto); } catch { return NextResponse.json({ error: 'cuerpo inválido' }, { status: 400 }); }
+  try { cuerpo = JSON.parse(lectura.texto); } catch { return NextResponse.json({ error: (await T()).t('dash.cuerpo_invalido') }, { status: 400 }); }
   const mensajes = validarMensajes((cuerpo as { mensajes?: unknown })?.mensajes);
-  if (!mensajes) return NextResponse.json({ error: 'mensajes inválidos' }, { status: 400 });
+  if (!mensajes) return NextResponse.json({ error: (await T()).t('dash.mensajes_invalidos') }, { status: 400 });
   // El id de conversación al que anexar (historial 0088). Inválido o ajeno →
   // conversación nueva; nunca un error que le corte la respuesta al usuario.
   const conversacionPedida = validarConversacionId((cuerpo as { conversacionId?: unknown })?.conversacionId);
@@ -108,12 +112,12 @@ async function manejarPOST(req: NextRequest) {
   } catch (e) {
     // Fallar CERRADO: si no se pudo leer el gasto del día, no se gasta más.
     logger.error('chat.tope_dia.error', { err: e instanceof Error ? e.message : String(e) });
-    return NextResponse.json({ agotado: true, bloques: [{ tipo: 'texto', texto: 'No pude verificar el presupuesto del día — el análisis con IA descansa un momento. Las respuestas rápidas siguen funcionando.' }] });
+    return NextResponse.json({ agotado: true, bloques: [{ tipo: 'texto', texto: (await T()).t('dash.chat.sin_presupuesto') }] });
   }
   if (gastadoHoy >= topeDiaUsd()) {
     return NextResponse.json({
       agotado: true,
-      bloques: [{ tipo: 'texto', texto: 'El análisis con IA de hoy llegó a su tope diario (existe para cuidar tu costo). Mañana se renueva solo; mientras, las respuestas rápidas del catálogo siguen funcionando.' }],
+      bloques: [{ tipo: 'texto', texto: (await T()).t('dash.chat.tope') }],
     });
   }
 

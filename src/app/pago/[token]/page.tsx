@@ -2,13 +2,15 @@ import { ipDeCabeceras } from '@/lib/http/ip_cliente';
 import { headers } from 'next/headers';
 import { mxn, fechaMx } from '@/lib/formato';
 import { rateLimit } from '@/lib/ratelimit';
-import { TEXTO_LIGA_NO_VALIDA, METODOS_PORTAL, identificaFactura, textoDelRep } from '@/lib/likida/portal_pago';
+import { METODOS_PORTAL, identificaFactura, textoDelRep } from '@/lib/likida/portal_pago';
 import {
   resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso,
   type VistaPortal,
 } from '@/lib/likida/portal_pago_lectura';
 import { FormaDePago } from './forma';
 import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
+import { getT } from '@/lib/i18n/servidor';
+import type { TrPublico } from '@/lib/i18n/publico_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /pago/<token> — LO QUE VE EL CLIENTE DE LA FLOTA. Sin sesión, sin cuenta.
@@ -46,11 +48,14 @@ import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = {
-  title: 'Tu factura',
-  robots: { index: false, follow: false },
-  referrer: 'no-referrer' as const,
-};
+export async function generateMetadata() {
+  const { t } = await getT('publico');
+  return {
+    title: t('pg.meta.titulo'),
+    robots: { index: false, follow: false },
+    referrer: 'no-referrer' as const,
+  };
+}
 
 /** El sobre de todas las pantallas de esta ruta: mismo ancho, mismo tono, y
  *  colores del sistema — este documento se abre de noche, desde un teléfono en
@@ -63,6 +68,8 @@ function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
 
 export default async function PaginaPago({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  const tr = await getT('publico');
+  const { t } = tr;
 
   // Un techo por IP sobre el RENDER, no solo sobre el envío. Con 256 bits de
   // token la fuerza bruta es imposible por aritmética, así que esto no protege
@@ -72,8 +79,8 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
   if (!(await rateLimit(`portal-pago-vista:${ip}`, 60, 10 * 60_000))) {
     return (
       <Aviso
-        titulo="Demasiadas peticiones"
-        texto="Espera unos minutos y vuelve a abrir tu enlace."
+        titulo={t('pg.limite.titulo')}
+        texto={t('pg.limite.texto')}
       />
     );
   }
@@ -83,12 +90,12 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
     if (resolucion.motivo === 'no_disponible') {
       return (
         <Aviso
-          titulo="No pudimos consultar tu factura"
-          texto="Hubo una falla al consultar. No es tu enlace: vuelve a intentarlo en unos minutos, y si sigue igual avísale a quien te lo envió."
+          titulo={t('pg.falla.titulo')}
+          texto={t('pg.falla.texto')}
         />
       );
     }
-    return <Aviso titulo="Enlace no disponible" texto={TEXTO_LIGA_NO_VALIDA} />;
+    return <Aviso titulo={t('pg.enlace.titulo')} texto={t('pg.enlace.texto')} />;
   }
   const liga = resolucion.liga;
 
@@ -97,8 +104,8 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
     if (vista.motivo === 'no_disponible') {
       return (
         <Aviso
-          titulo="No pudimos consultar tu factura"
-          texto="Hubo una falla al consultar. No es tu enlace: vuelve a intentarlo en unos minutos, y si sigue igual avísale a quien te lo envió."
+          titulo={t('pg.falla.titulo')}
+          texto={t('pg.falla.texto')}
         />
       );
     }
@@ -112,16 +119,16 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
       await anotarAcceso(liga, 'vista', { motivo: 'no_cobrable', estatus: vista.estatus });
       return (
         <Aviso
-          titulo="Esta factura ya no se puede pagar aquí"
+          titulo={t('pg.nocobrable.titulo')}
           texto={
             vista.estatus === 'cancelada'
-              ? 'Esta factura fue cancelada, así que aquí ya no se registra ningún pago. Si ya la pagaste, o si esperas una factura nueva que la reemplace, escríbele directamente a quien te la emitió: esa aclaración no se puede hacer desde esta página.'
-              : 'Esta factura todavía no está emitida, así que aquí no se puede registrar ningún pago. Escríbele a quien te compartió el enlace para que te confirme cómo va.'
+              ? t('pg.nocobrable.cancelada')
+              : t('pg.nocobrable.sinemitir')
           }
         />
       );
     }
-    return <Aviso titulo="Enlace no disponible" texto={TEXTO_LIGA_NO_VALIDA} />;
+    return <Aviso titulo={t('pg.enlace.titulo')} texto={t('pg.enlace.texto')} />;
   }
 
   const v = vista.vista;
@@ -135,41 +142,42 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
   await anotarAcceso(liga, 'vista', undefined, { unaVezCadaMs: 10 * 60_000 });
   await sellarUltimoAcceso(liga);
 
-  return <Contenido v={v} token={token} />;
+  return <Contenido v={v} token={token} tr={tr} />;
 }
 
-function Contenido({ v, token }: { v: VistaPortal; token: string }) {
+function Contenido({ v, token, tr }: { v: VistaPortal; token: string; tr: TrPublico }) {
+  const { t, idioma } = tr;
+  const fecha = (iso: string) => fechaMx(iso, idioma);
   const f = v.factura;
   const saldado = f.saldo !== null && f.saldo <= 0.01;
   const pendientes = v.propuestas.filter((p) => p.estado === 'pendiente');
 
   return (
     <MarcoPublico
-      rotulo={`Factura de ${v.flota}`}
-      titulo={identificaFactura(f)}
-      apoyo={`A nombre de ${v.cliente}`}
-      pie={<p>Esta página la genera Likida por cuenta de {v.flota}. No pide contraseñas ni datos de tarjeta: si algo te los pide, no es esto.</p>}
+      rotulo={t('pg.factura.rotulo', { flota: v.flota })}
+      titulo={identificaFactura(f, t('pg.sin_folio'))}
+      apoyo={t('pg.factura.apoyo', { cliente: v.cliente })}
+      pie={<p>{t('pg.factura.pie', { flota: v.flota })}</p>}
     >
       {/* ── EL SALDO ─────────────────────────────────────────────────────── */}
       <section className="border-b border-[var(--line)] py-6">
-        <Renglon etiqueta="Total de la factura" valor={mxn(f.total)} />
+        <Renglon etiqueta={t('pg.r.total')} valor={mxn(f.total, idioma)} />
         <Renglon
-          etiqueta="Pagado"
-          valor={f.pagado === null ? 'sin dato' : mxn(f.pagado)}
+          etiqueta={t('pg.r.pagado')}
+          valor={f.pagado === null ? t('pg.sin_dato') : mxn(f.pagado, idioma)}
         />
         <Renglon
-          etiqueta="Saldo pendiente"
-          valor={f.saldo === null ? 'sin dato' : mxn(f.saldo)}
+          etiqueta={t('pg.r.saldo')}
+          valor={f.saldo === null ? t('pg.sin_dato') : mxn(f.saldo, idioma)}
           fuerte
         />
-        <Renglon etiqueta="Fecha de la factura" valor={fechaMx(f.fecha)} />
-        <Renglon etiqueta="Vence" valor={f.venceEn ? fechaMx(f.venceEn) : 'sin plazo pactado'} />
-        {f.cfdiUuid && <Renglon etiqueta="Folio fiscal (UUID)" valor={f.cfdiUuid} />}
+        <Renglon etiqueta={t('pg.r.fecha')} valor={fecha(f.fecha)} />
+        <Renglon etiqueta={t('pg.r.vence')} valor={f.venceEn ? fecha(f.venceEn) : t('pg.sin_plazo')} />
+        {f.cfdiUuid && <Renglon etiqueta={t('pg.r.uuid')} valor={f.cfdiUuid} />}
 
         {f.saldo === null && (
           <p className="mt-4 text-[13px]">
-            Ahora mismo no podemos calcular tu saldo. No quiere decir que esté en
-            cero: quiere decir que no pudimos consultarlo. Vuelve en unos minutos.
+            {t('pg.saldo.no_calculable')}
           </p>
         )}
       </section>
@@ -178,23 +186,20 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
       {v.propuestas.length > 0 && (
         <section className="border-b border-[var(--line)] py-6">
           <h2 className="text-base font-semibold">
-            Pagos que has registrado aquí
+            {t('pg.reg.titulo')}
           </h2>
           <ul className="mt-3 space-y-2">
             {v.propuestas.map((p, i) => (
               <li key={i} className="text-[14px] break-words">
-                <span>{mxn(p.monto)}</span>
-                {' · '}{fechaMx(p.fecha)}{' · ref. '}{p.referencia}
+                <span>{t('pg.reg.linea', { monto: mxn(p.monto, idioma), fecha: fecha(p.fecha), referencia: p.referencia })}</span>
                 {' — '}
-                <span>{rotuloEstado(p.estado)}</span>
+                <span>{t(`pg.estado.${p.estado}`)}</span>
               </li>
             ))}
           </ul>
           {pendientes.length > 0 && (
             <p className="mt-3 text-[13px]">
-              «Por confirmar» significa que ya lo recibimos y que {v.flota} todavía
-              tiene que cruzarlo contra su estado de cuenta. Hasta entonces el saldo
-              de arriba no se mueve — es el saldo real, no una promesa.
+              {t('pg.reg.pendiente_nota', { flota: v.flota })}
             </p>
           )}
         </section>
@@ -203,26 +208,22 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
       {/* ── EL FORMULARIO ────────────────────────────────────────────────── */}
       <section className="border-b border-[var(--line)] py-6">
         <h2 className="text-base font-semibold">
-          Registrar un pago
+          {t('pg.forma.titulo')}
         </h2>
         {saldado ? (
           <p className="mt-2 text-[14px]">
-            Esta factura ya no tiene saldo pendiente. Si hiciste otro depósito,
-            escríbele directamente a {v.flota}.
+            {t('pg.forma.saldado', { flota: v.flota })}
           </p>
         ) : f.saldo === null ? (
           <p className="mt-2 text-[14px]">
-            No podemos registrar un pago mientras no podamos mostrarte el saldo.
-            Vuelve a abrir esta página en unos minutos.
+            {t('pg.forma.sin_saldo')}
           </p>
         ) : (
           <>
             <p className="mt-2 text-[14px]">
-              Aquí NO se cobra nada: no hay tarjeta y no se hace ningún cargo. Es
-              para que nos digas el pago que ya hiciste por tu banco, con su
-              referencia, y {v.flota} lo pueda encontrar y confirmar.
+              {t('pg.forma.aclaracion', { flota: v.flota })}
             </p>
-            <FormaDePago token={token} saldo={f.saldo} metodos={METODOS_PORTAL} />
+            <FormaDePago token={token} saldo={f.saldo} metodos={METODOS_PORTAL.map((m) => ({ id: m.id, rotulo: t(`pg.metodo.${m.id}`) }))} />
           </>
         )}
       </section>
@@ -230,31 +231,30 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
       {/* ── EL COMPLEMENTO DE PAGO ───────────────────────────────────────── */}
       <section className="py-6">
         <h2 className="text-base font-semibold">
-          Tu complemento de pago (REP)
+          {t('pg.rep.titulo')}
         </h2>
         <p className="mt-2 text-[14px] break-words">{textoDelRep(
-          v.reps.map((r) => ({ cfdi_uuid: r.cfdiUuid, tieneXml: r.tieneXml })),
+          v.reps.map((r) => ({ cfdi_uuid: r.cfdiUuid, tieneXml: r.tieneXml })), tr,
         )}</p>
         {/* TODOS los complementos, uno por bloque, cada uno con su descarga.
             Con parcialidades son varios y el contador del cliente necesita
             todos: cada uno acredita el IVA de su mes (`c7-16`). */}
         {v.reps.map((rep) => (
           <div key={rep.cfdiUuid} className="mt-4 text-[14px]">
-            <Renglon etiqueta="Folio fiscal del REP" valor={rep.cfdiUuid} />
-            <Renglon etiqueta="Fecha del pago" valor={fechaMx(rep.fechaPago)} />
-            <Renglon etiqueta="Importe pagado" valor={mxn(rep.impPagado)} />
+            <Renglon etiqueta={t('pg.rep.folio')} valor={rep.cfdiUuid} />
+            <Renglon etiqueta={t('pg.rep.fecha')} valor={fecha(rep.fechaPago)} />
+            <Renglon etiqueta={t('pg.rep.importe')} valor={mxn(rep.impPagado, idioma)} />
             {rep.tieneXml ? (
               <a
                 className="mt-2 inline-block underline"
                
                 href={`/pago/${encodeURIComponent(token)}/complemento/${encodeURIComponent(rep.cfdiUuid)}`}
               >
-                Descargar el XML de este complemento
+                {t('pg.rep.descargar')}
               </a>
             ) : (
               <p className="mt-2 text-[13px]">
-                De este complemento no hay archivo cargado en Likida: pídeselo a
-                {' '}{v.flota} citando ese folio fiscal.
+                {t('pg.rep.sin_archivo', { flota: v.flota })}
               </p>
             )}
           </div>
@@ -263,12 +263,6 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
 
     </MarcoPublico>
   );
-}
-
-function rotuloEstado(e: 'pendiente' | 'conciliada' | 'descartada'): string {
-  if (e === 'conciliada') return 'confirmado y aplicado a la factura';
-  if (e === 'descartada') return 'no se pudo confirmar — pregúntale a quien te emitió la factura';
-  return 'por confirmar';
 }
 
 function Renglon({ etiqueta, valor, fuerte }: { etiqueta: string; valor: string; fuerte?: boolean }) {

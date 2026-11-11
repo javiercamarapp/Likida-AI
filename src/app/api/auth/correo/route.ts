@@ -61,7 +61,7 @@ export const dynamic = 'force-dynamic';
 interface PayloadHook {
   /** A37-S02-03: sonda FIRMADA del script de encendido; responde 200 sin armar ni mandar nada. */
   likida_dry_run?: boolean;
-  user?: { email?: string; new_email?: string };
+  user?: { email?: string; new_email?: string; user_metadata?: { idioma?: unknown } };
   email_data?: {
     token?: string;
     token_hash?: string;
@@ -258,6 +258,8 @@ export async function POST(req: Request) {
     codigo: accion === 'reauthentication' ? codigo : '',
     minutos: minutosDeCaducidad(),
     correoNuevo: payload.user?.new_email,
+    // El idioma del DESTINATARIO si ya lo eligió; un valor ajeno se ignora y cae a español.
+    idioma: payload.user?.user_metadata?.idioma,
   });
 
   // F1B (oraculo de tiempo/estado): si el envio se espera aqui, una cuenta EXISTENTE tarda lo que tarda Resend y una

@@ -15,9 +15,12 @@ import Link from 'next/link';
 import {
   calcularEstimacion, PRECIO_DIESEL_REFERENCIA, type ResultadoCalculadora,
 } from '@/lib/likida/marketing/calculadora';
-import { mxn, numero as litrosFmt, hoyMx } from '@/lib/formato';
+import { mxn as mxnFmt, numero as numeroFmt, hoyMx } from '@/lib/formato';
 import { Boton } from '../ui-v2/componentes/boton';
 import { atribucionDeUrl } from '@/lib/marketing/atribucion';
+import { useIdioma, useT } from '@/lib/i18n/proveedor';
+import { rico } from '@/lib/i18n/rico';
+import { publico } from '@/lib/i18n/es/publico';
 
 const num = (s: string): number | null => {
   const n = Number(s.replace(/[,$\s]/g, ''));
@@ -25,6 +28,10 @@ const num = (s: string): number | null => {
 };
 
 export function Calculadora() {
+  const { t } = useT('publico', publico);
+  const idioma = useIdioma();
+  const mxn = (n: number) => mxnFmt(n, idioma);
+  const litrosFmt = (n: number) => numeroFmt(n, idioma);
   const [litros, setLitros] = useState('');
   const [gastoDiesel, setGastoDiesel] = useState('');
   const [precioLitro, setPrecioLitro] = useState(String(PRECIO_DIESEL_REFERENCIA.toFixed(2)));
@@ -70,13 +77,13 @@ export function Calculadora() {
       });
       const cuerpo = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErrorEnvio(typeof cuerpo.error === 'string' ? cuerpo.error : 'No pudimos registrar tus datos. Inténtalo de nuevo.');
+        setErrorEnvio(typeof cuerpo.error === 'string' ? cuerpo.error : t('cal.contacto.error'));
         setEnvio('error');
         return;
       }
       setEnvio('listo');
     } catch {
-      setErrorEnvio('No pudimos registrar tus datos. Inténtalo de nuevo.');
+      setErrorEnvio(t('cal.contacto.error'));
       setEnvio('error');
     }
   };
@@ -88,36 +95,36 @@ export function Calculadora() {
       {/* ── Los tres datos ── */}
       <section className="mt-8 grid gap-4">
         <div>
-          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>Litros de diésel al mes</label>
+          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{t('cal.litros')}</label>
           <input className={campo} inputMode="decimal" value={litros}
-            onChange={(e) => setLitros(e.target.value)} placeholder="p. ej. 40,000" />
-          <p className="mt-1 text-xs">¿No lo sabes en litros? Deja esto vacío y captura el gasto:</p>
+            onChange={(e) => setLitros(e.target.value)} placeholder={t('cal.litros.ph')} />
+          <p className="mt-1 text-xs">{t('cal.litros.alt')}</p>
           <div className="mt-2 grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs">Gasto de diésel al mes (MXN)</label>
+              <label className="text-xs">{t('cal.gasto')}</label>
               <input className={campo} inputMode="decimal" value={gastoDiesel}
-                onChange={(e) => setGastoDiesel(e.target.value)} placeholder="p. ej. 1,000,000" />
+                onChange={(e) => setGastoDiesel(e.target.value)} placeholder={t('cal.gasto.ph')} />
             </div>
             <div>
-              <label className="text-xs">Precio por litro que pagas</label>
+              <label className="text-xs">{t('cal.precio')}</label>
               <input className={campo} inputMode="decimal" value={precioLitro}
                 onChange={(e) => setPrecioLitro(e.target.value)} />
-              <p className="mt-1 text-xs">Referencia editable: ajústalo al tuyo.</p>
+              <p className="mt-1 text-xs">{t('cal.precio.nota')}</p>
             </div>
           </div>
         </div>
         <div>
-          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>Gasto en casetas al mes (MXN, con IVA)</label>
+          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{t('cal.casetas')}</label>
           <input className={campo} inputMode="decimal" value={casetas}
-            onChange={(e) => setCasetas(e.target.value)} placeholder="p. ej. 250,000" />
+            onChange={(e) => setCasetas(e.target.value)} placeholder={t('cal.casetas.ph')} />
         </div>
         <div>
-          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>Unidades de tu flota</label>
+          <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{t('cal.unidades')}</label>
           <input className={campo} inputMode="numeric" value={unidades}
-            onChange={(e) => setUnidades(e.target.value)} placeholder="p. ej. 35" />
+            onChange={(e) => setUnidades(e.target.value)} placeholder={t('cal.unidades.ph')} />
         </div>
         <Boton variante="primary" onClick={calcular} className="mt-2 w-fit">
-          Calcular con mis números
+          {t('cal.calcular')}
         </Boton>
       </section>
 
@@ -126,24 +133,26 @@ export function Calculadora() {
         <section className="mt-10 space-y-6">
           {/* Diésel */}
           <div className="rounded-md px-4 py-4" style={{ border: '1px solid var(--line)' }}>
-            <p className="text-xs font-medium uppercase tracking-wider">Diésel elegible para el estímulo IEPS</p>
+            <p className="text-xs font-medium uppercase tracking-wider">{t('cal.dsl.titulo')}</p>
             {'faltante' in r.diesel ? (
               <p className="mt-2 text-sm">{r.diesel.faltante}</p>
             ) : (
               <>
                 <p className="mt-2 text-xl font-semibold" style={{ color: 'var(--ink)' }}>
-                  {litrosFmt(r.diesel.litrosMes)} litros al mes
+                  {t('cal.dsl.mes', { litros: litrosFmt(r.diesel.litrosMes) })}
                 </p>
-                <p className="text-sm">({litrosFmt(r.diesel.litrosAnio)} litros al año — el dato duro que tu contador multiplica por la cuota semanal)</p>
+                <p className="text-sm">{t('cal.dsl.anio', { litros: litrosFmt(r.diesel.litrosAnio) })}</p>
                 {r.diesel.estimacionMesMxn !== null ? (
                   <p className="mt-3 text-sm">
-                    Cuota disminuida registrada: <strong style={{ color: 'var(--ink)' }}>${r.diesel.cuota.pesosPorLitro}/litro</strong> (al {r.diesel.cuota.registradaEl}) ·{' '}
-                    <a href={r.diesel.cuota.fuenteUrl} className="underline underline-offset-2" target="_blank" rel="noopener noreferrer">verifícala en el DOF</a>
-                    <br />Estimación con ESA cuota: <strong style={{ color: 'var(--ink)' }}>{mxn(r.diesel.estimacionMesMxn)}</strong> al mes
+                    {rico(t('cal.dsl.cuota', { pesos: r.diesel.cuota.pesosPorLitro, fecha: r.diesel.cuota.registradaEl }), {
+                      strong: (c) => <strong style={{ color: 'var(--ink)' }}>{c}</strong>,
+                      enlace: (c) => <a href={(r.diesel as Extract<typeof r.diesel, { cuota: unknown }>).cuota.fuenteUrl} className="underline underline-offset-2" target="_blank" rel="noopener noreferrer">{c}</a>,
+                    })}
+                    <br />{rico(t('cal.dsl.estimacion', { monto: mxn(r.diesel.estimacionMesMxn) }), { strong: (c) => <strong style={{ color: 'var(--ink)' }}>{c}</strong> })}
                   </p>
                 ) : (
                   <p className="mt-3 text-sm">
-                    La cuota que tenemos registrada ya venció, así que no te damos pesos con una cuota vieja: te damos los litros, que es el dato que no cambia.
+                    {t('cal.dsl.vencida')}
                   </p>
                 )}
               </>
@@ -152,15 +161,15 @@ export function Calculadora() {
 
           {/* Peaje */}
           <div className="rounded-md px-4 py-4" style={{ border: '1px solid var(--line)' }}>
-            <p className="text-xs font-medium uppercase tracking-wider">El 50% de peaje</p>
+            <p className="text-xs font-medium uppercase tracking-wider">{t('cal.peaje.titulo')}</p>
             {'faltante' in r.peaje ? (
               <p className="mt-2 text-sm">{r.peaje.faltante}</p>
             ) : (
               <>
                 <p className="mt-2 text-xl font-semibold" style={{ color: 'var(--ink)' }}>
-                  {mxn(r.peaje.estimuloMesMxn)} al mes · {mxn(r.peaje.estimuloAnioMxn)} al año
+                  {t('cal.peaje.cifra', { mes: mxn(r.peaje.estimuloMesMxn), anio: mxn(r.peaje.estimuloAnioMxn) })}
                 </p>
-                <p className="mt-1 text-sm">Sobre un subtotal estimado de {mxn(r.peaje.subtotalEstimadoMes)} (tu gasto ÷ 1.16).</p>
+                <p className="mt-1 text-sm">{t('cal.peaje.subtotal', { subtotal: mxn(r.peaje.subtotalEstimadoMes) })}</p>
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
                   {r.peaje.condiciones.map((c, i) => <li key={i}>{c}</li>)}
                 </ul>
@@ -170,20 +179,20 @@ export function Calculadora() {
 
           {/* Total + advertencias */}
           <div className="rounded-md px-4 py-4" style={{ border: '1px solid var(--marca)' }}>
-            <p className="text-xs font-medium uppercase tracking-wider">Estimación de recuperación anual</p>
+            <p className="text-xs font-medium uppercase tracking-wider">{t('cal.total.titulo')}</p>
             <p className="mt-2 text-2xl font-semibold" style={{ color: 'var(--ink)' }}>
-              {r.totalAnualMxn !== null ? mxn(r.totalAnualMxn) : 'Captura al menos un dato para estimar'}
+              {r.totalAnualMxn !== null ? mxn(r.totalAnualMxn) : t('cal.total.sin_datos')}
             </p>
             <p className="mt-1 text-sm">{r.notaDelTotal}</p>
             {r.supuestos.length > 0 && (
               <>
-                <p className="mt-4 text-xs font-medium uppercase tracking-wider">Supuestos usados</p>
+                <p className="mt-4 text-xs font-medium uppercase tracking-wider">{t('cal.supuestos')}</p>
                 <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
                   {r.supuestos.map((s, i) => <li key={i}>{s}</li>)}
                 </ul>
               </>
             )}
-            <p className="mt-4 text-xs font-medium uppercase tracking-wider">Lo que debes saber</p>
+            <p className="mt-4 text-xs font-medium uppercase tracking-wider">{t('cal.advertencias')}</p>
             <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
               {r.advertencias.map((a, i) => <li key={i}>{a}</li>)}
             </ul>
@@ -193,29 +202,28 @@ export function Calculadora() {
           <div className="rounded-md px-4 py-4" style={{ border: '1px solid var(--line)' }}>
             {envio === 'listo' ? (
               <p className="text-sm" style={{ color: 'var(--ink)' }}>
-                Listo. Te buscamos hoy mismo con tu estimación y la fecha de la cuota usada. Gracias.
+                {t('cal.contacto.listo')}
               </p>
             ) : (
               <>
-                <p className="text-sm font-medium" style={{ color: 'var(--ink)' }}>¿Quieres tu copia y que la revisemos contigo?</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{t('cal.contacto.pregunta')}</p>
                 <p className="mt-1 text-xs">
-                  Nada de secuencias infinitas: máximo tres toques.{' '}
-                  <Link href="/aviso/prospectos" className="underline underline-offset-2">Aviso de privacidad</Link>.
+                  {rico(t('cal.contacto.nota'), { enlace: (c) => <Link href="/aviso/prospectos" className="underline underline-offset-2">{c}</Link> })}
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-3">
-                  <input className={campo} placeholder="Tu nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
-                  <input className={campo} placeholder="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
-                  <input className={campo} placeholder="Correo" inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
-                  <input className={campo} placeholder="WhatsApp (opcional)" inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+                  <input className={campo} placeholder={t('cal.contacto.nombre')} value={nombre} onChange={(e) => setNombre(e.target.value)} />
+                  <input className={campo} placeholder={t('cal.contacto.empresa')} value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
+                  <input className={campo} placeholder={t('cal.contacto.correo')} inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
+                  <input className={campo} placeholder={t('cal.contacto.whatsapp')} inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
                 </div>
                 {/* Honeypot: fuera de la vista; un humano jamás lo llena. */}
                 <input
                   className="absolute -left-[9999px] h-0 w-0 opacity-0" tabIndex={-1} autoComplete="off"
-                  aria-hidden="true" value={sitioWeb} onChange={(e) => setSitioWeb(e.target.value)} placeholder="Sitio web"
+                  aria-hidden="true" value={sitioWeb} onChange={(e) => setSitioWeb(e.target.value)} placeholder={t('cal.contacto.honeypot')}
                 />
                 {errorEnvio && <p className="mt-2 text-sm" style={{ color: 'var(--warn)' }}>{errorEnvio}</p>}
                 <Boton variante="primary" onClick={pedirCopia} disabled={envio === 'mandando'} className="mt-3">
-                  {envio === 'mandando' ? 'Mandando…' : 'Quiero mi copia'}
+                  {envio === 'mandando' ? t('cal.contacto.mandando') : t('cal.contacto.boton')}
                 </Boton>
               </>
             )}

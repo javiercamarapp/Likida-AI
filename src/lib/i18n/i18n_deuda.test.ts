@@ -63,6 +63,22 @@ const MIGRADOS = [
   'src/app/admin/notificaciones/lista.tsx',
   'src/app/admin/resumen-mando.tsx',
   'src/app/admin/tu-turno/vista.tsx',
+  // P8-P10 (w13/err): páginas públicas y rutas de API visibles ya traducidas por completo.
+  'src/app/estado/page.tsx',
+  'src/app/pago/[token]/page.tsx',
+  'src/app/pago/[token]/forma.tsx',
+  'src/app/pago/[token]/complemento/[uuid]/route.ts',
+  'src/app/aviso/[tenant]/page.tsx',
+  'src/app/aviso/prospectos/page.tsx',
+  'src/app/calculadora/page.tsx',
+  'src/app/calculadora/calc.tsx',
+  'src/app/blog/page.tsx',
+  'src/app/blog/[slug]/page.tsx',
+  'src/app/demo/page.tsx',
+  'src/app/mcp/autorizar/page.tsx',
+  'src/app/api/pago/registrar/route.ts',
+  'src/app/api/dashboard/archivo/route.ts',
+  'src/app/api/dashboard/onboarding-chat/route.ts',
 ];
 
 interface Base { version: 1; descripcion: string; archivos: Record<string, number> }

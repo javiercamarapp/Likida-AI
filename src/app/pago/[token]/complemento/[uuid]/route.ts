@@ -1,5 +1,5 @@
 import { rateLimit, clientIp } from '@/lib/ratelimit';
-import { TEXTO_LIGA_NO_VALIDA } from '@/lib/likida/portal_pago';
+import { getT } from '@/lib/i18n/servidor';
 import { resolverLiga, xmlDelRep, anotarAcceso } from '@/lib/likida/portal_pago_lectura';
 import { sellarRepEntregado } from '@/lib/likida/portal_pago_escritura';
 
@@ -34,8 +34,9 @@ import { sellarRepEntregado } from '@/lib/likida/portal_pago_escritura';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request, ctx: { params: Promise<{ token: string; uuid: string }> }) {
+  const { t } = await getT('publico');
   if (!(await rateLimit(`portal-pago-xml:${clientIp(req)}`, 30, 10 * 60_000))) {
-    return new Response('Demasiadas peticiones. Espera unos minutos.', { status: 429 });
+    return new Response(t('pg.xml.limite'), { status: 429 });
   }
 
   const { token, uuid } = await ctx.params;
@@ -44,8 +45,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string; 
     // 503 cuando no se pudo preguntar, 404 cuando el token no vale — la misma
     // distinción que hace la página, por la misma razón.
     return resolucion.motivo === 'no_disponible'
-      ? new Response('No se pudo consultar. Vuelve a intentarlo en unos minutos.', { status: 503 })
-      : new Response(TEXTO_LIGA_NO_VALIDA, { status: 404 });
+      ? new Response(t('pg.xml.no_disponible'), { status: 503 })
+      : new Response(t('pg.enlace.texto'), { status: 404 });
   }
   const liga = resolucion.liga;
 
@@ -57,15 +58,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string; 
     // que pasó fue un hipo de la base, y que manda al cliente a molestar a la
     // flota por un archivo que sí está ahí.
     if (rep.motivo === 'no_disponible') {
-      return new Response('No se pudo consultar. Vuelve a intentarlo en unos minutos.', { status: 503 });
+      return new Response(t('pg.xml.no_disponible'), { status: 503 });
     }
     // Sin REP con ese folio, o con REP sin XML. No se inventa un archivo vacío:
     // eso le daría al cliente un documento que su contador no puede usar y que
     // parece el bueno.
-    return new Response(
-      'No hay un XML de complemento con ese folio en esta factura. Vuelve a la página del enlace: ahí está la lista de los que sí hay y en qué estado están.',
-      { status: 404 },
-    );
+    return new Response(t('pg.xml.sin_folio'), { status: 404 });
   }
 
   // Sellos tras el hecho: el archivo ya se va a entregar cuando esto corre. Se

@@ -19,25 +19,27 @@ import { ARTICULOS } from '@/lib/likida/marketing/articulos';
 import { fechaMx } from '@/lib/formato';
 import { PulsoSitio } from '../calculadora/pulso';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
+import { trPublico } from '@/lib/i18n/publico_tr';
+import { rico } from '@/lib/i18n/rico';
 
-export const metadata: Metadata = {
-  title: 'Blog — Likida',
-  description:
-    'Fiscal de transporte sin inflar cifras: peajes, IEPS de diésel, Carta Porte. Cada pieza cita su fundamento.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await trPublico();
+  return { title: t('blog.meta.titulo'), description: t('blog.meta.descripcion') };
+}
 
-export default function Blog() {
+export default async function Blog() {
+  const { t, idioma } = await trPublico();
   return (
     <MarcoPublico
-      rotulo="Blog"
-      titulo="Likida"
-      apoyo="Fiscal de transporte sin inflar cifras. Cada pieza cita su fundamento; lo que el corpus no cubre, se manda al contador."
+      rotulo={t('blog.rotulo')}
+      titulo={t('blog.titulo')}
+      apoyo={t('blog.apoyo')}
     >
       <PulsoSitio pagina="blog" />
       <ul className="rv-pub__lista rv-pub__sec">
         {ARTICULOS.map((a) => (
           <li key={a.slug}>
-            <p className="rv-pub__nota">{fechaMx(a.fecha)}</p>
+            <p className="rv-pub__nota">{fechaMx(a.fecha, idioma)}</p>
             <h2 className="rv-pub__item-titulo">
               <Link href={`/blog/${a.slug}`}>{a.titulo}</Link>
             </h2>
@@ -47,7 +49,7 @@ export default function Blog() {
       </ul>
 
       <p className="rv-pub__prosa rv-pub__sec">
-        ¿Cuánto estás dejando ir en peajes y diésel? <Link href="/calculadora">Calcúlalo con tus números</Link>.
+        {rico(t('blog.cta'), { enlace: (c) => <Link href="/calculadora">{c}</Link> })}
       </p>
     </MarcoPublico>
   );

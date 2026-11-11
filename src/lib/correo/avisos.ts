@@ -1,5 +1,6 @@
 import { appUrl } from '@/lib/env';
 import type { Correo } from './plantilla';
+import { trCorreo, marcoIdioma, type TrCorreo } from './tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS AVISOS — el catálogo completo de correos que Likida manda.
@@ -29,12 +30,10 @@ import type { Correo } from './plantilla';
 const APP = appUrl();
 
 /** El pie de "por qué te llegó", parametrizado por flota. Todos lo usan. */
-function porQue(flota: string | null, que: string): string {
-  const donde = flota ? `la flota ${flota}` : 'tu flota';
-  return `Recibes este aviso porque ${que} de ${donde} en Likida. Puedes apagarlo en la pestaña Notificaciones del agente.`;
+function porQue(tr: TrCorreo, flota: string | null, que: Parameters<TrCorreo['t']>[0]): string {
+  const donde = flota ? tr.t('av.porque.flota', { flota }) : tr.t('av.porque.tu_flota');
+  return tr.t('av.porque', { que: tr.t(que), donde });
 }
-
-const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios);
 
 // ── 1. Papeles de unidades por vencer ──────────────────────────────────────
 
@@ -56,32 +55,29 @@ export interface DatosVigencias {
  * `vencidos + porVencer > 0`. Y por eso el asunto lleva el conteo — con dos
  * unidades vencidas se abre; con "Resumen semanal de tu flota", no.
  */
-export function avisoVigencias(d: DatosVigencias): Correo {
+export function avisoVigencias(d: DatosVigencias, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t, tp } = tr;
   const pendientes = d.vencidos + d.porVencer;
   const urgente = d.vencidos > 0;
 
-  const titulo = urgente
-    ? `${d.vencidos} ${plural(d.vencidos, 'unidad tiene un papel vencido', 'unidades tienen papeles vencidos')}`
-    : `${d.porVencer} ${plural(d.porVencer, 'unidad tiene un papel por vencer', 'unidades tienen papeles por vencer')}`;
+  const titulo = urgente ? tp('vig.titulo.vencidas', d.vencidos) : tp('vig.titulo.porvencer', d.porVencer);
 
-  const parrafos = [
-    urgente
-      ? 'Una unidad con la verificación o el permiso vencidos no tiene un pendiente administrativo: tiene riesgo de multa, de detención y de un seguro que podría no responder.'
-      : 'Renovar una verificación o una póliza toma días hábiles —cita, taller, pago, emisión—, así que este aviso llega con margen.',
-  ];
+  const parrafos = [urgente ? t('vig.p.urgente') : t('vig.p.margen')];
   if (d.enRegla > 0 && d.total > 0) {
-    parrafos.push(`El resto de tu flota está al día: ${d.enRegla} de ${d.total} unidades en regla.`);
+    parrafos.push(t('vig.p.resto', { enRegla: d.enRegla, total: d.total }));
   }
 
   return {
-    asunto: `${pendientes} ${plural(pendientes, 'unidad necesita papeles', 'unidades necesitan papeles')}`,
+    asunto: tp('vig.asunto', pendientes),
     avance: d.detalle[0] ? `${d.detalle[0].unidad}: ${d.detalle[0].estado}` : titulo,
     titulo,
     parrafos,
     datos: d.detalle.map(({ unidad, estado }) => [unidad, estado] as [string, string]),
-    boton: { texto: 'Ver mis unidades', href: `${APP}/dashboard/unidades` },
+    boton: { texto: t('vig.boton'), href: `${APP}/dashboard/unidades` },
     tono: urgente ? 'urgente' : 'atencion',
-    porQueLoRecibes: porQue(d.flota, 'administras las unidades'),
+    porQueLoRecibes: porQue(tr, d.flota, 'av.que.unidades'),
+    ...marcoIdioma(tr),
   };
 }
 
@@ -115,7 +111,9 @@ export interface DatosCorridaFallida {
  * El motivo llega ya traducido: un stack trace en el correo del contralor no
  * le dice qué hacer y sí le dice que el producto está roto.
  */
-export function avisoCorridaFallida(d: DatosCorridaFallida): Correo {
+export function avisoCorridaFallida(d: DatosCorridaFallida, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t } = tr;
   const repetido = d.seguidas > 1;
 
   // EL FALLO ES DE LIKIDA Y EL CORREO LO DICE (B8). La variante de siempre
@@ -125,52 +123,39 @@ export function avisoCorridaFallida(d: DatosCorridaFallida): Correo {
   // («Executable doesn't exist…» no le dice al contralor qué hacer): queda en
   // los logs del sistema, no en su bandeja. Y el tono no es urgente porque no
   // hay nada que el cliente pueda hacer — la urgencia es de Likida.
+  const v = { agente: d.agente, seguidas: d.seguidas };
   if (d.plataforma) {
     return {
-      asunto: repetido
-        ? `${d.agente}: ${d.seguidas} corridas detenidas por un problema de Likida`
-        : `${d.agente} no corrió por un problema de Likida`,
-      avance: 'Tu información está bien y no tienes nada que corregir.',
-      titulo: repetido
-        ? 'La plataforma de Likida sigue con un problema'
-        : 'La plataforma de Likida tuvo un problema',
-      parrafos: [
-        repetido
-          ? `Van ${d.seguidas} corridas sin poder completarse por un problema de la plataforma de Likida — no de tu información. Tus datos están bien y no tienes nada que corregir: seguimos reintentando solos, y de nuestro lado ya quedó registrado.`
-          : 'La corrida no se pudo completar por un problema de la plataforma de Likida — no de tu información. Tus datos están bien y no tienes nada que corregir: reintentamos solos en la siguiente corrida.',
-      ],
+      asunto: repetido ? t('cf.plat.asunto.repetido', v) : t('cf.plat.asunto', v),
+      avance: t('cf.plat.avance'),
+      titulo: repetido ? t('cf.plat.titulo.repetido') : t('cf.plat.titulo'),
+      parrafos: [repetido ? t('cf.plat.p.repetido', v) : t('cf.plat.p')],
       datos: [
-        ['Agente', d.agente],
-        ['Cuándo', d.cuando],
-        ['Qué pasó', 'Un problema interno de Likida. Tu información está bien.'],
+        [t('cf.dato.agente'), d.agente],
+        [t('cf.dato.cuando'), d.cuando],
+        [t('cf.dato.que'), t('cf.plat.que')],
       ],
-      boton: { texto: `Ver ${d.agente}`, href: `${APP}${d.href}` },
+      boton: { texto: t('cf.boton', v), href: `${APP}${d.href}` },
       tono: repetido ? 'atencion' : 'neutral',
-      porQueLoRecibes: porQue(d.flota, 'administras los agentes'),
+      porQueLoRecibes: porQue(tr, d.flota, 'av.que.agentes'),
+      ...marcoIdioma(tr),
     };
   }
 
   return {
-    asunto: repetido
-      ? `${d.agente} lleva ${d.seguidas} corridas sin completarse`
-      : `${d.agente} no pudo completar su corrida`,
+    asunto: repetido ? t('cf.asunto.repetido', v) : t('cf.asunto', v),
     avance: d.motivo,
-    titulo: repetido
-      ? `${d.agente} no ha podido trabajar`
-      : `${d.agente} se detuvo a medio camino`,
-    parrafos: [
-      repetido
-        ? `Van ${d.seguidas} corridas seguidas sin completarse. Mientras tanto, lo que este agente hace no se está haciendo — y eso no genera errores en tu panel, simplemente no aparece trabajo nuevo.`
-        : 'La corrida se detuvo antes de terminar. Lo que alcanzó a hacer quedó guardado; lo que faltaba se reintenta en la siguiente.',
-    ],
+    titulo: repetido ? t('cf.titulo.repetido', v) : t('cf.titulo', v),
+    parrafos: [repetido ? t('cf.p.repetido', v) : t('cf.p')],
     datos: [
-      ['Agente', d.agente],
-      ['Cuándo', d.cuando],
-      ['Qué pasó', d.motivo],
+      [t('cf.dato.agente'), d.agente],
+      [t('cf.dato.cuando'), d.cuando],
+      [t('cf.dato.que'), d.motivo],
     ],
-    boton: { texto: `Ver ${d.agente}`, href: `${APP}${d.href}` },
+    boton: { texto: t('cf.boton', v), href: `${APP}${d.href}` },
     tono: repetido ? 'urgente' : 'atencion',
-    porQueLoRecibes: porQue(d.flota, 'administras los agentes'),
+    porQueLoRecibes: porQue(tr, d.flota, 'av.que.agentes'),
+    ...marcoIdioma(tr),
   };
 }
 
@@ -190,21 +175,22 @@ export interface DatosHuerfanos {
  * reenviarse y acabar en una bandeja que no debería ver el gasto de la flota.
  * El conteo alcanza para que alguien entre a resolverlo.
  */
-export function avisoHuerfanos(d: DatosHuerfanos): Correo {
+export function avisoHuerfanos(d: DatosHuerfanos, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t, tp } = tr;
   const viejo = d.diasDelMasViejo !== null && d.diasDelMasViejo >= 7;
   return {
-    asunto: `${d.cuantos} ${plural(d.cuantos, 'comprobante sin viaje', 'comprobantes sin viaje')}`,
-    avance: 'Son gastos que hoy no están en ninguna liquidación.',
-    titulo: `${d.cuantos} ${plural(d.cuantos, 'comprobante llegó', 'comprobantes llegaron')} sin viaje al cual pegarse`,
+    asunto: tp('hu.asunto', d.cuantos),
+    avance: t('hu.avance'),
+    titulo: tp('hu.titulo', d.cuantos),
     parrafos: [
-      'Cada uno es un gasto que ya salió de la caja y que hoy no está en ninguna liquidación. Desde la bandeja puedes asignarlos al viaje que les toca.',
-      ...(viejo
-        ? [`El más antiguo lleva ${d.diasDelMasViejo} días esperando. Entre más tiempo pasa, más difícil es que alguien recuerde de qué viaje era.`]
-        : []),
+      t('hu.p1'),
+      ...(viejo ? [t('hu.p.viejo', { dias: d.diasDelMasViejo ?? 0 })] : []),
     ],
-    boton: { texto: 'Abrir la bandeja', href: `${APP}/dashboard/huerfanos` },
+    boton: { texto: t('hu.boton'), href: `${APP}/dashboard/huerfanos` },
     tono: viejo ? 'atencion' : 'neutral',
-    porQueLoRecibes: porQue(d.flota, 'revisas los comprobantes'),
+    porQueLoRecibes: porQue(tr, d.flota, 'av.que.comprobantes'),
+    ...marcoIdioma(tr),
   };
 }
 
@@ -216,18 +202,19 @@ export interface DatosEscalados {
   folios: string[];
 }
 
-export function avisoEscalados(d: DatosEscalados): Correo {
+export function avisoEscalados(d: DatosEscalados, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t, tp } = tr;
   return {
-    asunto: `${d.cuantos} ${plural(d.cuantos, 'viaje escalado', 'viajes escalados')}`,
-    avance: 'El agente dejó de avanzar y esperan a una persona.',
-    titulo: `${d.cuantos} ${plural(d.cuantos, 'viaje necesita', 'viajes necesitan')} que alguien intervenga`,
-    parrafos: [
-      'El agente hizo lo que pudo y se detuvo: o el operador no respondió, o falta un comprobante que solo una persona puede conseguir. Están esperando, no avanzando.',
-    ],
-    datos: d.folios.slice(0, 8).map((f) => ['Viaje', f] as [string, string]),
-    boton: { texto: 'Ver los viajes', href: `${APP}/dashboard/viajes` },
+    asunto: tp('es.asunto', d.cuantos),
+    avance: t('es.avance'),
+    titulo: tp('es.titulo', d.cuantos),
+    parrafos: [t('es.p')],
+    datos: d.folios.slice(0, 8).map((f) => [t('es.dato.viaje'), f] as [string, string]),
+    boton: { texto: t('es.boton'), href: `${APP}/dashboard/viajes` },
     tono: 'atencion',
-    porQueLoRecibes: porQue(d.flota, 'das seguimiento a los viajes'),
+    porQueLoRecibes: porQue(tr, d.flota, 'av.que.viajes'),
+    ...marcoIdioma(tr),
   };
 }
 
@@ -253,26 +240,26 @@ export interface DatosEscalacionAsistente {
  * El asistente del panel NO decide temas delicados: deja una tarea y, si la flota lo encendió, esto es el aviso a la
  * persona. Dice qué pasó y a quién le toca; no afirma culpables y no trae datos personales (el resumen ya viene limpio).
  */
-export function avisoEscalacionAsistente(d: DatosEscalacionAsistente): Correo {
+export function avisoEscalacionAsistente(d: DatosEscalacionAsistente, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t } = tr;
   return {
-    asunto: `${d.motivo}${d.folio ? ` · viaje ${d.folio}` : ''}: el asistente dejó una tarea`,
-    avance: 'El asistente del panel dejó una tarea que solo una persona puede decidir.',
-    titulo: `${d.motivo}: le toca a ${d.destino}`,
-    parrafos: [
-      'El asistente del panel no decide los temas delicados: los deja en una tarea para la persona que sí decide. Esta quedó abierta y espera a alguien.',
-      d.resumen,
-    ],
+    asunto: d.folio ? t('ea.asunto.folio', { motivo: d.motivo, folio: d.folio }) : t('ea.asunto', { motivo: d.motivo }),
+    avance: t('ea.avance'),
+    titulo: t('ea.titulo', { motivo: d.motivo, destino: d.destino }),
+    parrafos: [t('ea.p1'), d.resumen],
     datos: [
-      ['Motivo', d.motivo],
-      ['Le toca a', d.destino],
-      ...(d.folio ? ([['Viaje', d.folio]] as Array<[string, string]>) : []),
+      [t('ea.dato.motivo'), d.motivo],
+      [t('ea.dato.toca'), d.destino],
+      ...(d.folio ? ([[t('es.dato.viaje'), d.folio]] as Array<[string, string]>) : []),
     ],
     // La tarea dirigida al contador se abre desde SU panel (el tablero de viajes en vivo no es de su área y lo rebotaría).
     boton: d.alContador
-      ? { texto: 'Abrir el panel del contador', href: `${APP}/dashboard/contador` }
-      : { texto: 'Abrir las tareas del asistente', href: `${APP}/dashboard/viajes-en-vivo` },
+      ? { texto: t('ea.boton.contador'), href: `${APP}/dashboard/contador` }
+      : { texto: t('ea.boton'), href: `${APP}/dashboard/viajes-en-vivo` },
     tono: d.urgente ? 'urgente' : 'atencion',
-    porQueLoRecibes: porQue(d.flota, 'supervisas la operación'),
+    porQueLoRecibes: porQue(tr, d.flota, 'av.que.operacion'),
+    ...marcoIdioma(tr),
   };
 }
 
@@ -296,28 +283,29 @@ export interface DatosColaAtorada {
  * El síntoma típico es que el agente hace todo lo que puede solo y lo que
  * queda necesita a una persona — que no sabe que la necesitan.
  */
-export function avisoColaAtorada(d: DatosColaAtorada): Correo {
+export function avisoColaAtorada(d: DatosColaAtorada, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t, tp } = tr;
   const viejo = d.diasSinBajar !== null && d.diasSinBajar >= 3;
   return {
-    asunto: `${d.agente}: ${d.cuantos} ${plural(d.cuantos, 'pendiente sin avanzar', 'pendientes sin avanzar')}`,
-    avance: 'El agente corre bien, pero su cola no baja.',
-    titulo: `La cola de ${d.agente} no está bajando`,
+    asunto: tp('co.asunto', d.cuantos, { agente: d.agente }),
+    avance: t('co.avance'),
+    titulo: t('co.titulo', { agente: d.agente }),
     parrafos: [
-      'El agente está corriendo sin errores — por eso esto no aparece como una falla. Lo que pasa es que hizo todo lo que podía solo, y lo que queda necesita que alguien decida.',
-      ...(viejo
-        ? [`Llevan ${d.diasSinBajar} días sin moverse. Entre más esperan, más difícil es reconstruir el contexto de cada uno.`]
-        : []),
+      t('co.p1'),
+      ...(viejo ? [t('co.p.viejo', { dias: d.diasSinBajar ?? 0 })] : []),
     ],
     datos: [
-      ['Agente', d.agente],
-      ['Pendientes', String(d.cuantos)],
+      [t('cf.dato.agente'), d.agente],
+      [t('co.dato.pendientes'), String(d.cuantos)],
       ...(d.diasSinBajar !== null
-        ? ([['Sin avanzar desde hace', `${d.diasSinBajar} ${plural(d.diasSinBajar, 'día', 'días')}`]] as Array<[string, string]>)
+        ? ([[t('co.dato.desde'), tp('co.dias', d.diasSinBajar)]] as Array<[string, string]>)
         : []),
     ],
-    boton: { texto: `Ver ${d.agente}`, href: `${APP}${d.href}` },
+    boton: { texto: t('cf.boton', { agente: d.agente }), href: `${APP}${d.href}` },
     tono: viejo ? 'urgente' : 'atencion',
-    porQueLoRecibes: porQue(d.flota, 'administras los agentes'),
+    porQueLoRecibes: porQue(tr, d.flota, 'av.que.agentes'),
+    ...marcoIdioma(tr),
   };
 }
 
@@ -337,23 +325,25 @@ export interface DatosInvitacion {
  * acceso a otro. Un "El equipo de Likida te ha invitado" sería falso — Likida
  * no invitó a nadie.
  */
-export function avisoInvitacion(d: DatosInvitacion): Correo {
+export function avisoInvitacion(d: DatosInvitacion, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t } = tr;
   const quien = d.invitaNombre?.trim();
-  const flota = d.flota ?? 'una flota';
+  const flota = d.flota ?? t('inv.flota_por_omision');
+  const v = { flota, rol: d.rol };
   return {
-    asunto: `Ya tienes acceso a ${flota} en Likida`,
-    avance: `Entras como ${d.rol}.`,
-    titulo: `Te dieron acceso a ${flota}`,
+    asunto: t('inv.asunto', v),
+    avance: t('inv.avance', v),
+    titulo: t('inv.titulo', v),
     parrafos: [
-      quien
-        ? `${quien} te dio acceso al panel de ${flota} en Likida, con el rol de ${d.rol}.`
-        : `Te dieron acceso al panel de ${flota} en Likida, con el rol de ${d.rol}.`,
-      'Entras con este mismo correo: en la pantalla de acceso pides tu enlace y llega aquí. No hay contraseña que recordar ni que perder.',
+      quien ? t('inv.p.quien', { ...v, quien }) : t('inv.p.sinquien', v),
+      t('inv.p2'),
     ],
-    boton: { texto: 'Entrar a Likida', href: `${APP}/login` },
+    boton: { texto: t('inv.boton'), href: `${APP}/login` },
     tono: 'neutral',
     // No lleva "puedes apagarlo": no es un aviso recurrente, es un acceso.
-    porQueLoRecibes: `Recibes este correo porque alguien de ${flota} te dio acceso a su panel en Likida.`,
+    porQueLoRecibes: t('inv.porque', { flota }),
+    ...marcoIdioma(tr),
   };
 }
 
@@ -384,18 +374,18 @@ export interface DatosPrueba {
  * SIN cifras y sin datos de la flota más allá del nombre: puede reenviarse
  * («mira, sí llega») y no debe cargar nada que no sea suyo.
  */
-export function avisoDePrueba(d: DatosPrueba): Correo {
+export function avisoDePrueba(d: DatosPrueba, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t } = tr;
   return {
-    asunto: `[Likida] Prueba de avisos — ${d.agente}`,
-    avance: 'Todo en orden: es la prueba que pediste, no un incidente.',
-    titulo: `Los avisos del ${d.agente} sí te llegan`,
-    parrafos: [
-      `Este correo confirma que los avisos del ${d.agente} llegan a esta dirección. No hay ningún problema real: pediste la prueba con el botón «Mándate una prueba», y comprobar la entrega es todo lo que hace.`,
-      'Cuando este agente tenga algo de verdad que avisarte, el correo va a entrar por este mismo camino.',
-    ],
+    asunto: t('pr.asunto', { agente: d.agente }),
+    avance: t('pr.avance'),
+    titulo: t('pr.titulo', { agente: d.agente }),
+    parrafos: [t('pr.p1', { agente: d.agente }), t('pr.p2')],
     tono: 'neutral',
     // El pie de siempre («Recibes este… porque…»), pero sin el "puedes
     // apagarlo" de los recurrentes: esta prueba llega solo cuando se pide.
-    porQueLoRecibes: `Recibes este correo porque pediste una prueba de los avisos del ${d.agente}${d.flota ? ` de la flota ${d.flota}` : ''} en Likida. No es recurrente: llega solo cuando tú la pides.`,
+    porQueLoRecibes: d.flota ? t('pr.porque.flota', { agente: d.agente, flota: d.flota }) : t('pr.porque', { agente: d.agente }),
+    ...marcoIdioma(tr),
   };
 }

@@ -1,32 +1,37 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { mxn } from '@/lib/formato';
+import { mxn as mxnFmt } from '@/lib/formato';
+import { useIdioma, useT } from '@/lib/i18n/proveedor';
+import { publico } from '@/lib/i18n/es/publico';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
 import { Chip } from '../ui-v2/componentes/chip';
 
-interface Comprobante { concepto: string; monto: number; folio?: string; cfdiUuid?: string; rfcReceptor?: string; label: string }
+interface Comprobante { concepto: 'diesel' | 'caseta' | 'factura'; monto: number; folio?: string; cfdiUuid?: string; rfcReceptor?: string; clave: 'diesel1' | 'diesel2' | 'caseta' | 'factura' }
 interface Bubble { from: 'op' | 'likida'; text: string }
 
 // 🔴 INVENTADO: escenario de demo Silao→Laredo. Anticipo = total comprobado,
 // así la ÚNICA diferencia es el diésel $200 sobre política (luce el diferenciador).
 const ANTICIPO = 10600;
 const PRESETS: Comprobante[] = [
-  { concepto: 'diesel', monto: 4200, folio: 'DS-8801', label: 'Diésel $4,200 (sobre tope)' },
-  { concepto: 'diesel', monto: 3800, folio: 'DS-8802', label: 'Diésel $3,800' },
-  { concepto: 'caseta', monto: 1400, folio: 'CA-4471', label: 'Caseta $1,400' },
+  { concepto: 'diesel', monto: 4200, folio: 'DS-8801', clave: 'diesel1' },
+  { concepto: 'diesel', monto: 3800, folio: 'DS-8802', clave: 'diesel2' },
+  { concepto: 'caseta', monto: 1400, folio: 'CA-4471', clave: 'caseta' },
   // El receptor viene EN el preset (ensayo 14-ago-2026): en el camino real
   // sale del QR/XML de la foto; sin él, el motor —con razón— mandaba la
   // factura a revisión por receptor ilegible y el guion perdía su «única
   // diferencia». Es el RFC de la flota demo, el mismo del seed.
-  { concepto: 'factura', monto: 1200, folio: 'FA-9007', cfdiUuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', rfcReceptor: 'GMX0902279I1', label: 'Factura CFDI $1,200' },
+  { concepto: 'factura', monto: 1200, folio: 'FA-9007', cfdiUuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', rfcReceptor: 'GMX0902279I1', clave: 'factura' },
 ];
 
 
 export default function Demo() {
+  const { t } = useT('publico', publico);
+  const idioma = useIdioma();
+  const mxn = (n: number) => mxnFmt(n, idioma);
   const [bubbles, setBubbles] = useState<Bubble[]>([
-    { from: 'likida', text: `¡Hola! Soy Likida. Ya casi cierras tu viaje Silao → Laredo (anticipo ${mxn(ANTICIPO)}). Mándame las fotos de tus comprobantes.` },
+    { from: 'likida', text: t('dem.saludo', { anticipo: mxn(ANTICIPO) }) },
   ]);
   const [added, setAdded] = useState<Comprobante[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,14 +46,14 @@ export default function Demo() {
     setAdded((a) => [...a, c]);
     setBubbles((b) => [
       ...b,
-      { from: 'op', text: `📎 ${c.label}` },
-      { from: 'likida', text: `Recibí tu ${c.concepto} de ${mxn(c.monto)}${c.cfdiUuid ? ' (CFDI validado por QR ✅)' : ''}. ¿Tienes más o ya cerramos?` },
+      { from: 'op', text: `📎 ${t(`dem.p.${c.clave}`)}` },
+      { from: 'likida', text: t(c.cfdiUuid ? 'dem.recibi.cfdi' : 'dem.recibi', { concepto: t(`dem.concepto.${c.concepto}`), monto: mxn(c.monto) }) },
     ]);
   };
 
   const cerrar = async () => {
     setLoading(true);
-    setBubbles((b) => [...b, { from: 'op', text: 'Ya no tengo más, ciérralo' }]);
+    setBubbles((b) => [...b, { from: 'op', text: t('dem.cerrar.dicho') }]);
     try {
       const res = await fetch('/api/demo', {
         method: 'POST',
@@ -58,20 +63,20 @@ export default function Demo() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = await res.json();
       const lines: string[] = [
-        `Listo, cuadré tu viaje (EJEMPLO, datos ficticios) 👇`,
-        `• Comprobado: ${mxn(r.totalComprobado)}`,
-        `• Anticipo: ${mxn(r.totalAnticipo)}`,
-        r.diferencia > 0 ? `• Sobró ${mxn(r.diferencia)} (a favor de la empresa)` : r.diferencia < 0 ? `• Pusiste ${mxn(-r.diferencia)} de tu bolsa` : `• Cuadra exacto ✅`,
+        t('dem.cuadre.encabezado'),
+        t('dem.cuadre.comprobado', { monto: mxn(r.totalComprobado) }),
+        t('dem.cuadre.anticipo', { monto: mxn(r.totalAnticipo) }),
+        r.diferencia > 0 ? t('dem.cuadre.sobro', { monto: mxn(r.diferencia) }) : r.diferencia < 0 ? t('dem.cuadre.bolsa', { monto: mxn(-r.diferencia) }) : t('dem.cuadre.exacto'),
       ];
       const obs = r.diferencias.filter((d: { tipo: string }) => d.tipo !== 'anticipo');
       setBubbles((b) => [...b, { from: 'likida', text: lines.join('\n') }]);
       if (obs.length) {
-        setBubbles((b) => [...b, { from: 'likida', text: 'Ojo con esto:\n' + obs.map((d: { nota: string }) => `• ${d.nota}`).join('\n') }]);
+        setBubbles((b) => [...b, { from: 'likida', text: t('dem.ojo') + '\n' + obs.map((d: { nota: string }) => `• ${d.nota}`).join('\n') }]);
       }
-      setBubbles((b) => [...b, { from: 'likida', text: '📄 Así te llegaría tu liquidación en PDF cuando cierres tu viaje. ¡Buen viaje! 🚛' }]);
+      setBubbles((b) => [...b, { from: 'likida', text: t('dem.pdf') }]);
     } catch {
       // ME-16: si el cuadre falla (red/servidor), avisar en vez de colgar el demo.
-      setBubbles((b) => [...b, { from: 'likida', text: 'Uy, no pude cerrar el cuadre ahorita. Inténtalo de nuevo en un momento.' }]);
+      setBubbles((b) => [...b, { from: 'likida', text: t('dem.falla') }]);
     } finally {
       setLoading(false);
     }
@@ -79,21 +84,21 @@ export default function Demo() {
 
   return (
     <MarcoPublico
-      rotulo="Demo"
-      titulo="Demo — Likida por WhatsApp"
-      apoyo="Ejemplo con datos ficticios: simula al operador mandando sus comprobantes. El cuadre es real."
+      rotulo={t('dem.rotulo')}
+      titulo={t('dem.titulo')}
+      apoyo={t('dem.apoyo')}
       ancho="estrecho"
     >
       {/* Teléfono */}
-      <div className="rv-demo" role="region" aria-label="Conversación de ejemplo">
+      <div className="rv-demo" role="region" aria-label={t('dem.region')}>
         <div className="rv-demo__cab">
           <div className="rv-demo__avatar" aria-hidden="true">L</div>
           <div>
             <div className="rv-demo__nombre">Likida</div>
-            <div className="rv-pub__nota">en línea</div>
+            <div className="rv-pub__nota">{t('dem.en_linea')}</div>
           </div>
           {/* F16: todo lo que se ve aquí es de demostración (viaje, montos, folios y RFC ficticios): se rotula SIEMPRE. */}
-          <Chip tono="warn" className="ml-auto"><span data-testid="etiqueta-ejemplo">Ejemplo</span></Chip>
+          <Chip tono="warn" className="ml-auto"><span data-testid="etiqueta-ejemplo">{t('dem.ejemplo')}</span></Chip>
         </div>
 
         <div ref={scrollRef} className="rv-demo__hilo" aria-live="polite">
@@ -108,12 +113,12 @@ export default function Demo() {
       {/* Controles */}
       <div className="rv-pub__acciones">
         {PRESETS.map((p, i) => (
-          <Boton key={i} tamano="sm" onClick={() => add(p)}>{p.label}</Boton>
+          <Boton key={i} tamano="sm" onClick={() => add(p)}>{t(`dem.p.${p.clave}`)}</Boton>
         ))}
       </div>
       <div className="rv-pub__acciones">
         <Boton variante="primary" onClick={cerrar} disabled={loading || !added.length} loading={loading}>
-          {loading ? 'Cuadrando…' : 'Ya no tengo más — cerrar liquidación'}
+          {loading ? t('dem.cuadrando') : t('dem.cerrar')}
         </Boton>
       </div>
     </MarcoPublico>
