@@ -38,7 +38,7 @@ const etiquetaPaso = (t: TResto = T_RESTO_ES): Record<string, string> => ({
   explicar_norma: t('op.consultando_el_sustento'),
   armar_respuesta: t('op.armando_la_respuesta'),
 });
-const rotuloPaso = (t: string) => etiquetaPaso(/*t*/)[t] ?? t.replaceAll('_', ' ');
+const rotuloPaso = (nombre: string, tx: TResto = T_RESTO_ES) => etiquetaPaso(tx)[nombre] ?? nombre.replaceAll('_', ' ');
 
 /** Mismo catálogo de Consulta que ChatFlota: tres columnas, clic = mensaje.
  *  Aquí son preguntas al configurador (el LLM solo explica fichas del catálogo). */
@@ -447,7 +447,7 @@ export function ChatEntrevista({
                                   {p.listo
                                     ? <span className="rv-ob__paso-ok"><Icono icono={Check} tam={14} /></span>
                                     : <span className="skeleton rv-ob__paso-pend" />}
-                                  {rotuloPaso(p.tool)}{p.listo ? '' : '…'}
+                                  {rotuloPaso(p.tool, t)}{p.listo ? '' : '…'}
                                 </div>
                               ))}
                             </div>

@@ -1,6 +1,6 @@
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
-import { ETIQUETA_TOOL_ADMIN } from './etiquetas-copiloto';
+import { ETIQUETA_TOOL_ADMIN, etiquetaToolAdmin } from './etiquetas-copiloto';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // Lógica PURA del chat «Pregunta a tus datos» (L5: separada de la interfaz sin cambiar una coma de lo que responde). Aquí viven el
@@ -82,7 +82,7 @@ export const etiquetaTool = (t: TResto = T_RESTO_ES): Record<string, string> => 
 });
 export const ETIQUETA_TOOL = etiquetaTool();
 /** Los nombres de tool de los dos agentes son disjuntos, así que un solo buscador sirve a ambos modos sin inventar rótulos. */
-export const rotuloTool = (t: string) => etiquetaTool(/*t*/)[t] ?? ETIQUETA_TOOL_ADMIN[t] ?? t.replaceAll('_', ' ');
+export const rotuloTool = (nombre: string, t: TResto = T_RESTO_ES) => etiquetaTool(t)[nombre] ?? etiquetaToolAdmin(t)[nombre] ?? nombre.replaceAll('_', ' ');
 
 /** Las fases del "pensando" (pedido del 12-ago: como Claude). Son honestas
  *  por construcción: solo se AVANZA de fase si de verdad sigue trabajando —

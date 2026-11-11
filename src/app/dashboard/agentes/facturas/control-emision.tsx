@@ -11,6 +11,10 @@ import {
   type RespuestaControl,
 } from './acciones-control';
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ════════════════════════════════════════════════════════════════════════════
 // LA EMISIÓN REAL, CON LAS MANOS DE UNA PERSONA (0542).
@@ -41,10 +45,10 @@ export interface DatosControl {
   flotaPintada: string | null;
 }
 
-const VERIF: Record<PortalControlPantalla['verificacion'], string> = {
-  verificado: 'Verificado contra el portal real', no_verificado: 'Sin corrida supervisada (no emite)',
-  obsoleto: 'El mapeo cambió: hay que volver a verificarlo', exento: 'Adaptador propio (CAPUFE)',
-};
+const verif = (tx: TAgentes = TR_ES.t): Record<PortalControlPantalla['verificacion'], string> => ({
+  verificado: tx('rest.verificado_contra_el_portal_real'), no_verificado: tx('rest.sin_corrida_supervisada_no_emite'),
+  obsoleto: tx('rest.el_mapeo_cambio_hay_que_volver'), exento: 'Adaptador propio (CAPUFE)',
+});
 
 function useRespuesta(r: RespuestaControl | null) {
   const { notificar } = useNotificar();
@@ -68,19 +72,21 @@ function Boton({ children, pendiente, peligro }: { children: React.ReactNode; pe
 }
 
 function Interruptor({ encendida, esDueno, flota }: { encendida: boolean; esDueno: boolean; flota: string | null }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [rEn, encender, pEn] = useActionState(accionEncenderEmision, null);
   const [rAp, apagar, pAp] = useActionState(accionApagarEmision, null);
   useRespuesta(rEn); useRespuesta(rAp);
   return encendida ? (
-    <form action={apagar}><CampoFlota valor={flota} /><Boton pendiente={pAp} peligro><Icono icono={ShieldOff} tam={14} /> Apagar la emisión real</Boton></form>
+    <form action={apagar}><CampoFlota valor={flota} /><Boton pendiente={pAp} peligro><Icono icono={ShieldOff} tam={14} />{' '}{tx('rest.apagar_la_emision_real')}</Boton></form>
   ) : esDueno ? (
-    <form action={encender}><CampoFlota valor={flota} /><Boton pendiente={pEn}><Icono icono={ShieldCheck} tam={14} /> Encender la emisión real</Boton></form>
+    <form action={encender}><CampoFlota valor={flota} /><Boton pendiente={pEn}><Icono icono={ShieldCheck} tam={14} />{' '}{tx('rest.encender_la_emision_real')}</Boton></form>
   ) : (
-    <p className="rv-fact__nota" data-tono="faint">La emisión real la enciende el dueño de la flota.</p>
+    <p className="rv-fact__nota" data-tono="faint">{tx('rest.la_emision_real_la_enciende_el')}</p>
   );
 }
 
 function Limites({ c, esDueno, flota }: { c: ControlPantalla | 'sin_fila'; esDueno: boolean; flota: string | null }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [r, guardar, p] = useActionState(accionCambiarLimites, null);
   useRespuesta(r);
   const v = c === 'sin_fila' ? { maxMontoTicket: 1500, maxTicketsLote: 5, maxTicketsDia: 20, maxMontoDia: 20000 } : c;
@@ -89,33 +95,31 @@ function Limites({ c, esDueno, flota }: { c: ControlPantalla | 'sin_fila'; esDue
   );
   if (!esDueno) {
     return (
-      <p className="rv-fact__nota">
-        Límites: {mxn(v.maxMontoTicket)} por ticket · {v.maxTicketsLote} tickets por lote · {v.maxTicketsDia} por día · {mxn(v.maxMontoDia)} por día. Los cambia el dueño de la flota.
-      </p>
+      <p className="rv-fact__nota">{tx('rest.limites_por_ticket_tickets_por_lote', { mxn: mxn(v.maxMontoTicket), maxTicketsLote: v.maxTicketsLote, maxTicketsDia: v.maxTicketsDia, mxn2: mxn(v.maxMontoDia) })}</p>
     );
   }
   return (
     <form action={guardar} className="rv-fact__tres">
       <CampoFlota valor={flota} />
-      {campo('maxMontoTicket', 'Monto máx. por ticket', v.maxMontoTicket)}
+      {campo('maxMontoTicket', tx('rest.monto_max_por_ticket'), v.maxMontoTicket)}
       {campo('maxTicketsLote', 'Tickets por lote', v.maxTicketsLote)}
-      {campo('maxTicketsDia', 'Tickets por día', v.maxTicketsDia)}
-      {campo('maxMontoDia', 'Monto máx. por día', v.maxMontoDia)}
-      <Boton pendiente={p}>Guardar límites</Boton>
+      {campo('maxTicketsDia', tx('rest.tickets_por_dia'), v.maxTicketsDia)}
+      {campo('maxMontoDia', tx('rest.monto_max_por_dia'), v.maxMontoDia)}
+      <Boton pendiente={p}>{tx('rest.guardar_limites')}</Boton>
     </form>
   );
 }
 
 function FilaLote({ l, flota }: { l: LotePantalla; flota: string | null }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [r, decidir, p] = useActionState(accionDecidirLote, null);
   useRespuesta(r);
   return (
     <li className="rv-fact__reglon">
       <span className="rv-fact__nota">
-        <strong>{l.nombre}</strong> · {l.tickets} ticket{l.tickets === 1 ? '' : 's'} · {mxn(l.montoTotal)}
+        <strong>{l.nombre}</strong>{' '}{tx('rest.ticket', { tickets: l.tickets })}{l.tickets === 1 ? '' : 's'} · {mxn(l.montoTotal)}
         <span className="rv-fact__sub">
-          {l.estado === 'confirmado' ? 'Confirmado: sale en la próxima corrida' : 'Esperando tu confirmación'} · propuesto {fechaCorta(l.propuestoEn)} · vence {fechaCorta(l.expiraEn)}
-        </span>
+          {l.estado === 'confirmado' ? tx('rest.confirmado_sale_en_la_proxima_corrida') : tx('rest.esperando_tu_confirmacion')}{' '}{tx('rest.propuesto_vence', { fechaCorta: fechaCorta(l.propuestoEn), fechaCorta2: fechaCorta(l.expiraEn) })}</span>
       </span>
       <form action={decidir} className="rv-fact__linea">
         <CampoFlota valor={flota} />
@@ -123,8 +127,8 @@ function FilaLote({ l, flota }: { l: LotePantalla; flota: string | null }) {
         {/* A37-S29-06: lo que se está viendo; confirmar se rechaza si el lote cambió desde que se pintó */}
         <input type="hidden" name="vistoTickets" value={l.tickets} />
         <input type="hidden" name="vistoMonto" value={l.montoTotal} />
-        {l.estado === 'propuesto' && <BotonV2 type="submit" tamano="sm" variante="primary" name="decision" value="confirmar" disabled={p}>Confirmar lote</BotonV2>}
-        <BotonV2 type="submit" tamano="sm" name="decision" value="rechazar" disabled={p}>Rechazar</BotonV2>
+        {l.estado === 'propuesto' && <BotonV2 type="submit" tamano="sm" variante="primary" name="decision" value="confirmar" disabled={p}>{tx('rest.confirmar_lote')}</BotonV2>}
+        <BotonV2 type="submit" tamano="sm" name="decision" value="rechazar" disabled={p}>{tx('rest.rechazar')}</BotonV2>
       </form>
     </li>
   );
@@ -133,6 +137,7 @@ function FilaLote({ l, flota }: { l: LotePantalla; flota: string | null }) {
 const TONO_VERIF: Record<PortalControlPantalla['verificacion'], TonoEstado> = { verificado: 'ok', exento: 'ok', no_verificado: 'warn', obsoleto: 'warn' };
 
 function FilaPortalControl({ f, minimo, esDueno, flota }: { f: PortalControlPantalla; minimo: number; esDueno: boolean; flota: string | null }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [rP, promover, pP] = useActionState(accionPromoverPortal, null);
   const [rD, devolver, pD] = useActionState(accionDevolverPortal, null);
   useRespuesta(rP); useRespuesta(rD);
@@ -140,19 +145,18 @@ function FilaPortalControl({ f, minimo, esDueno, flota }: { f: PortalControlPant
   return (
     <li className="rv-fact__reglon">
       <span className="rv-fact__nota">
-        <strong>{f.nombre}</strong> · {f.fase === 'autonoma' ? 'Autónomo' : 'Supervisado'} · {f.emisionesConfirmadas} emisión{f.emisionesConfirmadas === 1 ? '' : 'es'} con UUID
-        <span className="rv-fact__sub"><StatusChip tono={TONO_VERIF[f.verificacion]}>{VERIF[f.verificacion]}</StatusChip></span>
+        <strong>{f.nombre}</strong> · {f.fase === 'autonoma' ? tx('rest.autonomo') : tx('rest.supervisado')} · {tx(f.emisionesConfirmadas === 1 ? 'rest.n_emision_con_uuid.uno' : 'rest.n_emision_con_uuid.otros', { n: f.emisionesConfirmadas })}<span className="rv-fact__sub"><StatusChip tono={TONO_VERIF[f.verificacion]}>{verif(tx)[f.verificacion]}</StatusChip></span>
       </span>
       {f.fase === 'autonoma' ? (
-        <form action={devolver}><CampoFlota valor={flota} /><input type="hidden" name="comercio" value={f.clave} /><Boton pendiente={pD}>Volver a supervisado</Boton></form>
+        <form action={devolver}><CampoFlota valor={flota} /><input type="hidden" name="comercio" value={f.clave} /><Boton pendiente={pD}>{tx('rest.volver_a_supervisado')}</Boton></form>
       ) : !esDueno ? (
-        <span className="rv-fact__nota" data-tono="faint">Un portal lo pasa a autónomo el dueño de la flota.</span>
+        <span className="rv-fact__nota" data-tono="faint">{tx('rest.un_portal_lo_pasa_a_autonomo')}</span>
       ) : (
         <form action={promover} className="rv-fact__linea">
           <CampoFlota valor={flota} />
           <input type="hidden" name="comercio" value={f.clave} />
-          <Boton pendiente={pP}>Pasar a autónomo</Boton>
-          {!puede && <span className="rv-fact__nota" data-tono="faint">Faltan {minimo - f.emisionesConfirmadas} emisión(es) confirmadas</span>}
+          <Boton pendiente={pP}>{tx('rest.pasar_a_autonomo')}</Boton>
+          {!puede && <span className="rv-fact__nota" data-tono="faint">{tx('rest.faltan_emision_es_confirmadas', { v: minimo - f.emisionesConfirmadas })}</span>}
         </form>
       )}
     </li>
@@ -160,37 +164,34 @@ function FilaPortalControl({ f, minimo, esDueno, flota }: { f: PortalControlPant
 }
 
 export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const { control, lotes, portales, minimoParaAutonoma, esDueno, flotaPintada } = datos;
   const encendida = control !== null && control !== 'sin_fila' && control.emisionReal;
   return (
-    <Tarjeta titulo="Emisión real de facturas">
+    <Tarjeta titulo={tx('rest.emision_real_de_facturas')}>
       <div className="rv-fact__pila">
-        <p className="rv-fact__nota">
-          Un CFDI emitido no se deshace. Por eso la emisión real es una decisión del dueño de la flota, requiere el mandato otorgado en
-          {' '}<Link className="rv-fact__enlace" href="/dashboard/legal">Términos y mandato</Link>, y cada portal arranca supervisado: el agente propone el lote y tú lo confirmas.
-        </p>
+        <p className="rv-fact__nota">{ricoT(tx('rest.un_cfdi_emitido_no_se_deshace'), { e0: (c) => <Link className="rv-fact__enlace" href="/dashboard/legal">{c}</Link> })}</p>
         {control === null ? (
-          <p role="alert" className="rv-fact__nota" data-tono="bad">No se pudo leer el control de emisión: esta sección está ciega y el agente sigue en ensayo. Recarga en un momento.</p>
+          <p role="alert" className="rv-fact__nota" data-tono="bad">{tx('rest.no_se_pudo_leer_el_control')}</p>
         ) : (
           <>
-            <p className="rv-fact__nota">
-              Estado: <strong>{encendida ? 'Emisión real ENCENDIDA' : 'Ensayo (llena el portal y no emite)'}</strong>
+            <p className="rv-fact__nota">{tx('rest.estado')}{' '}<strong>{encendida ? tx('rest.emision_real_encendida') : tx('rest.ensayo_llena_el_portal_y_no')}</strong>
             </p>
             <Interruptor encendida={encendida} esDueno={esDueno} flota={flotaPintada} />
             <Limites c={control} esDueno={esDueno} flota={flotaPintada} />
           </>
         )}
-        <p className="rv-fact__rotulo">Lotes por confirmar</p>
+        <p className="rv-fact__rotulo">{tx('rest.lotes_por_confirmar')}</p>
         {lotes === null ? (
-          <p className="rv-fact__nota" data-tono="bad">No se pudieron leer los lotes.</p>
+          <p className="rv-fact__nota" data-tono="bad">{tx('rest.no_se_pudieron_leer_los_lotes')}</p>
         ) : lotes.length === 0 ? (
-          <p className="rv-fact__nota">Ninguno. Cuando el agente tenga tickets listos en un portal supervisado, el lote aparece aquí.</p>
+          <p className="rv-fact__nota">{tx('rest.ninguno_cuando_el_agente_tenga_tickets')}</p>
         ) : (
           <ul className="rv-fact__reglones">{lotes.map((l) => <FilaLote key={l.id} l={l} flota={flotaPintada} />)}</ul>
         )}
-        <p className="rv-fact__rotulo">Portales</p>
+        <p className="rv-fact__rotulo">{tx('rest.portales')}</p>
         {portales.length === 0 ? (
-          <p className="rv-fact__nota">Ningún portal ha emitido todavía.</p>
+          <p className="rv-fact__nota">{tx('rest.ningun_portal_ha_emitido_todavia')}</p>
         ) : (
           <ul className="rv-fact__reglones">{portales.map((f) => <FilaPortalControl key={f.clave} f={f} minimo={minimoParaAutonoma} esDueno={esDueno} flota={flotaPintada} />)}</ul>
         )}

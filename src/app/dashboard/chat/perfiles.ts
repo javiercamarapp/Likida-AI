@@ -1,4 +1,4 @@
-import { CATALOGO_CONSULTA, FASES_PENSANDO } from './respuestas';
+import { catalogoConsulta, fasesPensando } from './respuestas';
 import type { ModoAgente } from './motor';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
@@ -43,9 +43,9 @@ export const perfilCliente = (t: TResto = T_RESTO_ES): PerfilAgente => ({
     ],
     pie: t('ch.responde_con_cifras_ya_calculadas_en'),
   },
-  temas: CATALOGO_CONSULTA,
+  temas: catalogoConsulta(t),
   endpoint: '/api/dashboard/chat',
-  fases: FASES_PENSANDO,
+  fases: fasesPensando(t),
   acciones: false,
   adjuntos: true,
 });
@@ -83,4 +83,6 @@ export const perfilSuperadmin = (t: TResto = T_RESTO_ES): PerfilAgente => ({
 });
 export const PERFIL_SUPERADMIN = perfilSuperadmin();
 
-export const PERFILES: Record<ModoAgente, PerfilAgente> = { cliente: perfilCliente(/*t*/), superadmin: perfilSuperadmin(/*t*/) };
+export const PERFILES: Record<ModoAgente, PerfilAgente> = { cliente: perfilCliente(), superadmin: perfilSuperadmin() };
+/** Los perfiles en el idioma del traductor (los componentes leen este; `PERFILES` queda en español para quien no tiene `t`). */
+export const perfiles = (t: TResto = T_RESTO_ES): Record<ModoAgente, PerfilAgente> => ({ cliente: perfilCliente(t), superadmin: perfilSuperadmin(t) });

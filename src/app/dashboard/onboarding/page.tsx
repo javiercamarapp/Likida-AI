@@ -34,11 +34,11 @@ const extra = (t: TResto = T_RESTO_ES): Opcion[] => ([
 ]);
 const otroTr = (t: TResto = T_RESTO_ES): Opcion => ({ valor: 'otro', texto: t('op.otro_escribelo_abajo') });
 
-function opciones(cat: CategoriaConector): Opcion[] {
+function opciones(cat: CategoriaConector, t: TResto): Opcion[] {
   return [
-    ...extra(/*t*/),
+    ...extra(t),
     ...CONECTORES.filter((c) => c.categoria === cat).map((c) => ({ valor: c.id, texto: c.nombre })),
-    otroTr(/*t*/),
+    otroTr(t),
   ];
 }
 
@@ -104,9 +104,9 @@ export default async function OnboardingFlotaPage({
     redirect(`/dashboard${sufijoTenant(sp)}`);
   }
 
-  const gps = opciones('Rastreo GPS');
-  const erp = opciones('ERP y contabilidad');
-  const tag = opciones('Peaje y monederos').filter((o) => o.valor !== 'monedero_diesel' && o.valor !== 'powergas');
+  const gps = opciones('Rastreo GPS', t);
+  const erp = opciones('ERP y contabilidad', t);
+  const tag = opciones('Peaje y monederos', t).filter((o) => o.valor !== 'monedero_diesel' && o.valor !== 'powergas');
   const monedero = [
     ...extra(t),
     ...CONECTORES.filter((c) => c.id === 'monedero_diesel' || c.id === 'powergas')

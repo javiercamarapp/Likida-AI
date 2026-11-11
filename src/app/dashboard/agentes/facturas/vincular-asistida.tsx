@@ -11,6 +11,10 @@ import {
 } from './acciones-vinculacion';
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { horaMx } from '@/lib/formato';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ════════════════════════════════════════════════════════════════════════════
 // «VINCULAR» — el paso humano del CAPTCHA/MFA, con pantalla en el producto (0540).
@@ -22,12 +26,13 @@ import { horaMx } from '@/lib/formato';
 // por Likida. Esta pieza muestra el código UNA vez y sondea el estado hasta que termina.
 // ════════════════════════════════════════════════════════════════════════════
 
-const ROTULO: Record<string, string> = {
-  pendiente: 'Esperando a que corras el comando…',
-  reclamada: 'Código aceptado: entra al portal en la ventana que se abrió y resuelve el reto.',
-};
+const rotulo = (tx: TAgentes = TR_ES.t): Record<string, string> => ({
+  pendiente: tx('rest.esperando_a_que_corras_el_comando'),
+  reclamada: tx('rest.codigo_aceptado_entra_al_portal_en'),
+});
 
 export function VincularAsistida({ clave, nombre, flota = null }: { clave: string; nombre: string; flota?: string | null }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const router = useRouter();
   const { notificar } = useNotificar();
   const [res, iniciar, iniciando] = useActionState<ResultadoVincular | null, FormData>(accionIniciarVinculacion, null);
@@ -48,10 +53,10 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
       setEstado(e);
       if (!e.ok) return;
       if (e.estado === 'completada') {
-        notificar({ tono: 'ok', mensaje: `${nombre} quedó vinculado. El agente ya puede entrar solo.` });
+        notificar({ tono: 'ok', mensaje: tx('rest.quedo_vinculado_el_agente_ya_puede', { nombre }) });
         setCerrado(true); router.refresh();
       } else if (e.estado === 'fallida' || e.estado === 'expirada' || e.estado === 'cancelada') {
-        notificar({ tono: 'error', mensaje: `No se vinculó ${nombre}: ${e.motivo ?? (e.estado === 'expirada' ? 'el código venció' : 'se canceló')}. Pide otro código.` });
+        notificar({ tono: 'error', mensaje: tx('rest.no_se_vinculo_pide_otro_codigo', { nombre, v: e.motivo ?? (e.estado === 'expirada' ? 'el código venció' : 'se canceló') }) });
         setCerrado(true); router.refresh();
       }
     }, 4_000);
@@ -65,7 +70,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
         {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
         <div>
           <Boton type="submit" variante="ghost" tamano="sm" loading={iniciando} icono={<Icono icono={MonitorSmartphone} tam={14} />}>
-            {iniciando ? 'Generando…' : 'Vincular con código'}
+            {iniciando ? 'Generando…' : tx('rest.vincular_con_codigo')}
           </Boton>
         </div>
         {res && !res.ok && <span role="alert" className="rv-fact__nota" data-tono="bad">{res.error}</span>}
@@ -77,25 +82,23 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
   return (
     <div className="rv-fact__relogin" role="region" aria-label={`Vincular ${nombre}`}>
       <div className="rv-fact__pila">
-        <p className="rv-fact__titulo">Vincular {nombre}</p>
+        <p className="rv-fact__titulo">{tx('rest.vincular')}{' '}{nombre}</p>
         <ol className="rv-fact__pasos">
-          <li>En una computadora <strong>con pantalla</strong> (la tuya), en la carpeta de Likida, corre:</li>
+          <li>{ricoT(tx('rest.en_una_computadora_strong_con_pantalla'), { strong: (c) => <strong>{c}</strong> })}</li>
         </ol>
         <div className="rv-fact__linea">
           <code className="rv-fact__codigo" data-testid="comando-vinculacion">{res.comando}</code>
-          <Boton variante="ghost" tamano="sm" aria-label="Copiar comando"
-            onClick={() => { void navigator.clipboard?.writeText(res.comando); notificar({ tono: 'info', mensaje: 'Comando copiado.' }); }}>
+          <Boton variante="ghost" tamano="sm" aria-label={tx('rest.copiar_comando')}
+            onClick={() => { void navigator.clipboard?.writeText(res.comando); notificar({ tono: 'info', mensaje: tx('rest.comando_copiado') }); }}>
             <Icono icono={Copy} tam={14} />
           </Boton>
         </div>
         <ol start={2} className="rv-fact__pasos">
-          <li>Se abre el portal. <strong>Entra tú</strong> con tu cuenta y resuelve el CAPTCHA o el código de dos pasos. Likida no teclea nada ni resuelve retos.</li>
-          <li>Cuando estés dentro, la ventana se cierra sola y aquí aparece «vinculado».</li>
+          <li>{ricoT(tx('rest.se_abre_el_portal_strong_entra'), { strong: (c) => <strong>{c}</strong> })}</li>
+          <li>{tx('rest.cuando_estes_dentro_la_ventana_se')}</li>
         </ol>
-        <p className="rv-fact__nota" data-tono="warn">
-          El código se muestra solo ahora, sirve una vez y caduca a las {horaMx(res.expiraEn)}. No lo compartas.
-        </p>
-        <p className="rv-fact__nota" role="status">{ROTULO[vivo] ?? ''}</p>
+        <p className="rv-fact__nota" data-tono="warn">{tx('rest.el_codigo_se_muestra_solo_ahora', { horaMx: horaMx(res.expiraEn) })}</p>
+        <p className="rv-fact__nota" role="status">{rotulo(tx)[vivo] ?? ''}</p>
         <div>
           <Boton variante="ghost" tamano="sm" loading={cancelando} icono={<Icono icono={X} tam={14} />}
             onClick={() => empezarCancelar(async () => {
@@ -103,9 +106,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
               const r = await accionCancelarVinculacion(null, fd);
               notificar(r.error ? { tono: 'error', mensaje: r.error } : { tono: 'info', mensaje: r.ok ?? 'Cancelada.' });
               setCerrado(true); router.refresh();
-            })}>
-            Cancelar y anular el código
-          </Boton>
+            })}>{tx('rest.cancelar_y_anular_el_codigo')}</Boton>
         </div>
       </div>
     </div>

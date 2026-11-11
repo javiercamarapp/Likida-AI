@@ -15,6 +15,7 @@ export function textoMs(ms?: number | null): string {
 }
 
 function ListaPasos({ pasos }: { pasos: PasoTraza[] }) {
+  const { t } = useT('resto', restoEs);
   return (
     <ol className="rv-traza__lista">
       {pasos.map((p, i) => (
@@ -23,7 +24,7 @@ function ListaPasos({ pasos }: { pasos: PasoTraza[] }) {
             {p.listo ? <Check width={12} height={12} strokeWidth={2} /> : <span className="rv-traza__punto" />}
           </span>
           <span className="rv-traza__titulo">
-            {rotuloTool(p.tool)}{p.listo ? '' : '…'}
+            {rotuloTool(p.tool, t)}{p.listo ? '' : '…'}
             {p.listo && p.ms !== undefined && <span className="rv-traza__meta">{textoMs(p.ms)}</span>}
           </span>
         </li>

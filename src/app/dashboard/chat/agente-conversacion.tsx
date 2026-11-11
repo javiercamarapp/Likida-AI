@@ -10,7 +10,7 @@ import PanelHistorial, { BotonHistorial } from './historial';
 import { BurbujaUsuario, RespuestaVista } from './mensajes';
 import { comportamientoScroll, useMovimientoReducido } from './movimiento';
 import type { Motor, ModoAgente } from './motor';
-import { PERFILES, type TemaAgente, type TextosAgente } from './perfiles';
+import { perfiles, type TemaAgente, type TextosAgente } from './perfiles';
 import TemasRapidos from './sugerencias';
 import BriefingDecideHoy from './briefing-decide-hoy';
 import { useAnalista } from './use-analista';
@@ -81,7 +81,7 @@ function ConMotorSuperadmin(p: PropsAgente) {
 
 function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca = 'horizontal', acciones, adjuntos, cabecera, motor: a }: PropsAgente & { motor: Motor }) {
   const { t: tl } = useT('resto', restoEs);
-  const perfil = PERFILES[modo];
+  const perfil = perfiles(tl)[modo];
   const tx: TextosAgente = { ...perfil.textos, ...textos };
   const listaTemas = temas ?? perfil.temas;
   const conAcciones = acciones ?? perfil.acciones;

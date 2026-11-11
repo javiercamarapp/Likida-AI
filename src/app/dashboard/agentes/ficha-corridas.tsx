@@ -31,7 +31,7 @@ const columnasTr = (t: TResto = T_RESTO_ES): readonly ColumnaBase<CorridaRegistr
   {
     id: 'estado', titulo: t('llaves.estado'),
     celda: (c) => {
-      const e = estadoTr(/*t*/)[c.estado] ?? { tono: 'neutral' as const, rotulo: c.estado };
+      const e = estadoTr(t)[c.estado] ?? { tono: 'neutral' as const, rotulo: c.estado };
       return (
         <>
           <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>

@@ -15,7 +15,11 @@ import {
 } from '@/lib/likida/liquidacion_externa/repo';
 import { VistaFormatoLiquidacion } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Formato de las liquidaciones' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.formato_de_las_liquidaciones') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -24,9 +28,10 @@ const RUTA = '/dashboard/agentes/liquidacion/formato';
 /** La puerta de TODA action: una action es un endpoint alcanzable por POST directo, no un botón.
  *  Guardar el formato y a quién se copia es administrar (dueño), no solo ver dinero. */
 async function puerta(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string): Promise<{ por: string } | { error: string }> {
+  const { t: tx } = await getT('agentes');
   const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-  if (!puedeVerArea(sesion.rol, 'administracion')) return { error: 'Solo el dueño de la flota cambia el formato de las liquidaciones y a quién se le copian.' };
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Esta configuración no es de tu flota.' };
+  if (!puedeVerArea(sesion.rol, 'administracion')) return { error: tx('rest.solo_el_dueno_de_la_flota_4') };
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.esta_configuracion_no_es_de_tu') };
   return { por: sesion.userId };
 }
 
@@ -48,6 +53,7 @@ export default async function PaginaFormatoLiquidacion({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -61,7 +67,7 @@ export default async function PaginaFormatoLiquidacion({
   let telefonos: TelefonosFlota | null = null;
   try { [config, telefonos] = await Promise.all([leerFormatoFlota(tenantId), leerTelefonosFlota(tenantId)]); } catch (e) {
     logger.error('liqext.formato_pagina_lectura', { err: e instanceof Error ? e.message : String(e) });
-    errorLectura = 'No se pudo leer el formato guardado. Inténtalo de nuevo en un momento; no se cambió nada.';
+    errorLectura = tx('rest.no_se_pudo_leer_el_formato');
   }
 
   async function accionSubirMuestra(fd: FormData) {
@@ -69,8 +75,8 @@ export default async function PaginaFormatoLiquidacion({
     const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     const a = fd.get('archivo');
-    if (!(a instanceof File) || a.size === 0) return volver(sufijo, 'error:Elige el Excel de muestra (un .xlsx con el formato que hoy mandas a tus operadores).');
-    if (a.size > MAX_CATALOGO_BYTES) return volver(sufijo, 'error:Ese archivo pesa demasiado para ser una muestra (máximo 4 MB).');
+    if (!(a instanceof File) || a.size === 0) return volver(sufijo, tx('rest.error_elige_el_excel_de_muestra'));
+    if (a.size > MAX_CATALOGO_BYTES) return volver(sufijo, tx('rest.error_ese_archivo_pesa_demasiado_para'));
     const matriz = matrizDeArchivoCatalogo(a.name, new Uint8Array(await a.arrayBuffer()));
     if (!matriz.ok) return volver(sufijo, `error:${matriz.motivo}`);
     const d = derivarFormatoDeMatriz(matriz.matriz);
@@ -87,13 +93,13 @@ export default async function PaginaFormatoLiquidacion({
       }, p.por, version);
     } catch (e) {
       logger.error('liqext.formato_subir', { err: e instanceof Error ? e.message : String(e) });
-      return volver(sufijo, e instanceof DatoInvalido ? `error:${e.message}` : 'error:No se pudo guardar el formato. Inténtalo de nuevo.');
+      return volver(sufijo, e instanceof DatoInvalido ? `error:${e.message}` : tx('rest.error_no_se_pudo_guardar_el'));
     }
     const notas = [
-      d.sinMapear.length > 0 ? `No reconocí estas columnas y NO se imprimirán: ${d.sinMapear.join(', ')}.` : '',
+      d.sinMapear.length > 0 ? tx('rest.no_reconoci_estas_columnas_y_no', { d: d.sinMapear.join(', ') }) : '',
       ...d.advertencias,
     ].filter(Boolean).join(' ');
-    return volver(sufijo, `Formato guardado desde «${a.name}»: ${d.formato.columnas.length} columnas. ${notas} Revísalo abajo; las liquidaciones nuevas ya salen con este formato.`.trim());
+    return volver(sufijo, tx('rest.formato_guardado_desde_columnas_revisalo_abajo', { name: a.name, length: d.formato.columnas.length, notas }).trim());
   }
 
   async function accionGuardarAjustes(fd: FormData) {
@@ -105,7 +111,7 @@ export default async function PaginaFormatoLiquidacion({
     try { version = await leerVersionFormato(tenantId); actual = await leerFormatoFlota(tenantId); } catch (e) {
       return volver(sufijo, `error:${mensajeParaPantalla(e, 'leer el formato guardado')}`);
     }
-    if (!actual) return volver(sufijo, 'error:Primero sube el Excel de muestra: sin formato no hay nada que ajustar.');
+    if (!actual) return volver(sufijo, tx('rest.error_primero_sube_el_excel_de'));
     const previo = actual;
     try {
       const lista = (prefijo: string, n: number): string[] => {
@@ -121,13 +127,13 @@ export default async function PaginaFormatoLiquidacion({
       });
       await guardarFormatoFlota(tenantId, {
         formato, nombreMuestra: previo.nombreMuestra,
-        copiaTelefonos: leerTelefonos(String(fd.get('copia') ?? ''), 'La copia al jefe de flota'),
-        discrepanciaTelefonos: leerTelefonos(String(fd.get('discrepancia') ?? ''), 'El aviso de «No coincide»'),
+        copiaTelefonos: leerTelefonos(String(fd.get('copia') ?? ''), tx('rest.la_copia_al_jefe_de_flota')),
+        discrepanciaTelefonos: leerTelefonos(String(fd.get('discrepancia') ?? ''), tx('rest.el_aviso_de_no_coincide')),
       }, p.por, version);
     } catch (e) {
       return volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar el formato')}`);
     }
-    return volver(sufijo, 'Cambios guardados. Aplican a las liquidaciones que lleguen desde ahora.');
+    return volver(sufijo, tx('rest.cambios_guardados_aplican_a_las_liquidaciones'));
   }
 
   /** Los teléfonos de la copia y del aviso de discrepancia SIN formato de Excel (flotas con el PDF genérico). */
@@ -137,13 +143,13 @@ export default async function PaginaFormatoLiquidacion({
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     try {
       await guardarTelefonosFlota(tenantId, {
-        copia: leerTelefonos(String(fd.get('copia') ?? ''), 'La copia al jefe de flota'),
-        discrepancia: leerTelefonos(String(fd.get('discrepancia') ?? ''), 'El aviso de «No coincide»'),
+        copia: leerTelefonos(String(fd.get('copia') ?? ''), tx('rest.la_copia_al_jefe_de_flota')),
+        discrepancia: leerTelefonos(String(fd.get('discrepancia') ?? ''), tx('rest.el_aviso_de_no_coincide')),
       }, p.por);
     } catch (e) {
-      return volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar los teléfonos')}`);
+      return volver(sufijo, `error:${mensajeParaPantalla(e, tx('rest.guardar_los_telefonos'))}`);
     }
-    return volver(sufijo, 'Teléfonos guardados. La copia y el aviso de «No coincide» salen a estos números desde ahora.');
+    return volver(sufijo, tx('rest.telefonos_guardados_la_copia_y_el'));
   }
 
   async function accionQuitar() {
@@ -152,14 +158,14 @@ export default async function PaginaFormatoLiquidacion({
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     try { await borrarFormatoFlota(tenantId); } catch (e) {
       logger.error('liqext.formato_quitar', { err: e instanceof Error ? e.message : String(e) });
-      return volver(sufijo, 'error:No se pudo quitar el formato. Inténtalo de nuevo.');
+      return volver(sufijo, tx('rest.error_no_se_pudo_quitar_el'));
     }
     // Los teléfonos sobreviven al formato (0645): se dice lo que de verdad quedó, no lo que se supone.
     let quedan = false;
     try { const t = await leerTelefonosFlota(tenantId); quedan = !!t && (t.copia.length > 0 || t.discrepancia.length > 0); } catch { /* el aviso es informativo */ }
     return volver(sufijo, quedan
-      ? 'Formato quitado: las liquidaciones nuevas salen con el PDF de siempre. Los teléfonos de la copia y del aviso se conservan.'
-      : 'Formato quitado: las liquidaciones nuevas salen con el PDF de siempre y ya no se manda copia.');
+      ? tx('rest.formato_quitado_las_liquidaciones_nuevas_salen')
+      : tx('rest.formato_quitado_las_liquidaciones_nuevas_salen_2'));
   }
 
   return (

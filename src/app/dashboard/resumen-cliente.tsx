@@ -48,6 +48,7 @@ function useMarcha(senales: SenalesAsistente | null, ambito: string, soloLectura
 const rotuloSev = (t: TResto = T_RESTO_ES) => ({ accion: t('op.te_toca_a_ti'), atencion: t('op.en_espera_o_por_mirar'), info: t('op.informativo') } as const);
 
 function FilaVisual({ f, onAbrir }: { f: FilaAtencion; onAbrir?: () => void }) {
+  const { t } = useT('resto', restoEs);
   const cuerpo = (
     <>
       <i className="rv-at__punto" data-sev={f.sinPendiente && f.severidad === 'info' ? 'ok' : f.severidad} aria-hidden="true" />
@@ -56,7 +57,7 @@ function FilaVisual({ f, onAbrir }: { f: FilaAtencion; onAbrir?: () => void }) {
         <span className="rv-at__detalle" title={f.detalle}>{f.detalle}</span>
       </span>
       {f.sinPendiente && f.severidad === 'info' ? <Check width={16} height={16} aria-hidden="true" className="rv-at__ok" /> : onAbrir ? <ChevronRight width={16} height={16} aria-hidden="true" className="rv-at__flecha" /> : null}
-      <span className="rv-sr">{rotuloSev(/*t*/)[f.severidad]}</span>
+      <span className="rv-sr">{rotuloSev(t)[f.severidad]}</span>
     </>
   );
   return onAbrir
