@@ -2049,4 +2049,10 @@ export const dinero = {
   'e26b.arco_por_responder_nota': 'solicitudes abiertas sin respuesta',
   'e26b.arco_pronto_nota': 'a punto de agotar el plazo',
   'e26b.arco_vencidas_nota': 'el plazo de respuesta ya se agotó',
+  'r4.rent_periodo': 'Periodo de los viajes',
+  'r4.rent_p_todo': 'Todo',
+  'r4.rent_p_30d': '30 días',
+  'r4.rent_p_90d': '90 días',
+  'r4.rent_p_12m': '12 meses',
+  'r4.rent_metodo': 'El periodo mide los viajes de ese lapso (margen, ingreso y costo). La cartera por cobrar es el saldo vigente de todas las facturas, no cambia con el periodo.',
 } as const;
