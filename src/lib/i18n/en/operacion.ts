@@ -1023,7 +1023,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'mapa.dibujan.n': 'The {tope} most recent trips in progress of {total} are drawn — the rest is in the log.',
   'cli.f.guardando': 'Saving…',
   'cli.f.nombre': 'Name or business name',
-  'cli.f.nombre.ph': 'Cementos del Bajío S.A. de C.V.',
+  'cli.f.nombre.ph': 'Bajio Cement Co.',
   'cli.f.opcional': 'Optional',
   'cli.f.rfc.ayuda': 'Its check digit is verified. It is the RFC you will invoice them with.',
   'cli.f.credito': 'Credit days',
