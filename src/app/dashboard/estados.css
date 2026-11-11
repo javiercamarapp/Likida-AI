@@ -31,3 +31,7 @@
 
 /* Los hijos de una tabla maestra (tabla, notas, tarjetas de apoyo) van separados por el gap de 12 px de Rovaq, no pegados. */
 [data-ui="v2"] .rv-esq__tabla { display: grid; gap: 12px; min-width: 0; }
+
+/* Ronda 6: pie de la tabla maestra («25 de N» + paginación) dentro de la tarjeta, con filete superior (Rovaq). */
+.rv-reg__pie-tabla { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--line); }
+.rv-un__nota { margin: 0; padding: 0 14px 10px; font-size: 12px; color: var(--muted); }

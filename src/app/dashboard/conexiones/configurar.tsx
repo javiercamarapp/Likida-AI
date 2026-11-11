@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { SegmentedControl } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
@@ -13,16 +13,18 @@ import './conexiones.css';
  */
 export type IdSeccionConfig = 'estado' | 'sistemas' | 'gps' | 'credenciales';
 
+function suscribirHash(fn: () => void): () => void {
+  window.addEventListener('hashchange', fn);
+  return () => window.removeEventListener('hashchange', fn);
+}
+
 export function ConfigurarSincronizacion({ secciones }: { secciones: ReadonlyArray<{ id: IdSeccionConfig; nodo: ReactNode }> }) {
   const { t } = useT('resto', restoEs);
   const presentes = secciones.filter((s) => s.nodo !== undefined && s.nodo !== null && s.nodo !== false);
-  const [activa, setActiva] = useState<IdSeccionConfig>(presentes[0]?.id ?? 'estado');
-  useEffect(() => {
-    const h = window.location.hash.replace('#', '') as IdSeccionConfig;
-    if (presentes.some((s) => s.id === h)) setActiva(h);
-    // Solo al montar: el ancla de la URL decide la sección inicial.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // El ancla de la URL (`#gps`) decide la sección inicial; leerla con useSyncExternalStore evita el desajuste de hidratación (en el servidor vale '').
+  const hash = useSyncExternalStore(suscribirHash, () => window.location.hash.replace('#', ''), () => '');
+  const [manual, setManual] = useState<IdSeccionConfig | null>(null);
+  const activa: IdSeccionConfig = manual ?? presentes.find((x) => x.id === hash)?.id ?? presentes[0]?.id ?? 'estado';
   if (presentes.length === 0) return null;
   const rotulo: Record<IdSeccionConfig, string> = {
     estado: t('cfg.sec.fuentes'), sistemas: t('cfg.sec.sistemas'), gps: t('cfg.sec.gps'), credenciales: t('cfg.sec.credenciales'),
@@ -31,7 +33,7 @@ export function ConfigurarSincronizacion({ secciones }: { secciones: ReadonlyArr
     <section className="rv-cx__config" aria-label={t('cfg.configurar_sincronizacion')}>
       <div className="rv-cx__config-cab">
         <h2 className="rv-cx__config-titulo">{t('cfg.configurar_sincronizacion')}</h2>
-        <SegmentedControl<IdSeccionConfig> etiqueta={t('cfg.configurar_sincronizacion')} tamano="sm" valor={activa} onChange={setActiva}
+        <SegmentedControl<IdSeccionConfig> etiqueta={t('cfg.configurar_sincronizacion')} tamano="sm" valor={activa} onChange={setManual}
           opciones={presentes.map((s) => ({ valor: s.id, etiqueta: rotulo[s.id] }))} />
       </div>
       {presentes.map((s) => (
