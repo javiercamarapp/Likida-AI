@@ -2055,4 +2055,5 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'r4.rent_p_90d': '90 days',
   'r4.rent_p_12m': '12 months',
   'r4.rent_metodo': 'The period measures the trips in that window (margin, revenue and cost). Receivables are the current balance of all invoices and do not change with the period.',
+  'r4.timb_ir_hacerlo': 'Go do it',
 };
