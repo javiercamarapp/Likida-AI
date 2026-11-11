@@ -207,4 +207,5 @@ it('D11/D12 (auditoría 11-nov): sin solicitudes NO hay tira de dos ceros y el v
   const html = (await import('react-dom/server')).renderToStaticMarkup(await CompliancePage({ searchParams: Promise.resolve({}) }));
   expect(html).not.toContain('Vencen pronto');
   expect(html).toMatch(/rv-tarjeta[\s\S]*Ninguna solicitud ARCO registrada/);
+  expect(html).toContain('Seguridad y datos');
 });

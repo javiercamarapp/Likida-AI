@@ -185,5 +185,5 @@ export default async function CobranzaPage() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('admin_dinero');
-  return { title: t('cobranza.cobranza') };
+  return { title: t('cobranza.facturacion') };
 }

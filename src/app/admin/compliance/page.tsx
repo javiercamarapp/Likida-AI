@@ -99,7 +99,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
   ];
 
   return (
-    <MarcoPagina titulo="Compliance y datos" apoyo="Las solicitudes de derechos de los titulares (ARCO): quién pide qué y cuánto falta para contestar.">
+    <MarcoPagina titulo="Seguridad y datos" apoyo="Las solicitudes de derechos de los titulares (ARCO): quién pide qué y cuánto falta para contestar.">
       {/* Sin una sola solicitud, dos ceros no son dos mediciones: el único estado vacío (abajo) lo dice una vez. */}
       {lectura !== null && solicitudes.length === 0 ? null : <TiraCifras etiqueta="Solicitudes ARCO" items={lectura === null ? [
         { etiqueta: 'Por responder', valor: null, estado: 'error', mensaje: 'No se pudieron leer las solicitudes.', reintentar: true },
@@ -223,4 +223,4 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
   return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }
 
-export const metadata: Metadata = { title: 'Compliance & Datos' };
+export const metadata: Metadata = { title: 'Seguridad y datos' };

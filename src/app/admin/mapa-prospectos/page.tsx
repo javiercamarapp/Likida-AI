@@ -30,4 +30,4 @@ export default async function PaginaMapaProspectos() {
   );
 }
 
-export const metadata: Metadata = { title: 'Cerebro de ventas' };
+export const metadata: Metadata = { title: 'Ventas' };

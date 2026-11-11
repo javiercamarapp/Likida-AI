@@ -80,7 +80,7 @@ export default async function DevPage() {
   // quizá ya existe. `null` viaja como `null` y el selector lo dice.
   const tenants = conteoTenants.error ? null : conteoTenants.count ?? 0;
   return (
-    <MarcoPagina titulo="Dev">
+    <MarcoPagina titulo="Desarrollo">
       {/* "Entrar a los otros paneles" — vivía en el Inicio; Javier lo mandó aquí el 17-ago: es herramienta de desarrollo, no de operación. */}
       <SelectorVista tenants={tenants} />
 

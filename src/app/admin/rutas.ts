@@ -121,7 +121,7 @@ export const SECCIONES: Array<{ titulo: string; items: Item[] }> = [
 /** Pantallas que viven FUERA del menú, lista cerrada: la campana, el avatar y el «ver como». Todo `page.tsx` bajo `/admin` está en
  *  `SECCIONES`, aquí, o es un stub 308 (guarda `admin_paginas_en_menu`). Aparecen en ⌘K. */
 export const FUERA_DEL_MENU: ReadonlyArray<{ href: string; nombre: string; Icono: typeof LayoutGrid; alias?: readonly string[] }> = [
-  { href: '/admin/notificaciones', nombre: 'Notificaciones', Icono: Bell, alias: ['campana', 'pendientes'] },
+  { href: '/admin/notificaciones', nombre: 'Avisos', Icono: Bell, alias: ['notificaciones', 'campana', 'pendientes'] },
   { href: '/admin/mi-perfil', nombre: 'Mi perfil', Icono: UserRound, alias: ['avatar', 'cuenta', 'contraseña'] },
   { href: '/admin/elegir-flota', nombre: 'Ver como una flota', Icono: Eye, alias: ['elegir flota', 'ver como'] },
 ];
@@ -129,11 +129,14 @@ export const FUERA_DEL_MENU: ReadonlyArray<{ href: string; nombre: string; Icono
 const ENTRADAS: Item[] = [COPILOTO, ...SECCIONES.flatMap((s) => s.items)];
 const coincide = (pathname: string, href: string): boolean => pathname === href || pathname.startsWith(`${href}/`);
 /** La entrada del sidebar a la que pertenece una ruta (por la ruta de la entrada o la de cualquiera de sus pestañas; las rutas con
- *  parámetro, p. ej. `/admin/flotas/<id>`, cuentan por prefijo). `null` si no es de ninguna (Inicio, Mi perfil, Notificaciones…). */
+ *  parámetro, p. ej. `/admin/flotas/<id>`, cuentan por prefijo). `null` si no es de ninguna (Inicio…); las de `FUERA_DEL_MENU` (Avisos, Mi perfil…) devuelven una entrada sin pestañas. */
 export function entradaDeRuta(pathname: string): Item | null {
   for (const it of ENTRADAS) {
     if (coincide(pathname, it.href) || (it.pestanas ?? []).some((p) => coincide(pathname, p.href))) return it;
   }
+  // Las pantallas fuera del menú (Avisos, Mi perfil, Ver como…) también dan nombre a la cabecera; no son de ninguna sección ni llevan pestañas.
+  const fuera = FUERA_DEL_MENU.find((f) => coincide(pathname, f.href));
+  if (fuera) return { href: fuera.href, nombre: fuera.nombre, Icono: fuera.Icono };
   return null;
 }
 
