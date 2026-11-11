@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { EsqueletoConfiguracion } from '../../../ui-v2/esqueletos';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
+import { getT } from '@/lib/i18n/servidor';
 import { FormaNuevoAcceso } from './forma-nuevo-acceso';
 import '../../resumen.css';
 
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function NuevoUsuario({ searchParams }: { searchParams?: Promise<{ flota?: string }> }) {
   await requireSuperadmin();
-  const [{ flotas }, sp] = await Promise.all([getResumenNegocio(), searchParams]);
+  const [{ flotas }, sp, { t }] = await Promise.all([getResumenNegocio(), searchParams, getT('admin_flotas')]);
   const preseleccion = flotas.some((f) => f.id === sp?.flota) ? sp?.flota : '';
 
   return (
@@ -25,7 +26,7 @@ export default async function NuevoUsuario({ searchParams }: { searchParams?: Pr
         id: 'nuevo-acceso', titulo: 'Nuevo acceso',
         // La ayuda va como descripción de la tarjeta, no pegada al botón: el pie queda con una sola acción.
         descripcion: 'Crea la cuenta de acceso y la persona en el panel, deja el asiento en la bitácora y le manda el correo de acceso. El primer ingreso (enlace por correo) confirma la cuenta. Si el canal de correo no está configurado, la pantalla lo dice y la cuenta queda creada: usa «Reenviar acceso» desde Personas. Los vendedores se dan de alta en Ventas.',
-        contenido: <FormaNuevoAcceso flotas={flotas} preseleccion={preseleccion} />,
+        contenido: <FormaNuevoAcceso flotas={flotas} preseleccion={preseleccion} t={t} />,
       }]}
     />
   );

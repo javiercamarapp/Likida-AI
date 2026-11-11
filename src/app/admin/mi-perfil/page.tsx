@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
-import { AvisoCompacto, Boton, Fieldset } from '@/app/ui-v2/componentes';
-import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
+import { AvisoCompacto, Boton } from '@/app/ui-v2/componentes';
+import { EsqueletoConfiguracion, FilaConfig } from '@/app/ui-v2/esqueletos';
+import { getT } from '@/lib/i18n/servidor';
+import { PreferenciasFilas } from './preferencias-filas';
 import { CampoTexto } from '../../ui-v2/componentes/campos';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -41,6 +43,8 @@ export default async function MiPerfilPage({
 }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
   const s = await requireSuperadmin();
   const sp = await searchParams;
+  const { t, idioma } = await getT('publico');
+  const { t: ts } = await getT('admin_sistema');
   const admin = supabaseAdmin();
   const { data: fila } = await admin.from('app_user').select('email').eq('id', s.userId).maybeSingle();
 
@@ -110,31 +114,30 @@ export default async function MiPerfilPage({
       )}
       secciones={[
         {
-          id: 'foto', titulo: 'Foto',
-          contenido: <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />,
-        },
-        {
-          id: 'nombre', titulo: 'Nombre',
-          contenido: (
-            <form action={actualizarNombre} className="adm-perfil-form">
-              <CampoTexto etiqueta="Nombre" name="nombre" defaultValue={s.nombre ?? ''} obligatorio />
-              <Boton type="submit" variante="secondary">Guardar nombre</Boton>
-            </form>
-          ),
-        },
-        {
-          id: 'cuenta', titulo: 'Cuenta',
+          // UNA tarjeta de filas rótulo-control (Rovaq CF): foto, nombre, correo, rol, idioma y tema.
+          id: 'perfil', titulo: ts('mi_perfil.tu_cuenta'),
           contenido: (
             <>
-              <Fieldset leyenda="Datos de acceso">
-                <dl className="adm-res-pares">
-                  <dt>Correo</dt>
-                  <dd>{(fila?.email as string) ?? '—'}</dd>
-                  <dt>Rol</dt>
-                  <dd>{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
-                </dl>
-              </Fieldset>
-              <p className="adm-res-pie">Correo y rol no son editables aquí: el correo está ligado a tu cuenta de acceso y el rol lo asigna otro superadmin.</p>
+              <FilaConfig rotulo={ts('mi_perfil.foto')} ayuda={ts('mi_perfil.foto_ayuda')}>
+                <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
+              </FilaConfig>
+              <FilaConfig rotulo={ts('mi_perfil.nombre')} ayuda={ts('mi_perfil.nombre_ayuda')}>
+                <form action={actualizarNombre} className="adm-perfil-form adm-perfil-form--fila">
+                  <CampoTexto etiqueta={ts('mi_perfil.nombre')} etiquetaOculta name="nombre" defaultValue={s.nombre ?? ''} obligatorio />
+                  <Boton type="submit" variante="secondary" tamano="sm">{ts('mi_perfil.guardar_nombre')}</Boton>
+                </form>
+              </FilaConfig>
+              <FilaConfig rotulo={ts('mi_perfil.correo')} ayuda={ts('mi_perfil.correo_ayuda')}>
+                <span className="adm-perfil-valor">{(fila?.email as string) ?? '—'}</span>
+              </FilaConfig>
+              <FilaConfig rotulo={ts('mi_perfil.rol')} ayuda={ts('mi_perfil.rol_ayuda')}>
+                <span className="adm-perfil-valor">{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</span>
+              </FilaConfig>
+              <PreferenciasFilas idiomaActivo={idioma} textos={{
+                idioma: t('cta.idioma'), ayudaIdioma: ts('mi_perfil.idioma_ayuda'), tema: t('cta.tema'), ayudaTema: ts('mi_perfil.tema_ayuda'),
+                temaClaro: t('cta.tema.claro'), temaSistema: t('cta.tema.sistema'), temaOscuro: t('cta.tema.oscuro'),
+                es: 'Español', en: 'English', enProximamente: t('cta.en_pronto'), fallo: t('cta.idioma.fallo'),
+              }} />
             </>
           ),
         },

@@ -101,9 +101,9 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
       id: 'acciones', titulo: t('equipo.acciones'), tituloOculto: true, alinear: 'der',
       celda: (p) => (
         <span className="adm-acciones-fila">
-          <BotonEnlace href={quitar({ abrir: p.id })} tamano="sm" variante="ghost">Gestionar</BotonEnlace>
+          <BotonEnlace href={quitar({ abrir: p.id })} tamano="sm" variante="ghost">{t('equipo.gestionar')}</BotonEnlace>
           {p.activa && !p.esLikida && p.estado !== 'sin_acceso' && p.id !== sesion.userId ? (
-            <Revocar id={p.id} nombre={p.nombre ?? p.email} accion={accionDarDeBajaUsuario} etiqueta="Revocar"
+            <Revocar id={p.id} nombre={p.nombre ?? p.email} accion={accionDarDeBajaUsuario} etiqueta={t('equipo.revocar')}
               titulo={t('equipo_gestion_persona.dar_de_baja_a', { nombre: p.nombre ?? p.email })} descripcion={t('equipo_gestion_persona.pierde_el_acceso_al')}
               confirmar={t('equipo_gestion_persona.si_dar_de_baja')} />
           ) : null}
@@ -138,9 +138,9 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
   return marco([
     ...(gestion ? [{ id: 'gestion', titulo: t('equipo_gestion_persona.gestionar_a', { nombre: seleccionada?.nombre ?? seleccionada?.email ?? '' }), contenido: gestion }] : []),
     {
-      id: 'invitar', titulo: 'Invitar integrante',
-      descripcion: 'Crea la cuenta de acceso y le manda el correo con el enlace de ingreso. Los vendedores se dan de alta en Ventas.',
-      contenido: <FormaNuevoAcceso flotas={flotas} preseleccion={flotas.some((f) => f.id === flotaId) ? flotaId : ''} />,
+      id: 'invitar', titulo: t('equipo.invitar_integrante'),
+      descripcion: t('equipo.invitar_ayuda'),
+      contenido: <FormaNuevoAcceso flotas={flotas} preseleccion={flotas.some((f) => f.id === flotaId) ? flotaId : ''} t={t} />,
     },
     {
       id: 'roles', titulo: t('equipo.que_puede_hacer_cada'),
