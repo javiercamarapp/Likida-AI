@@ -420,7 +420,7 @@ describe('atención del día (Rovaq: un solo vacío, no cuatro tarjetas)', () =>
     expect(actividadVacia(d, d.config.slaRespuestaMin, AHORA)).toBe(true);
     const html = await pintar(BloqueActividad({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones: {} as never }));
     expect(html.match(/Nada que atender ahora/g)?.length).toBe(1);
-    expect(html).not.toContain('Cola de aprobación');
+    expect(html).not.toContain('Conversaciones activas');
   });
   it('con una fila de bitácora ya no es vacío: cada tarjeta conserva la suya', () => {
     const d = base({ eventos: [{ id: 'e1', tipo: 'entrante', nivel: null, creadoEn: '2026-10-01T10:00:00Z' } as never] });
