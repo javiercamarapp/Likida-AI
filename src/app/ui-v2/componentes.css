@@ -42,7 +42,7 @@
 
 /* ── Aviso ─────────────────────────────────────────────────────────────── */
 .rv-aviso {
-  display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px;
+  display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px;
   border: 1px solid color-mix(in srgb, var(--info, var(--muted)) 24%, transparent); border-radius: 8px;
   background: var(--infobg, var(--canvas)); color: var(--info, var(--ink));
   font-size: 13px; line-height: 1.5;
@@ -551,3 +551,4 @@
 /* Boton de solo icono (11-nov-2026): el mismo .rv-btn de 28 px, cuadrado; siempre con aria-label y Tooltip del sistema. */
 [data-ui="v2"] .rv-btn.rv-btn--icono { width: var(--ctl-h-sm, 28px); min-width: 0; padding: 0; justify-content: center; }
 @media (max-width: 820px) { [data-ui="v2"] .rv-btn.rv-btn--icono { width: 36px; } }
+[data-ui="v2"] .rv-aviso { padding: 10px 14px; }
