@@ -41,6 +41,9 @@
 // de uno que los filtros tratan como marketing.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { trCorreo } from './tr';
+import { LANG_HTML, type Idioma } from '@/lib/i18n/idioma';
+
 import { appUrl } from '@/lib/env';
 import { LOGO_CID } from './logo';
 
@@ -100,11 +103,17 @@ export type TonoCorreo = 'neutral' | 'atencion' | 'urgente';
  * mantiene neutro. Así, además, el día que lleguen tres avisos seguidos no
  * parecen tres alarmas.
  */
-const TONO: Record<TonoCorreo, { rotulo: string | null; color: string }> = {
+const TONO: Record<TonoCorreo, { rotulo: 'pl.tono.atencion' | 'pl.tono.urgente' | null; color: string }> = {
   neutral: { rotulo: null, color: C.muted },
-  atencion: { rotulo: 'Requiere atención', color: C.warn },
-  urgente: { rotulo: 'Urgente', color: C.bad },
+  atencion: { rotulo: 'pl.tono.atencion', color: C.warn },
+  urgente: { rotulo: 'pl.tono.urgente', color: C.bad },
 };
+
+/** El texto del diccionario, escapado y con los acentos como entidades (el correo viaja igual en cualquier cliente). */
+const ENTIDADES: Record<string, string> = { 'á': 'aacute', 'é': 'eacute', 'í': 'iacute', 'ó': 'oacute', 'ú': 'uacute', 'ñ': 'ntilde', 'ü': 'uuml', '¿': 'iquest', '¡': 'iexcl' };
+function escEntidades(texto: string): string {
+  return esc(texto).replace(/[áéíóúñü¿¡]/g, (c) => `&${ENTIDADES[c]};`);
+}
 
 export interface Boton { texto: string; href: string }
 
@@ -142,6 +151,8 @@ export interface Correo {
   tono?: TonoCorreo;
   /** Por qué le llegó este correo. Va al pie. */
   porQueLoRecibes: string;
+  /** El idioma del DESTINATARIO (marco del correo: rótulos, pie, `<html lang>`). Sin él, español. */
+  idioma?: Idioma;
   /**
    * La liga de baja de UN CLIC (`baja.ts`), cuando el correo la lleva. Solo
    * la usa la campaña de prospección (`cola.ts`): un correo transaccional no
@@ -186,11 +197,11 @@ export function aTextoPlano(c: Correo): string {
     lineas.push('');
     for (const [k, v] of c.datos) lineas.push(`${k}: ${v}`);
   }
-  if (c.codigo) lineas.push('', `Código: ${c.codigo}`);
+  if (c.codigo) lineas.push('', `${trCorreo(c.idioma).t('pl.codigo')}: ${c.codigo}`);
   if (c.boton) lineas.push('', `${c.boton.texto}: ${c.boton.href}`);
   if (c.nota) lineas.push('', c.nota);
   lineas.push('', '—', c.porQueLoRecibes, `Likida · ${base()}`);
-  if (c.bajaHref) lineas.push('', `Darte de baja: ${c.bajaHref}`);
+  if (c.bajaHref) lineas.push('', `${trCorreo(c.idioma).t('pl.baja.texto')}: ${c.bajaHref}`);
   return lineas.join('\n');
 }
 
@@ -212,13 +223,14 @@ export interface OpcionesHtml {
 }
 
 export function armarHtml(c: Correo, op: OpcionesHtml = {}): string {
+  const tr = trCorreo(c.idioma);
   const tono = TONO[c.tono ?? 'neutral'];
   const logoSrc = op.logo === 'url' ? `${base()}/images/logo.png` : `cid:${LOGO_CID}`;
 
   // Micro-rótulo con su punto de color: el mismo recurso `etiqueta-mono` de
   // las tarjetas de la app — el tono se dice en UNA palabra, no en bandas.
   const rotulo = tono.rotulo
-    ? `<p style="margin:0 0 14px 0;font-family:${SANS};font-size:10px;line-height:14px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:${tono.color};"><span style="color:${tono.color};">&#9679;</span>&nbsp;&nbsp;${esc(tono.rotulo)}</p>`
+    ? `<p style="margin:0 0 14px 0;font-family:${SANS};font-size:10px;line-height:14px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:${tono.color};"><span style="color:${tono.color};">&#9679;</span>&nbsp;&nbsp;${esc(tr.t(tono.rotulo))}</p>`
     : '';
 
   // El grid de datos, nivel documento: etiqueta en versalitas espaciadas a la
@@ -247,7 +259,7 @@ ${c.datos.map(([k, v]) => `        <tr>
   // computadora, así que lo que importa es que NO se confundan 1/l ni 0/O.
   const codigo = c.codigo
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 4px 0;">
-        <tr><td style="padding:0 0 9px 0;font-family:${SANS};font-size:10px;line-height:14px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:${C.faint};">C&oacute;digo de un solo uso</td></tr>
+        <tr><td style="padding:0 0 9px 0;font-family:${SANS};font-size:10px;line-height:14px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:${C.faint};">${escEntidades(tr.t('pl.codigo.rotulo'))}</td></tr>
         <tr><td bgcolor="${C.g1}" align="center" style="padding:17px 30px;border:1px solid ${C.linea};border-radius:12px;font-family:${MONO};font-size:27px;line-height:33px;font-weight:600;letter-spacing:0.2em;color:${C.tinta};white-space:nowrap;">${esc(c.codigo)}</td></tr>
       </table>`
     : '';
@@ -256,7 +268,7 @@ ${c.datos.map(([k, v]) => `        <tr>
   // verificación pasa de los 200 caracteres y sin él desborda los 600px y
   // rompe la tarjeta en Outlook.
   const ligaLiteral = c.boton && c.enlaceLiteral
-    ? `<p style="margin:24px 0 0 0;font-family:${SANS};font-size:11.5px;line-height:18px;color:${C.faint};">&iquest;El bot&oacute;n no abre? Copia esta liga en tu navegador:<br>
+    ? `<p style="margin:24px 0 0 0;font-family:${SANS};font-size:11.5px;line-height:18px;color:${C.faint};">${escEntidades(tr.t('pl.liga'))}<br>
         <span style="word-break:break-all;">${esc(c.boton.href)}</span></p>`
     : '';
 
@@ -275,7 +287,7 @@ ${c.datos.map(([k, v]) => `        <tr>
   // funciona con un clic. `hrefSeguro` la protege igual que a un botón.
   const baja = c.bajaHref
     ? `<p style="margin:6px 0 0 0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">
-          <a href="${hrefSeguro(c.bajaHref)}" style="color:${C.faint};text-decoration:underline;text-decoration-color:${C.linea};">Darme de baja de estos correos</a>
+          <a href="${hrefSeguro(c.bajaHref)}" style="color:${C.faint};text-decoration:underline;text-decoration-color:${C.linea};">${escEntidades(tr.t('pl.baja.enlace'))}</a>
         </p>`
     : '';
 
@@ -288,7 +300,7 @@ ${c.datos.map(([k, v]) => `        <tr>
   const rellenoAvance = '&nbsp;&zwnj;'.repeat(90);
 
   return `<!doctype html>
-<html lang="es">
+<html lang="${LANG_HTML[c.idioma ?? 'es']}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -334,7 +346,7 @@ ${c.datos.map(([k, v]) => `        <tr>
       <!-- El pie: la casa editorial del correo. Primera línea, quiénes somos;
            segunda, por qué te llegó; tercera, a dónde volver. Sin gritos. -->
       <tr><td align="left" style="padding:26px 6px 0 6px;">
-        <p style="margin:0 0 7px 0;font-family:${SANS};font-size:11px;line-height:17px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${C.muted};">Likida&nbsp;&nbsp;&#183;&nbsp;&nbsp;Liquidaci&oacute;n de viajes por WhatsApp</p>
+        <p style="margin:0 0 7px 0;font-family:${SANS};font-size:11px;line-height:17px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${C.muted};">Likida&nbsp;&nbsp;&#183;&nbsp;&nbsp;${escEntidades(tr.t('pl.pie.marca'))}</p>
         <p style="margin:0 0 5px 0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">${esc(c.porQueLoRecibes)}</p>
         <p style="margin:0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">
           <a href="${base()}" style="color:${C.faint};text-decoration:underline;text-decoration-color:${C.linea};">${esc(base().replace(/^https?:\/\//, ''))}</a>
@@ -390,7 +402,7 @@ ${c.datos.map(([k, v]) => `        <tr>
     .map((p) => `<p style="margin:0 0 14px 0;font-family:${SANS};font-size:15px;line-height:24px;color:#3f3f46;">${esc(p)}</p>`)
     .join('\n    ');
   return `<!doctype html>
-<html lang="es">
+<html lang="${LANG_HTML[c.idioma ?? 'es']}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
