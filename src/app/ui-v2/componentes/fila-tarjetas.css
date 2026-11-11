@@ -2,6 +2,7 @@
    Sin colores ni medidas fuera de los tokens del sistema; cero reglas que dependan de la piel del chrome. */
 .rv-fila-tarjetas { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; min-width: 0; }
 .rv-fila-tarjetas > * { min-width: 0; }
+.rv-fila-tarjetas > .rv-tarjeta { height: 100%; }
 .rv-fila-tarjetas[data-llena] { flex: 1 1 auto; }
 
 /* 8-4 y 4-8 solo en escritorio: sus selectores (0,3,0) ganarían a las reglas móviles (0,2,0) y la fila nunca se apilaría. */

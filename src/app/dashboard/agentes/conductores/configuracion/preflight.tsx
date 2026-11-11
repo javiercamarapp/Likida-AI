@@ -69,6 +69,7 @@ export function PanelPreflight({ preflight, sufijo = '', tr = TR_ES }: { preflig
               return (
                 <li key={c.id} className="rv-cd__paso" data-estado={ok ? 'ok' : 'falta'}>
                   <div className="rv-cd__paso-cab">
+                    {/* sin-info: título de paso de la lista de verificación, no un recuadro con cifra */}
                     <h3 className="rv-cd__paso-titulo">{c.titulo}</h3>
                     <Chip tono={ok ? 'ok' : 'warn'} tamano="estado">
                       <Icono icono={ok ? CircleCheck : CircleAlert} tam={14} etiqueta={ok ? tx('rest.en_orden') : tx('rest.falta')} />

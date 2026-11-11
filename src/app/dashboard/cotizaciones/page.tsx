@@ -231,6 +231,7 @@ export default async function PaginaCotizaciones({
         return (
           <>
             {mxn(g.pesos)}
+            {g.margenPct !== null && <span className="rv-cot__tenue"> {tr('cotizaciones.page.delPrecio', { v: porcentaje(g.margenPct) })}</span>}
             <StatusChip tono={g.pesos < 0 ? 'bad' : 'ok'}>{g.pesos < 0 ? tr('cotizaciones.page.pierdeDinero') : tr('cotizaciones.page.dejaGanancia')}</StatusChip>
           </>
         );

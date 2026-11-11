@@ -88,14 +88,14 @@ export function FormaConAviso({
           <BotonConfirmar
             etiqueta={pendiente ? 'Guardando…' : boton} deshabilitado={pendiente}
             titulo={confirmar.titulo} descripcion={confirmar.descripcion} etiquetaConfirmar={confirmar.etiquetaConfirmar}
-            className="text-sm font-medium rounded-lg px-4 py-2 w-full md:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
+            className="inline-flex h-8 items-center justify-center text-[13px] font-medium rounded-lg px-3 w-full md:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}
           />
         ) : (
           <button
             type="submit"
             disabled={pendiente}
-            className="text-sm font-medium rounded-lg px-4 py-2 w-full md:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
+            className="inline-flex h-8 items-center justify-center text-[13px] font-medium rounded-lg px-3 w-full md:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}
           >
             {pendiente ? 'Guardando…' : boton}

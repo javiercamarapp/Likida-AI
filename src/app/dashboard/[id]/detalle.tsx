@@ -416,10 +416,12 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
       {/* Rovaq 06d cierra la ficha con «Qué se sabe / Qué no se sabe»: lo desconocido se dibuja, no se omite. */}
       <div className="rv-esq__saberes">
         <section className="rv-esq__saber" aria-labelledby="liq-saber-si">
+          {/* sin-info: encabezado de lista «lo que sí sabemos», no un recuadro con cifra */}
           <h3 id="liq-saber-si">{tr('liquidacion.detalle.saberSiTitulo')}</h3>
           <ul>{(['saberSi1', 'saberSi2', 'saberSi3'] as const).map((k) => <li key={k}>{tr(`liquidacion.detalle.${k}`)}</li>)}</ul>
         </section>
         <section className="rv-esq__saber" data-no-sabe="" aria-labelledby="liq-saber-no">
+          {/* sin-info: encabezado de lista «lo que no sabemos», no un recuadro con cifra */}
           <h3 id="liq-saber-no">{tr('liquidacion.detalle.saberNoTitulo')}</h3>
           <ul>{(['saberNo1', 'saberNo2', 'saberNo3'] as const).map((k) => <li key={k}>{tr(`liquidacion.detalle.${k}`)}</li>)}</ul>
         </section>

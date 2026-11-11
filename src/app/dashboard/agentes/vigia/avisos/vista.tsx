@@ -295,6 +295,7 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, pendie
           <div className="rv-vg__pila">
             {grupos.map((g) => (
               <section key={g.fecha || 'sin-fecha'} className="rv-vg__pila" aria-label={dia(g.fecha)}>
+                {/* sin-info: separador de día de la bandeja, no un recuadro con cifra */}
                 <h3 className="rv-vg__dia">{dia(g.fecha)}</h3>
                 {g.clientes.map((c) => (
                   <div key={c.cliente} className="rv-vg__pila">
