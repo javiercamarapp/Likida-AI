@@ -13,9 +13,10 @@ import {
 import { etiquetaIva } from '@/lib/saas/iva';
 import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
 import { logger } from '@/lib/logger';
-import { Aviso, BarraFiltros, CampoSelect, CampoTexto, Disclosure, EstadoError, FilaTarjetas, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BarraFiltros, CampoSelect, CampoTexto, Disclosure, EstadoError, FilaTarjetas, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { Columnas, DonaMini, type PropsCifra } from '@/app/ui-v2/graficas';
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { accionGestionarPlan } from '../flotas/acciones-plan';
@@ -262,7 +263,11 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
   const mesesOrden = [...porMes.keys()].sort().slice(-12);
   const porEstado = new Map<string, number>();
   for (const f of historial?.filas ?? []) porEstado.set(String(f.estado), (porEstado.get(String(f.estado)) ?? 0) + 1);
-  const graficas = [
+  const sinFacturas = historial !== null && mesesOrden.length === 0 && porEstado.size === 0;
+  const graficas = sinFacturas ? [
+    // Sin facturas no hay barras ni dona que dibujar: UN vacío de una línea en vez de dos tarjetas vacías lado a lado.
+    <Tarjeta key="vacio" titulo={t('costos_facturacion.facturado_por_mes')} estado="vacio" contenida mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />,
+  ] : [
     historial === null
       ? <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} estado="error" mensaje={t('costos_facturacion.no_se_pudo_leer_3')} reintentar />
       : mesesOrden.length === 0
@@ -287,28 +292,26 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
   return (
     <EsqueletoPanelCifras
       titulo={t('costos_facturacion.facturacion')} apoyo={t('costos_facturacion.lo_que_likida_cobra')}
-      etiquetaCifras={t('costos_facturacion.cobro_de_la_mensualidad')} cifras={cifras} graficas={graficas} variante="8-4"
-      avisos={(
-        <>
-          {!banco ? (
-            <Aviso tono="warn" titulo={t('costos_facturacion.sin_cuenta_de_cobro')}>
-          
-              {t('costos_facturacion.faltan_la_clabe_el')}
-            </Aviso>
-          ) : null}
-          {!hayStripe ? (
-            <Aviso tono="warn" titulo={t('costos_facturacion.stripe_sin_conectar')}>{t('costos_facturacion.sin_la_llave_de')}</Aviso>
-          ) : !webhookConfigurado() ? (
-            <Aviso tono="error" titulo={t('costos_facturacion.falta_el_secreto_del')}>
-          
-              {t('costos_facturacion.se_puede_mandar_a')}
-            </Aviso>
-          ) : null}
-        </>
-      )}
+      etiquetaCifras={t('costos_facturacion.cobro_de_la_mensualidad')} cifras={observadas(cifras, t('a1r4.observado'))} graficas={graficas} variante="8-4"
+      avisos={(() => {
+        // Como máximo UN aviso de una línea (Rovaq): si faltan varias conexiones se dicen juntas y el detalle queda tras «Ver más».
+        const faltas: Array<{ tono: 'warn' | 'error'; titulo: string; texto?: string }> = [];
+        if (!banco) faltas.push({ tono: 'warn', titulo: t('costos_facturacion.sin_cuenta_de_cobro'), texto: t('costos_facturacion.faltan_la_clabe_el') });
+        if (!hayStripe) faltas.push({ tono: 'warn', titulo: t('costos_facturacion.stripe_sin_conectar'), texto: t('costos_facturacion.sin_la_llave_de') });
+        else if (!webhookConfigurado()) faltas.push({ tono: 'error', titulo: t('costos_facturacion.falta_el_secreto_del'), texto: t('costos_facturacion.se_puede_mandar_a') });
+        if (faltas.length === 0) return null;
+        if (faltas.length === 1) return <Aviso tono={faltas[0].tono} titulo={faltas[0].titulo}>{faltas[0].texto}</Aviso>;
+        return (
+          <AvisoCompacto
+            tono={faltas.some((f) => f.tono === 'error') ? 'error' : 'warn'}
+            resumen={<strong>{faltas.map((f) => f.titulo).join(' · ')}</strong>}
+            mas={<ul className="adm-din-lista">{faltas.map((f) => <li key={f.titulo}><strong>{f.titulo}</strong> <span>{f.texto}</span></li>)}</ul>}
+          />
+        );
+      })()}
     >
       <div className="adm-pila adm-forma-fina">
-      <FilaTarjetas variante="8-4">
+      <FilaTarjetas variante="8-4" className="adm-fila-alto-contenido">
         <Tarjeta titulo={t('costos_facturacion.por_cobrar')} estado={porCobrar === null ? 'error' : porCobrar.length === 0 ? 'vacio' : 'ok'} contenida={porCobrar !== null && porCobrar.length === 0} mensaje={porCobrar === null ? t('costos_facturacion.no_se_pudo_leer_3') : t('costos_facturacion.nada_pendiente_de_cobro')}
           detalle={porCobrar === null ? t('costos_facturacion.esto_no_quiere_decir') : t('costos_facturacion.aparece_aqui_en_cuanto')} reintentar>
           {porCobrar !== null ? (

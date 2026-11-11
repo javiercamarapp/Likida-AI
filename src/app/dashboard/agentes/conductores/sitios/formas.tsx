@@ -1,10 +1,10 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useId, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save, Upload } from 'lucide-react';
 import '../conductores.css';
-import { Aviso as AvisoV2, Boton, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Icono } from '@/app/ui-v2/componentes';
+import { Aviso as AvisoV2, Boton, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Drawer, Icono } from '@/app/ui-v2/componentes';
 import { TIPOS_SITIO } from '@/lib/likida/conductor/sitios';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
@@ -54,14 +54,18 @@ export interface SitioEditable {
 
 export const SITIO_VACIO: SitioEditable = { nombre: '', tipo: 'planta', codigo: '', direccion: '', lat: '', lng: '', radio_m: '300', cliente_id: '', padre_id: '' };
 
-export function FormaSitio({ accion, inicial, clientes, padres }: {
+export function FormaSitio({ accion, inicial, clientes, padres, idForma, alOk, alPendiente }: {
   accion: AccionSitio; inicial: SitioEditable;
   clientes: Array<{ id: string; nombre: string }>; padres: Array<{ id: string; nombre: string }>;
+  /** En un cajón el envío vive en el pie (`form=idForma`): la forma no pinta su propio botón. */
+  idForma?: string; alOk?: () => void; alPendiente?: (p: boolean) => void;
 }) {
   const { t: tx } = useT('agentes', agentesEs);
-  const [estado, enviar] = useActionState(accion, null);
+  const [estado, enviar, pendiente] = useActionState(accion, null);
+  useEffect(() => { if (estado?.ok) alOk?.(); }, [estado, alOk]);
+  useEffect(() => { alPendiente?.(pendiente); }, [pendiente, alPendiente]);
   return (
-    <form action={enviar} className="rv-cd__pila" aria-label={inicial.id ? tx('rest.editar_sitio') : tx('rest.nuevo_sitio')}>
+    <form id={idForma} action={enviar} className="rv-cd__pila" aria-label={inicial.id ? tx('rest.editar_sitio') : tx('rest.nuevo_sitio')}>
       {inicial.id && <input type="hidden" name="id" value={inicial.id} />}
       <div className="rv-cd__cuad">
         <CampoTexto etiqueta={tx('conductores.forma.nombre')} name="nombre" defaultValue={inicial.nombre} required maxLength={120} />
@@ -80,9 +84,45 @@ export function FormaSitio({ accion, inicial, clientes, padres }: {
           <option value="">—</option>{padres.filter((p) => p.id !== inicial.id).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </CampoSelect>
       </div>
-      <div className="rv-cd__linea"><Boton1 texto={inicial.id ? tx('rest.guardar_cambios') : tx('rest.crear_sitio')} icono="guardar" /></div>
+      {!idForma && <div className="rv-cd__linea"><Boton1 texto={inicial.id ? tx('rest.guardar_cambios') : tx('rest.crear_sitio')} icono="guardar" /></div>}
       <Aviso r={estado} />
     </form>
+  );
+}
+
+/**
+ * Alta y edición de un sitio en CAJÓN de 420 px (Rovaq `FormaEnCajon`): pie con Cancelar y el primario, Esc cierra, el foco vuelve al
+ * disparador. La acción de servidor es la misma de siempre (puerta de permisos y flota atada en `page.tsx`); un rechazo deja el cajón
+ * abierto con el aviso, solo `{ ok }` lo cierra. Con `cerrarHref` (edición por `?editar=`) cerrar quita el parámetro de la URL.
+ */
+export function CajonSitio({ accion, inicial, clientes, padres, disparador, abiertoInicial = false, cerrarHref }: {
+  accion: AccionSitio; inicial: SitioEditable; clientes: Array<{ id: string; nombre: string }>; padres: Array<{ id: string; nombre: string }>;
+  disparador?: string; abiertoInicial?: boolean; cerrarHref?: string;
+}) {
+  const { t: tx } = useT('agentes', agentesEs);
+  const idForma = useId();
+  const [abierto, setAbierto] = useState(abiertoInicial);
+  const [pendiente, setPendiente] = useState(false);
+  const cerrar = () => { setAbierto(false); if (cerrarHref && typeof window !== 'undefined') window.history.replaceState(null, '', cerrarHref); };
+  const editar = Boolean(inicial.id);
+  return (
+    <>
+      {disparador ? <Boton type="button" variante="secondary" tamano="sm" aria-haspopup="dialog" onClick={() => setAbierto(true)}>{disparador}</Boton> : null}
+      <Drawer
+        abierto={abierto} onCerrar={cerrar} cierraConFondo={false}
+        titulo={editar ? `Editar «${inicial.nombre}»` : tx('rest.nuevo_sitio')}
+        pie={(
+          <>
+            <Boton type="button" variante="ghost" onClick={cerrar}>{tx('f26d4.cajon.cancelar')}</Boton>
+            <Boton type="submit" form={idForma} variante="primary" disabled={pendiente} aria-busy={pendiente || undefined}>
+              {pendiente ? 'Guardando…' : editar ? tx('rest.guardar_cambios') : tx('rest.crear_sitio')}
+            </Boton>
+          </>
+        )}
+      >
+        {<FormaSitio key={abierto ? 'abierto' : 'cerrado'} accion={accion} inicial={inicial} clientes={clientes} padres={padres} idForma={idForma} alOk={cerrar} alPendiente={setPendiente} />}
+      </Drawer>
+    </>
   );
 }
 

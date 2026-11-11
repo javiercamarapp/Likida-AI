@@ -1,6 +1,6 @@
 /* Techo diario de IA: barra de uso por flota y el formulario en línea de cada fila. */
-.rv-techo-uso { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.rv-techo-barra { width: 64px; height: 4px; border: 0; border-radius: 999px; appearance: none; background: var(--line2); overflow: hidden; }
+.rv-techo-uso { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+.rv-techo-barra { flex: 1 1 96px; max-width: 220px; height: 6px; border: 0; border-radius: 999px; appearance: none; background: var(--line2); overflow: hidden; }
 .rv-techo-barra::-webkit-progress-bar { background: var(--line2); }
 .rv-techo-barra::-webkit-progress-value { background: var(--marca); transition: width 240ms ease; }
 .rv-techo-barra::-moz-progress-bar { background: var(--marca); }

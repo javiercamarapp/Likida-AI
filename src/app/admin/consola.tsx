@@ -3,6 +3,7 @@ import { ShieldCheck } from 'lucide-react';
 import { EsqCifrasV2, EsqTarjetaV2, FilaTarjetas, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { Columnas, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import { uniformes } from './cifras-uniformes';
+import { observadas } from './sello-observado';
 import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { saludoTr } from '@/lib/i18n/operacion_tr';
@@ -31,7 +32,7 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       area={t('consola.eyebrow')}
       titulo={t('consola.resumen')}
       apoyo={t('consola.apoyo', { saludo: saludoTr(tr), nombre: nombre ?? 'Javier' })}
-      acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>}
+      acciones={<BotonEnlace variante="primary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>}
       avisos={(
         <>
           <p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={1.75} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>
@@ -42,7 +43,7 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       {/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas, luego los paneles con filas-tarjeta. */}
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
 
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
       </FilaTarjetas>
@@ -109,7 +110,7 @@ async function BloqueNorte() {
         <Aviso tono="info">{t('consola.cifras_reales_no_de')}</Aviso>
       )}
       <div className="rv-esq__cifras-sueltas adm-res-tiles" role="group" aria-label={t('consola.numero_norte')}>
-        {uniformes(cifras).map((c) => <TiraCifras key={c.etiqueta} items={[c]} etiqueta={c.etiqueta} elevar entra="tarjeta" />)}
+        {observadas(uniformes(cifras), t('a1r4.observado')).map((c) => <TiraCifras key={c.etiqueta} items={[c]} etiqueta={c.etiqueta} elevar entra="tarjeta" />)}
       </div>
     </>
   );
@@ -133,10 +134,10 @@ async function BloqueSeries() {
     <FilaTarjetas variante="6-6">
       {r.porDia.length > 1
         ? <Tarjeta titulo={t('consola.gasto_de_ia_por')} elevar entra="tarjeta"><Columnas datos={costo} etiqueta={t('consola.gasto_de_ia_por')} formato="usd" matiz={2} /></Tarjeta>
-        : <Tarjeta titulo={t('consola.gasto_de_ia_por')} estado="vacio" mensaje={t('consola.sin_historial_suficiente')} detalle={t('consola.se_dibuja_cuando_haya')} />}
+        : <Tarjeta titulo={t('consola.gasto_de_ia_por')} estado="vacio" contenida mensaje={t('consola.sin_historial_suficiente')} detalle={t('consola.se_dibuja_cuando_haya')} />}
       {r.facturasPorDia.some((d) => d.n > 0)
         ? <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} elevar entra="tarjeta"><Columnas datos={facturas} etiqueta={t('consola.facturas_procesadas_por_dia_2')} formato="numero" matiz={1} /></Tarjeta>
-        : <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} estado="vacio" mensaje={t('consola.sin_facturas_en_el')} detalle={t('consola.cada_comprobante_que_pasa')} />}
+        : <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} estado="vacio" contenida mensaje={t('consola.sin_facturas_en_el')} detalle={t('consola.cada_comprobante_que_pasa')} />}
     </FilaTarjetas>
   );
 }
@@ -162,12 +163,32 @@ const columnasFlotas = (t: TrDe<'admin_inicio'>): ColumnaBase<FilaFlota>[] => [
   },
 ];
 
+/** CSV de la tabla de flotas tal como se ve (nada que la pantalla no muestre). Una celda que empieza con = + - @ se neutraliza para que una hoja de cálculo no la lea como fórmula. */
+function csvFlotas(filas: ReadonlyArray<FilaFlota>, t: TrDe<'admin_inicio'>): string {
+  const celda = (v: string | number) => {
+    const x = String(v);
+    const seguro = /^[=+\-@]/.test(x) ? `'${x}` : x;
+    return /[",\n]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
+  };
+  return [
+    [t('consola.flota'), t('consola.plan'), t('consola.viajes'), t('consola.costo_de_ia_historico')].map(celda).join(','),
+    ...filas.map((f) => [f.nombre, f.plan, f.viajes, f.costoIaUsd].map(celda).join(',')),
+  ].join('\n');
+}
+
 async function BloqueFlotas() {
   const { t } = await getT('admin_inicio');
   const r = await resumenNegocio();
   return (
     <section id="flotas" aria-label={t('consola.flotas')}>
-      <Tarjeta titulo={t('consola.flotas')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace>}>
+      <Tarjeta titulo={t('consola.flotas')} elevar entra="tarjeta" acciones={(
+        <>
+          {r && r.flotas.length > 0 ? (
+            <BotonEnlace tamano="sm" variante="secondary" download="flotas.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${csvFlotas(r.flotas, t)}`)}`}>{t('a1r4.exportar_csv')}</BotonEnlace>
+          ) : null}
+          <BotonEnlace tamano="sm" variante="ghost" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace>
+        </>
+      )}>
         <TablaBase
           etiqueta={t('consola.flotas_con_plan_viajes')}
           columnas={columnasFlotas(t)}

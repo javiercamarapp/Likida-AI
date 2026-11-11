@@ -21,3 +21,5 @@
 
 /* F26: los bloques de la tabla maestra (clientes, tarifas, viajes sin ingreso) van apilados a 12 px, como el resto del marco. */
 .rv-cl__bloques { display: grid; gap: var(--sp-gap, 12px); min-width: 0; }
+.rv-cl__pie-cajon { display: flex; justify-content: flex-end; gap: 8px; width: 100%; }
+.rv-cl__pie-cajon .rv-cl__guardar { height: 32px; }

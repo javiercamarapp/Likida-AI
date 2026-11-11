@@ -46,10 +46,14 @@ export function FormaEntrega({ config, guardar }: { config: ConfigEntrega; guard
   useRefrescarAlAvisar(estado);
   return (
     <form action={accion} className="rv-prov__forma">
+      <div className="rv-prov__cols">
+        <div className="rv-prov__col">
       <Casilla name="activo" checked={activo} onChange={(e) => setActivo(e.target.checked)} etiqueta={tx('rest.entregar_al_contador_las_facturas_aprobadas')}
         ayuda={tx('rest.apagado_como_nace_nada_sale_por')} />
       <CampoTextarea etiqueta={tx('rest.correo_s_del_contador')} ayuda={tx('rest.hasta_5_separados_por_coma_o')} name="destinatarios" defaultValue={config.destinatarios.join('\n')} rows={2} maxLength={600}
         placeholder="contador@tuempresa.mx" />
+        </div>
+        <div className="rv-prov__col">
       <div className="rv-prov__par">
         <CampoSelect etiqueta={tx('rest.formato_del_csv')} name="formato" defaultValue={config.formato}>
           <option value="generico">{tx('rest.generico_excel')}</option>
@@ -66,7 +70,9 @@ export function FormaEntrega({ config, guardar }: { config: ConfigEntrega; guard
           <CampoTexto tipo="number" etiqueta={tx('rest.minimo_de_facturas')} name="minFacturas" min={1} max={100} defaultValue={config.minFacturas} />
         </div>
       )}
-      <div><Boton texto={tx('rest.guardar')} pendiente={tx('cobranza.formagasto.guardando')} icono={<Icono icono={Check} tam={14} />} /></div>
+        </div>
+      </div>
+      <div className="rv-prov__pie"><Boton texto={tx('rest.guardar')} pendiente={tx('cobranza.formagasto.guardando')} icono={<Icono icono={Check} tam={14} />} /></div>
       <Mensaje estado={estado} />
     </form>
   );

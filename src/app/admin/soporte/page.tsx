@@ -23,6 +23,7 @@ import {
 import type { PropsCifra } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { HiloTicket } from './hilo';
@@ -298,7 +299,7 @@ export default async function SoportePage({
 
   return (
     <EsqueletoTablaMaestra
-      titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')} etiquetaCifras={ta('soporte.tickets_de_soporte')} cifras={cifras}
+      titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')} etiquetaCifras={ta('soporte.tickets_de_soporte')} cifras={cifras ? observadas(cifras, ta('a1r4.observado')) : undefined}
       filtros={tickets === null ? undefined : (
         // La guarda `una_barra_de_pestanas` reserva las pestañas subrayadas a la barra automática del grupo: la vista de la cola es un segmentado con
         // contador (no un select ni una segunda barra de pestañas).

@@ -5,7 +5,6 @@ import type { TableroGastos } from '@/lib/likida/agentes/cobranza_gasto';
 import { numero, mxn, fechaCorta } from '@/lib/formato';
 import { FormaPorGasto } from './forma-por-gasto';
 import type { AccionSimple } from './controles';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { EstadoVacio, FilaTarjetas, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TR_ES, selloHoyTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
@@ -47,32 +46,33 @@ export function SeccionPorGasto({ config, plan, tablero, tr = TR_ES }: {
 
   return (
     <>
-      {/* sin-info: rótulo de sección de la página, no un recuadro con cifra */}
-      <h2 className="rv-cob__seccion">{t('cobranza.gasto.cobranza_por_gasto')}</h2>
-      <p className="rv-ag-notif__nota">
-        {t('cobranza.gasto.que_comprobante_falta_de_que', { estado: config.porGasto
-          ? t('cobranza.gasto.encendida_los_viajes_con_gastos')
-          : t('cobranza.gasto.apagada_el_agente_cobra_por') })}
-      </p>
-
-      <TiraCifras sello={selloHoyTr(tr, t('cobranza.gasto.gastos_de_los_viajes'))}>
-        <Cifra matiz={8} info="cobranza.gasto_sin_comprobante" etiqueta={t('cobranza.gasto.gastos_sin_comprobante')} valor={numero(plan.pendientes.length)} nota={t('cobranza.gasto.en_viajes_abiertos_o_en')} />
-        <Cifra matiz={8} info="cobranza.gasto_les_toca_hoy" etiqueta={t('cobranza.gasto.les_toca_hoy')} valor={numero(hoy)} nota={t('cobranza.gasto.choferes_un_mensaje', { n: numero(plan.paraContactar.length) })} />
-        <Cifra matiz={8} info="cobranza.gasto_sin_telefono" etiqueta={t('cobranza.gasto.sin_telefono')} valor={numero(plan.sinTelefono.reduce((n, g) => n + g.items.length, 0))}
-          nota={t('cobranza.gasto.gastos_de_choferes_sin_telefono')} tono={plan.sinTelefono.length > 0 ? 'warn' : undefined} />
-        <Cifra matiz={8} info="cobranza.gasto_avisos" etiqueta={t('cobranza.gasto.avisos_30_dias')} valor={ef ? numero(ef.avisos) : null} estado={ef ? 'ok' : 'error'} reintentar
-          nota={ef ? t('cobranza.gasto.aun_abiertos', { abiertos: numero(ef.abiertos) }) : undefined} />
-        <Cifra matiz={8} info="cobranza.gasto_efectividad" etiqueta={t('cobranza.gasto.efectividad')}
-          valor={ef === null || ef.tasa === null ? null : `${numero(Math.round(ef.tasa * 100))} %`}
-          estado={ef === null ? 'error' : 'ok'} reintentar
-          mensaje={ef !== null && ef.tasa === null ? t('cobranza.gasto.aun_hay_pocos_datos') : undefined}
-          nota={ef === null ? undefined
-            : ef.medianaHoras === null ? t('cobranza.gasto.avisos_que_produjeron_el_comprobante')
-              : t('cobranza.gasto.mediana_horas', { n: numero(ef.medianaHoras) })} />
-      </TiraCifras>
+      {/* Rovaq HB: UNA sola tira de cifras por página (la de arriba); el resumen por gasto va en una tarjeta con filas rótulo-valor. */}
+      <Tarjeta titulo={t('cobranza.gasto.cobranza_por_gasto')} acciones={<span className="rv-ag-notif__nota">{selloHoyTr(tr, t('cobranza.gasto.gastos_de_los_viajes'))}</span>}>
+        <p className="rv-ag-notif__nota">
+          {t('cobranza.gasto.que_comprobante_falta_de_que', { estado: config.porGasto
+            ? t('cobranza.gasto.encendida_los_viajes_con_gastos')
+            : t('cobranza.gasto.apagada_el_agente_cobra_por') })}
+        </p>
+        <dl className="rv-cob__resumen">
+          {([
+            [t('cobranza.gasto.gastos_sin_comprobante'), numero(plan.pendientes.length), t('cobranza.gasto.en_viajes_abiertos_o_en')],
+            [t('cobranza.gasto.les_toca_hoy'), numero(hoy), t('cobranza.gasto.choferes_un_mensaje', { n: numero(plan.paraContactar.length) })],
+            [t('cobranza.gasto.sin_telefono'), numero(plan.sinTelefono.reduce((n, g) => n + g.items.length, 0)), t('cobranza.gasto.gastos_de_choferes_sin_telefono')],
+            [t('cobranza.gasto.avisos_30_dias'), ef ? numero(ef.avisos) : '—', ef ? t('cobranza.gasto.aun_abiertos', { abiertos: numero(ef.abiertos) }) : ''],
+            [t('cobranza.gasto.efectividad'), ef === null ? '—' : ef.tasa === null ? '—' : `${numero(Math.round(ef.tasa * 100))} %`,
+              ef === null ? '' : ef.tasa === null ? t('cobranza.gasto.aun_hay_pocos_datos')
+                : ef.medianaHoras === null ? t('cobranza.gasto.avisos_que_produjeron_el_comprobante') : t('cobranza.gasto.mediana_horas', { n: numero(ef.medianaHoras) })],
+          ] as const).map(([rotulo, valor, nota]) => (
+            <div key={rotulo} className="rv-cob__resumen-fila">
+              <dt>{rotulo}{nota ? <small>{nota}</small> : null}</dt>
+              <dd className="cifra-mono">{valor}</dd>
+            </div>
+          ))}
+        </dl>
+      </Tarjeta>
 
       {/* ── Qué comprobante falta de qué gasto ── */}
-      <Tarjeta titulo={t('cobranza.gasto.que_falta_gasto_por_gasto')} acciones={<span className="rv-ag-notif__nota">{t('cobranza.gasto.n_gastos', { n: numero(plan.pendientes.length) })}</span>} contenida>
+      <Tarjeta titulo={t('cobranza.gasto.que_falta_gasto_por_gasto')} acciones={<span className="rv-ag-notif__nota">{t('cobranza.gasto.n_gastos', { n: numero(plan.pendientes.length) })}</span>}>
         {plan.pendientes.length === 0 ? (
           <EstadoVacio titulo={t('cobranza.gasto.nada_por_comprobar')} icono={FileWarning} contenido>
             {config.porGasto

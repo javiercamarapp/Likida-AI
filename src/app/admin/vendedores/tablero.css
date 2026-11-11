@@ -64,3 +64,8 @@
 [data-ui="v2"] .rv-btn.ven-tarjeta__abrir::after { content: none; }
 [data-ui="v2"] .rv-btn.ven-tarjeta__abrir:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 4px; }
 .ven-detalle { display: flex; flex-direction: column; gap: 12px; }
+
+/* Fila 6-6 sin aire: cada tarjeta mide lo que dice su contenido y la pila de la derecha reparte el alto del embudo. */
+[data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .adm-pila { display: flex; flex-direction: column; gap: var(--sp-gap, 12px); min-width: 0; }
+[data-ui="v2"] .adm-pila > .rv-tarjeta { height: auto; }

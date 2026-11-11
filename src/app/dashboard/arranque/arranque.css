@@ -27,3 +27,6 @@
 .rv-ar__barra::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
 .rv-ar__barra::-webkit-progress-value { background: var(--ink); border-radius: 999px; }
 .rv-ar__barra::-moz-progress-bar { background: var(--ink); border-radius: 999px; }
+
+/* Contención del desborde del documento: los `.rv-sr` absolutos escapaban del marco y alargaban la ventana (ver conexiones.css). */
+[data-ui="v2"] .rv-contenido { position: relative; }

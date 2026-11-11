@@ -21,7 +21,7 @@ import {
 } from './forma';
 import { Cifra, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { AvisoCompacto, Chip, EstadoVacio as EstadoVacioV2, StatusChip, TablaBase, TabsLinea, TituloRecuadro, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraPeriodo, Chip, EstadoVacio as EstadoVacioV2, StatusChip, TablaBase, TabsLinea, TituloRecuadro, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import '../caja-vacia.css';
 import './facturacion.css';
@@ -117,7 +117,12 @@ export function VistaFacturacion({ datos, captura = null, auditoria = null, tr =
       titulo={tr('facturacion.vista.facturacionAClientes')}
       apoyo={tr('facturacion.vista.facturasEmitidasSusPagos')}
       acciones={alta ? <div className="rv-fact__alta">{alta}</div> : undefined}
-      filtros={pestanas}
+      filtros={pestanas ? (
+        <>
+          <BarraPeriodo etiqueta={tr('facturacion.vista.facturacionAClientes')} chips={datos ? [{ id: 'alcance', etiqueta: tr('facturacion.vista.alcanceAl', { v: fechaMx(datos.hoy) }) }] : []} />
+          {pestanas}
+        </>
+      ) : undefined}
       avisos={tabulada && datos !== null && !vacioTotal ? (seccion === 'cartera' ? avisosCartera(datos, tr) : seccion === 'mesa' ? avisosMesa(datos, tr) : undefined) : undefined}
       cifras={tabulada && datos !== null ? (seccion === 'cartera' ? cifrasCartera(datos, tr) : seccion === 'mesa' && !vacioTotal ? cifrasMesa(datos, tr) : undefined) : undefined}
       etiquetaCifras={tr('facturacion.vista.facturacionAClientes')}
@@ -211,7 +216,7 @@ function cifrasMesa(datos: FacturacionClientes, tr: Tr): PropsCifra[] {
       ? { icono: <CalendarClock width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.elMasViejoSin'), info: 'facturacion.mas_viejo', valor: null, estado: 'vacio' as const, mensaje: tr('facturacion.vista.ningunoDeEstosViajes'), matiz: 8 }
       : { icono: <CalendarClock width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.elMasViejoSin'), info: 'facturacion.mas_viejo', valor: m.diasMasViejo, formato: 'numero', nota: tr('facturacion.vista.diasDesdeQueSe'), matiz: 8 },
     // La cuarta celda (Rovaq: tira de 4): cuántos de esos viajes ya tienen una factura sin emitir. Es un conteo medido, también cuando es 0.
-    { icono: <FileText width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.conBorradorCifra'), valor: m.conBorrador, formato: 'numero', nota: tr('facturacion.vista.conBorradorNota'), matiz: 8 },
+    { icono: <FileText width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.conBorradorCifra'), info: 'facturacion.sin_factura', valor: m.conBorrador, formato: 'numero', nota: tr('facturacion.vista.conBorradorNota'), matiz: 8 },
   ];
 }
 

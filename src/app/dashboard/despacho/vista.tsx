@@ -136,13 +136,12 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
     },
   ];
 
+  // Tira de 4 como Rovaq: «En taller» y «POD pendientes» no se pierden, viajan como sello de la cifra a la que pertenecen (mismo conteo, misma lectura).
   const cifras: PropsCifra[] | undefined = tablero === null ? undefined : [
-    { etiqueta: t('dsp.cifra.activos'), valor: numero(tablero.viajesActivos, idioma), info: 'despacho.viajes_activos' },
+    { etiqueta: t('dsp.cifra.activos'), valor: numero(tablero.viajesActivos, idioma), info: 'despacho.viajes_activos', sello: `${t('dsp.cifra.pod')}: ${numero(tablero.podPendientes, idioma)}` },
     { etiqueta: t('dsp.cifra.sinunidad'), valor: numero(tablero.sinUnidad, idioma), tono: tablero.sinUnidad > 0 ? 'warn' : undefined, info: 'despacho.sin_unidad' },
-    { etiqueta: t('dsp.cifra.libres'), valor: numero(tablero.unidadesDisponibles, idioma), info: 'despacho.unidades_libres' },
-    { etiqueta: t('dsp.cifra.taller'), valor: numero(tablero.unidadesEnTaller, idioma), info: 'despacho.en_taller' },
+    { etiqueta: t('dsp.cifra.libres'), valor: numero(tablero.unidadesDisponibles, idioma), info: 'despacho.unidades_libres', sello: `${t('dsp.cifra.taller')}: ${numero(tablero.unidadesEnTaller, idioma)}` },
     { etiqueta: t('dsp.cifra.incidencias'), valor: numero(tablero.incidenciasAbiertas, idioma), tono: tablero.incidenciasAbiertas > 0 ? 'warn' : undefined, info: 'despacho.incidencias' },
-    { etiqueta: t('dsp.cifra.pod'), valor: numero(tablero.podPendientes, idioma), info: 'despacho.pod_pendientes' },
   ];
 
   return (

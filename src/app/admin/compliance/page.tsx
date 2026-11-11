@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -140,7 +141,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
       titulo={t('compliance.seguridad_y_datos')}
       apoyo={t('compliance.las_solicitudes_de_derechos_de_los')}
       etiquetaCifras={t('compliance.solicitudes_arco')}
-      cifras={lectura === null ? [
+      cifras={uniformes(lectura === null ? [
         { etiqueta: t('compliance.por_responder'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
         { etiqueta: t('compliance.vencen_pronto'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
         { etiqueta: t('compliance.kpi_resueltas'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
@@ -156,7 +157,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
         { etiqueta: t('compliance.vencen_pronto'), valor: lectura.pendientesVencen, formato: 'entero', tono: lectura.pendientesVencen > 0 ? 'bad' : undefined, nota: t('compliance.plazo_en_5_dias_habiles_o') },
         { etiqueta: t('compliance.kpi_resueltas'), valor: resueltas.length, formato: 'entero' },
         { etiqueta: t('compliance.kpi_obligaciones'), valor: `${obligaciones.filter((o) => o.medida).length} / ${obligaciones.length}`, nota: t('compliance.kpi_obligaciones_nota') },
-      ]}
+      ])}
     >
 
       {lectura === null ? (

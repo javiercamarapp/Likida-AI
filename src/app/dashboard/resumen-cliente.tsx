@@ -19,8 +19,8 @@ import { rico } from '@/lib/i18n/rico';
 
 /** Barra de periodo del Resumen (R8, patrón Rovaq): segmentado 7 días / 30 días / Todo + chip de cobertura de fuentes. Mueve todas las cifras de abajo:
  *  el estado vive en la URL (`?rango=7|30|todo`, como siempre) y cada opción es un enlace que conserva los demás parámetros (tenant, vista, rol…).
- *  No hay moneda ni «Filtros»: el Resumen no tiene otros criterios y no se inventan. */
-export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuentes: string }) {
+ *  Los chips dicen el alcance vigente (periodo y fuentes leídas). No hay moneda ni botón «Filtros»: el Resumen no tiene otros criterios y no se inventan. */
+export function FiltrosResumen({ rango, fuentes, periodoTexto }: { rango: RangoResumen; fuentes: string; periodoTexto?: string }) {
   const { t } = useT('resto', restoEs);
   const ruta = usePathname();
   const params = useSearchParams();
@@ -30,7 +30,7 @@ export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuente
     <BarraPeriodo
       etiqueta={t('op.periodo_del_resumen')}
       periodo={{ etiqueta: t('op.periodo_de_las_cifras'), valor: rango, opciones: RANGOS.map((r) => ({ valor: r, etiqueta: ROTULO_RANGO[r], href: hrefConParams(ruta ?? '', actuales, { rango: r }) })) }}
-      chips={[{ id: 'fuentes', etiqueta: fuentes }]}
+      chips={[...(periodoTexto ? [{ id: 'periodo', etiqueta: periodoTexto }] : []), { id: 'fuentes', etiqueta: fuentes }]}
     />
   );
 }

@@ -3215,4 +3215,11 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'f26d2.vigia.avisos_y_limites': 'Configuration and SLA, contacts, backup emails and limits',
   'f26d2.vigia.avisos_y_limites_resumen': 'Set up once',
   'f26d2.vigia.ir_a_configuracion': 'Go to Configuration and SLA',
+  'f26d4.vigia.atencion_del_dia': 'Today\'s attention',
+  'f26d4.vigia.sin_nada_que_atender': 'Nothing to handle right now',
+  'f26d4.vigia.sin_nada_que_atender_detalle': 'There are no replies to approve, exceptions, open threads or recent activity.',
+  'f26d4.vigia.sin_tiempo_de_respuesta': 'First-response time: no data yet.',
+  'f26d4.soltar.pista': 'or drop the file here',
+  'f26d4.cajon.cancelar': 'Cancel',
+  'f26d4.liq.nota_enviados_detalle': 'Delivered {e} · bounced {r}',
 };

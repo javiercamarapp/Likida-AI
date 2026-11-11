@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { FileSpreadsheet } from 'lucide-react';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
 import { Boton, CampoArchivo, CampoFecha, CampoTexto, Icono } from '@/app/ui-v2/componentes';
+import { ZonaSoltar } from '../zona-soltar';
 import './peajes.css';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
@@ -42,13 +43,17 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
 
   return (
     <div className="rv-pj-control">
-      <form action={accion} className="rv-pj-forma rv-pj-forma--rejilla">
-        <CampoArchivo etiqueta={tx('rest.desglose_del_proveedor_de_peaje_excel')} name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
-          onChange={(e) => validarArchivoElegido(e.currentTarget)} />
+      <form action={accion} className="rv-pj-forma-pila">
+        <ZonaSoltar>
+          <CampoArchivo etiqueta={tx('rest.desglose_del_proveedor_de_peaje_excel')} name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
+            onChange={(e) => validarArchivoElegido(e.currentTarget)} />
+        </ZonaSoltar>
+        <div className="rv-pj-forma rv-pj-forma--rejilla">
         <CampoTexto etiqueta={tx('rest.proveedor_del_desglose_opcional')} name="proveedor" placeholder={tx('rest.proveedor_iave_pase_televia')} />
         <CampoFecha etiqueta={tx('rest.inicio_del_periodo_del_archivo_opcional')} name="periodo_desde" />
         <CampoFecha etiqueta={tx('rest.fin_del_periodo_del_archivo_opcional')} name="periodo_hasta" />
         <BotonImportar />
+        </div>
       </form>
       <p className="rv-pj-nota">{tx('rest.maximo_4_mb_por_archivo_un')}</p>
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
@@ -72,7 +77,7 @@ function BotonImportar() {
   const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" tamano="sm" loading={pending} icono={<Icono icono={FileSpreadsheet} tam={14} />}>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={FileSpreadsheet} tam={14} />}>
       {pending ? 'Cruzando…' : tx('rest.importar_y_cruzar')}
     </Boton>
   );

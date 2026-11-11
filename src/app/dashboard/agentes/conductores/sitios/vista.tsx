@@ -5,7 +5,7 @@ import type { SitioFila } from '@/lib/likida/conductor/repo_validacion';
 import { FilaTextoSinSitio, FormaImportarEquivalencias } from './formas_equivalencias';
 import { FormaCatalogo } from './formas_catalogo';
 import { FormaEstadoSitio } from './formas_estado';
-import { FormaImportar, FormaSitio, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
+import { CajonSitio, FormaImportar, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
 import '../conductores.css';
 import { AvisoCompacto, BarraFiltros, BotonEnlace, Disclosure, FiltroBusqueda, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
@@ -87,7 +87,16 @@ export function VistaSitios(p: PropsVistaSitios) {
     <EsqueletoTablaMaestra
       titulo={tx('rest.catalogo_de_sitios')}
       apoyo={tx('rest.clientes_plantas_y_andenes_con_su')}
-      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${p.sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}
+      acciones={(
+        <>
+          {p.puedeEditar && <CajonSitio key="nuevo" accion={p.accionGuardar} inicial={SITIO_VACIO} clientes={p.clientes} padres={padres} disparador={tx('rest.nuevo_sitio')} />}
+          {p.puedeEditar && p.editando && (
+            <CajonSitio key={p.editando.id} accion={p.accionGuardar} inicial={aEditable(p.editando)} clientes={p.clientes} padres={padres} abiertoInicial
+              cerrarHref={`/dashboard/agentes/conductores/sitios${p.sufijo}`} />
+          )}
+          <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${p.sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>
+        </>
+      )}
       filtros={(
         <BarraFiltros buscar accion="?" enLinea etiqueta={tx('rest.buscar_sitios')} ocultos={p.sufijo.startsWith('?') ? [...new URLSearchParams(p.sufijo.slice(1))] : []}
           nActivos={p.busqueda ? 1 : 0} limpiarHref={p.sufijo || '?'}>
@@ -116,18 +125,12 @@ export function VistaSitios(p: PropsVistaSitios) {
         <div className="rv-cd__pila">
           <TablaBase etiqueta={tx('rest.sitios')} columnas={columnasSitios} filas={p.sitios ?? []} idFila={(s) => s.id} densa tarjetaMovil />
           {p.hayMas && <p className="rv-cd__nota" data-tono="warn">{tx('rest.hay_mas_sitios_de_los_que')}</p>}
+          {avisoSelector && p.puedeEditar && <p role="status" className="rv-cd__nota" data-tono="warn">{avisoSelector}</p>}
         </div>
       </Tarjeta>
 
       {p.puedeEditar ? (
         <>
-          <Tarjeta titulo={p.editando ? `Editar «${p.editando.nombre}»` : tx('rest.nuevo_sitio')} info="conductores_sitios.formulario">
-            <div className="rv-cd__pila">
-              {avisoSelector && <p role="status" className="rv-cd__nota" data-tono="warn">{avisoSelector}</p>}
-              <FormaSitio key={p.editando?.id ?? 'nuevo'} accion={p.accionGuardar} inicial={p.editando ? aEditable(p.editando) : SITIO_VACIO} clientes={p.clientes} padres={padres} />
-              {p.editando && <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="rv-cd__enlace">{tx('rest.cancelar_la_edicion')}</Link>}
-            </div>
-          </Tarjeta>
           <Tarjeta titulo={tx('rest.importar_desde_csv')} info="conductores_sitios.importar_csv">
             <div className="rv-cd__pila">
               <p className="rv-cd__nota">{ricoT(tx('rest.columnas_code_codigo_nombre_tipo_lat'), { code: (c) => <code>{c}</code> })}</p>
