@@ -24,6 +24,9 @@ export const tiposOperador = (tx: TAgentes = TR_ES.t): ReadonlyArray<{ valor: st
   { valor: 'foraneo', etiqueta: tx('rest.foraneos') },
   { valor: 'local', etiqueta: tx('rest.locales') },
   { valor: 'permisionario', etiqueta: tx('rest.permisionarios') },
+  { valor: 'rabon', etiqueta: tx('rest.rabones') },
+  { valor: 'posturero', etiqueta: tx('rest.posturero') },
+  { valor: 'cargador', etiqueta: tx('rest.cargadores') },
 ]);
 export const TIPOS_OPERADOR = tiposOperador();
 
