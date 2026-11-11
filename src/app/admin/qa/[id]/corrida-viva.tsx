@@ -22,28 +22,32 @@ import { TituloSeccion } from '../../../dashboard/resumen-visual';
 import { BotonEnlace, EstadoError, MarcoPagina } from '@/app/ui-v2/componentes';
 import '../qa.css';
 import { StatusPill, type Estado } from '../../ui/kit';
-import { PILL_CORRIDA } from '../pantalla';
+import { pillCorrida } from '../pantalla';
 import { escenarioPorId } from '@/lib/admin/qa-escenarios';
 import type { CorridaQA, EstadoPaso } from '@/lib/admin/qa-tipos';
 import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
 import { MedicionCorrida } from './medicion-corrida';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
 
 export interface FotoFirmada { id: string; etiqueta: string; url: string | null }
 export interface PdfFirmado { path: string; url: string | null }
 
-const PILL_PASO: Record<EstadoPaso, { estado: Estado; etiqueta: string }> = {
-  pendiente: { estado: 'neutral', etiqueta: 'pendiente' },
-  corriendo: { estado: 'neutral', etiqueta: 'corriendo…' },
+const pillPaso = (tx: TSistema = T_SISTEMA_ES): Record<EstadoPaso, { estado: Estado; etiqueta: string }> => ({
+  pendiente: { estado: 'neutral', etiqueta: tx('qa_corrida_viva.pendiente') },
+  corriendo: { estado: 'neutral', etiqueta: tx('qa_corrida_viva.corriendo') },
   ok: { estado: 'ok', etiqueta: 'ok' },
   warn: { estado: 'warn', etiqueta: 'warn' },
   bad: { estado: 'bad', etiqueta: 'bad' },
-};
+});
 
-const PILL_ORACULO: Record<'ok' | 'fallo' | 'no_verificado', { estado: Estado; etiqueta: string }> = {
+const pillOraculo = (tx: TSistema = T_SISTEMA_ES): Record<'ok' | 'fallo' | 'no_verificado', { estado: Estado; etiqueta: string }> => ({
   ok: { estado: 'ok', etiqueta: 'ok' },
-  fallo: { estado: 'bad', etiqueta: 'fallo' },
-  no_verificado: { estado: 'warn', etiqueta: 'no verificado' },
-};
+  fallo: { estado: 'bad', etiqueta: tx('qa_corrida_viva.fallo') },
+  no_verificado: { estado: 'warn', etiqueta: tx('qa_corrida_viva.no_verificado') },
+});
 
 const TERMINALES = new Set(['ok', 'parcial', 'fallo', 'abortada']);
 
@@ -58,6 +62,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
   medicionInicial?: ResumenPrecisionCorrida | null;
   medicionErrorInicial?: string | null;
 }) {
+  const { t: tx, idioma } = useT('admin_sistema', admin_sistemaEs);
   const [corrida, setCorrida] = useState(corridaInicial);
   const [fotos, setFotos] = useState(fotosIniciales);
   const [pdfs, setPdfs] = useState(pdfsIniciales);
@@ -101,7 +106,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
           medicion?: ResumenPrecisionCorrida | null; medicionError?: string | null; error?: string;
         } | null;
         if (!res.ok || !cuerpo?.corrida) {
-          setErrorLectura(cuerpo?.error ?? `no se pudo leer el estado (HTTP ${res.status})`);
+          setErrorLectura(cuerpo?.error ?? tx('qa_corrida_viva.no_se_pudo_leer_el_estado', { status: res.status }));
           return;
         }
         setErrorLectura(null);
@@ -117,7 +122,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
       }
     }, 2_500);
     return () => clearInterval(timer);
-  }, [viva, corrida.id]);
+  }, [viva, corrida.id, tx]);
 
   // ═════════════════════════════════════════════════════════════════════════
   // EL CARRIL COMPLETO — esta pantalla es la que EMPUJA las pasadas.
@@ -148,7 +153,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
         const cuerpo = await res.json().catch(() => null) as { motivo?: string; error?: string } | null;
         if (!montado) return;
         if (!res.ok) {
-          setErrorPasada(cuerpo?.error ?? `la pasada no pudo correr (HTTP ${res.status})`);
+          setErrorPasada(cuerpo?.error ?? tx('qa_corrida_viva.la_pasada_no_pudo_correr_http', { status: res.status }));
           return;
         }
         setErrorPasada(null);
@@ -165,9 +170,9 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
     const t = setTimeout(() => { void empujar(); }, 0);
     const timer = setInterval(() => { void empujar(); }, 5_000);
     return () => { montado = false; clearTimeout(t); clearInterval(timer); };
-  }, [viva, corrida.carril, corrida.id]);
+  }, [viva, corrida.carril, corrida.id, tx]);
 
-  const pill = PILL_CORRIDA[corrida.estado] ?? { estado: 'neutral' as Estado, etiqueta: corrida.estado };
+  const pill = pillCorrida(tx)[corrida.estado] ?? { estado: 'neutral' as Estado, etiqueta: corrida.estado };
   const sinLatidoS = useMemo(() => {
     if (ahora === null) return null;   // todavía sin reloj del cliente
     const t = new Date(corrida.latidoEn).getTime();
@@ -187,47 +192,39 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
       <div className="space-y-2.5">
           {/* ── Avisos de lectura (fallar cerrado, dicho) ─────────────────── */}
           {errorLectura && (
-            <div className="card p-3 text-sm rv-qa-malo">
-              No se pudo leer el estado de la corrida: {errorLectura}. Lo que ves abajo es la última
-              lectura buena — no afirma el estado actual.
-            </div>
+            <div className="card p-3 text-sm rv-qa-malo">{tx('qa_corrida_viva.no_se_pudo_leer_el_estado_2', { errorLectura })}</div>
           )}
           {posiblementeMuerta && (
-            <div className="card p-3 text-sm rv-qa-malo">
-              El motor lleva {sinLatidoS}s sin dar señales y la corrida sigue marcada «corriendo»:
-              pudo haber muerto sin alcanzar a escribir su aborto. Si no avanza, el tenant
-              «{corrida.tenantNombre}» puede haber quedado sembrado — revísalo y límpialo a mano.
-            </div>
+            <div className="card p-3 text-sm rv-qa-malo">{tx('qa_corrida_viva.el_motor_lleva_s_sin_dar', { sinLatidoS, tenantNombre: corrida.tenantNombre })}</div>
           )}
 
           {/* ── El renglón resumen ────────────────────────────────────────── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">Estado</div>
+              <div className="text-xs rv-qa-mut">{tx('salud_sistema.estado')}</div>
               <div className="mt-1"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></div>
               {corrida.motivo && <div className="text-[10px] mt-1 rv-qa-mut">{corrida.motivo}</div>}
             </div>
             <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">Carril</div>
+              <div className="text-xs rv-qa-mut">{tx('qa_corrida_viva.carril')}</div>
               <div className="mt-1 text-sm font-medium">
-                {corrida.carril === 'completo' ? 'completo — en varias pasadas' : 'rápido — en un solo proceso'}
+                {corrida.carril === 'completo' ? tx('qa_corrida_viva.completo_en_varias_pasadas') : tx('qa_corrida_viva.rapido_en_un_solo_proceso')}
               </div>
               {corrida.carril === 'completo' && (
-                <div className="text-[10px] mt-0.5 rv-qa-mut">
-                  pasada {corrida.pasadas} · {enPasada ? 'trabajando ahora' : viva ? 'pausada entre pasadas' : 'terminada'}
+                <div className="text-[10px] mt-0.5 rv-qa-mut">{tx('qa_corrida_viva.pasada', { pasadas: corrida.pasadas })}{' '}{enPasada ? tx('qa_corrida_viva.trabajando_ahora') : viva ? tx('qa_corrida_viva.pausada_entre_pasadas') : 'terminada'}
                 </div>
               )}
             </div>
             <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">Costo hasta ahora (real)</div>
+              <div className="text-xs rv-qa-mut">{tx('qa_corrida_viva.costo_hasta_ahora_real')}</div>
               <div className="mt-1 text-sm font-medium tabular">{usd4(corrida.costoUsdTotal ?? 0)}</div>
-              <div className="text-[10px] mt-0.5 rv-qa-mut">costo registrado — nunca estimado</div>
+              <div className="text-[10px] mt-0.5 rv-qa-mut">{tx('qa_corrida_viva.costo_registrado_nunca_estimado')}</div>
             </div>
             <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">Flota de prueba</div>
+              <div className="text-xs rv-qa-mut">{tx('qa_corrida_viva.flota_de_prueba')}</div>
               <div className="mt-1 text-xs font-mono break-all">{corrida.tenantNombre}</div>
               <div className="text-[10px] mt-0.5 rv-qa-mut">
-                {corrida.inicio ? `inicio ${fechaHoraMx(corrida.inicio)}` : 'sin arrancar'}{corrida.fin ? ` · fin ${fechaHoraMx(corrida.fin)}` : ''}
+                {corrida.inicio ? tx('qa_corrida_viva.inicio', { v: fechaHoraMx(corrida.inicio, idioma) }) : tx('qa_corrida_viva.sin_arrancar')}{corrida.fin ? ` · ${tx('qa_corrida_viva.fin', { v: fechaHoraMx(corrida.fin, idioma) })}` : ''}
               </div>
             </div>
           </div>
@@ -238,44 +235,37 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
               `qa_corrida_foto`, ninguno de una resta a ojo. */}
           {corrida.carril === 'completo' && av !== null && (
             <div className="card p-3">
-              <TituloSeccion>El avance, foto por foto</TituloSeccion>
+              <TituloSeccion>{tx('qa_corrida_viva.el_avance_foto_por_foto')}</TituloSeccion>
               <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                <div className="font-display text-[22px] leading-tight font-semibold tabular">
-                  {av.ok} <span className="text-[14px] font-normal rv-qa-mut">de {av.total} fotos procesadas</span>
-                </div>
+                <div className="font-display text-[22px] leading-tight font-semibold tabular">{rico(tx('qa_corrida_viva.e0_de_fotos_procesadas_e0', { ok: av.ok, total: av.total }), { e0: (c) => <span className="text-[14px] font-normal rv-qa-mut">{c}</span> })}</div>
                 {av.sinTurno > 0 && (
-                  <span className="text-xs rv-qa-mut">· {av.sinTurno} sin turno todavía</span>
+                  <span className="text-xs rv-qa-mut">{tx('qa_corrida_viva.sin_turno_todavia', { sinTurno: av.sinTurno })}</span>
                 )}
                 {av.enVuelo > 0 && (
-                  <span className="text-xs rv-qa-mut">· {av.enVuelo} en vuelo</span>
+                  <span className="text-xs rv-qa-mut">{tx('qa_corrida_viva.en_vuelo', { enVuelo: av.enVuelo })}</span>
                 )}
                 {av.bad > 0 && (
-                  <span className="text-xs rv-qa-bad">· {av.bad} con fallo</span>
+                  <span className="text-xs rv-qa-bad">{tx('qa_corrida_viva.con_fallo', { bad: av.bad })}</span>
                 )}
                 {av.interrumpidas > 0 && (
-                  <span className="text-xs rv-qa-warn">
-                    · {av.interrumpidas} INTERRUMPIDA{av.interrumpidas === 1 ? '' : 'S'} (una pasada murió con
-                    ellas en vuelo — no se sabe cómo acabaron: ni acierto ni fallo)
-                  </span>
+                  <span className="text-xs rv-qa-warn">{tx(av.interrumpidas === 1 ? 'qa_corrida_viva.interrumpida_una' : 'qa_corrida_viva.interrumpida_varias', { interrumpidas: av.interrumpidas })}{' '}{tx('qa_corrida_viva.una_pasada_murio_con_ellas_en')}</span>
                 )}
               </div>
               <div className="mt-1.5 h-1.5 rounded-full overflow-hidden rv-qa-fl2">
-                <progress className="rv-qa-barra" value={av.ok + av.bad} max={Math.max(av.total, 1)} aria-label="Avance de la corrida" />
+                <progress className="rv-qa-barra" value={av.ok + av.bad} max={Math.max(av.total, 1)} aria-label={tx('qa_corrida_viva.avance_de_la_corrida')} />
               </div>
 
               {corrida.corte !== null && (
                 <p className={corrida.corte === 'dinero' ? 'text-xs mt-2 m-0 rv-qa-bad' : 'text-xs mt-2 m-0 rv-qa-mut'}>
                   {corrida.corte === 'dinero'
-                    ? 'La última pasada paró por DINERO — la corrida no vuelve a gastar. El motivo de arriba trae la cifra medida.'
-                    : 'La última pasada paró por RELOJ. Ninguna foto se pierde: la siguiente continúa desde donde iba y no repite las que ya se midieron.'}
+                    ? tx('qa_corrida_viva.la_ultima_pasada_paro_por_dinero')
+                    : tx('qa_corrida_viva.la_ultima_pasada_paro_por_reloj')}
                 </p>
               )}
 
               {av.sinTurnoIds.length > 0 && (
                 <details className="mt-2 text-xs rv-qa-mut">
-                  <summary className="cursor-pointer">
-                    Las {av.sinTurnoIds.length} que no han tenido turno — dichas por su nombre, no contadas nada más
-                  </summary>
+                  <summary className="cursor-pointer">{tx('qa_corrida_viva.las_que_no_han_tenido_turno', { length: av.sinTurnoIds.length })}</summary>
                   <ul className="mt-1.5 space-y-0.5 max-h-40 overflow-y-auto pr-1">
                     {av.sinTurnoIds.map((fid) => (
                       <li key={fid} className="truncate">
@@ -287,33 +277,27 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
               )}
 
               {viva && (
-                <p className="text-[11px] mt-2 m-0 rv-qa-faint">
-                  Esta pantalla es la que empuja las pasadas. Si la cierras, la corrida se queda
-                  pausada exactamente donde iba —sin perder nada— y sigue al volver a abrirla.
-                </p>
+                <p className="text-[11px] mt-2 m-0 rv-qa-faint">{tx('qa_corrida_viva.esta_pantalla_es_la_que_empuja')}</p>
               )}
               {avisoPasada && (
                 <p className="text-[11px] mt-1 m-0 font-mono rv-qa-faint">{avisoPasada}</p>
               )}
               {errorPasada && (
-                <p className="text-xs mt-1 m-0 rv-qa-bad">
-                  La pasada no pudo correr: {errorPasada}
-                </p>
+                <p className="text-xs mt-1 m-0 rv-qa-bad">{tx('qa_corrida_viva.la_pasada_no_pudo_correr', { errorPasada })}</p>
               )}
             </div>
           )}
 
           {/* ── Los pasos (el ledger en vivo) ─────────────────────────────── */}
           <div className="card p-3">
-            <TituloSeccion>La corrida, paso a paso</TituloSeccion>
+            <TituloSeccion>{tx('qa_corrida_viva.la_corrida_paso_a_paso')}</TituloSeccion>
             {corrida.pasos.length === 0 ? (
-              <p className="text-sm mt-2 rv-qa-mut">
-                Todavía no arranca el primer paso{viva ? ' — esta pantalla se actualiza sola cada 2.5 s' : ''}.
+              <p className="text-sm mt-2 rv-qa-mut">{tx('qa_corrida_viva.todavia_no_arranca_el_primer_paso')}{viva ? tx('qa_corrida_viva.esta_pantalla_se_actualiza_sola_cada') : ''}.
               </p>
             ) : (
               <div className="mt-2 space-y-1">
                 {corrida.pasos.map((p) => {
-                  const pp = PILL_PASO[p.estado] ?? PILL_PASO.pendiente;
+                  const pp = pillPaso(tx)[p.estado] ?? pillPaso(tx).pendiente;
                   return (
                     <div key={p.n} className="flex items-start justify-between gap-3 text-sm py-1 border-b rv-qa-bl2">
                       <div className="min-w-0">
@@ -334,24 +318,24 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
 
           {/* ── El veredicto ──────────────────────────────────────────────── */}
           <div className="card p-3">
-            <TituloSeccion>El veredicto — el LLM explora, el código juzga</TituloSeccion>
+            <TituloSeccion>{tx('qa_corrida_viva.el_veredicto_el_llm_explora_el')}</TituloSeccion>
             {corrida.veredicto === null ? (
               <p className="text-sm mt-2 rv-qa-mut">
-                {viva ? 'Los oráculos corren al final de la corrida.' : 'Esta corrida terminó sin veredicto — los oráculos no alcanzaron a correr (ver el motivo arriba).'}
+                {viva ? tx('qa_corrida_viva.los_oraculos_corren_al_final_de') : tx('qa_corrida_viva.esta_corrida_termino_sin_veredicto_los')}
               </p>
             ) : (
               <div className="overflow-x-auto mt-2">
-                <table aria-label="Veredicto por invariante" className="w-full text-sm">
+                <table aria-label={tx('qa_corrida_viva.veredicto_por_invariante')} className="w-full text-sm">
                   <thead>
                     <tr className="rv-qa-mut text-left">
-                      <th scope="col" className="px-2 py-1.5 font-medium">Invariante</th>
-                      <th scope="col" className="px-2 py-1.5 font-medium">Estado</th>
-                      <th scope="col" className="px-2 py-1.5 font-medium">Severidad</th>
+                      <th scope="col" className="px-2 py-1.5 font-medium">{tx('qa_corrida_viva.invariante')}</th>
+                      <th scope="col" className="px-2 py-1.5 font-medium">{tx('salud_sistema.estado')}</th>
+                      <th scope="col" className="px-2 py-1.5 font-medium">{tx('trust_safety.severidad')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {corrida.veredicto.map((v, i) => {
-                      const pv = PILL_ORACULO[v.estado];
+                      const pv = pillOraculo(tx)[v.estado];
                       return (
                         <tr key={i} className="border-t align-top rv-qa-bl2">
                           <td className="px-2 py-2">
@@ -359,11 +343,11 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
                               <summary className="cursor-pointer font-medium">{v.invariante}</summary>
                               <div className="mt-2 text-xs space-y-1.5">
                                 <div>
-                                  <span className="font-semibold">esperado:</span>{' '}
+                                  <span className="font-semibold">{tx('qa_corrida_viva.esperado')}</span>{' '}
                                   <code className="font-mono break-all">{json(v.esperado)}</code>
                                 </div>
                                 <div>
-                                  <span className="font-semibold">real:</span>{' '}
+                                  <span className="font-semibold">{tx('qa_corrida_viva.real')}</span>{' '}
                                   <code className="font-mono break-all">{json(v.real)}</code>
                                 </div>
                                 {v.detalle && <div className="rv-qa-mut">{v.detalle}</div>}
@@ -388,10 +372,10 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
           {/* ── Evidencia clicable ────────────────────────────────────────── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             <div className="card p-3">
-              <TituloSeccion>La conversación (evidencia, solo lectura)</TituloSeccion>
+              <TituloSeccion>{tx('qa_corrida_viva.la_conversacion_evidencia_solo_lectura')}</TituloSeccion>
               {corrida.turnos.length === 0 ? (
                 <p className="text-sm mt-2 rv-qa-mut">
-                  {viva ? 'Los turnos aparecen al cierre de la corrida.' : 'No quedó conversación registrada.'}
+                  {viva ? tx('qa_corrida_viva.los_turnos_aparecen_al_cierre_de') : tx('qa_corrida_viva.no_quedo_conversacion_registrada')}
                 </p>
               ) : (
                 <div className="mt-2 space-y-1.5 max-h-80 overflow-y-auto pr-1">
@@ -399,7 +383,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
                     <div key={i} className={`flex ${t.rol === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={t.rol === 'user' ? 'max-w-[85%] rounded-xl px-3 py-1.5 text-xs whitespace-pre-wrap hairline rv-qa-burbuja-user' : 'max-w-[85%] rounded-xl px-3 py-1.5 text-xs whitespace-pre-wrap hairline rv-qa-burbuja-bot'}>
                         <span className="inline-flex items-center gap-1 font-medium text-[10px] opacity-70">
-                          <MessageCircle width={10} height={10} strokeWidth={1.75} /> {t.rol === 'user' ? 'chofer sintético' : 'Likida'}
+                          <MessageCircle width={10} height={10} strokeWidth={1.75} /> {t.rol === 'user' ? tx('qa_corrida_viva.chofer_sintetico') : 'Likida'}
                         </span>
                         <div>{t.texto}</div>
                       </div>
@@ -410,7 +394,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
             </div>
 
             <div className="card p-3">
-              <TituloSeccion>Fotos y PDF de esta corrida</TituloSeccion>
+              <TituloSeccion>{tx('qa_corrida_viva.fotos_y_pdf_de_esta_corrida')}</TituloSeccion>
               <div className="mt-2 space-y-1.5">
                 {fotos.map((f) => (
                   <div key={f.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b rv-qa-bl2">
@@ -419,17 +403,15 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
                       <span className="truncate text-xs">{f.etiqueta}</span>
                     </span>
                     {f.url ? (
-                      <a href={f.url} target="_blank" rel="noreferrer" className="text-xs font-medium px-2 py-0.5 rounded-full hairline hover:opacity-70 shrink-0">
-                        abrir (firma 60 s)
-                      </a>
+                      <a href={f.url} target="_blank" rel="noreferrer" className="text-xs font-medium px-2 py-0.5 rounded-full hairline hover:opacity-70 shrink-0">{tx('qa_corrida_viva.abrir_firma_60_s')}</a>
                     ) : (
-                      <span className="text-xs shrink-0 rv-qa-faint">sin firma</span>
+                      <span className="text-xs shrink-0 rv-qa-faint">{tx('qa_corrida_viva.sin_firma')}</span>
                     )}
                   </div>
                 ))}
                 {(corrida.pdfs ?? []).length === 0 ? (
                   <p className="text-xs pt-1 rv-qa-mut">
-                    {viva ? 'El PDF aparece si el cierre lo genera.' : 'No quedó PDF registrado en esta corrida.'}
+                    {viva ? tx('qa_corrida_viva.el_pdf_aparece_si_el_cierre') : tx('qa_corrida_viva.no_quedo_pdf_registrado_en_esta')}
                   </p>
                 ) : (
                   pdfs.map((p) => (
@@ -439,13 +421,9 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
                         <span className="truncate text-xs font-mono">{p.path.split('/').pop()}</span>
                       </span>
                       {p.url ? (
-                        <a href={p.url} target="_blank" rel="noreferrer" className="text-xs font-medium px-2 py-0.5 rounded-full hairline hover:opacity-70 shrink-0">
-                          abrir PDF (firma 60 s)
-                        </a>
+                        <a href={p.url} target="_blank" rel="noreferrer" className="text-xs font-medium px-2 py-0.5 rounded-full hairline hover:opacity-70 shrink-0">{tx('qa_corrida_viva.abrir_pdf_firma_60_s')}</a>
                       ) : (
-                        <span className="text-xs shrink-0 rv-qa-faint">
-                          borrado con el tenant (retención «conservar» lo preserva)
-                        </span>
+                        <span className="text-xs shrink-0 rv-qa-faint">{tx('qa_corrida_viva.borrado_con_el_tenant_retencion_conservar')}</span>
                       )}
                     </div>
                   ))
@@ -456,9 +434,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
 
           {/* ── La limpieza, dicha ────────────────────────────────────────── */}
           {corrida.limpieza && (
-            <div className="card p-3 text-xs rv-qa-mut">
-              <span className="font-semibold">Limpieza:</span> {corrida.limpieza}
-            </div>
+            <div className="card p-3 text-xs rv-qa-mut">{rico(tx('qa_corrida_viva.e0_limpieza_e0', { limpieza: corrida.limpieza }), { e0: (c) => <span className="font-semibold">{c}</span> })}</div>
           )}
       </div>
   );
@@ -473,19 +449,20 @@ export function CorridaViva({ corridaInicial = null, errorLectura = null, ...res
   medicionInicial?: ResumenPrecisionCorrida | null;
   medicionErrorInicial?: string | null;
 }) {
+  const { t: tx } = useT('admin_sistema', admin_sistemaEs);
   return (
     <MarcoPagina
-      area="Calidad"
-      titulo={corridaInicial ? `Corrida ${corridaInicial.id.slice(0, 8)}` : 'Calidad'}
+      area={tx('qa_corrida_viva.calidad')}
+      titulo={corridaInicial ? tx('qa_corrida_viva.corrida', { v: corridaInicial.id.slice(0, 8) }) : tx('qa_corrida_viva.calidad')}
       apoyo={corridaInicial
-        ? `Escenario: ${escenarioPorId(corridaInicial.escenario)?.nombre ?? corridaInicial.escenario}. El avance, el veredicto y la evidencia de esta corrida.`
-        : 'La corrida de pruebas reales no se pudo abrir.'}
-      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">Volver a Pruebas reales</BotonEnlace>}
+        ? tx('qa_corrida_viva.escenario_el_avance_el_veredicto_y', { v: escenarioPorId(corridaInicial.escenario)?.nombre ?? corridaInicial.escenario })
+        : tx('qa_corrida_viva.la_corrida_de_pruebas_reales_no')}
+      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{tx('qa_corrida_viva.volver_a_pruebas_reales')}</BotonEnlace>}
     >
       {corridaInicial ? (
         <CuerpoCorrida corridaInicial={corridaInicial} fotosIniciales={resto.fotosIniciales ?? []} pdfsIniciales={resto.pdfsIniciales ?? []} medicionInicial={resto.medicionInicial} medicionErrorInicial={resto.medicionErrorInicial} />
       ) : (
-        <EstadoError reintentar>{`No se pudo leer la corrida. ${errorLectura ?? ''} — no es que no exista, es que no se pudo mirar.`}</EstadoError>
+        <EstadoError reintentar>{tx('qa_corrida_viva.no_se_pudo_leer_la_corrida', { v: errorLectura ?? '' })}</EstadoError>
       )}
     </MarcoPagina>
   );

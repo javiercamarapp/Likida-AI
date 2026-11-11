@@ -8,6 +8,8 @@ import { clasesBoton } from '../../ui-v2/componentes/boton';
 import { numero } from '@/lib/formato';
 import type { ResumenBandejaCola, ResumenVencidas } from '@/lib/admin/cola-aprobacion';
 import '../bandeja.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 
 export type ResultadoConteo =
   | { error: string; resumen?: undefined; entrada?: undefined }
@@ -28,41 +30,32 @@ export function LimpiezaLote({ contar, vaciar, bandeja }: {
   /** Estado de la bandeja leído por el servidor; `null` = no se pudo leer. */
   bandeja: ResumenBandejaCola | null;
 }) {
+  const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
   const [conteo, enviarConteo, contando] = useActionState<ResultadoConteo, FormData>(contar, null);
   const [vaciado, enviarVaciado, vaciando] = useActionState<ResultadoVaciado, FormData>(vaciar, null);
   const r = conteo?.resumen;
 
   return (
-    <Tarjeta titulo="Limpiar piezas vencidas">
+    <Tarjeta titulo={t('aprobaciones_lote.limpiar_piezas_vencidas')}>
       <div className="bj-lote">
         {bandeja === null ? (
-          <Aviso tono="warn">No se pudo leer el estado de la bandeja ahora mismo. Contar sí intenta leerla por su cuenta.</Aviso>
+          <Aviso tono="warn">{t('aprobaciones_lote.no_se_pudo_leer_el_estado')}</Aviso>
         ) : bandeja.frenaAlRunner ? (
-          <Aviso tono="error" titulo="La bandeja está frenando a los agentes.">
-            Hay {numero(bandeja.pendientes)} piezas pendientes
-            {bandeja.diasMasVieja !== null ? ` y la más vieja lleva ${numero(Math.floor(bandeja.diasMasVieja))} días` : ''}
-            ; el runner no fabrica encima mientras haya {numero(bandeja.topeBandeja)} o más, o alguna con más de {numero(bandeja.diasVencimiento)} días.
-            Resolverlas (aprobar, rechazar o limpiar las vencidas) lo destraba; el tope no se toca.
-          </Aviso>
+          <Aviso tono="error" titulo={t('aprobaciones_lote.la_bandeja_esta_frenando_a_los')}>{t('aprobaciones_lote.hay_piezas_pendientes', { numero: numero(bandeja.pendientes, idioma) })}{bandeja.diasMasVieja !== null ? t('aprobaciones_lote.y_la_mas_vieja_lleva_dias', { numero: numero(Math.floor(bandeja.diasMasVieja), idioma) }) : ''}{t('aprobaciones_lote.el_runner_no_fabrica_encima_mientras', { numero: numero(bandeja.topeBandeja, idioma), numero2: numero(bandeja.diasVencimiento, idioma) })}</Aviso>
         ) : (
-          <p className="bj-nota">
-            Hay {numero(bandeja.pendientes)} piezas pendientes y la bandeja no está frenando a los agentes ahora mismo.
-          </p>
+          <p className="bj-nota">{t('aprobaciones_lote.hay_piezas_pendientes_y_la_bandeja', { numero: numero(bandeja.pendientes, idioma) })}</p>
         )}
 
-        <p className="bj-nota">
-          Las piezas con más de N días sin atender se rechazan por lote, las más viejas primero, con el motivo «Archivada por vencimiento».
-          No se envía nada. Cada lote deja una entrada firmada en la bitácora. Primero se cuenta; nada cambia hasta que confirmas.
-        </p>
+        <p className="bj-nota">{t('aprobaciones_lote.las_piezas_con_mas_de_n')}</p>
 
         <form action={enviarConteo} className="bj-lote">
           <div className="bj-lote__campos">
-            <CampoTexto etiqueta="Días sin atender" tipo="number" name="dias" min={1} max={365} step={1} defaultValue={30} />
-            <CampoTexto etiqueta="Piezas por lote" tipo="number" name="limite" min={1} max={200} step={1} defaultValue={50} />
-            <CampoTexto etiqueta="Solo estos tipos (opcional)" name="tipos" placeholder="parte_diario, parte_semanal" ayuda="Vacío = todos. Separados por coma." />
+            <CampoTexto etiqueta={t('aprobaciones_lote.dias_sin_atender')} tipo="number" name="dias" min={1} max={365} step={1} defaultValue={30} />
+            <CampoTexto etiqueta={t('aprobaciones_lote.piezas_por_lote')} tipo="number" name="limite" min={1} max={200} step={1} defaultValue={50} />
+            <CampoTexto etiqueta={t('aprobaciones_lote.solo_estos_tipos_opcional')} name="tipos" placeholder={t('aprobaciones_lote.parte_diario_parte_semanal')} ayuda={t('aprobaciones_lote.vacio_todos_separados_por_coma')} />
           </div>
           <div className="bj-acciones">
-            <Boton type="submit" variante="secondary" tamano="sm" disabled={contando}>{contando ? 'Contando…' : 'Contar (no cambia nada)'}</Boton>
+            <Boton type="submit" variante="secondary" tamano="sm" disabled={contando}>{contando ? t('aprobaciones_lote.contando') : t('aprobaciones_lote.contar_no_cambia_nada')}</Boton>
           </div>
         </form>
 
@@ -71,17 +64,17 @@ export function LimpiezaLote({ contar, vaciar, bandeja }: {
         {r && (
           <div className="bj-lote">
             {r.vencidas === 0 ? (
-              <Aviso tono="ok">No hay piezas pendientes con más de {numero(r.dias)} días. No hay nada que limpiar con estos criterios.</Aviso>
+              <Aviso tono="ok">{t('aprobaciones_lote.no_hay_piezas_pendientes_con_mas', { numero: numero(r.dias, idioma) })}</Aviso>
             ) : (
               <>
                 <ul className="bj-lote__resumen">
-                  <li>Con más de {numero(r.dias)} días sin atender hay <strong>{numero(r.vencidas)}</strong> piezas.</li>
-                  <li>Este lote tocaría <strong>{numero(r.enElLote)}</strong> (tope por lote: {numero(r.limite)}; las más viejas primero).</li>
-                  {r.vencidas > r.enElLote && <li>Quedarían {numero(r.vencidas - r.enElLote)} para otro lote.</li>}
+                  <li>{t('aprobaciones_lote.con_mas_de_dias_sin_atender', { numero: numero(r.dias, idioma) })}{' '}<strong>{numero(r.vencidas, idioma)}</strong>{' '}{t('aprobaciones_lote.piezas')}</li>
+                  <li>{t('aprobaciones_lote.este_lote_tocaria')}{' '}<strong>{numero(r.enElLote, idioma)}</strong>{' '}{t('aprobaciones_lote.tope_por_lote_las_mas_viejas', { numero: numero(r.limite, idioma) })}</li>
+                  {r.vencidas > r.enElLote && <li>{t('aprobaciones_lote.quedarian_para_otro_lote', { numero: numero(r.vencidas - r.enElLote, idioma) })}</li>}
                 </ul>
-                <div className="bj-lote__desglose" aria-label="Por tipo de pieza">
+                <div className="bj-lote__desglose" aria-label={t('aprobaciones_lote.por_tipo_de_pieza')}>
                   {Object.entries(r.porTipo).sort((a, b) => b[1] - a[1]).map(([t, n]) => (
-                    <StatusChip key={t} tono="neutral">{t}: {numero(n)}</StatusChip>
+                    <StatusChip key={t} tono="neutral">{t}: {numero(n, idioma)}</StatusChip>
                   ))}
                 </div>
                 {vaciado?.ok ? null : (
@@ -91,14 +84,14 @@ export function LimpiezaLote({ contar, vaciar, bandeja }: {
                     <input type="hidden" name="tipos" value={conteo.entrada.tipos} />
                     <input type="hidden" name="esperadas" value={r.enElLote} />
                     <BotonConfirmar
-                      etiqueta={vaciando ? 'Archivando…' : `Archivar ${numero(r.enElLote)} piezas`}
+                      etiqueta={vaciando ? t('aprobaciones_lote.archivando') : t('aprobaciones_lote.archivar_piezas', { n: numero(r.enElLote, idioma) })}
                       deshabilitado={vaciando}
                       tono="peligro"
-                      titulo="Archivar piezas vencidas"
-                      etiquetaConfirmar={`Sí, archivar ${numero(r.enElLote)}`}
-                      descripcion={`Se rechazarán ${numero(r.enElLote)} piezas pendientes con más de ${numero(r.dias)} días, las más viejas primero, `
-                        + 'con el motivo «Archivada por vencimiento». No se envía nada a nadie. Queda firmado en la bitácora con tu usuario. '
-                        + 'Esta pantalla no tiene botón para deshacerlo. Si la cifra cambió desde que contaste, no se ejecuta.'}
+                      titulo={t('aprobaciones_lote.archivar_piezas_vencidas')}
+                      etiquetaConfirmar={t('aprobaciones_lote.si_archivar', { numero: numero(r.enElLote, idioma) })}
+                      descripcion={t('aprobaciones_lote.se_rechazaran_piezas_pendientes_con_mas', { numero: numero(r.enElLote, idioma), numero2: numero(r.dias, idioma) })
+                        + t('aprobaciones_lote.con_el_motivo_archivada_por_vencimiento')
+                        + t('aprobaciones_lote.esta_pantalla_no_tiene_boton_para')}
                       className={clasesBoton('danger', 'sm')}
                     />
                   </form>

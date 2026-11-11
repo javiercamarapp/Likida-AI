@@ -4,6 +4,7 @@ import { getResumenNegocio, getCostoPorFaseModelo, contarConversacionesActivas }
 import { MarcoPagina, FilaTarjetas, Tarjeta, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import { TarjetaFase } from '../tarjeta-fase';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
  * (con el teléfono enmascarado); aquí NO se repite: una cifra y un enlace. Un cero de costo es MEDIDO, no un relleno.
  */
 export default async function AgenteWhatsappPage() {
+  const { t } = await getT('admin_sistema');
   await requireSuperadmin();
   const [r, porFaseModelo, activas] = await Promise.all([
     getResumenNegocio(), getCostoPorFaseModelo().catch(() => []), contarConversacionesActivas(),
@@ -23,35 +25,33 @@ export default async function AgenteWhatsappPage() {
   return (
     <MarcoPagina
       area="Agentes"
-      titulo="Agentes"
-      apoyo="WhatsApp: la conversación completa con el operador. Costo real, histórico."
-      acciones={<BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm">Ver conversaciones</BotonEnlace>}
+      titulo={t('model_ops.agentes')}
+      apoyo={t('agente_whatsapp.whatsapp_la_conversacion_completa_con_el')}
+      acciones={<BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm">{t('agente_whatsapp.ver_conversaciones')}</BotonEnlace>}
     >
-      <Aviso tono="info">
-        El WhatsApp del producto sigue en el número de prueba de Meta: las cifras de aquí son de esa operación, no de un número de producción.
-      </Aviso>
+      <Aviso tono="info">{t('agente_whatsapp.el_whatsapp_del_producto_sigue_en')}</Aviso>
 
       <TiraCifras
         etiqueta="WhatsApp"
         items={[
-          { etiqueta: 'Gastado en WhatsApp', valor: whatsapp ? whatsapp.costoUsd : 0, formato: 'usd', nota: 'Costo medido en llm_costo' },
-          { etiqueta: 'Llamadas de WhatsApp', valor: whatsapp ? whatsapp.n : 0, formato: 'entero' },
-          { etiqueta: 'Conversaciones activas', valor: activas, estado: activas === null ? 'error' : 'ok', formato: 'entero', href: '/admin/conversaciones' },
+          { etiqueta: t('agente_whatsapp.gastado_en_whatsapp'), valor: whatsapp ? whatsapp.costoUsd : 0, formato: 'usd', nota: t('agente_cuadre.costo_medido_en_llm_costo') },
+          { etiqueta: t('agente_whatsapp.llamadas_de_whatsapp'), valor: whatsapp ? whatsapp.n : 0, formato: 'entero' },
+          { etiqueta: t('whatsapp_infra.conversaciones_activas'), valor: activas, estado: activas === null ? 'error' : 'ok', formato: 'entero', href: '/admin/conversaciones' },
         ]}
       />
 
       <FilaTarjetas variante="6-6">
         <TarjetaFase
-          titulo="Costo por modelo, WhatsApp"
-          queHace="Lleva la conversación con el operador de principio a fin: recibe fotos, confirma y cierra la liquidación."
+          titulo={t('agente_whatsapp.costo_por_modelo_whatsapp')}
+          queHace={t('model_ops.lleva_la_conversacion_con_el_operador')}
           datos={whatsapp}
           modelos={modelos}
         />
         <Tarjeta
-          titulo="Lo que falta medir"
+          titulo={t('agente_whatsapp.lo_que_falta_medir')}
           estado="vacio"
-          mensaje="Entrega y ventana de 24 horas"
-          detalle="Enviados, entregados y leídos, la ventana de 24 horas y los opt-ins requiere integrar la Meta WhatsApp Business API más a fondo de lo que Likida usa hoy."
+          mensaje={t('agente_whatsapp.entrega_y_ventana_de_24_horas')}
+          detalle={t('agente_whatsapp.enviados_entregados_y_leidos_la_ventana')}
         />
       </FilaTarjetas>
     </MarcoPagina>

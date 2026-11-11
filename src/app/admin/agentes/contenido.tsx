@@ -3,8 +3,9 @@ import {
 } from '@/lib/likida/agentes/definiciones';
 import { listarInterruptores } from '@/lib/likida/interruptores';
 import { contarPendientesPorAgente } from '@/lib/likida/agentes/insumos';
-import { estadoRealDeAgente, ROTULO_ESTADO_REAL, TONO_ESTADO_REAL, type EstadoReal } from '@/lib/likida/agentes/estado-real';
-import { autonomiaDe, NOMBRE_NIVEL } from '@/lib/likida/agentes/autonomia';
+import { estadoRealDeAgente, TONO_ESTADO_REAL, type EstadoReal } from '@/lib/likida/agentes/estado-real';
+import { autonomiaDe } from '@/lib/likida/agentes/autonomia';
+import { nombreNivelTr, rotuloEstadoRealTr } from '@/lib/i18n/rotulos_tr';
 import { getAgentesParados } from '@/lib/admin/agentes-parados';
 import { getConsumoPorAgente } from '@/lib/admin/consumo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -65,6 +66,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   accionAlta: AccionAlta; accionPalanca: AccionPalanca; accionConfig: AccionConfig;
 }) {
   const { t } = await getT('admin_agentes');
+  const { t: ts } = await getT('admin_sistema');
   const ahora = ahoraMs();
   const { t: tr } = await getT('agentes');
   const [agentes, interruptores, exito, consumo, insumosPendientes, parados] = await Promise.all([
@@ -131,7 +133,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
       celda: ({ a, real, motivo }) => (
         <>
           <span title={motivo && (real === 'bloqueado_bandeja' || real === 'parado') ? motivo : undefined}>
-            <StatusChip tono={TONO_ESTADO_REAL[real] as TonoEstado}>{ROTULO_ESTADO_REAL[real]}</StatusChip>
+            <StatusChip tono={TONO_ESTADO_REAL[real] as TonoEstado}>{rotuloEstadoRealTr(real, ts)}</StatusChip>
           </span>
           {a.experimental ? <Chip>Experimental</Chip> : null}
         </>
@@ -162,7 +164,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
       id: 'autonomia', titulo: t('agentes_contenido.autonomia'),
       celda: ({ a }) => {
         const n = autonomiaDe(a.id);
-        return <span className="rv-agente-nowrap">{`${n.nivel} · ${NOMBRE_NIVEL[n.nivel]}`}</span>;
+        return <span className="rv-agente-nowrap">{`${n.nivel} · ${nombreNivelTr(n.nivel, ts)}`}</span>;
       },
     },
     {

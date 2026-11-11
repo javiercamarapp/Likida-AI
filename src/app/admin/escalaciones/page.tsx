@@ -1,4 +1,5 @@
 import { getT } from '@/lib/i18n/servidor';
+import { nombreFuenteTr } from '@/lib/i18n/rotulos_tr';
 import { urlCasoExamen } from '@/lib/admin/casos-regresion';
 import type { Metadata } from 'next';
 import {
@@ -6,7 +7,7 @@ import {
 } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
-  getBandejaEscalaciones, NOMBRE_FUENTE, conteoDeFuente,
+  getBandejaEscalaciones, conteoDeFuente,
   type BandejaEscalaciones, type FuenteEscalacion, type ItemEscalacion,
 } from '@/lib/admin/escalaciones';
 import { getAgentesParados } from '@/lib/admin/agentes-parados';
@@ -68,6 +69,7 @@ export default async function EscalacionesPage() {
   const legibles = FUENTES.filter((f) => bandeja.fuentes[f].error === null);
 
   const { t: tMon } = await getT('monitoreo');
+  const { t: tSis } = await getT('admin_sistema');
   const columnas: ColumnaBase<ItemEscalacion>[] = [
     {
       id: 'que', titulo: t('escalaciones.que_espera'), principal: true,
@@ -75,7 +77,7 @@ export default async function EscalacionesPage() {
     },
     {
       id: 'fuente', titulo: t('escalaciones.fuente'),
-      celda: (it) => { const Icono = ICONO_FUENTE[it.fuente]; return <span className="bj-fuente"><Icono width={13} height={13} strokeWidth={1.75} aria-hidden="true" />{NOMBRE_FUENTE[it.fuente]}</span>; },
+      celda: (it) => { const Icono = ICONO_FUENTE[it.fuente]; return <span className="bj-fuente"><Icono width={13} height={13} strokeWidth={1.75} aria-hidden="true" />{nombreFuenteTr(it.fuente, tSis)}</span>; },
     },
     { id: 'flota', titulo: t('escalaciones.flota'), celda: (it) => it.tenantNombre },
     { id: 'desde', titulo: t('escalaciones.desde'), celda: (it) => `${fechaHoraMx(it.desde)} · ${edadDe(it.desde, ahora)}` },
@@ -101,13 +103,13 @@ export default async function EscalacionesPage() {
         etiqueta={t('escalaciones.escalaciones_por_fuente')}
         items={legibles.map((f) => {
           const Icono = ICONO_FUENTE[f];
-          return { etiqueta: NOMBRE_FUENTE[f], valor: conteoDeFuente(f, bandeja.conteos), formato: 'entero' as const, icono: <Icono width={15} height={15} strokeWidth={1.75} /> };
+          return { etiqueta: nombreFuenteTr(f, tSis), valor: conteoDeFuente(f, bandeja.conteos), formato: 'entero' as const, icono: <Icono width={15} height={15} strokeWidth={1.75} /> };
         })}
       />
 
       {/* Fuentes que NO se pudieron leer — dicho, nunca un 0. */}
       {ilegibles.map((f) => (
-        <Aviso key={f} tono="error" titulo={t('escalaciones.no_se_pudo_leer', { NOMBRE_FUENTE: NOMBRE_FUENTE[f] })}>
+        <Aviso key={f} tono="error" titulo={t('escalaciones.no_se_pudo_leer', { NOMBRE_FUENTE: nombreFuenteTr(f, tSis) })}>
           
           {t('escalaciones.no_es_que_haya')} {bandeja.fuentes[f].error}
         </Aviso>

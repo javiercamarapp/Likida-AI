@@ -36,6 +36,10 @@ import {
 } from '@/lib/admin/qa-tipos';
 import { agregar, type Medicion, type MedicionCampo, type RespuestaOcrBanco, type ResultadoFotoOcr } from '@/lib/admin/qa-verdad';
 import type { FotoConUrl } from './lanzar-form';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
 
 /** La última lectura de cada foto, ya leída por el servidor. Se tipa aquí con
  *  lo que la pantalla usa y no con la fila entera: el componente es cliente y
@@ -54,6 +58,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
   lecturasIniciales: Record<string, UltimaLectura>;
   lecturasError: string | null;
 }) {
+  const { t, tp, idioma } = useT('admin_sistema', admin_sistemaEs);
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
   const [lecturas, setLecturas] = useState<Record<string, UltimaLectura>>(lecturasIniciales);
@@ -84,9 +89,9 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
   const validacion = validarLoteOcr({ fotoIds: [...seleccion] });
   const sinEtiqueta = [...seleccion].filter((id) => fotos.find((f) => f.id === id)?.ocrEsperado == null);
   const motivoBloqueo =
-    bancoError !== null ? 'el banco de fotos no se pudo leer'
+    bancoError !== null ? t('qa_banco_verdad.el_banco_de_fotos_no_se')
     : !validacion.ok ? validacion.error
-    : sinEtiqueta.length === seleccion.size ? 'ninguna de las fotos elegidas tiene verdad-de-terreno: no habría contra qué medir'
+    : sinEtiqueta.length === seleccion.size ? t('qa_banco_verdad.ninguna_de_las_fotos_elegidas_tiene')
     : null;
 
   const correrOcr = async () => {
@@ -103,7 +108,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
       });
       const cuerpo = await res.json().catch(() => null) as (RespuestaOcrBanco & { error?: string }) | null;
       if (!res.ok || !cuerpo?.resultados) {
-        setErrorCorrida(cuerpo?.error ?? `la corrida del OCR falló (HTTP ${res.status})`);
+        setErrorCorrida(cuerpo?.error ?? t('qa_banco_verdad.la_corrida_del_ocr_fallo_http', { status: res.status }));
         return;
       }
       // Solo las fotos que de verdad se midieron actualizan su ficha. Una
@@ -139,9 +144,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
     return (
       <div className="card p-4 flex items-start gap-3">
         <AlertTriangle width={15} height={15} strokeWidth={1.75} className="rv-qa-bad" />
-        <p className="text-sm m-0">
-          <span className="font-semibold">El banco de comprobantes no se pudo leer.</span>
-          <span className="block text-xs mt-0.5 font-mono rv-qa-mut">{bancoError}</span>
+        <p className="text-sm m-0">{rico(t('qa_banco_verdad.e0_el_banco_de_comprobantes_no'), { e0: (c) => <span className="font-semibold">{c}</span> })}<span className="block text-xs mt-0.5 font-mono rv-qa-mut">{bancoError}</span>
         </p>
       </div>
     );
@@ -149,37 +152,35 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
 
   return (
     <div className="card p-4 space-y-3">
-      <TituloSeccion>Banco de comprobantes reales — verdad de terreno y medición del OCR</TituloSeccion>
+      <TituloSeccion>{t('qa_banco_verdad.banco_de_comprobantes_reales_verdad_de')}</TituloSeccion>
 
       {/* ── Los números de arriba ──────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <Cifra etiqueta="Fotos en el banco" valor={numero(fotos.length)} nota="listadas todas, sin recorte" />
+        <Cifra etiqueta={t('qa_banco_verdad.fotos_en_el_banco')} valor={numero(fotos.length, idioma)} nota={t('qa_banco_verdad.listadas_todas_sin_recorte')} />
         <Cifra
-          etiqueta="Con verdad de terreno"
-          valor={`${numero(etiquetadas.length)} de ${numero(fotos.length)}`}
-          nota={etiquetadas.length === fotos.length ? 'todas etiquetadas' : `${numero(fotos.length - etiquetadas.length)} sin etiquetar: no se pueden medir`}
+          etiqueta={t('qa_banco_verdad.con_verdad_de_terreno')}
+          valor={t('qa_banco_verdad.n_de_m', { n: numero(etiquetadas.length, idioma), m: numero(fotos.length, idioma) })}
+          nota={etiquetadas.length === fotos.length ? t('qa_banco_verdad.todas_etiquetadas') : t('qa_banco_verdad.sin_etiquetar_no_se_pueden_medir', { numero: numero(fotos.length - etiquetadas.length, idioma) })}
         />
         <Cifra
-          etiqueta="Campos medidos"
-          valor={resumen.medidos === 0 ? 'sin medir' : `${numero(resumen.ok)} acertados · ${numero(resumen.mal)} fallados`}
+          etiqueta={t('qa_banco_verdad.campos_medidos')}
+          valor={resumen.medidos === 0 ? t('qa_medicion_corrida.sin_medir') : t('qa_banco_verdad.acertados_fallados', { ok: numero(resumen.ok, idioma), mal: numero(resumen.mal, idioma) })}
           nota={resumen.medidos === 0
-            ? 'todavía no se ha corrido el OCR contra ninguna foto'
-            : `${numero(resumen.noMedidos)} sin medir (ilegibles o fallo técnico) — fuera del denominador`}
+            ? t('qa_banco_verdad.todavia_no_se_ha_corrido_el')
+            : t('qa_banco_verdad.sin_medir_ilegibles_o_fallo_tecnico', { numero: numero(resumen.noMedidos, idioma) })}
         />
         <Cifra
-          etiqueta="Exactitud del OCR"
+          etiqueta={t('qa_banco_verdad.exactitud_del_ocr')}
           // Jamás 0% ni 100% sobre una medición que no existe.
-          valor={resumen.exactitud === null ? 'sin medir' : porcentaje(resumen.exactitud * 100)}
+          valor={resumen.exactitud === null ? t('qa_medicion_corrida.sin_medir') : porcentaje(resumen.exactitud * 100, 1, idioma)}
           nota={resumen.exactitud === null
-            ? 'no hay ni un campo medido: no hay porcentaje que decir'
-            : `sobre ${numero(resumen.medidos)} campos con valor esperado`}
+            ? t('qa_banco_verdad.no_hay_ni_un_campo_medido')
+            : t('qa_banco_verdad.sobre_campos_con_valor', { n: numero(resumen.medidos, idioma) })}
         />
       </div>
 
       {lecturasError !== null && (
-        <p className="text-xs m-0 rv-qa-bad">
-          Las lecturas guardadas del OCR no se pudieron leer, así que arriba falta lo ya medido: {lecturasError}
-        </p>
+        <p className="text-xs m-0 rv-qa-bad">{t('qa_banco_verdad.las_lecturas_guardadas_del_ocr_no', { lecturasError })}</p>
       )}
 
       {/* ── El botón ───────────────────────────────────────────────────────── */}
@@ -187,18 +188,14 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
         <button type="button" onClick={() => void correrOcr()} disabled={Boolean(motivoBloqueo) || corriendo}
           className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40 rv-qa-marca">
           {corriendo ? <Loader2 width={14} height={14} strokeWidth={1.75} className="animate-spin" /> : <ScanLine width={14} height={14} strokeWidth={1.75} />}
-          {corriendo ? 'Corriendo el OCR real…' : `Correr el OCR contra ${seleccion.size} foto${seleccion.size === 1 ? '' : 's'}`}
+          {corriendo ? t('qa_banco_verdad.corriendo_el_ocr_real') : tp('qa_banco_verdad.correr_el_ocr_contra', seleccion.size)}
         </button>
         <button type="button"
           onClick={() => setSeleccion(new Set(etiquetadas.slice(0, MAX_FOTOS_OCR).map((f) => f.id)))}
-          className="text-xs font-medium hover:opacity-70 rv-qa-mut">
-          elegir las primeras {MAX_FOTOS_OCR} etiquetadas
-        </button>
+          className="text-xs font-medium hover:opacity-70 rv-qa-mut">{t('qa_banco_verdad.elegir_las_primeras_etiquetadas', { maxFotosOcr: MAX_FOTOS_OCR })}</button>
         <button type="button" onClick={() => setSeleccion(new Set())}
-          className="text-xs font-medium hover:opacity-70 rv-qa-mut">
-          limpiar selección
-        </button>
-        {motivoBloqueo && <span className="text-xs rv-qa-mut">Bloqueado: {motivoBloqueo}</span>}
+          className="text-xs font-medium hover:opacity-70 rv-qa-mut">{t('qa_banco_verdad.limpiar_seleccion')}</button>
+        {motivoBloqueo && <span className="text-xs rv-qa-mut">{t('qa_banco_verdad.bloqueado')}{' '}{motivoBloqueo}</span>}
         {errorCorrida && <span className="text-xs font-medium rv-qa-bad">{errorCorrida}</span>}
       </div>
 
@@ -206,10 +203,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
           invocación cortó y esas fotos ni se intentaron. */}
       {sinTurno.length > 0 && (
         <p className="text-xs m-0 rv-qa-warn">
-          {numero(sinTurno.length)} foto{sinTurno.length === 1 ? '' : 's'} se quedaron sin turno: el reloj de la
-          invocación se agotó antes de llegar a ellas y NO se corrieron. Vuelve a apretar el botón con ellas
-          seleccionadas.
-        </p>
+          {tp('qa_banco_verdad.fotos_sin_turno', sinTurno.length, { n: numero(sinTurno.length, idioma) })}{' '}{t('qa_banco_verdad.se_quedaron_sin_turno_el_reloj')}</p>
       )}
       {avisos.length > 0 && (
         <ul className="text-xs space-y-0.5 m-0 rv-qa-mut">
@@ -219,15 +213,11 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
 
       {/* ── La lista ───────────────────────────────────────────────────────── */}
       {fotos.length === 0 ? (
-        <p className="text-xs m-0 rv-qa-mut">
-          El banco está vacío de verdad (el índice se leyó completo): sube comprobantes en el formulario de arriba.
-        </p>
+        <p className="text-xs m-0 rv-qa-mut">{t('qa_banco_verdad.el_banco_esta_vacio_de_verdad')}</p>
       ) : (
         <>
           <p className="text-xs m-0 rv-qa-mut">
-            {numero(fotos.length)} comprobante{fotos.length === 1 ? '' : 's'} en el banco, todos listados. Abre uno para
-            ver su ficha y su última medición.
-          </p>
+            {tp('qa_banco_verdad.comprobantes', fotos.length, { n: numero(fotos.length, idioma) })}{' '}{t('qa_banco_verdad.en_el_banco_todos_listados_abre')}</p>
           <div className="space-y-1.5 max-h-[36rem] overflow-y-auto pr-1">
             {fotos.map((f) => (
               <FilaFoto
@@ -265,6 +255,7 @@ function FilaFoto({ foto, lectura, elegida, abierta, onElegir, onAbrir }: {
   onElegir: () => void;
   onAbrir: () => void;
 }) {
+  const { t } = useT('admin_sistema', admin_sistemaEs);
   const verdad = foto.ocrEsperado;
   return (
     <div className="rounded-xl hairline overflow-hidden rv-qa-fs">
@@ -283,28 +274,23 @@ function FilaFoto({ foto, lectura, elegida, abierta, onElegir, onAbrir }: {
           <span className="text-sm truncate">{foto.etiqueta}</span>
         </button>
         {verdad === null ? (
-          <StatusPill estado="neutral">Sin etiquetar</StatusPill>
+          <StatusPill estado="neutral">{t('qa_banco_verdad.sin_etiquetar')}</StatusPill>
         ) : (
           <span className="text-xs whitespace-nowrap rv-qa-mut">
-            {CLASE_ES[verdad.clase]}
+            {claseEs(t)[verdad.clase]}
           </span>
         )}
         {lectura === null ? (
-          <span className="text-xs whitespace-nowrap rv-qa-faint">sin medir</span>
+          <span className="text-xs whitespace-nowrap rv-qa-faint">{t('qa_medicion_corrida.sin_medir')}</span>
         ) : (
-          <span className="text-xs whitespace-nowrap tabular">
-            {lectura.medicion.camposOk} acertados · {lectura.medicion.camposMal} fallados · {lectura.medicion.camposNoMedidos} sin medir
-          </span>
+          <span className="text-xs whitespace-nowrap tabular">{t('qa_banco_verdad.acertados_fallados_sin_medir', { camposOk: lectura.medicion.camposOk, camposMal: lectura.medicion.camposMal, camposNoMedidos: lectura.medicion.camposNoMedidos })}</span>
         )}
       </div>
 
       {abierta && (
         <div className="px-2.5 pb-2.5 pt-1 border-t rv-qa-bl2">
           {verdad === null ? (
-            <p className="text-xs m-0 rv-qa-mut">
-              Nadie ha confirmado qué dice este comprobante, así que no hay vara contra la que medir el OCR. Una foto
-              sin verdad de terreno NO cuenta como acierto ni como error: queda fuera de la medición.
-            </p>
+            <p className="text-xs m-0 rv-qa-mut">{t('qa_banco_verdad.nadie_ha_confirmado_que_dice_este')}</p>
           ) : (
             <Ficha verdad={verdad} lectura={lectura} confirmadoEn={foto.confirmadoEn} />
           )}
@@ -314,12 +300,12 @@ function FilaFoto({ foto, lectura, elegida, abierta, onElegir, onAbrir }: {
   );
 }
 
-const CLASE_ES: Record<VerdadTerreno['clase'], string> = {
-  ticket: 'Ticket',
-  voucher_bancario: 'Voucher bancario',
-  cfdi_impreso: 'CFDI impreso',
-  no_comprobante: 'No es comprobante',
-};
+const claseEs = (t: TSistema = T_SISTEMA_ES): Record<VerdadTerreno['clase'], string> => ({
+  ticket: t('qa_banco_verdad.ticket'),
+  voucher_bancario: t('qa_banco_verdad.voucher_bancario'),
+  cfdi_impreso: t('qa_banco_verdad.cfdi_impreso'),
+  no_comprobante: t('qa_banco_verdad.no_es_comprobante'),
+});
 
 /** La ficha de una foto: qué dice el papel según la persona, y —si ya se
  *  corrió— qué leyó el OCR y cómo salió cada campo. */
@@ -328,31 +314,28 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
   lectura: UltimaLectura | null;
   confirmadoEn: string | null;
 }) {
+  const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
   const porClave = new Map<ClaveVerdad, MedicionCampo>(
     (lectura?.medicion.campos ?? []).map((c) => [c.clave, c]),
   );
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] rv-qa-mut">
-        <span>
-          Comercio:{' '}
-          {verdad.comercioClave === null
-            ? <span className="rv-qa-warn">fuera del catálogo COMERCIOS (hallazgo, no hueco)</span>
+        <span>{t('qa_banco_verdad.comercio')}{' '}{verdad.comercioClave === null
+            ? <span className="rv-qa-warn">{t('qa_banco_verdad.fuera_del_catalogo_comercios_hallazgo_no')}</span>
             : <span className="font-mono">{verdad.comercioClave}</span>}
-        </span>
-        <span>Clase: {CLASE_ES[verdad.clase]}</span>
-        {confirmadoEn && <span>Etiquetada el {fechaCorta(confirmadoEn)}</span>}
-        {lectura && <span>Último OCR: {fechaHoraMx(lectura.corridaEn)} · {lectura.modelo} · {usd4(lectura.costoUsd)}</span>}
+        </span>{rico(t('qa_banco_verdad.e0_clase_e0', { claseEs: claseEs(t)[verdad.clase] }), { e0: (c) => <span>{c}</span> })}{confirmadoEn && <span>{t('qa_banco_verdad.etiquetada_el')}{' '}{fechaCorta(confirmadoEn, idioma)}</span>}
+        {lectura && <span>{t('qa_banco_verdad.ultimo_ocr', { fechaHoraMx: fechaHoraMx(lectura.corridaEn, idioma), modelo: lectura.modelo })}{' '}{usd4(lectura.costoUsd)}</span>}
       </div>
 
       <div className="overflow-x-auto">
-        <table aria-label="Campo esperado contra campo leído por el OCR" className="w-full text-xs">
+        <table aria-label={t('qa_banco_verdad.campo_esperado_contra_campo_leido_por')} className="w-full text-xs">
           <thead>
             <tr className="text-left rv-qa-mut">
-              <th scope="col" className="py-1 pr-3 font-medium">Campo</th>
-              <th scope="col" className="py-1 pr-3 font-medium">Esperado (la persona)</th>
-              <th scope="col" className="py-1 pr-3 font-medium">Leído (el OCR)</th>
-              <th scope="col" className="py-1 font-medium">Veredicto</th>
+              <th scope="col" className="py-1 pr-3 font-medium">{t('qa_medicion_corrida.campo')}</th>
+              <th scope="col" className="py-1 pr-3 font-medium">{t('qa_banco_verdad.esperado_la_persona')}</th>
+              <th scope="col" className="py-1 pr-3 font-medium">{t('qa_banco_verdad.leido_el_ocr')}</th>
+              <th scope="col" className="py-1 font-medium">{t('qa_banco_verdad.veredicto')}</th>
             </tr>
           </thead>
           <tbody>
@@ -364,14 +347,14 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
                   <td className="py-1 pr-3"><Esperado verdad={verdad} clave={clave} /></td>
                   <td className="py-1 pr-3">
                     {m === null
-                      ? <span className="rv-qa-faint">sin medir</span>
+                      ? <span className="rv-qa-faint">{t('qa_medicion_corrida.sin_medir')}</span>
                       : <Valor clave={clave} v={m.leido} />}
                   </td>
                   <td className="py-1">
                     {m === null
                       ? <span className="rv-qa-faint">—</span>
                       : <span title={m.motivo ?? ''}>
-                          {m.veredicto === 'ok' ? 'acertó' : m.veredicto === 'mal' ? 'falló' : 'no medido'}
+                          {m.veredicto === 'ok' ? t('qa_medicion_corrida.acerto_2') : m.veredicto === 'mal' ? t('qa_medicion_corrida.fallo_2') : t('qa_banco_verdad.no_medido')}
                         </span>}
                   </td>
                 </tr>
@@ -382,7 +365,7 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
       </div>
 
       {verdad.notas && (
-        <p className="text-[11px] m-0 rv-qa-mut">Notas de quien etiquetó: {verdad.notas}</p>
+        <p className="text-[11px] m-0 rv-qa-mut">{t('qa_banco_verdad.notas_de_quien_etiqueto')}{' '}{verdad.notas}</p>
       )}
       {lectura?.motivo && (
         <p className="text-[11px] m-0 rv-qa-warn">{lectura.motivo}</p>
@@ -394,21 +377,23 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
 /** El valor ESPERADO, con los tres estados bien distintos. Un ilegible pintado
  *  como celda vacía es la mentira que este panel existe para no contar. */
 function Esperado({ verdad, clave }: { verdad: VerdadTerreno; clave: ClaveVerdad }) {
+  const { t } = useT('admin_sistema', admin_sistemaEs);
   if (verdad.ilegibles.includes(clave)) {
-    return <span className="font-medium rv-qa-warn">ilegible en la foto</span>;
+    return <span className="font-medium rv-qa-warn">{t('qa_banco_verdad.ilegible_en_la_foto')}</span>;
   }
   if (verdad.noAplica.includes(clave)) {
-    return <span className="rv-qa-faint">el papel no lo imprime</span>;
+    return <span className="rv-qa-faint">{t('qa_banco_verdad.el_papel_no_lo_imprime')}</span>;
   }
   return <Valor clave={clave} v={verdad[clave]} />;
 }
 
 /** Moneda y fecha SOLO por lib/formato.ts. */
 function Valor({ clave, v }: { clave: ClaveVerdad; v: string | number | null }) {
+  const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
   if (v === null || v === undefined || v === '') {
-    return <span className="rv-qa-faint">no leyó nada</span>;
+    return <span className="rv-qa-faint">{t('qa_medicion_corrida.no_leyo_nada')}</span>;
   }
-  if (clave === 'monto') return <span className="tabular">{mxn(Number(v))}</span>;
-  if (clave === 'fecha') return <span className="whitespace-nowrap">{fechaCorta(String(v))}</span>;
+  if (clave === 'monto') return <span className="tabular">{mxn(Number(v), idioma)}</span>;
+  if (clave === 'fecha') return <span className="whitespace-nowrap">{fechaCorta(String(v), idioma)}</span>;
   return <span className="break-all">{String(v)}</span>;
 }

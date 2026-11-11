@@ -10,6 +10,10 @@ import { fechaHoraMx } from '@/lib/formato';
 import { AvisoGitHub } from '../ui/aviso-github';
 import { MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
 import { SelectorVista } from '../selector-vista';
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,24 +21,24 @@ export const dynamic = 'force-dynamic';
 const REPO_URL = 'https://github.com/javiercamarapp/likida.ai';
 
 
-const COLUMNAS_SLO: ColumnaBase<Slo>[] = [
-  { id: 'nombre', titulo: 'Objetivo', principal: true, celda: (s) => s.nombre },
-  { id: 'objetivo', titulo: 'Objetivo declarado', celda: (s) => <span className="text-muted">obj. {s.objetivo}</span> },
+const columnasSlo = (t: TSistema = T_SISTEMA_ES): ColumnaBase<Slo>[] => ([
+  { id: 'nombre', titulo: t('dev.objetivo'), principal: true, celda: (s) => s.nombre },
+  { id: 'objetivo', titulo: t('dev.objetivo_declarado'), celda: (s) => <span className="text-muted">{t('dev.obj', { objetivo: s.objetivo })}</span> },
   {
     // cumple=null jamás se pinta verde: sin muestra o sin lectura es «sin medir», con su propio tono.
-    id: 'medido', titulo: 'Medido', alinear: 'der',
+    id: 'medido', titulo: t('dev.medido'), alinear: 'der',
     celda: (s) => (
       <StatusChip tono={s.cumple === true ? 'ok' : s.cumple === false ? 'bad' : 'muted'}>
         <span className="tabular">{s.medido}</span>
       </StatusChip>
     ),
   },
-  { id: 'ventana', titulo: 'Ventana', celda: (s) => <span className="etiqueta-mono text-[11px] uppercase text-muted">{s.ventana}</span> },
-];
+  { id: 'ventana', titulo: t('dev.ventana'), celda: (s) => <span className="etiqueta-mono text-[11px] uppercase text-muted">{s.ventana}</span> },
+]);
 
-const COLUMNAS_SEGURIDAD: ColumnaBase<FilaSeguridad>[] = [
+const columnasSeguridad = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<FilaSeguridad>[] => ([
   {
-    id: 'tipo', titulo: 'Evento', principal: true,
+    id: 'tipo', titulo: t('dev.evento'), principal: true,
     celda: (e) => (
       <>
         <StatusChip tono={e.severidad === 'alta' ? 'bad' : e.severidad === 'media' ? 'warn' : 'neutral'}>{e.tipo.replace(/_/g, ' ')}</StatusChip>
@@ -43,8 +47,8 @@ const COLUMNAS_SEGURIDAD: ColumnaBase<FilaSeguridad>[] = [
       </>
     ),
   },
-  { id: 'cuando', titulo: 'Fecha', alinear: 'der', celda: (e) => <span className="tabular text-muted">{fechaHoraMx(e.creadoEn)}</span> },
-];
+  { id: 'cuando', titulo: t('dev.fecha'), alinear: 'der', celda: (e) => <span className="tabular text-muted">{fechaHoraMx(e.creadoEn, idioma)}</span> },
+]);
 
 /**
  * Dev — `requireSuperadmin()` ya lo hizo el layout.
@@ -57,6 +61,7 @@ const COLUMNAS_SEGURIDAD: ColumnaBase<FilaSeguridad>[] = [
  * eso el link directo al repositorio sigue siendo el único atajo para eso.
  */
 export default async function DevPage() {
+  const { t, idioma } = await getT('admin_sistema');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   // El selector de vistas necesita saber si HAY flotas (con cero, sus ligas
@@ -90,15 +95,15 @@ export default async function DevPage() {
 
       {/* ── El mapa de puntos: 26 semanas de pushes, un punto por día. La intensidad es commits/día; GitHub lo precalcula y a veces
             contesta "generando" — se dice. Refresca en cada carga (force-dynamic). ── */}
-      <Tarjeta titulo="Mapa de actividad — pushes por día">
+      <Tarjeta titulo={t('dev.mapa_de_actividad_pushes_por_dia')}>
         {mapa.estado === 'sin_token' && (
-          <p className="m-0 text-xs text-muted">Sin el acceso a GitHub no hay mapa — no es que no haya pushes.</p>
+          <p className="m-0 text-xs text-muted">{t('dev.sin_el_acceso_a_github_no_hay_mapa')}</p>
         )}
         {mapa.estado === 'error' && (
-          <p className="m-0 text-xs text-muted">GitHub no contestó el histograma — recarga en un momento.</p>
+          <p className="m-0 text-xs text-muted">{t('dev.github_no_contesto_el_histograma_recarga')}</p>
         )}
         {mapa.estado === 'generando' && (
-          <p className="m-0 text-xs text-muted">GitHub está recalculando el histograma tras el último push — recarga en unos segundos.</p>
+          <p className="m-0 text-xs text-muted">{t('dev.github_esta_recalculando_el_histograma_tras')}</p>
         )}
         {mapa.estado === 'ok' && (
           <div className="flex items-start gap-5">
@@ -108,7 +113,7 @@ export default async function DevPage() {
             {/* Por integrante (orden del 17-ago): quién empujó cuánto — 52 semanas de /stats/contributors, mismos tres estados
                 honestos que el histograma. */}
             <div className="w-44 shrink-0">
-              <p className="etiqueta-mono m-0 mb-1.5 text-[11px] uppercase text-muted">Por integrante</p>
+              <p className="etiqueta-mono m-0 mb-1.5 text-[11px] uppercase text-muted">{t('dev.por_integrante')}</p>
               {autores.estado === 'ok' && autores.autores.map((a) => (
                 <div key={a.nombre} className="flex items-center justify-between py-0.5">
                   <span className="truncate text-xs text-[var(--ink2)]">{a.nombre}</span>
@@ -116,10 +121,10 @@ export default async function DevPage() {
                 </div>
               ))}
               {autores.estado === 'generando' && (
-                <p className="m-0 text-xs text-muted">GitHub lo está recalculando…</p>
+                <p className="m-0 text-xs text-muted">{t('dev.github_lo_esta_recalculando')}</p>
               )}
               {(autores.estado === 'error' || autores.estado === 'sin_token') && (
-                <p className="m-0 text-xs text-muted">No se pudo leer — no es que nadie haya empujado.</p>
+                <p className="m-0 text-xs text-muted">{t('dev.no_se_pudo_leer_no_es')}</p>
               )}
             </div>
           </div>
@@ -128,14 +133,14 @@ export default async function DevPage() {
 
       {/* ── SLOs (fase 7): objetivos DECLARADOS contra datos reales. cumple=null jamás se pinta verde — sin muestra o sin lectura se
             dice con esas palabras. ── */}
-      <Tarjeta titulo="SLOs — objetivos contra lo medido">
+      <Tarjeta titulo={t('dev.slos_objetivos_contra_lo_medido')}>
         {slos === null && (
-          <p className="m-0 text-xs text-muted">No se pudieron leer los SLOs.</p>
+          <p className="m-0 text-xs text-muted">{t('dev.no_se_pudieron_leer_los_slos')}</p>
         )}
         {slos !== null && (
           <TablaBase
-            etiqueta="SLOs — objetivos contra lo medido"
-            columnas={COLUMNAS_SLO}
+            etiqueta={t('dev.slos_objetivos_contra_lo_medido')}
+            columnas={columnasSlo(t)}
             filas={slos}
             idFila={(s) => s.clave}
             altoMaximo={false}
@@ -145,21 +150,17 @@ export default async function DevPage() {
 
       {/* ── Trust & Safety (0133): lo que los detectores atraparon. Firma inválida, intents rechazados, cifras sin respaldo — la
             memoria de seguridad consultable, no solo logs. ── */}
-      <Tarjeta titulo="Eventos de seguridad">
+      <Tarjeta titulo={t('dev.eventos_de_seguridad')}>
         {seguridad === null && (
-          <p className="m-0 text-xs text-muted">
-            No se pudieron leer — que no es lo mismo que «no hay eventos».
-          </p>
+          <p className="m-0 text-xs text-muted">{t('dev.no_se_pudieron_leer_que_no')}</p>
         )}
         {seguridad !== null && seguridad.length === 0 && (
-          <p className="m-0 text-xs text-muted">
-            Sin eventos registrados. Eso NO prueba que no haya pasado nada: solo cubre lo que las fuentes emiten (la cobertura exacta está en Trust &amp; Safety).
-          </p>
+          <p className="m-0 text-xs text-muted">{t('dev.sin_eventos_registrados_eso_no_prueba')}</p>
         )}
         {seguridad !== null && seguridad.length > 0 && (
           <TablaBase
-            etiqueta="Eventos de seguridad recientes"
-            columnas={COLUMNAS_SEGURIDAD}
+            etiqueta={t('dev.eventos_de_seguridad_recientes')}
+            columnas={columnasSeguridad(t, idioma)}
             filas={seguridad}
             idFila={(e) => String(e.id)}
             altoMaximo={false}
@@ -169,29 +170,29 @@ export default async function DevPage() {
       </Tarjeta>
 
       {/* ── Actividad en vivo (17-ago): commits y CI reales, cada carga. Tres estados honestos — sin llave / API caída / datos. ── */}
-      <Tarjeta titulo="Actividad del código — en vivo">
+      <Tarjeta titulo={t('dev.actividad_del_codigo_en_vivo')}>
         {actividad.estado === 'sin_token' && (
-          <p className="m-0 text-xs text-muted">Sin el acceso a GitHub esta sección no puede ver el repo — no es que no haya actividad.</p>
+          <p className="m-0 text-xs text-muted">{t('dev.sin_el_acceso_a_github_esta_seccion')}</p>
         )}
         {actividad.estado === 'error' && (
-          <p className="m-0 text-xs text-muted">GitHub no contestó — no se sabe qué hay (que no es lo mismo que nada).</p>
+          <p className="m-0 text-xs text-muted">{t('dev.github_no_contesto_no_se_sabe')}</p>
         )}
         {actividad.estado === 'ok' && (
           <div className="grid gap-3 lg:grid-cols-2">
             <div>
-              <p className="m-0 mb-1.5 text-xs font-medium text-muted">Últimos commits</p>
+              <p className="m-0 mb-1.5 text-xs font-medium text-muted">{t('dev.ultimos_commits')}</p>
               <ul className="m-0 list-none space-y-1 p-0">
                 {actividad.commits.map((c) => (
                   <li key={c.sha} className="flex items-center gap-2 text-xs">
                     <code className="shrink-0 text-[11px] text-muted">{c.sha}</code>
                     <a href={c.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{c.mensaje}</a>
-                    <span className="shrink-0 text-[11px] text-muted">{fechaHoraMx(c.fecha)}</span>
+                    <span className="shrink-0 text-[11px] text-muted">{fechaHoraMx(c.fecha, idioma)}</span>
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <p className="m-0 mb-1.5 text-xs font-medium text-muted">CI — últimas corridas</p>
+              <p className="m-0 mb-1.5 text-xs font-medium text-muted">{t('dev.ci_ultimas_corridas')}</p>
               <ul className="m-0 list-none space-y-1 p-0">
                 {actividad.ci.map((w, i) => (
                   <li key={`${w.url}-${i}`} className="flex items-center gap-2 text-xs">
@@ -208,26 +209,22 @@ export default async function DevPage() {
         )}
       </Tarjeta>
 
-      <Tarjeta titulo="Repositorio">
+      <Tarjeta titulo={t('dev.repositorio')}>
         <a href={REPO_URL} target="_blank" rel="noopener noreferrer"
           className="flex items-center gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">
           <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
-          <span className="min-w-0">
-            <span className="block text-[13px] font-medium">Código — GitHub</span>
-            <span className="block text-xs text-muted">javiercamarapp/likida.ai. Se enlaza en vez de reconstruirse.</span>
-          </span>
+          <span className="min-w-0">{rico(t('dev.e0_codigo_github_e0_e1_javiercamarapp'), { e0: (c) => <span className="block text-[13px] font-medium">{c}</span>, e1: (c) => <span className="block text-xs text-muted">{c}</span> })}</span>
         </a>
       </Tarjeta>
 
-      <Tarjeta titulo="Lo que falta">
-        <p className="m-0 text-xs text-muted">
-          Calendario de contribuciones, deploys de Vercel con estado de build, feature flags,
-          tiempo de merge/cobertura/error budget y changelog — lo de GitHub ya entra en vivo arriba (17-ago);
-          lo de Vercel sigue sin integración. Vercel y Sentry ya están enlazados desde Inicio/Observabilidad.
-        </p>
+      <Tarjeta titulo={t('dev.lo_que_falta')}>
+        <p className="m-0 text-xs text-muted">{t('dev.calendario_de_contribuciones_deploys_de_vercel')}</p>
       </Tarjeta>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Desarrollo' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('dev.desarrollo') };
+}

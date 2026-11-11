@@ -9,6 +9,7 @@ import { TOPE_CORRIDA_USD } from '../../../../scripts/qa-agentes/config.qa';
 import { PantallaQa } from './pantalla';
 import type { UltimaLectura } from './banco-verdad';
 import type { FotoConUrl } from './lanzar-form';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ export const dynamic = 'force-dynamic';
 export default async function QaPage() {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
+  const { t, idioma } = await getT('admin_sistema');
   const db = supabaseAdmin();
 
   let fotos: FotoConUrl[] = [];
@@ -70,8 +72,13 @@ export default async function QaPage() {
       topeCorridaUsd={TOPE_CORRIDA_USD}
       lecturasIniciales={lecturasIniciales}
       lecturasError={lecturas.ok ? null : lecturas.error}
+      t={t}
+      idioma={idioma}
     />
   );
 }
 
-export const metadata: Metadata = { title: 'QA autónomo' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('qa.qa_autonomo') };
+}

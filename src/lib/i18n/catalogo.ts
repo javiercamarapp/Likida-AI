@@ -13,6 +13,7 @@ import type { admin_inicio as admin_inicioEs } from './es/admin_inicio';
 import type { admin_agentes as admin_agentesEs } from './es/admin_agentes';
 import type { admin_flotas as admin_flotasEs } from './es/admin_flotas';
 import type { admin_dinero as admin_dineroEs } from './es/admin_dinero';
+import type { admin_sistema as admin_sistemaEs } from './es/admin_sistema';
 import type { publico as publicoEs } from './es/publico';
 import type { correo as correoEs } from './es/correo';
 import type { mensajes as mensajesEs } from './es/mensajes';
@@ -45,6 +46,7 @@ export interface Diccionarios {
   admin_agentes: typeof admin_agentesEs;
   admin_flotas: typeof admin_flotasEs;
   admin_dinero: typeof admin_dineroEs;
+  admin_sistema: typeof admin_sistemaEs;
   publico: typeof publicoEs;
   correo: typeof correoEs;
   mensajes: typeof mensajesEs;
@@ -56,7 +58,7 @@ export type Namespace = keyof Diccionarios;
 export type DiccionarioDe<N extends Namespace> = { readonly [K in keyof Diccionarios[N]]: string };
 export type ClaveDe<N extends Namespace> = keyof Diccionarios[N] & string;
 
-export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes', 'login', 'operacion', 'dinero', 'agentes', 'admin_inicio', 'admin_agentes', 'admin_flotas', 'admin_dinero', 'publico', 'correo', 'mensajes', 'resto'] as const satisfies readonly Namespace[];
+export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes', 'login', 'operacion', 'dinero', 'agentes', 'admin_inicio', 'admin_agentes', 'admin_flotas', 'admin_dinero', 'admin_sistema', 'publico', 'correo', 'mensajes', 'resto'] as const satisfies readonly Namespace[];
 
 type Cargadores = { [I in Idioma]: { [N in Namespace]: () => Promise<DiccionarioDe<N>> } };
 
@@ -73,6 +75,7 @@ export const CARGADORES: Cargadores = {
     admin_agentes: () => import('./es/admin_agentes').then((m) => m.admin_agentes),
     admin_flotas: () => import('./es/admin_flotas').then((m) => m.admin_flotas),
     admin_dinero: () => import('./es/admin_dinero').then((m) => m.admin_dinero),
+    admin_sistema: () => import('./es/admin_sistema').then((m) => m.admin_sistema),
     publico: () => import('./es/publico').then((m) => m.publico),
     correo: () => import('./es/correo').then((m) => m.correo),
     mensajes: () => import('./es/mensajes').then((m) => m.mensajes),
@@ -89,6 +92,7 @@ export const CARGADORES: Cargadores = {
     admin_agentes: () => import('./en/admin_agentes').then((m) => m.admin_agentes),
     admin_flotas: () => import('./en/admin_flotas').then((m) => m.admin_flotas),
     admin_dinero: () => import('./en/admin_dinero').then((m) => m.admin_dinero),
+    admin_sistema: () => import('./en/admin_sistema').then((m) => m.admin_sistema),
     publico: () => import('./en/publico').then((m) => m.publico),
     correo: () => import('./en/correo').then((m) => m.correo),
     mensajes: () => import('./en/mensajes').then((m) => m.mensajes),

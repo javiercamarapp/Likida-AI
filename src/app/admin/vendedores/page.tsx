@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ConsolaVendedores } from './consola-vendedores';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,11 @@ export default async function VendedoresPage({
   searchParams: Promise<{ vendedor?: string; q?: string }>;
 }) {
   const [{ nombre }, sp] = await Promise.all([requireSuperadmin(), searchParams]);
-  return <ConsolaVendedores nombre={nombre} sp={sp} />;
+  const { t } = await getT('admin_sistema');
+  return <ConsolaVendedores nombre={nombre} sp={sp} tx={t} />;
 }
 
-export const metadata: Metadata = { title: 'Vendedores' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('vendedores.vendedores') };
+}

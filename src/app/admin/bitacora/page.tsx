@@ -14,30 +14,32 @@ import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 import { PiePaginas } from '../pie-paginas';
 import { quienDe } from './quien';
-import { etiquetaAccion, etiquetaEntidad, ROTULO_TIPO_ACCESO } from './etiquetas';
+import { etiquetaAccion, etiquetaEntidad, rotuloTipoAcceso } from './etiquetas';
 import '../sistema.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import type { Idioma } from '@/lib/i18n/idioma';
 export const dynamic = 'force-dynamic';
 
 type SP = { accion?: string; persona?: string; flota?: string; desde?: string; hasta?: string; p?: string; vista?: string };
 
-function columnasAcciones(t: TrDe<'admin_inicio'>): ColumnaTabla<EntradaBitacora>[] {
+function columnasAcciones(t: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaTabla<EntradaBitacora>[] {
   return [
-    { id: 'cuando', titulo: t('bitacora.cuando'), corta: true, celda: (e) => fechaHoraMx(e.ocurrioEn) },
-    { id: 'que', titulo: t('bitacora.que_se_hizo'), principal: true, celda: (e) => etiquetaAccion(e.accion) },
+    { id: 'cuando', titulo: t('bitacora.cuando'), corta: true, celda: (e) => fechaHoraMx(e.ocurrioEn, idioma) },
+    { id: 'que', titulo: t('bitacora.que_se_hizo'), principal: true, celda: (e) => etiquetaAccion(e.accion, ts) },
     { id: 'quien', titulo: t('bitacora.quien'), celda: (e) => quienDe(e.actor) },
-    { id: 'flota', titulo: t('bitacora.flota'), celda: (e) => e.tenantNombre ?? (e.tenantId === null ? 'Plataforma' : '—') },
-    { id: 'sobre', titulo: t('bitacora.sobre_que'), celda: (e) => etiquetaEntidad(e.entidad) },
+    { id: 'flota', titulo: t('bitacora.flota'), celda: (e) => e.tenantNombre ?? (e.tenantId === null ? ts('bitacora_etiquetas.plataforma') : '—') },
+    { id: 'sobre', titulo: t('bitacora.sobre_que'), celda: (e) => etiquetaEntidad(e.entidad, ts) },
   ];
 }
 
-function columnasAccesos(t: TrDe<'admin_inicio'>): ColumnaTabla<AccesoSuperadmin>[] {
+function columnasAccesos(t: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaTabla<AccesoSuperadmin>[] {
   return [
-    { id: 'cuando', titulo: t('bitacora.cuando'), corta: true, celda: (a) => fechaHoraMx(a.creadoEn) },
+    { id: 'cuando', titulo: t('bitacora.cuando'), corta: true, celda: (a) => fechaHoraMx(a.creadoEn, idioma) },
     { id: 'quien', titulo: t('bitacora.quien'), principal: true, celda: (a) => quienDe(a.actor) },
-    { id: 'tipo', titulo: t('bitacora.que_hizo'), celda: (a) => <StatusChip tono={a.tipo === 'descarga' ? 'warn' : 'neutral'}>{ROTULO_TIPO_ACCESO[a.tipo]}</StatusChip> },
+    { id: 'tipo', titulo: t('bitacora.que_hizo'), celda: (a) => <StatusChip tono={a.tipo === 'descarga' ? 'warn' : 'neutral'}>{rotuloTipoAcceso(ts)[a.tipo]}</StatusChip> },
     { id: 'flota', titulo: t('bitacora.flota'), celda: (a) => a.tenantNombre ?? '—' },
     { id: 'ruta', titulo: t('bitacora.pantalla'), celda: (a) => <span className="adm-sis-dato">{a.ruta}</span> },
   ];
@@ -53,6 +55,7 @@ function columnasAccesos(t: TrDe<'admin_inicio'>): ColumnaTabla<AccesoSuperadmin
  */
 export default async function BitacoraPage({ searchParams }: { searchParams: Promise<SP> }) {
   const { t } = await getT('admin_inicio');
+  const { t: ts, idioma } = await getT('admin_sistema');
   await requireSuperadmin();
   const sp = await searchParams;
   const filtro: FiltroBitacora = normalizarFiltroBitacora({ accion: sp.accion, actorId: sp.persona, tenantId: sp.flota, desde: sp.desde, hasta: sp.hasta });
@@ -125,7 +128,7 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
       ) : vista === 'acciones' && lectura ? (
         <>
           <TablaLista<EntradaBitacora>
-            etiqueta={t('bitacora.acciones_registradas')} columnas={columnasAcciones(t)} filas={lectura.filas} idFila={(e) => String(e.id)} base="/admin/bitacora" params={params}
+            etiqueta={t('bitacora.acciones_registradas')} columnas={columnasAcciones(t, ts, idioma)} filas={lectura.filas} idFila={(e) => String(e.id)} base="/admin/bitacora" params={params}
             vacio={nFiltros > 0
               ? { titulo: t('bitacora.ninguna_entrada_con_ese'), texto: t('bitacora.quita_un_filtro_o') }
               : { titulo: t('bitacora.la_bitacora_esta_vacia'), texto: t('bitacora.aun_no_se_ha') }}
@@ -135,7 +138,7 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
       ) : accesos && accesos.existe ? (
         <>
           <TablaLista<AccesoSuperadmin>
-            etiqueta={t('bitacora.accesos_del_equipo')} columnas={columnasAccesos(t)} filas={accesos.filas} idFila={(a) => String(a.id)} base="/admin/bitacora" params={params}
+            etiqueta={t('bitacora.accesos_del_equipo')} columnas={columnasAccesos(t, ts, idioma)} filas={accesos.filas} idFila={(a) => String(a.id)} base="/admin/bitacora" params={params}
             vacio={{ titulo: t('bitacora.ningun_acceso_con_ese'), texto: t('bitacora.quita_un_filtro_o') }}
           />
           <PiePaginas base="/admin/bitacora" params={params} pagina={accesos.pagina} paginas={accesos.paginas} total={accesos.total} tamano={FILAS_BITACORA} unidad="accesos" />

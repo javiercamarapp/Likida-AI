@@ -5,18 +5,20 @@ import { usd, numero } from '@/lib/formato';
 import { MarcoPagina, FilaTarjetas, Tarjeta, Disclosure, BotonEnlace } from '@/app/ui-v2/componentes';
 import { DonaMini, BarList } from '@/app/ui-v2/graficas';
 import { TarjetaFase } from '../tarjeta-fase';
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 
 export const dynamic = 'force-dynamic';
 
-const FASE_LABEL: Record<string, string> = { ocr: 'OCR', cuadre: 'Cuadre', whatsapp: 'WhatsApp' };
+const faseLabel = (t: TSistema = T_SISTEMA_ES): Record<string, string> => ({ ocr: 'OCR', cuadre: t('model_ops.cuadre'), whatsapp: 'WhatsApp' });
 
 /** Las TRES fases del pipeline DEL VIAJE, en el orden en que corren. Esta pantalla gobierna solo ese camino; NO es el inventario de
  *  agentes de la compañía (eso es Agentes › Panel, con la matriz de roles de modelo en `agente_definicion.modelo_rol`). */
-const FASES = [
-  { fase: 'ocr', nombre: 'OCR', queHace: 'Lee la foto de un comprobante (diésel, caseta, factura) y extrae monto, folio y CFDI.' },
-  { fase: 'cuadre', nombre: 'Cuadre', queHace: 'Compara los gastos ya capturados contra el anticipo y la política de la flota.' },
-  { fase: 'whatsapp', nombre: 'WhatsApp', queHace: 'Lleva la conversación con el operador de principio a fin: recibe fotos, confirma y cierra la liquidación.' },
-] as const;
+const fasesTr = (t: TSistema = T_SISTEMA_ES) => ([
+  { fase: 'ocr', nombre: t('model_ops.ocr'), queHace: t('model_ops.lee_la_foto_de_un_comprobante') },
+  { fase: 'cuadre', nombre: t('model_ops.cuadre'), queHace: t('model_ops.compara_los_gastos_ya_capturados_contra') },
+  { fase: 'whatsapp', nombre: 'WhatsApp', queHace: t('model_ops.lleva_la_conversacion_con_el_operador') },
+] as const);
 
 /**
  * Modelos: el pipeline completo del viaje con su costo real por fase y por modelo. Todo sale de `llm_costo` (`getResumenNegocio` /
@@ -24,6 +26,7 @@ const FASES = [
  * declara abajo. El rol de modelo de cada AGENTE del catálogo sí se cambia, desde Agentes › Panel › Configurar.
  */
 export default async function ModelOpsPage() {
+  const { t, idioma } = await getT('admin_sistema');
   await requireSuperadmin();
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo()]);
   const porFase = new Map(r.porFase.map((f) => [f.fase, f]));
@@ -31,41 +34,41 @@ export default async function ModelOpsPage() {
   return (
     <MarcoPagina
       area="Agentes"
-      titulo="Agentes"
-      apoyo="Modelos: las tres fases del pipeline del viaje y lo que cuestan, por fase y por modelo."
-      acciones={<BotonEnlace href="/admin/agentes" variante="secondary" tamano="sm">Rol de modelo por agente</BotonEnlace>}
+      titulo={t('model_ops.agentes')}
+      apoyo={t('model_ops.modelos_las_tres_fases_del_pipeline')}
+      acciones={<BotonEnlace href="/admin/agentes" variante="secondary" tamano="sm">{t('model_ops.rol_de_modelo_por_agente')}</BotonEnlace>}
     >
       <FilaTarjetas variante="4-4-4">
-        {FASES.map(({ fase, nombre, queHace }) => (
+        {fasesTr(t).map(({ fase, nombre, queHace }) => (
           <TarjetaFase key={fase} titulo={nombre} queHace={queHace} datos={porFase.get(fase)} modelos={porFaseModelo.filter((m) => m.fase === fase)} />
         ))}
       </FilaTarjetas>
 
       <FilaTarjetas variante="6-6">
-        <Tarjeta titulo="Costo por fase" estado={r.porFase.length > 0 ? 'ok' : 'vacio'} mensaje="Sin actividad de IA" detalle="Todavía no hay actividad de IA registrada.">
+        <Tarjeta titulo={t('model_ops.costo_por_fase')} estado={r.porFase.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_actividad_de_ia')} detalle={t('model_ops.todavia_no_hay_actividad_de_ia')}>
           <DonaMini
-            etiqueta="Costo por fase"
+            etiqueta={t('model_ops.costo_por_fase')}
             formato="usd"
-            gajos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))}
+            gajos={r.porFase.map((f) => ({ etiqueta: faseLabel(t)[f.fase] ?? f.fase, valor: f.costoUsd }))}
             centro={usd(r.porFase.reduce((s, f) => s + f.costoUsd, 0))}
           />
         </Tarjeta>
-        <Tarjeta titulo="Costo por modelo, todas las fases" estado={r.porModelo.length > 0 ? 'ok' : 'vacio'} mensaje="Sin llamadas" detalle="Sin llamadas registradas todavía.">
+        <Tarjeta titulo={t('model_ops.costo_por_modelo_todas_las_fases')} estado={r.porModelo.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_llamadas')} detalle={t('model_ops.sin_llamadas_registradas_todavia')}>
           <BarList
-            etiqueta="Costo por modelo"
-            items={r.porModelo.map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: `${usd(m.costoUsd)} · ${numero(m.n)} llamadas` }))}
+            etiqueta={t('model_ops.costo_por_modelo')}
+            items={r.porModelo.map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: t('model_ops.llamadas_costo', { costo: usd(m.costoUsd), n: numero(m.n, idioma) }) }))}
           />
         </Tarjeta>
       </FilaTarjetas>
 
-      <Disclosure titulo="Lo que no existe todavía" resumen="Versionado y selector de modelo">
-        <p>
-          Versionado de prompts, reversa y guardrails configurables: aún no existen. Hoy los prompts viven en el código, sin historial de versiones ni pantalla de edición.
-          No existe tampoco un selector de modelo por fase ni tenant: cambiar de modelo en el pipeline del viaje es un cambio de código y un despliegue.
-        </p>
+      <Disclosure titulo={t('model_ops.lo_que_no_existe_todavia')} resumen={t('model_ops.versionado_y_selector_de_modelo')}>
+        <p>{t('model_ops.versionado_de_prompts_reversa_y_guardrails')}</p>
       </Disclosure>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Modelos' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('model_ops.modelos') };
+}

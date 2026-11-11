@@ -4,6 +4,7 @@ import { getResumenProspectos, type ResumenProspectos } from '@/lib/admin/prospe
 import { logger } from '@/lib/logger';
 import { AvisoCompacto, MarcoPagina } from '../../ui-v2/componentes';
 import { Cerebro } from './cerebro';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,7 @@ export const dynamic = 'force-dynamic';
  * sigue anotándola al entregar; esta página ya no entrega ninguna fila.
  */
 export default async function PaginaMapaProspectos() {
+  const { t } = await getT('admin_sistema');
   await requireSuperadmin();
   let resumen: ResumenProspectos | null = null;
   try {
@@ -26,12 +28,12 @@ export default async function PaginaMapaProspectos() {
     logger.error('mapa_prospectos.resumen', { err: e instanceof Error ? e.message : String(e) });
   }
   return (
-    <MarcoPagina titulo="Ventas" apoyo="Tu cartera de prospectos en un mapa vivo: filtra, abre la ficha y contacta con el mensaje que redactó el agente.">
+    <MarcoPagina titulo={t('mapa_prospectos.ventas')} apoyo={t('mapa_prospectos.tu_cartera_de_prospectos_en_un')}>
       {resumen === null && (
         <AvisoCompacto
           tono="error"
-          resumen="La cartera no se pudo leer — lo que ves abajo está vacío POR ESO, no porque no haya prospectos."
-          mas="Cada página de la cartera se reintenta una vez antes de rendirse. Si recargar no lo arregla, la base tardó más de lo que permite o rechazó la consulta; el detalle queda en el registro del servidor (mapa_prospectos.resumen)."
+          resumen={t('mapa_prospectos.la_cartera_no_se_pudo_leer')}
+          mas={t('mapa_prospectos.cada_pagina_de_la_cartera_se')}
         />
       )}
       <Cerebro resumen={resumen} />
@@ -39,4 +41,7 @@ export default async function PaginaMapaProspectos() {
   );
 }
 
-export const metadata: Metadata = { title: 'Ventas' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('mapa_prospectos.ventas') };
+}

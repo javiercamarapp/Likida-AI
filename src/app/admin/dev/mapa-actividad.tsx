@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 
 /**
  * El mapa de puntos INTERACTIVO (orden del 17-ago): clic en un día → fecha y
@@ -19,6 +21,7 @@ export function MapaActividad({ semanas, total }: {
   semanas: Array<{ inicio: number; dias: number[] }>;
   total: number;
 }) {
+  const { t, tp } = useT('admin_sistema', admin_sistemaEs);
   const [dia, setDia] = useState<{ fecha: string; n: number } | null>(null);
   const tope = Math.max(1, ...semanas.flatMap((s) => s.dias));
   const fechaDe = fechaDeDiaUtc;
@@ -31,7 +34,7 @@ export function MapaActividad({ semanas, total }: {
               const fecha = fechaDe(sem.inicio + di * 86_400_000);
               const activo = dia?.fecha === fecha;
               return (
-                <button key={di} type="button" title={`${n} push${n === 1 ? '' : 'es'} · ${fecha}`}
+                <button key={di} type="button" title={`${tp('dev_mapa_actividad.push', n)} · ${fecha}`}
                   onClick={() => setDia({ fecha, n })}
                   className="w-[11px] h-[11px] rounded-[3px] transition-transform hover:scale-125"
                   style={{
@@ -48,8 +51,8 @@ export function MapaActividad({ semanas, total }: {
       </div>
       <p className="text-xs mt-1.5" style={{ color: 'var(--muted)' }}>
         {dia
-          ? <><b className="tabular" style={{ color: 'var(--ink)' }}>{dia.n} push{dia.n === 1 ? '' : 'es'}</b> · {dia.fecha}</>
-          : <>{total} commits en 52 semanas (se enseñan 26) · un punto = un día · toca un cuadro para ver su fecha y sus pushes.</>}
+          ? <><b className="tabular" style={{ color: 'var(--ink)' }}>{tp('dev_mapa_actividad.push', dia.n)}</b> · {dia.fecha}</>
+          : <>{total}{' '}{t('dev_mapa_actividad.commits_en_52_semanas_se_ensenan')}</>}
       </p>
     </div>
   );
