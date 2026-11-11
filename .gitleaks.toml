@@ -44,3 +44,11 @@ paths = [
   '''^docs/(conocimiento/)?investigacion/portales/''',
   '''^src/lib/(cuadra|likida)/facturacion/permisos_cre\.json$''',
 ]
+
+[[allowlists]]
+description = "Diccionarios de interfaz es/en (solo textos visibles: 'Generar secreto', 'Credencial desactivada.', 'Tokens usados'). Las claves contienen secreto/credencial/token y la regla generica los toma por llaves. Triado a mano el 11-nov-2026 (7 hallazgos: 71bf7734f en resto.ts, c00f4b9d8 en admin_dinero.ts), autorizado por el dueno. Solo generic-api-key y solo los diccionarios planos src/lib/i18n/{es,en}/<namespace>.ts (no pruebas, no codigo)."
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^src/lib/i18n/(es|en)/[a-z_]+\.ts$''',
+]
