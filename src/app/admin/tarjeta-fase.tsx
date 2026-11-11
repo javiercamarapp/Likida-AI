@@ -1,3 +1,4 @@
+import './sistema.css';
 import './tarjeta-fase.css';
 import type { ReactNode } from 'react';
 import { usd, numero } from '@/lib/formato';
@@ -56,8 +57,11 @@ export function TablaModelosFase({ titulo, modelos, textos }: {
     { id: 'costo', titulo: textos.costo, alinear: 'der', celda: (m) => usd(m.costoUsd) },
   ];
   return (
-    <Tarjeta titulo={titulo} estado={modelos.length === 0 ? 'vacio' : 'ok'} mensaje={textos.vacio} detalle={textos.vacioDetalle} contenida>
-      {modelos.length > 0 ? <TablaBase etiqueta={titulo} columnas={columnas} filas={[...modelos]} idFila={(m) => m.modelo} densa altoMaximo={false} /> : null}
+    <Tarjeta titulo={titulo} contenida>
+      {modelos.length > 0
+        ? <TablaBase etiqueta={titulo} columnas={columnas} filas={[...modelos]} idFila={(m) => m.modelo} densa altoMaximo={false} />
+        // Vacío de UNA línea (1.5 px punteado), no una tarjeta alta medio vacía.
+        : <p className="adm-sis-vacio-linea" role="status"><b>{textos.vacio}</b> {textos.vacioDetalle}</p>}
     </Tarjeta>
   );
 }

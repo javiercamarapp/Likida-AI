@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -10,6 +11,7 @@ import { Tarjeta, BotonEnlace } from '@/app/ui-v2/componentes';
 import { Columnas } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { TablaModelosFase } from '../tarjeta-fase';
+import '../sistema.css';
 
 import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
@@ -43,19 +45,21 @@ export default async function AgenteOcrPage() {
   return (
     <EsqueletoPanelCifras
       area="Agentes"
-      titulo={t('agente_ocr.agentes')}
+      titulo="OCR"
       apoyo={t('agente_ocr.ocr_la_lectura_de')}
       acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.medir_en_calidad')}</BotonEnlace>}
       etiquetaCifras="OCR"
-      cifras={[
+      cifras={uniformes([
           { etiqueta: t('agente_ocr.gastado_en_ocr'), valor: ocr ? ocr.costoUsd : 0, formato: 'usd', nota: t('agente_ocr.costo_medido_en_llm') },
           { etiqueta: t('agente_ocr.llamadas_de_ocr'), valor: ocr ? ocr.n : 0, formato: 'entero' },
           { etiqueta: t('agente_ocr.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero' },
           { etiqueta: t('agente_ocr.exactitud_global'), valor: precision === null ? null : precision.global.exactitud === null ? null : Math.round(precision.global.exactitud * 100), formato: 'porcentaje', estado: precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok', mensaje: precision === null ? undefined : t('agente_ocr.sin_medir_todavia'), nota: t('agente_ocr.contra_el_banco_de') },
-      ]}
+      ])}
       graficas={[
-        <Tarjeta key="serie" titulo={t('agente_ocr.serie_facturas')} estado={r.facturasPorDia.some((d) => d.n > 0) ? 'ok' : 'vacio'} mensaje={t('agente_ocr.sin_facturas_en_7')} detalle={t('agente_ocr.aparecen_cuando_una_flota')} contenida>
-          <Columnas etiqueta={t('agente_ocr.facturas_procesadas_por_dia')} datos={r.facturasPorDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.n }))} formato="numero" />
+        <Tarjeta key="serie" titulo={t('agente_ocr.serie_facturas')} contenida>
+          {r.facturasPorDia.some((d) => d.n > 0)
+            ? <Columnas etiqueta={t('agente_ocr.facturas_procesadas_por_dia')} datos={r.facturasPorDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.n }))} formato="numero" />
+            : <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.sin_facturas_en_7')}</b> {t('agente_ocr.aparecen_cuando_una_flota')}</p>}
         </Tarjeta>,
         <TablaModelosFase
           key="modelos"
@@ -83,29 +87,29 @@ export default async function AgenteOcrPage() {
         },
       }}
     >
-      <Tarjeta key="lee" titulo={t('agente_ocr.que_tan_bien_lee')} estado={precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok'}
-          mensaje={precision === null ? t('agente_ocr.no_se_pudo_leer') : t('agente_ocr.el_ocr_todavia_no')}
-          detalle={t('agente_ocr.sin_campos_medidos_no')}
-          accionVacio={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.abrir_calidad')}</BotonEnlace>}
-        >
-          {precision !== null && precision.global.exactitud !== null ? (
-            <>
+      <Tarjeta key="lee" titulo={t('agente_ocr.que_tan_bien_lee')} contenida
+        acciones={precision === null || precision.global.exactitud === null ? <BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.abrir_calidad')}</BotonEnlace> : undefined}>
+        {precision === null ? (
+          <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.no_se_pudo_leer')}</b> {t('agente_ocr.sin_campos_medidos_no')}</p>
+        ) : precision.global.exactitud === null ? (
+          <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.el_ocr_todavia_no')}</b> {t('agente_ocr.sin_campos_medidos_no')}</p>
+        ) : (
+          <>
+            <p>
+              <strong>{pct(precision.global.exactitud)}</strong> de exactitud global: {numero(precision.global.medidos)} campos medidos sobre {numero(precision.fotos)}  {t('agente_ocr.fotos_ultima_lectura_de')}
+            </p>
+            {peores.length > 0 ? (
               <p>
-                <strong>{pct(precision.global.exactitud)}</strong> de exactitud global: {numero(precision.global.medidos)} campos medidos sobre {numero(precision.fotos)}  {t('agente_ocr.fotos_ultima_lectura_de')}
+                {t('agente_ocr.lo_que_peor_se')}{' '}
+                {peores.map((c, i) => (
+                  <span key={c.clave}>{i > 0 && ' · '}<strong>{c.clave} {pct(c.exactitud)}</strong> ({numero(c.medidos)} {c.medidos === 1 ? t('agente_ocr.medicion') : 'mediciones'})</span>
+                ))}
               </p>
-              {peores.length > 0 ? (
-                <p>
-                  
-                  {t('agente_ocr.lo_que_peor_se')}{' '}
-                  {peores.map((c, i) => (
-                    <span key={c.clave}>{i > 0 && ' · '}<strong>{c.clave} {pct(c.exactitud)}</strong> ({numero(c.medidos)} {c.medidos === 1 ? t('agente_ocr.medicion') : 'mediciones'})</span>
-                  ))}
-                </p>
-              ) : null}
-              <p>El detalle por foto y el botón para volver a medir viven en <Link href="/admin/qa">Calidad › Pruebas reales</Link>.</p>
-            </>
-          ) : null}
-        </Tarjeta>
+            ) : null}
+            <p>El detalle por foto y el botón para volver a medir viven en <Link href="/admin/qa">Calidad › Pruebas reales</Link>.</p>
+          </>
+        )}
+      </Tarjeta>
     </EsqueletoPanelCifras>
   );
 }
