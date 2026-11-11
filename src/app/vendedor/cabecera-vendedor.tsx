@@ -11,8 +11,7 @@ import './vendedor.css';
  * (el logo, el tema, el idioma y salir viven en el sidebar, `sidebar-vendedor.tsx`); bajo 768 px: la cabecera móvil de 56
  * (`.rv-cab-movil`) con logo, tema y salir. El texto sale del diccionario `shell` (es/en); el formulario de salir lo arma el layout (server action).
  */
-export default async function CabeceraVendedor({ nombre, esSoporte, salir, movil }: {
-  nombre?: string | null;
+export default async function CabeceraVendedor({ esSoporte, salir, movil }: {
   esSoporte: boolean;
   /** Server action de cerrar sesión; opcional para renderizar el marco sin sesión. */
   salir?: () => Promise<void>;

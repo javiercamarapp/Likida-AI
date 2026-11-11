@@ -63,7 +63,7 @@ export default async function VendedorLayout({ children }: { children: React.Rea
   return (
     <IdiomaProvider idioma={idioma.idioma} diccionarios={idioma.diccionarios}>
       <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
-        <CabeceraVendedor movil nombre={nombre ?? null} esSoporte={esSoporte} salir={cerrarSesion} />
+        <CabeceraVendedor movil esSoporte={esSoporte} salir={cerrarSesion} />
         <div className={`${CLASES_V2.fila} vnd-fila`}>
           <SidebarVendedor nombre={nombre ?? null} rolEtiqueta={rolEtiqueta} salir={salir} />
           <div className={CLASES_V2.columna}>
