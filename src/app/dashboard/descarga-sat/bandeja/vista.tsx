@@ -229,18 +229,16 @@ export async function PanelBandeja({
           {avisoFalta}
         </>
       )}
-      cifras={ESTATUS_CFDI.map((e): PropsCifra => {
-        // `null` = la consulta de conteos se cayó. La cola no pinta un 0 que nadie midió: pinta un guion.
-        const n = c === null ? null
-          : e === 'ambiguo' ? c.ambiguos
-            : e === 'disponible' ? c.disponibles
-              : e === 'casado' ? c.casados : c.ignorados;
-        return {
-          etiqueta: colas(tr)[e].titulo, valor: n, formato: 'entero', matiz: 8,
-          href: enlace(searchParams, { estatus: e, pag: null, buscar: null }),
-          ...(n === null ? { estado: 'vacio' as const, mensaje: tr('descargaSat.bandeja.vista.noSePudoLeer', { error: '' }) } : {}),
-        };
-      })}
+      // La tira resume cifras DISTINTAS a las del segmentado (que ya filtra por cada cola): el total bajado y cuánto falta vs. cuánto ya se resolvió.
+      // `null` = la consulta de conteos se cayó: «—», nunca un 0 que nadie midió.
+      cifras={([
+        { etiqueta: tr('descargaSat.bandeja.vista.cifraDescargados'), valor: c === null ? null : c.descargados, nota: tr('descargaSat.bandeja.vista.cifraDescargadosNota') },
+        { etiqueta: tr('descargaSat.bandeja.vista.cifraPorResolver'), valor: c === null ? null : c.ambiguos + c.disponibles, nota: tr('descargaSat.bandeja.vista.cifraPorResolverNota') },
+        { etiqueta: tr('descargaSat.bandeja.vista.cifraResueltos'), valor: c === null ? null : c.casados + c.ignorados, nota: tr('descargaSat.bandeja.vista.cifraResueltosNota') },
+      ] as PropsCifra[]).map((x): PropsCifra => ({
+        ...x, formato: 'entero', matiz: 8,
+        ...(x.valor === null ? { estado: 'vacio' as const, mensaje: tr('descargaSat.bandeja.vista.noSePudoLeer', { error: '' }) } : {}),
+      }))}
       etiquetaCifras={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}
     >
       {/* ── LA LISTA ───────────────────────────────────────────────── */}
