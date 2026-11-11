@@ -117,7 +117,15 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
     <EsqueletoTablaMaestra
       titulo={tx('corridas.corridas')}
       apoyo={tx('corridas.las_corridas_de_los_agentes_en')}
-      cifras={resultado === null ? undefined : [{ etiqueta: tx('corridas.corridas'), valor: resultado.total, formato: 'entero' }]}
+      cifras={resultado === null ? undefined : [
+        { etiqueta: tx('corridas.corridas'), valor: resultado.total, formato: 'entero' },
+        { etiqueta: tx('corridas.kpi_ok'), valor: resultado.corridas.filter((c) => c.estado === 'ok').length, formato: 'entero', nota: tx('corridas.kpi_pagina_nota') },
+        { etiqueta: tx('corridas.kpi_parciales'), valor: resultado.corridas.filter((c) => c.estado === 'parcial').length, formato: 'entero', tono: resultado.corridas.some((c) => c.estado === 'parcial') ? 'warn' : undefined },
+        { etiqueta: tx('corridas.kpi_fallos'), valor: resultado.corridas.filter((c) => c.estado === 'fallo').length, formato: 'entero', tono: resultado.corridas.some((c) => c.estado === 'fallo') ? 'bad' : undefined },
+        parados === null
+          ? { etiqueta: tx('corridas.kpi_parados'), valor: null, estado: 'vacio' as const }
+          : { etiqueta: tx('corridas.kpi_parados'), valor: parados.parados.length, formato: 'entero' as const, tono: parados.parados.length > 0 ? 'warn' as const : undefined },
+      ]}
       filtros={
       <BarraFiltros accion="/admin/corridas" enLinea buscar etiqueta={tx('corridas.filtrar_corridas')} nActivos={[agente, estado, tenant].filter(Boolean).length} limpiarHref="/admin/corridas">
         <FiltroOpciones etiqueta={tx('observabilidad.agente')} nombre="agente" valor={agente} opciones={opcionesAgente(tx)} />
@@ -147,7 +155,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
         </>
       )}
 
-      <BloqueAgentesParados datos={parados} cola={cola} />
+      <BloqueAgentesParados datos={parados} cola={cola} resumen />
     </EsqueletoTablaMaestra>
   );
 }
