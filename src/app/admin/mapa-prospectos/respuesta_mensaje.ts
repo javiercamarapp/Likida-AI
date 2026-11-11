@@ -1,4 +1,3 @@
-import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 // MX-004: lo que el servidor dice al pedir «Mensaje IA» (POST /api/admin/mapa-prospectos/mensaje).
 // Antes las dos pantallas hacian `if (!r.ok) return;` y no leian `aviso`/`guardado:false`: un 503 o un
@@ -17,8 +16,8 @@ export type ResultadoMensaje =
 
 const genericoTr = (t: TSistema = T_SISTEMA_ES) => (t('mapa_prospectos_respuesta_mensaje.no_se_pudo_redactar_el_mensaje'));
 
-export async function leerRespuestaMensaje(r: Response): Promise<ResultadoMensaje> {
-  const { t } = await getT('admin_sistema');
+/** `t` lo pone quien llama (los dos son componentes de cliente con `useT`): este archivo se importa desde el navegador y no puede tocar `next/headers`. */
+export async function leerRespuestaMensaje(r: Response, t: TSistema = T_SISTEMA_ES): Promise<ResultadoMensaje> {
   let cuerpo: Record<string, unknown> | null = null;
   try {
     const v: unknown = await r.json();
