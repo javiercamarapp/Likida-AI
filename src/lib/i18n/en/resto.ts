@@ -1221,4 +1221,11 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.mf_info_como': 'Adds up the amount of the expenses in the chosen period whose dominant loss cause puts the deduction at risk or makes it lost. It is the expense amount, not the VAT.',
   'op.mf_info_fuente': 'Your fleet\'s tax expenses in the chosen window (7 days, 30 days or all time). If it could not be read, the engine says so: it does not show 0.',
   'op.mf_info_hacer': 'Review the top causes below and fix whatever can still be fixed.',
+  'e26.mcp_persona': 'Person',
+  'e26.mcp_rol': 'Role',
+  'e26.mcp_clientes': 'Connected clients',
+  'e26.mcp_ultimo_uso': 'Last use',
+  'e26.mcp_nunca': 'never',
+  'e26.mcp_acceso': 'Access',
+  'e26.mcp_personas': 'People with access',
 };

@@ -1219,4 +1219,11 @@ export const resto = {
   'op.mf_info_como': 'Suma el monto de los gastos del periodo elegido cuya causa dominante de pérdida pone en riesgo la deducción o la da por perdida. Es el monto del gasto, no el IVA.',
   'op.mf_info_fuente': 'Gastos fiscales de tu flota en la ventana elegida (7 días, 30 días o histórico). Si no se pudo leer, el motor lo dice: no pone 0.',
   'op.mf_info_hacer': 'Revisa abajo las causas principales y corrige lo que aún tenga arreglo.',
+  'e26.mcp_persona': 'Persona',
+  'e26.mcp_rol': 'Rol',
+  'e26.mcp_clientes': 'Clientes conectados',
+  'e26.mcp_ultimo_uso': 'Último uso',
+  'e26.mcp_nunca': 'nunca',
+  'e26.mcp_acceso': 'Acceso',
+  'e26.mcp_personas': 'Personas con acceso',
 } as const;
