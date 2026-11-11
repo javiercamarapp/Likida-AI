@@ -163,8 +163,6 @@ export const CATALOGO_CONSULTA = catalogoConsulta();
 /** `acred` de una flota con perfil: lo fiscal está FUERA DEL PLAN (no se leyó). Distinto de `null` = «no hay datos / no se pudo leer». */
 export const FUERA_DEL_PLAN = 'fuera_del_plan' as const;
 export type AcreditablesOFuera = Acreditables | null | typeof FUERA_DEL_PLAN;
-/** El mismo texto que da el servidor (MOTIVO_STAND_BY_PERFIL) cuando algo no está en el plan de la cuenta. */
-export const TEXTO_FUERA_DEL_PLAN = 'Esta función no está incluida en el plan de tu cuenta.';
 
 export function responder(pregunta: string, kpis: DashboardKpis | null, acred: AcreditablesOFuera, t: TResto = T_RESTO_ES): Respuesta {
   const q = pregunta.toLowerCase();
@@ -221,7 +219,7 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
     };
   }
   if (q.includes('diesel') || q.includes('diésel') || q.includes('litro')) {
-    if (acred === FUERA_DEL_PLAN) return { texto: TEXTO_FUERA_DEL_PLAN };
+    if (acred === FUERA_DEL_PLAN) return { texto: t('ch.fuera_del_plan') };
     if (!acred) return { texto: t('ch.todavia_no_hay_datos_de_diesel') };
     return {
       texto: t('ch.elegibles_para_el_estimulo_este_periodo', { litros: litros(acred.litrosDiesel) }),
@@ -242,7 +240,7 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
     };
   }
   if (/\biva\b/.test(q) || q.includes('peaje') || q.includes('caseta') || q.includes('acreditable')) {
-    if (acred === FUERA_DEL_PLAN) return { texto: TEXTO_FUERA_DEL_PLAN };
+    if (acred === FUERA_DEL_PLAN) return { texto: t('ch.fuera_del_plan') };
     if (!acred) return { texto: t('ch.todavia_no_hay_datos_de_acreditables') };
     return {
       texto: /\biva\b/.test(q)

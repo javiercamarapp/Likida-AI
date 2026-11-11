@@ -1158,6 +1158,7 @@ export const resto = {
   'ch.liquidaciones_tienen_diferencia_o_estan_por': '{v} liquidaciones tienen diferencia o están por revisar, de {viajesLiquidados} en total.',
   'ch.sin_diferencias': 'Sin diferencias',
   'ch.todavia_no_hay_datos_de_diesel': 'Todavía no hay datos de diésel este periodo.',
+  'ch.fuera_del_plan': 'Esta función no está incluida en el plan de tu cuenta.',
   'ch.elegibles_para_el_estimulo_este_periodo': '{litros} elegibles para el estímulo este periodo.',
   'ch.lif_2026_art_20_a_el': 'LIF 2026, Art. 20-A — el estímulo en pesos lo fija la cuota DOF de cada semana.',
   'ch.tu_tasa_de_cuadre_es_liquidaciones': 'Tu tasa de cuadre es {tasaCuadre}% — liquidaciones sin diferencias sobre el total.',

@@ -1160,6 +1160,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'ch.liquidaciones_tienen_diferencia_o_estan_por': '{v} settlements have a difference or are to review, out of {viajesLiquidados} in total.',
   'ch.sin_diferencias': 'No differences',
   'ch.todavia_no_hay_datos_de_diesel': 'There is no diesel data yet this period.',
+  'ch.fuera_del_plan': 'This feature is not included in your account plan.',
   'ch.elegibles_para_el_estimulo_este_periodo': '{litros} eligible for the incentive this period.',
   'ch.lif_2026_art_20_a_el': 'LIF 2026, Art. 20-A — the incentive in pesos is set by each week\'s DOF rate.',
   'ch.tu_tasa_de_cuadre_es_liquidaciones': 'Your reconciliation rate is {tasaCuadre}% — settlements with no differences over the total.',
