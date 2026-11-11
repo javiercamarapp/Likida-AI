@@ -1237,4 +1237,9 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'e26.usu_que_puede_cada_rol': 'What each role can do',
   'e26.sop_cerrados': 'Closed',
   'e26.sop_sin_cerrados': 'No closed tickets',
+  'e26.con_norma': 'Rule',
+  'e26.con_nivel': 'Level',
+  'e26.con_sin_fecha': 'no date',
+  'e26.con_ver': 'View',
+  'e26.con_pie': '{n} of {total} sheets',
 };

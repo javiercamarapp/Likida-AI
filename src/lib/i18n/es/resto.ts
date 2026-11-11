@@ -1235,4 +1235,9 @@ export const resto = {
   'e26.usu_que_puede_cada_rol': 'Qué puede hacer cada rol',
   'e26.sop_cerrados': 'Cerrados',
   'e26.sop_sin_cerrados': 'Sin tickets cerrados',
+  'e26.con_norma': 'Norma',
+  'e26.con_nivel': 'Nivel',
+  'e26.con_sin_fecha': 'sin fecha',
+  'e26.con_ver': 'Ver ficha',
+  'e26.con_pie': '{n} de {total} fichas',
 } as const;
