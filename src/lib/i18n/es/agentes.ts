@@ -799,7 +799,7 @@ export const agentes = {
   'vigia.vista.el_proveedor_de_correo_lo': 'El proveedor de correo lo rechazó',
   'vigia.vista.el_respaldo_por_correo_esta': 'El respaldo por correo está encendido: si el WhatsApp no sale, se manda por correo.',
   'vigia.vista.el_respaldo_por_correo_esta_2': 'El respaldo por correo está apagado: solo se avisa por WhatsApp (enciéndelo en «Configuración y SLA»).',
-  'vigia.vista.el_vigia_esta_apagado_para': 'El Vigía está apagado para tu flota: ningún cliente recibe respuesta. Autoriza a tus clientes y enciéndelo en «Configuración».',
+  'vigia.vista.el_vigia_esta_apagado_para': 'El Vigía está apagado para tu flota: ningún cliente recibe respuesta. Autoriza a tus clientes y enciéndelo en «Configuración y SLA».',
   'vigia.vista.el_vigia_redacto_una_respuesta': 'El Vigía redactó una respuesta',
   'vigia.vista.escalada_nivel': 'Escalada a nivel {nivel}',
   'vigia.vista.espera': 'Espera {espera}',
@@ -3194,4 +3194,7 @@ export const agentes = {
   'f26d2.cp.no_necesitan': 'No necesitan complemento',
   'f26d2.cp.sin_armar': 'Sin borrador sin fallas',
   'f26d2.cp.ver_cuales': 'Ver cuáles son',
+  'f26d2.vigia.avisos_y_limites': 'Contactos, correos de respaldo y límites',
+  'f26d2.vigia.avisos_y_limites_resumen': 'Se configuran una vez',
+  'f26d2.vigia.ir_a_configuracion': 'Ir a Configuración y SLA',
 } as const;

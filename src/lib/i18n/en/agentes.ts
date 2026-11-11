@@ -801,7 +801,7 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'vigia.vista.el_proveedor_de_correo_lo': 'The email provider rejected it',
   'vigia.vista.el_respaldo_por_correo_esta': 'Email backup is on: if WhatsApp does not go out, it is sent by email.',
   'vigia.vista.el_respaldo_por_correo_esta_2': 'Email backup is off: notices go out by WhatsApp only (turn it on under "Settings and SLA").',
-  'vigia.vista.el_vigia_esta_apagado_para': 'Vigía is off for your fleet: no customer gets a reply. Authorize your customers and turn it on under "Settings".',
+  'vigia.vista.el_vigia_esta_apagado_para': 'Vigía is off for your fleet: no customer gets a reply. Authorize your customers and turn it on under "Configuration and SLA".',
   'vigia.vista.el_vigia_redacto_una_respuesta': 'Vigía drafted a reply',
   'vigia.vista.escalada_nivel': 'Escalated to level {nivel}',
   'vigia.vista.espera': 'Waiting {espera}',
@@ -3196,4 +3196,7 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'f26d2.cp.no_necesitan': 'Do not need a complement',
   'f26d2.cp.sin_armar': 'No clean draft yet',
   'f26d2.cp.ver_cuales': 'See which ones',
+  'f26d2.vigia.avisos_y_limites': 'Contacts, backup emails and limits',
+  'f26d2.vigia.avisos_y_limites_resumen': 'Set up once',
+  'f26d2.vigia.ir_a_configuracion': 'Go to Configuration and SLA',
 };
