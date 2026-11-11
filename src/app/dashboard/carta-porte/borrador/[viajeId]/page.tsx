@@ -7,7 +7,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { getBorradorViaje, type ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
-import { BotonEnlace, Icono } from '@/app/ui-v2/componentes';
+import { BotonEnlace, Icono, TablaBase } from '@/app/ui-v2/componentes';
 import { sufijoTenant } from '../../../sufijo';
 
 export const dynamic = 'force-dynamic';
@@ -97,33 +97,18 @@ export default async function PaginaBorradorCcp({
             {tr('cartaPorte.borrador.viajeId.page.sinRenglonesCapturadosEl')}
           </p>
         ) : (
-          // FE-34: sin overflow-x-auto, seis columnas desbordan en 390 px.
-          <div className="overflow-x-auto">
-            <table aria-label={tr('cartaPorte.borrador.viajeId.page.mercanciasDelBorradorDe')} className="w-full text-[12px]">
-              <thead>
-                <tr className="text-left text-[var(--faint)]">
-                  <th scope="col" className="py-1 pr-3 font-medium">{tr('cartaPorte.borrador.viajeId.page.descripcion')}</th>
-                  <th scope="col" className="py-1 pr-3 font-medium">{tr('cartaPorte.borrador.viajeId.page.claveSat')}</th>
-                  <th scope="col" className="py-1 pr-3 font-medium">{tr('cartaPorte.borrador.viajeId.page.cantidad')}</th>
-                  <th scope="col" className="py-1 pr-3 font-medium">{tr('cartaPorte.borrador.viajeId.page.unidad2')}</th>
-                  <th scope="col" className="py-1 pr-3 font-medium">{tr('cartaPorte.borrador.viajeId.page.pesoKg')}</th>
-                  <th scope="col" className="py-1 font-medium">{tr('cartaPorte.borrador.viajeId.page.peligroso')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {v.mercancias.map((m) => (
-                  <tr key={m.id} className="align-top">
-                    <td className="py-1 pr-3">{m.descripcion}</td>
-                    <td className="py-1 pr-3 cifra-mono">{m.bienesTransp ?? hueco(tr('cartaPorte.borrador.viajeId.page.sinClave'))}</td>
-                    <td className="py-1 pr-3 cifra-mono">{numero(m.cantidad)}</td>
-                    <td className="py-1 pr-3 cifra-mono">{m.claveUnidad ?? hueco(tr('cartaPorte.borrador.viajeId.page.sinUnidad'))}</td>
-                    <td className="py-1 pr-3 cifra-mono">{m.pesoKg !== null ? numero(m.pesoKg) : hueco(tr('cartaPorte.borrador.viajeId.page.sinPeso'))}</td>
-                    <td className="py-1">{m.materialPeligroso === true ? tr('cartaPorte.borrador.viajeId.page.si') : m.materialPeligroso === false ? tr('cartaPorte.borrador.viajeId.page.no') : hueco(tr('cartaPorte.borrador.viajeId.page.sinDeclarar'))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TablaBase
+            etiqueta={tr('cartaPorte.borrador.viajeId.page.mercanciasDelBorradorDe')} densa altoMaximo={false}
+            filas={v.mercancias} idFila={(m) => m.id}
+            columnas={[
+              { id: 'descripcion', titulo: tr('cartaPorte.borrador.viajeId.page.descripcion'), principal: true, celda: (m) => m.descripcion },
+              { id: 'clave', titulo: tr('cartaPorte.borrador.viajeId.page.claveSat'), celda: (m) => <span className="cifra-mono">{m.bienesTransp ?? hueco(tr('cartaPorte.borrador.viajeId.page.sinClave'))}</span> },
+              { id: 'cantidad', titulo: tr('cartaPorte.borrador.viajeId.page.cantidad'), celda: (m) => <span className="cifra-mono">{numero(m.cantidad)}</span> },
+              { id: 'unidad', titulo: tr('cartaPorte.borrador.viajeId.page.unidad2'), celda: (m) => <span className="cifra-mono">{m.claveUnidad ?? hueco(tr('cartaPorte.borrador.viajeId.page.sinUnidad'))}</span> },
+              { id: 'peso', titulo: tr('cartaPorte.borrador.viajeId.page.pesoKg'), celda: (m) => <span className="cifra-mono">{m.pesoKg !== null ? numero(m.pesoKg) : hueco(tr('cartaPorte.borrador.viajeId.page.sinPeso'))}</span> },
+              { id: 'peligroso', titulo: tr('cartaPorte.borrador.viajeId.page.peligroso'), celda: (m) => m.materialPeligroso === true ? tr('cartaPorte.borrador.viajeId.page.si') : m.materialPeligroso === false ? tr('cartaPorte.borrador.viajeId.page.no') : hueco(tr('cartaPorte.borrador.viajeId.page.sinDeclarar')) },
+            ]}
+          />
         )}
       </section>
 
@@ -217,22 +202,24 @@ function TablaCampos({ v, responsable, titulo, tr = trEs }: { v: ViajeCcp; respo
   return (
     <div>
       <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-1.5 text-[var(--muted)]">{titulo}</h3>
-      <table aria-label={titulo} className="w-full text-[11px]">
-        <tbody>
-          {campos.map((c) => (
-            <tr key={c.clave} className="align-top">
-              <td className="py-0.5 pr-3 text-[var(--muted)]">{c.rotulo}</td>
-              <td className="py-0.5 cifra-mono">
+      <TablaBase
+        etiqueta={titulo} densa altoMaximo={false} filas={campos} idFila={(c) => c.clave}
+        columnas={[
+          { id: 'dato', titulo: tr('cartaPorte.borrador.viajeId.page.dato'), principal: true, celda: (c) => c.rotulo },
+          {
+            id: 'valor', titulo: tr('cartaPorte.borrador.viajeId.page.valor'),
+            celda: (c) => (
+              <span className="cifra-mono">
                 {c.presente === true
                   ? (c.valor ?? 'capturado')
                   : c.presente === false
                     ? hueco('falta')
                     : hueco(tr('cartaPorte.borrador.viajeId.page.sinCasillaEnLikida'))}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </span>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

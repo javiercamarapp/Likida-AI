@@ -86,6 +86,8 @@ export const dinero = {
   'cartaPorte.borrador.viajeId.page.sinUnidad': 'sin unidad',
   'cartaPorte.borrador.viajeId.page.timbre': 'Timbre',
   'cartaPorte.borrador.viajeId.page.unidad': '· Unidad {unidadEconomico}',
+  'cartaPorte.borrador.viajeId.page.dato': 'Dato',
+  'cartaPorte.borrador.viajeId.page.valor': 'Valor',
   'cartaPorte.borrador.viajeId.page.unidad2': 'Unidad',
   'cartaPorte.borrador.viajeId.page.validacionContraElRechazo': 'Validación contra el rechazo del PAC',
   'cartaPorte.borrador.viajeId.page.veredicto': 'Veredicto',

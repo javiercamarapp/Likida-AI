@@ -86,6 +86,8 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'cartaPorte.borrador.viajeId.page.sinUnidad': 'no unit',
   'cartaPorte.borrador.viajeId.page.timbre': 'Stamp',
   'cartaPorte.borrador.viajeId.page.unidad': '· Unit {unidadEconomico}',
+  'cartaPorte.borrador.viajeId.page.dato': 'Field',
+  'cartaPorte.borrador.viajeId.page.valor': 'Value',
   'cartaPorte.borrador.viajeId.page.unidad2': 'Unit',
   'cartaPorte.borrador.viajeId.page.validacionContraElRechazo': 'Validation against PAC rejection',
   'cartaPorte.borrador.viajeId.page.veredicto': 'Verdict',
