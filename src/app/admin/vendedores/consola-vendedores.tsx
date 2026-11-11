@@ -19,6 +19,7 @@ import { getT } from '@/lib/i18n/servidor';
 import { estadoProspectoTr } from '@/lib/i18n/rotulos_tr';
 import { embudoDeVentas } from './embudo-ventas';
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import { TableroProspectos, type ColumnaTablero } from './tablero';
 import { FormaProspecto, FormaInvitarVendedor, BotonRepartir } from './formas';
 import {
@@ -141,7 +142,7 @@ async function BloqueKpis({ sp }: { sp: { vendedor?: string; q?: string } }) {
     );
   }
   return (
-    <TiraCifras etiqueta={tx('vendedores_consola_vendedores.pipeline_de_ventas')} items={uniformes([
+    <TiraCifras etiqueta={tx('vendedores_consola_vendedores.pipeline_de_ventas')} items={observadas(uniformes([
       { etiqueta: tx('vendedores_consola_vendedores.prospectos_en_el_pipeline'), valor: totalProspectos, formato: 'entero' },
       { etiqueta: tx('vendedores_consola_vendedores.con_seguimiento'), valor: vivos, formato: 'entero' },
       { etiqueta: tx('vendedores_consola_vendedores.ganados'), valor: totales?.won ?? 0, formato: 'entero' },
@@ -149,7 +150,7 @@ async function BloqueKpis({ sp }: { sp: { vendedor?: string; q?: string } }) {
       vendedores !== null
         ? { etiqueta: tx('vendedores_consola_vendedores.vendedores_con_cuenta'), valor: vendedores.length, formato: 'entero' }
         : { etiqueta: tx('vendedores_consola_vendedores.vendedores_con_cuenta'), valor: null, estado: 'error' as const, mensaje: tx('vendedores_consola_vendedores.no_se_pudo_leer_el_equipo') },
-    ])} />
+    ]), tx('a1r4.observado'))} />
   );
 }
 

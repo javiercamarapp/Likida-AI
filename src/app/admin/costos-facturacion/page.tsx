@@ -16,6 +16,7 @@ import { logger } from '@/lib/logger';
 import { Aviso, AvisoCompacto, BarraFiltros, CampoSelect, CampoTexto, Disclosure, EstadoError, FilaTarjetas, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { Columnas, DonaMini, type PropsCifra } from '@/app/ui-v2/graficas';
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { accionGestionarPlan } from '../flotas/acciones-plan';
@@ -291,7 +292,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
   return (
     <EsqueletoPanelCifras
       titulo={t('costos_facturacion.facturacion')} apoyo={t('costos_facturacion.lo_que_likida_cobra')}
-      etiquetaCifras={t('costos_facturacion.cobro_de_la_mensualidad')} cifras={cifras} graficas={graficas} variante="8-4"
+      etiquetaCifras={t('costos_facturacion.cobro_de_la_mensualidad')} cifras={observadas(cifras, t('a1r4.observado'))} graficas={graficas} variante="8-4"
       avisos={(() => {
         // Como máximo UN aviso de una línea (Rovaq): si faltan varias conexiones se dicen juntas y el detalle queda tras «Ver más».
         const faltas: Array<{ tono: 'warn' | 'error'; titulo: string; texto?: string }> = [];

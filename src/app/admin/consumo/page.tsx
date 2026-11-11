@@ -13,6 +13,7 @@ import { getT } from '@/lib/i18n/servidor';
 import { gastoApiladoPorFlota } from './apilado';
 
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import '../dinero.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -143,7 +144,7 @@ export default async function ConsumoPage() {
   return (
     <EsqueletoPanelCifras
       titulo={ta('consumo.consumo_de_ia')} apoyo={ta('consumo.a_donde_se_va')} variante="8-4"
-      etiquetaCifras={ta('consumo.gasto_de_ia')} cifras={cifras}
+      etiquetaCifras={ta('consumo.gasto_de_ia')} cifras={cifras ? observadas(cifras, ta('a1r4.observado')) : undefined}
       avisos={todoCaido ? undefined : <AvisosAcotados avisos={avisosLista} resto={ta} />}
       graficas={todoCaido ? undefined : [
         <Tarjeta key="gasto" titulo={ta('consumo.gasto_de_ia_por')} estado={r && r.porDia.length > 1 ? 'ok' : r ? 'vacio' : 'error'} contenida={!!r && r.porDia.length <= 1} mensaje={r ? ta('consumo.sin_historial_suficiente') : undefined} detalle={ta('consumo.hacen_falta_al_menos')} reintentar>
