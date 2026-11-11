@@ -120,6 +120,9 @@ describe('desglose_contrato: validación estricta', () => {
   it('tipoOperador fuera del enum y no-objeto → rechazo; enum válido pasa', () => {
     expect(() => desde({ tipoOperador: 'otro' })).toThrow(CampoInvalido);
     expect(desde({ tipoOperador: 'local' }).tipoOperador).toBe('local');
+    for (const [v, e] of [['rabon', 'rabon'], ['Rabón', 'rabon'], ['POSTURERO', 'posturero'], ['Cargador', 'cargador'], ['Foráneo', 'foraneo']]) {
+      expect(desde({ tipoOperador: v }).tipoOperador).toBe(e);
+    }
     expect(() => validarDesgloseBitacora('texto')).toThrow(CampoInvalido);
   });
 });

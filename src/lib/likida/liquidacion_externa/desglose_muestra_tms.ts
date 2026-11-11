@@ -14,7 +14,7 @@
 //
 // ── Reglas (nada se inventa) ────────────────────────────────────────────────
 //   · CAMPOS OPCIONALES del piloto (11-nov-2026, todos dentro de cada bitácora, junto a los seis de la muestra):
-//       `NumeroEmpleado` (texto/entero ≤40), `TipoOperador` (local|foraneo|permisionario; se aceptan mayúsculas y acento),
+//       `NumeroEmpleado` (texto/entero ≤40), `TipoOperador` (local|foraneo|permisionario|rabon|posturero|cargador; se aceptan mayúsculas y acento),
 //       `Poliza` (texto ≤40 o null), `NumeroPago` (≤40, [A-Za-z0-9._/-]), `Neto` (número ≤2 decimales, puede ser negativo) y
 //       `Folio` (texto/entero ≤40, el número que conoce el operador; solo se guarda y se muestra).
 //     Un valor INVÁLIDO manda ESA bitácora a revisión con su motivo; jamás tumba el lote. Ausente o null = no vino (sigue igual que
@@ -50,7 +50,7 @@
 import { TZ_MX, hoyMx } from '../../formato';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { aInstanteMx } from '../peajes/formatos';
-import { aLiquidacionExterna, TIPOS_OPERADOR, validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose } from './desglose_contrato';
+import { aLiquidacionExterna, normalizarTipoOperador, TIPOS_OPERADOR, validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose } from './desglose_contrato';
 import { leerRuta, normalizarUnidad } from './desglose_mapeo_tms';
 import { normalizarConcepto } from './desglose_reglas';
 
@@ -308,9 +308,9 @@ function textoOpcional(v: unknown, max: number, nombre: string): Opcional<string
 
 function tipoOperadorDe(v: unknown): Opcional<TipoOperadorDesglose> {
   if (ausente(v)) return { ok: true, valor: undefined };
-  const t = typeof v === 'string' ? v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() : '';
-  return (TIPOS_OPERADOR as readonly string[]).includes(t)
-    ? { ok: true, valor: t as TipoOperadorDesglose }
+  const t = normalizarTipoOperador(v);
+  return t !== undefined
+    ? { ok: true, valor: t }
     : { ok: false, detalle: `TipoOperador tiene que ser ${TIPOS_OPERADOR.map((x) => `«${x}»`).join(', ')}.` };
 }
 

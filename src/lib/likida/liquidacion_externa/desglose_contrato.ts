@@ -20,8 +20,21 @@
 import { CampoInvalido, texto, fecha, monto } from '@/lib/http/campos_cuerpo';
 import { aCentavos, validarLiquidacionExterna, type LiquidacionExternaNormalizada } from './esquema';
 
-export const TIPOS_OPERADOR = ['foraneo', 'local', 'permisionario'] as const;
+/**
+ * Catálogo de tipo de operador. El sistema de transporte del cliente piloto maneja Local, Foráneo, Rabón, Posturero y Cargador, y
+ * además se identifica al permisionario. Todos son VÁLIDOS para recibirse; recibir la liquidación por correo lo decide
+ * `tipos_que_reciben` (por omisión solo foráneo y local): un tipo válido fuera de esa lista queda retenido con `tipo_sin_regla`.
+ * El mismo dominio vive en el CHECK `liquidacion_desglose_tipo_operador_dominio` (migración 1004).
+ */
+export const TIPOS_OPERADOR = ['foraneo', 'local', 'permisionario', 'rabon', 'posturero', 'cargador'] as const;
 export type TipoOperadorDesglose = (typeof TIPOS_OPERADOR)[number];
+
+/** Comparación tolerante: sin acentos, sin espacios en los extremos y sin distinguir mayúsculas («Foráneo», «RABÓN»). */
+export function normalizarTipoOperador(v: unknown): TipoOperadorDesglose | undefined {
+  if (typeof v !== 'string') return undefined;
+  const t = v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  return (TIPOS_OPERADOR as readonly string[]).includes(t) ? (t as TipoOperadorDesglose) : undefined;
+}
 
 export interface RenglonBitacora {
   concepto: string;
@@ -243,10 +256,10 @@ export function validarDesgloseBitacora(crudo: unknown): DesgloseBitacora {
 
   let tipoOperador: TipoOperadorDesglose | undefined;
   if (crudo.tipoOperador !== undefined && crudo.tipoOperador !== null) {
-    if (typeof crudo.tipoOperador !== 'string' || !(TIPOS_OPERADOR as readonly string[]).includes(crudo.tipoOperador)) {
+    tipoOperador = normalizarTipoOperador(crudo.tipoOperador);
+    if (tipoOperador === undefined) {
       throw new CampoInvalido('tipoOperador', `\`tipoOperador\` tiene que ser ${TIPOS_OPERADOR.map((t) => `\`${t}\``).join(', ')}.`);
     }
-    tipoOperador = crudo.tipoOperador as TipoOperadorDesglose;
   }
 
   const desde = fecha(crudo, 'desde');
