@@ -19,9 +19,10 @@ import { RevisionCobros, type EstadoRevisionCobros } from './revision-cobros';
 import type { SuperficiePeajes } from '@/lib/likida/peajes/superficie_perfil';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import {
-  BotonEnlace, EstadoError, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, TituloRecuadro,
+  BotonEnlace, EstadoError, EstadoVacio, FilaTarjetas, Icono, StatusChip, Tarjeta, TituloRecuadro,
 } from '@/app/ui-v2/componentes';
 import './peajes.css';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { TR_ES, rico, type TrAgentes, selloHoyTr, type TAgentes } from '../i18n-agentes';
 
 /** Sin perfil: todo se pinta (valor local para no importar el módulo de servidor). */
@@ -102,20 +103,22 @@ export function VistaAgentePeajes({
   const pct = conciliacion && total > 0 ? Math.round((conciliacion.conciliadas / total) * 100) : null;
 
   return (
-    <MarcoPagina titulo={tx('peajes.vista.conciliacion_de_peajes')} apoyo={tx('peajes.vista.el_estado_de_cuenta_del')}>
-
-      {superficie.cfdiYTickets && (
-      <TiraCifras sello={selloHoyTr(tr, tx('peajes.vista.estados_de_cuenta_de_peaje'))}>
-        <Cifra etiqueta={tx('peajes.vista.lineas_conciliadas')} info="peajes.lineas_conciliadas" valor={conciliacion ? numero(conciliacion.conciliadas) : '—'}
-          nota={pct !== null ? tx('peajes.vista.del_estado_de_cuenta', { pct: numero(pct) }) : tx('peajes.vista.aun_sin_estados_de_cuenta')} />
-        <Cifra etiqueta={tx('peajes.vista.por_conciliar')} info="peajes.por_conciliar" valor={conciliacion ? numero(conciliacion.porConciliar) : '—'}
-          nota={tx('peajes.vista.esperan_a_un_humano')} tono={(conciliacion?.porConciliar ?? 0) > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta={tx('peajes.vista.sin_gasto_que_corresponda')} info="peajes.sin_gasto" valor={conciliacion ? numero(conciliacion.sinMatch) : '—'}
-          nota={tx('peajes.vista.revisadas_y_documentadas')} />
-        <Cifra etiqueta={tx('peajes.vista.estados_de_cuenta')} info="peajes.estados_cuenta" valor={conciliacion ? numero(conciliacion.cfdis) : '—'}
-          nota={tx('peajes.vista.cfdi_consolidados_recibidos')} />
-      </TiraCifras>
-      )}
+    <EsqueletoTablaMaestra
+      titulo={tx('peajes.vista.conciliacion_de_peajes')}
+      apoyo={tx('peajes.vista.el_estado_de_cuenta_del')}
+      cifras={superficie.cfdiYTickets ? [
+        { etiqueta: tx('peajes.vista.lineas_conciliadas'), info: 'peajes.lineas_conciliadas', valor: conciliacion ? numero(conciliacion.conciliadas) : null,
+          nota: pct !== null ? tx('peajes.vista.del_estado_de_cuenta', { pct: numero(pct) }) : tx('peajes.vista.aun_sin_estados_de_cuenta') },
+        { etiqueta: tx('peajes.vista.por_conciliar'), info: 'peajes.por_conciliar', valor: conciliacion ? numero(conciliacion.porConciliar) : null,
+          nota: tx('peajes.vista.esperan_a_un_humano'), tono: (conciliacion?.porConciliar ?? 0) > 0 ? 'warn' : undefined },
+        { etiqueta: tx('peajes.vista.sin_gasto_que_corresponda'), info: 'peajes.sin_gasto', valor: conciliacion ? numero(conciliacion.sinMatch) : null,
+          nota: tx('peajes.vista.revisadas_y_documentadas') },
+        { etiqueta: tx('peajes.vista.estados_de_cuenta'), info: 'peajes.estados_cuenta', valor: conciliacion ? numero(conciliacion.cfdis) : null,
+          nota: tx('peajes.vista.cfdi_consolidados_recibidos') },
+      ] : undefined}
+      etiquetaCifras={tx('peajes.vista.conciliacion_de_peajes')}
+      selloCifras={selloHoyTr(tr, tx('peajes.vista.estados_de_cuenta_de_peaje'))}
+    >
 
       {/* ── T-A2-27: la revisión de cobros, arriba del detalle ── */}
       <RevisionCobros tr={tr} estado={revisionCobros ?? { tipo: 'sin_archivo' }} />
@@ -372,7 +375,7 @@ export function VistaAgentePeajes({
       )}
 
       {notificaciones}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
