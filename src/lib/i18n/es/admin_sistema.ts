@@ -1411,4 +1411,8 @@ export const admin_sistema = {
   'salud_sistema.col_significa': 'Qué significa',
   'salud_sistema.col_enlace': 'Dónde verlo',
   'salud_sistema.como_arreglar_n': 'Cómo arreglarlo ({n})',
+  'trust_safety.origen': 'Origen',
+  'trust_safety.vista_rapida': 'Vista rápida',
+  'trust_safety.vr_subtitulo': 'Evento {n} de {total}',
+  'trust_safety.vr_veces': 'Veces visto',
 } as const;

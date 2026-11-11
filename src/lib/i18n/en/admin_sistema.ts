@@ -1413,4 +1413,8 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'salud_sistema.col_significa': 'What it means',
   'salud_sistema.col_enlace': 'Where to see it',
   'salud_sistema.como_arreglar_n': 'How to fix it ({n})',
+  'trust_safety.origen': 'Origin',
+  'trust_safety.vista_rapida': 'Quick view',
+  'trust_safety.vr_subtitulo': 'Event {n} of {total}',
+  'trust_safety.vr_veces': 'Times seen',
 };
