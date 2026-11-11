@@ -1460,4 +1460,8 @@ export const admin_sistema = {
   'agente_cuadre.se_viajes': 'Viajes procesados en total: {n}.',
   'agente_whatsapp.se_conversaciones': 'Conversaciones activas ahora: {n}.',
   'agente_whatsapp.no_entrega': 'Entregados y leídos, la ventana de 24 horas y los opt-ins: requiere integrar la Meta WhatsApp Business API más a fondo de lo que Likida usa hoy.',
+  'model_ops.kpi_gasto': 'Gasto de IA medido',
+  'model_ops.kpi_llamadas': 'Llamadas a modelos',
+  'model_ops.kpi_fases': 'Fases con gasto',
+  'model_ops.kpi_modelos': 'Modelos que han corrido',
 } as const;

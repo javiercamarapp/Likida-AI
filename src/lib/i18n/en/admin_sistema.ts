@@ -1462,4 +1462,8 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'agente_cuadre.se_viajes': 'Trips processed in total: {n}.',
   'agente_whatsapp.se_conversaciones': 'Active conversations right now: {n}.',
   'agente_whatsapp.no_entrega': 'Delivered and read, the 24-hour window and opt-ins: requires integrating the Meta WhatsApp Business API more deeply than Likida does today.',
+  'model_ops.kpi_gasto': 'Measured AI spend',
+  'model_ops.kpi_llamadas': 'Model calls',
+  'model_ops.kpi_fases': 'Phases with spend',
+  'model_ops.kpi_modelos': 'Models that have run',
 };
