@@ -176,7 +176,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
     { etiqueta: tr('descargaSat.vista.sinGastoQueLes'), info: 'descarga_sat.disponibles', icono: <Icono icono={FileCheck2} />, valor: c?.disponibles ?? null, formato: 'entero', nota: tr('descargaSat.vista.puedeSerUnGasto') },
     { etiqueta: tr('descargaSat.vista.archivadosAProposito'), info: 'descarga_sat.ignorados', icono: <Icono icono={Archive} />, valor: c?.ignorados ?? null, formato: 'entero', nota: tr('descargaSat.vista.consolidadosQueYaEntraron') },
   ];
-  const cifras: PropsCifra[] = cifrasBase.map((x) => (x.valor === null ? { ...x, estado: 'vacio', mensaje: tr('descargaSat.vista.noSePudoLeer') } : x));
+  const cifras: PropsCifra[] = cifrasBase.map((x) => (x.valor === null ? { ...x, estado: 'vacio' as const, mensaje: tr('descargaSat.vista.noSePudoLeer') } : x));
 
   // Los avisos de arriba (a lo sumo dos, Rovaq): el proveedor sin configurar y la lectura incompleta. El texto largo de «qué es esto» va en la tarjeta de conexión.
   const avisos = (
