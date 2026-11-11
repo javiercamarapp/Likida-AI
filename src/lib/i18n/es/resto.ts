@@ -1249,4 +1249,8 @@ export const resto = {
   'e26.con_pie': '{n} de {total} fichas',
   'e26.perfil_mfa_activo': 'Activo',
   'e26.perfil_mfa_inactivo': 'Sin activar',
+  'f26d2.inicio.cifras_al': 'Cifras al {fecha}',
+  'f26d2.inicio.fuentes_sin_lectura': '{n} sin lectura',
+  'f26d2.inicio.flota_nueva': 'Flota nueva: sin actividad todavía',
+  'f26d2.inicio.procedencia': 'Procedencia de las cifras',
 } as const;
