@@ -54,3 +54,6 @@
 /* Una fila de acciones de una zona: ancho de contenido, nunca estiradas (un primario de 540 px es un botón tosco). */
 .rv-ag-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .rv-ag-acciones > * { flex: 0 0 auto; width: auto; }
+
+/* Pila de bloques de una página de agente: el contenedor de la tabla maestra no separa a sus hijos y las tarjetas quedaban a 3 px. */
+.rv-ag-pila { display: grid; gap: var(--sp-gap, 12px); min-width: 0; }

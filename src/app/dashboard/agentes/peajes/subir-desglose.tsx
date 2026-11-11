@@ -42,7 +42,7 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
 
   return (
     <div className="rv-pj-control">
-      <form action={accion} className="rv-pj-forma">
+      <form action={accion} className="rv-pj-forma rv-pj-forma--rejilla">
         <CampoArchivo etiqueta={tx('rest.desglose_del_proveedor_de_peaje_excel')} name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)} />
         <CampoTexto etiqueta={tx('rest.proveedor_del_desglose_opcional')} name="proveedor" placeholder={tx('rest.proveedor_iave_pase_televia')} />
@@ -72,7 +72,7 @@ function BotonImportar() {
   const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={FileSpreadsheet} />}>
+    <Boton type="submit" variante="primary" tamano="sm" loading={pending} icono={<Icono icono={FileSpreadsheet} tam={14} />}>
       {pending ? 'Cruzando…' : tx('rest.importar_y_cruzar')}
     </Boton>
   );

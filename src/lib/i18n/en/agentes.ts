@@ -3177,4 +3177,12 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'f26d2.avisos.tarjeta': 'Notices',
   'f26d2.avisos.sin_lectura': 'The list could not be read',
   'f26d2.avisos.sin_lectura_texto': 'This does not mean there are no notices: the list could not be read.',
+  'f26d2.peajes.sin_archivo': 'No file imported',
+  'f26d2.peajes.sube_el_primero': 'Upload the first one below',
+  'f26d2.peajes.lineas_en_total': '{n} lines in total',
+  'f26d2.peajes.pct_de_las_lineas': '{pct} % of the lines',
+  'f26d2.peajes.discrepancia': 'With a discrepancy or ambiguity',
+  'f26d2.peajes.ningun_gasto': 'No matching toll expense',
+  'f26d2.peajes.col_lineas': 'Lines',
+  'f26d2.peajes.col_pct': '% matches',
 };

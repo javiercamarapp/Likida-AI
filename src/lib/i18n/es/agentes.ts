@@ -3175,4 +3175,12 @@ export const agentes = {
   'f26d2.avisos.tarjeta': 'Avisos',
   'f26d2.avisos.sin_lectura': 'Sin lectura de la lista',
   'f26d2.avisos.sin_lectura_texto': 'No se afirma que no haya avisos: la lista no se pudo leer.',
+  'f26d2.peajes.sin_archivo': 'Sin archivo importado',
+  'f26d2.peajes.sube_el_primero': 'Sube el primero abajo',
+  'f26d2.peajes.lineas_en_total': '{n} líneas en total',
+  'f26d2.peajes.pct_de_las_lineas': '{pct} % de las líneas',
+  'f26d2.peajes.discrepancia': 'Con discrepancia o ambigüedad',
+  'f26d2.peajes.ningun_gasto': 'Ningún gasto de caseta que corresponda',
+  'f26d2.peajes.col_lineas': 'Líneas',
+  'f26d2.peajes.col_pct': '% cuadra',
 } as const;
