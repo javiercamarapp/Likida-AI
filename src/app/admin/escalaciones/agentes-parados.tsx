@@ -53,7 +53,7 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, resumen
   const titulo = <h2 className="bj-titulo" id="agentes-parados">{t('escalaciones_agentes_parados.agentes_que_no_corrieron')}</h2>;
   if (datos === null) {
     return (
-      <section className="bj-bloque" aria-labelledby="agentes-parados">
+      <section className="bj-bloque bj-caja" aria-labelledby="agentes-parados">
         {titulo}
         <Aviso tono="warn">
           
@@ -65,7 +65,7 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, resumen
   const { parados, habilitados, umbralHoras } = datos;
   if (parados.length === 0) {
     return (
-      <section className="bj-bloque" aria-labelledby="agentes-parados">
+      <section className="bj-bloque bj-caja" aria-labelledby="agentes-parados">
         {titulo}
         <EstadoVacio titulo={t('escalaciones_agentes_parados.ningun_agente_parado')}>
           {habilitados === 0
@@ -93,7 +93,7 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, resumen
   ];
   const porCausa = contarPorCausa(parados);
   return (
-    <section className="bj-bloque" aria-labelledby="agentes-parados">
+    <section className="bj-bloque bj-caja" aria-labelledby="agentes-parados">
       {titulo}
       <Aviso tono="warn">
         {t('parados.resumen_llevan', { n: numero(parados.length), habilitados: numero(habilitados), umbral: numero(umbralHoras) })}{' '}
