@@ -51,7 +51,7 @@ export function ListaLlaves({ llaves, revocarLlave, t = T_RESTO_ES }: {
     { id: 'estado', titulo: t('llaves.estado'), celda: (l) => <EstadoLlave l={l} revocarLlave={revocarLlave} /> },
   ];
 
-  return <TablaBase etiqueta={t('llaves.llaves_de_api')} columnas={columnas} filas={llaves} idFila={(l) => l.id} altoMaximo={false} tarjetaMovil />;
+  return <TablaBase etiqueta={t('llaves.llaves_de_api')} columnas={columnas} filas={llaves} idFila={(l) => l.id} altoMaximo={false} tarjetaMovil className="rv-lla__tabla" />;
 }
 
 function EstadoLlave({ l, revocarLlave }: { l: LlaveListada; revocarLlave: AccionForma }) {
