@@ -1,14 +1,12 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
-import { Server, Smartphone, MessageCircle, ChevronDown, Info } from 'lucide-react';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { StatCard, EstadoVacio } from '../ui/kit';
+import { Smartphone, Info } from 'lucide-react';
+import { Disclosure, EstadoVacio, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import { Cifra, TiraCifras } from '../../ui-v2/graficas';
 import { destinatarioEnmascarado } from '@/lib/meta/client';
 
 export const dynamic = 'force-dynamic';
-
-const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
 /** Lo que de verdad falta para tratar esto como infraestructura de la Meta
  *  WhatsApp Business API a escala — ninguno de estos existe hoy, y no se
@@ -34,9 +32,7 @@ const FUERA_DE_ALCANCE = [
  * aquí mismo (mismo patrón que la sección "Conversaciones de WhatsApp" de
  * Inicio).
  *
- * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
- * con el ícono de `rutas.ts` (Server). Las mitades vacías siguen vacías y
- * lo dicen — solo cambió la envoltura.
+ * Marco de página único (`MarcoPagina`). Las mitades vacías siguen vacías y lo dicen.
  */
 export default async function WhatsappInfraPage() {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
@@ -48,109 +44,88 @@ export default async function WhatsappInfraPage() {
   const recortado = total !== null && total > conversaciones.length;
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Server width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="WhatsApp Infra"
+    <MarcoPagina titulo="WhatsApp Infra">
+      {/* El conteo REAL de `wa_conversacion` (count exact, FE-9). Antes esta tarjeta enseñaba el tamaño de la página —20— con una nota
+          que confesaba el tope: una cifra de infraestructura que se topa en 20 no sirve para dimensionar infraestructura. */}
+      <TiraCifras etiqueta="Conversaciones de WhatsApp">
+        <Cifra
+          etiqueta="Conversaciones activas" valor={total} formato="entero"
+          estado={total === null ? 'vacio' : 'ok'}
+          mensaje="no se pudo contar"
+          nota="Filas vivas en wa_conversacion (ventana rodante de turnos)"
         />
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          {/* El conteo REAL de `wa_conversacion` (count exact, FE-9). Antes
-              esta tarjeta enseñaba el tamaño de la página —20— con una nota
-              que confesaba el tope: una cifra de infraestructura que se topa
-              en 20 no sirve para dimensionar infraestructura. */}
-          <div className="kit-kpis">
-            <StatCard icono={<MessageCircle {...ICONO_KPI} />}
-              etiqueta="Conversaciones activas" valor={total} formato="entero"
-              sinDato="no se pudo contar"
-              nota="Filas vivas en wa_conversacion (ventana rodante de turnos)"
-            />
-          </div>
+      </TiraCifras>
 
-          <div className="card p-4">
-            <TituloSeccion>Número operativo</TituloSeccion>
-            <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
-              El número real que opera el bot, y lo que falta para tratarlo como infraestructura a escala
-            </p>
-            <div className="hairline rounded-lg px-3 py-2.5 mt-2 flex items-center gap-2.5" style={{ background: 'var(--surface)' }}>
-              <Smartphone width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-              <div className="min-w-0">
-                <div className="text-[13px] font-semibold">1 número operativo</div>
-                <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                  El que usa el bot de producción — vía Meta WhatsApp Business API. Sin pool de números, sin rotación.
-                </div>
-              </div>
+      <Tarjeta titulo="Número operativo">
+        <p className="m-0 text-xs text-muted">
+          El número real que opera el bot, y lo que falta para tratarlo como infraestructura a escala
+        </p>
+        <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-3 py-2.5">
+          <Smartphone width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" />
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold">1 número operativo</div>
+            <div className="mt-0.5 text-xs text-muted">
+              El que usa el bot de producción — vía Meta WhatsApp Business API. Sin pool de números, sin rotación.
             </div>
-            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-              El dígito real no vive en este código (es configuración de Meta, no una fila en la base de datos) —
-              por eso no se muestra un número aquí, para no inventar uno de ejemplo que se lea como real.
-            </p>
-          </div>
-
-          <section id="conversaciones" className="card p-4 scroll-mt-24">
-            <TituloSeccion>
-              {recortado ? `Conversaciones — las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Conversaciones'}
-            </TituloSeccion>
-            {conversaciones.length === 0 ? (
-              <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</p>
-            ) : (
-              <div className="space-y-1.5 mt-2">
-                {conversaciones.map((c) => (
-                  <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
-                    <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
-                      <div>
-                        {/* A37-S08-06 (minimización LFPDPPP): el teléfono sale enmascarado; el completo vive en el detalle de la conversación. */}
-                        <div className="text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
-                        {c.turns.length > 0 ? `${c.turns.length} mensajes` : 'sin mensajes'}
-                        <ChevronDown width={14} height={14} className="transition-transform group-open:rotate-180" />
-                      </div>
-                    </summary>
-                    {c.turns.length > 0 && (
-                      <div className="px-3 pb-3 pt-1 space-y-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-                        {c.turns.slice(-6).map((t, i) => (
-                          <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                            <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
-                              style={t.role === 'user'
-                                ? { background: 'var(--canvas)', border: '1px solid var(--line2)' }
-                                : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                              {t.content}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </details>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <div className="card p-4">
-            <TituloSeccion>Fuera de alcance hoy</TituloSeccion>
-            {/* EstadoVacio (kit compartido) — mismo mensaje + icono (Info,
-                igual que antes) de la intro; la lista de items fuera de
-                alcance baja como bloque aparte. */}
-            <div className="mt-2">
-              <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Ninguno de estos existe todavía en este panel — requieren integrar más a fondo la Meta WhatsApp
-                Business API de lo que Likida usa hoy:
-              </EstadoVacio>
-            </div>
-            <ul className="text-sm mt-3 space-y-2" style={{ color: 'var(--muted)' }}>
-              {FUERA_DE_ALCANCE.map((item) => (
-                <li key={item} className="flex items-start gap-2.5">
-                  <span className="w-1 h-1 rounded-full mt-2 shrink-0" style={{ background: 'var(--muted)' }} />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
-      </div>
-    </main>
+        <p className="m-0 mt-2 text-xs text-muted">
+          El dígito real no vive en este código (es configuración de Meta, no una fila en la base de datos) —
+          por eso no se muestra un número aquí, para no inventar uno de ejemplo que se lea como real.
+        </p>
+      </Tarjeta>
+
+      <Tarjeta titulo={recortado ? `Conversaciones — las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Conversaciones'}>
+        <div id="conversaciones" className="scroll-mt-24">
+          {conversaciones.length === 0 ? (
+            <p className="m-0 text-sm text-muted">Sin conversaciones activas.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {conversaciones.map((c) => (
+                <Disclosure
+                  key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`}
+                  titulo={
+                    <span className="block">
+                      {/* A37-S08-06 (minimización LFPDPPP): el teléfono sale enmascarado; el completo vive en el detalle de la conversación. */}
+                      <span className="block text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</span>
+                      <span className="block text-xs font-normal text-muted">{c.tenantNombre}</span>
+                    </span>
+                  }
+                  resumen={c.turns.length > 0 ? `${c.turns.length} mensajes` : 'sin mensajes'}
+                >
+                  {c.turns.length > 0 && (
+                    <div className="space-y-2">
+                      {c.turns.slice(-6).map((t, i) => (
+                        <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                          <div className={`max-w-[80%] whitespace-pre-wrap rounded-xl px-3.5 py-2 text-sm ${t.role === 'user' ? 'border border-[var(--line2)] bg-[var(--canvas)]' : 'bg-[var(--marca)] text-[var(--marca-fg)]'}`}>
+                            {t.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Disclosure>
+              ))}
+            </div>
+          )}
+        </div>
+      </Tarjeta>
+
+      <Tarjeta titulo="Fuera de alcance hoy">
+        <EstadoVacio titulo="Sin integrar" icono={Info} contenido>
+          Ninguno de estos existe todavía en este panel — requieren integrar más a fondo la Meta WhatsApp
+          Business API de lo que Likida usa hoy:
+        </EstadoVacio>
+        <ul className="m-0 mt-3 list-none space-y-2 p-0 text-sm text-muted">
+          {FUERA_DE_ALCANCE.map((item) => (
+            <li key={item} className="flex items-start gap-2.5">
+              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--muted)]" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </Tarjeta>
+    </MarcoPagina>
   );
 }
 
