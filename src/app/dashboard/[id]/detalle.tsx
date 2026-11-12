@@ -267,7 +267,7 @@ export function DetalleLiquidacion({ d, sufijo, volverA, estatus, etiqueta, pdfH
       etiquetaCifras={tr('liquidacion.detalle.titulo', { folio: d.folio })}
       variante="6-6"
       bloques={[
-        <Tarjeta key="ficha" titulo={tr('liquidacion.detalle.fichaTitulo')}>
+        <Tarjeta key="ficha" className="rv-liq__ficha" titulo={tr('liquidacion.detalle.fichaTitulo')}>
           <CamposSistema className="rv-liq__datos"
             etiqueta={tr('liquidacion.detalle.fichaTitulo')}
             campos={[
