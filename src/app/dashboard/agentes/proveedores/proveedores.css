@@ -2,7 +2,7 @@
 .rv-prov__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.5; max-width: 72ch; }
 .rv-prov__subir { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 /* Zona de carga punteada (patrón de Importaciones): el control nativo de archivo vive dentro de una caja con borde discontinuo. */
-.rv-prov__zona { display: grid; gap: 6px; padding: 20px 16px; border: 1.5px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--canvas); align-content: start; min-width: 0; }
+.rv-prov__zona { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .rv-prov__zona input[type="file"] { width: 100%; min-width: 0; font-size: var(--t-small, 12px); color: var(--muted); }
 .rv-prov__zona input[type="file"]::file-selector-button { height: 28px; margin-inline-end: 8px; padding: 0 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--surface); color: var(--ink); font: 500 var(--t-small, 12px) inherit; cursor: pointer; }
 .rv-prov__export { display: grid; gap: 8px; justify-items: start; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -43,6 +43,11 @@
 [data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__texto { margin: 0; font-size: 12px; }
 [data-ui="v2"] .rv-ag-compacto .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo { flex: 0 0 auto; }
 
-/* «Subir factura» | «Buzón»: cada tarjeta a su alto natural; la corta no se estira a la altura de la larga ni deja un hueco en blanco. */
-.rv-fila-tarjetas.rv-prov__fila { align-items: start; }
-.rv-fila-tarjetas.rv-prov__fila > .rv-tarjeta { height: auto; }
+/* «Subir factura» y «Buzón» van una bajo la otra a todo el ancho (dos zonas de soltar lado a lado, y la dirección del buzón en una fila): alto equilibrado,
+   ningún hueco bajo la tarjeta corta. El ritmo entre bloques es de 12 px. */
+.rv-fila-tarjetas.rv-prov__fila { align-items: stretch; gap: 12px; }
+/* El subtítulo de la bandeja no queda pegado al vacío que le sigue. */
+[data-ui="v2"] .rv-ag-compacto .rv-prov__nota + .rv-vacio { margin-top: 8px; }
+
+/* Cifras en la fuente del sistema con dígitos tabulares (Rovaq: Hanken Grotesk), no en monoespaciada. */
+.rv-cifra { font-variant-numeric: tabular-nums; }
