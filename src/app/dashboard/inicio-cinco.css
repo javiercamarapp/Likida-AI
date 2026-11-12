@@ -1,7 +1,9 @@
 /* Portada del perfil de cinco agentes (Rovaq «Hoy»): solo DISPOSICIÓN que las reglas compartidas de `.rv-ic__*` no dan. Tokens del sistema; sin hex. */
 
 /* Los cinco agentes: tarjetas de la MISMA altura y el enlace «Abrir» siempre al pie, a la misma altura en todas (antes cada una medía lo suyo). */
-.rv-ic__agentes > .rv-ic__agente { display: flex; flex-direction: column; }
+.rv-ic__agentes > .rv-ic__agente { display: flex; flex-direction: column; position: relative; }
+/* El texto solo para lectores (.rv-sr) es absoluto: con la tarjeta posicionada ya no escapa a la derecha ni ensancha el documento en móvil. */
+.rv-ic__agentes, .rv-ic__seccion { position: relative; }
 .rv-ic__agentes > .rv-ic__agente > .rv-tarjeta__cuerpo { display: flex; flex: 1 1 auto; flex-direction: column; }
 .rv-ic__agentes .rv-ic__agente-cuerpo { flex: 1 1 auto; }
 
@@ -11,6 +13,8 @@
 
 /* Las filas de tarjetas de la portada se estiran a la altura de la más alta: sin tarjetas bajas junto a una alta. */
 .rv-ic__fila > .rv-tarjeta { height: 100%; }
+/* La tarjeta «contenida» (vacío de «Lo que hizo solo») se ajusta a su contenido, sin hueco dentro de la fila. */
+.rv-ic__fila > .rv-tarjeta[data-contenida] { height: auto; align-self: start; }
 
 /* El chip de estado de cada agente se ve COMPLETO: si el texto no cabe en una línea baja a la siguiente (altura mínima 22 px), nunca se recorta con puntos suspensivos. */
 [data-ui="v2"] .rv-ic__estado { flex-wrap: wrap; row-gap: 4px; min-width: 0; }

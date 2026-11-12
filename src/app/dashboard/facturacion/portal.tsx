@@ -226,8 +226,8 @@ function Bandeja({ panel, conciliar, descartar, tr = trEs }: {
         </>
       ),
     },
-    { id: 'factura', titulo: tr('facturacion.portal.factura2'), celda: (p) => <span className="cifra-mono">{p.factura}</span> },
-    { id: 'ref', titulo: tr('facturacion.forma.referencia'), celda: (p) => <span className="cifra-mono">{p.referencia}</span> },
+    { id: 'factura', titulo: tr('facturacion.portal.factura2'), celda: (p) => <span className="rv-cifra">{p.factura}</span> },
+    { id: 'ref', titulo: tr('facturacion.forma.referencia'), celda: (p) => <span className="rv-cifra">{p.referencia}</span> },
     { id: 'fecha', titulo: tr('facturacion.vista.fecha'), celda: (p) => <span className="whitespace-nowrap text-[color:var(--muted)]">{fechaMx(p.fecha)}</span> },
     { id: 'monto', titulo: tr('facturacion.forma.montoMxn'), alinear: 'der', celda: (p) => <span className="tabular font-medium">{mxn(p.monto)}</span> },
     {
@@ -289,7 +289,7 @@ function Enlaces({ panel, generar, revocar, tr = trEs }: {
 }) {
   type Liga = PanelPortal['ligasVivas'][number];
   const columnas: ColumnaBase<Liga>[] = [
-    { id: 'factura', titulo: tr('facturacion.portal.factura2'), principal: true, celda: (l) => <span className="cifra-mono">{l.factura}</span> },
+    { id: 'factura', titulo: tr('facturacion.portal.factura2'), principal: true, celda: (l) => <span className="rv-cifra">{l.factura}</span> },
     { id: 'cliente', titulo: tr('facturacion.vista.cliente'), celda: (l) => l.cliente },
     {
       id: 'acceso', titulo: tr('facturacion.portal.colUltimoAcceso'),
@@ -355,7 +355,7 @@ function Complemento({ panel, anotarRep, tr = trEs }: {
       <CampoTexto etiqueta={tr('facturacion.portal.folioFiscalUuidDel')} name="cfdiUuid" obligatorio ayuda={tr('facturacion.portal.copialoTalCualDel')} claseControl="cifra-mono" />
       <div className="grid grid-cols-2 gap-3">
         <CampoFecha etiqueta={tr('facturacion.portal.fechaDelPago')} name="fechaPago" obligatorio />
-        <CampoTexto etiqueta={tr('facturacion.portal.importePagado')} name="impPagado" obligatorio inputMode="decimal" ayuda={tr('facturacion.portal.elQueTraeEl')} claseControl="cifra-mono" />
+        <CampoTexto etiqueta={tr('facturacion.portal.importePagado')} name="impPagado" obligatorio inputMode="decimal" ayuda={tr('facturacion.portal.elQueTraeEl')} claseControl="rv-cifra" />
       </div>
       <CampoTexto etiqueta={tr('facturacion.portal.formaDePagoDel')} name="formaPago" ayuda={tr('facturacion.portal.03Transferencia01Efectivo')} />
       <CampoTextarea etiqueta={tr('facturacion.portal.xmlDelComplementoOpcional')} name="xml" ayuda={tr('facturacion.portal.pegaloSiLoTienes')} />

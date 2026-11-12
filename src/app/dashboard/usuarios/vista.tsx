@@ -91,7 +91,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
         : <span className="rv-usu__sin">{t('cfg.sin_whatsapp_el_bot_no_lo')}</span>),
     },
     ...(puedeInvitar ? [{
-      id: 'acciones', titulo: t('cfg.acciones'),
+      id: 'acciones', titulo: t('cfg.acciones'), alinear: 'der' as const, tituloOculto: true,
       celda: (u: UsuarioRow) => <Acciones t={t} u={u} esYo={u.id === userId} acciones={acciones} />,
     }] : []),
   ];
@@ -108,12 +108,14 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
           <FilaTarjetas variante="6-6">
             {puedeInvitar ? (
               <Tarjeta titulo={t('cfg.invitar_a_alguien_de_tu_equipo')} entra="tarjeta">
+                <p className="rv-usu__sub">{t('r7.usu_invitar_sub')}</p>
                 <FormaInvitar accion={acciones.invitar} roles={catalogoRoles} />
               </Tarjeta>
             ) : (
               <p className="rv-usu__pie">{t('cfg.tu_rol_ve_el_equipo_pero')}</p>
             )}
             <Tarjeta titulo={t('e26.usu_que_puede_cada_rol')} info="usuarios.equipo">
+              <p className="rv-usu__sub">{t('r7.usu_roles_sub')}</p>
               {/* Lista de Rovaq: punto negro, el rol en 13/600, la descripción en 12 px y un divisor entre ítems. */}
               <ul className="rv-usu__roles-lista">
                 {catalogoRoles.map((r) => <li key={r.valor}><strong>{r.rotulo}</strong><span>{r.detalle}</span></li>)}
@@ -142,14 +144,16 @@ function Acciones({ u, esYo, acciones, t = T_RESTO_ES }: {
   }
   if (!u.activo) return <FormaReactivar accion={acciones.reactivar} id={u.id} />;
   return (
-    // «Dar de baja» en peligro de 28 px a la vista (Rovaq «Revocar»); lo demás (reenviar acceso, cerrar sesiones) en el menú «Acciones».
-    // Cada forma conserva su server action, su aviso y su diálogo de confirmación.
+    // Una sola celda: el menú «···» (28 px, ghost) a la derecha. Reenviar acceso, cerrar sesiones y dar de baja son filas del menú; el rojo
+    // de peligro solo aparece en el diálogo de confirmación. Cada forma conserva su server action, su aviso y su confirmación.
     <div className="rv-usu__celda-acciones">
       <MenuAcciones rotulo={t('cfg.acciones')} etiqueta={`Acciones de ${u.nombre ?? u.email}`}>
-        <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
-        <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
+        <div className="rv-menu" role="menu">
+          <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
+          <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
+          <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
+        </div>
       </MenuAcciones>
-      <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
     </div>
   );
 }

@@ -26,8 +26,14 @@
 .rv-cont__pierdo .rv-tarjeta__cab { flex-wrap: wrap; height: auto; min-height: 32px; row-gap: 6px; }
 .rv-cont__pierdo .rv-tarjeta__acciones { flex-wrap: wrap; margin-left: auto; }
 @media (max-width: 767.98px) { .rv-cont__pierdo .rv-tarjeta__acciones { margin-left: 0; padding-left: 0; width: 100%; } }
-/* Vacíos de tarjeta: llenan la tarjeta (no una tarjeta estirada con un vacío chico) y siempre con borde 1 px discontinuo. */
-.rv-cont__vacio-llena .rv-vacio, .rv-cont__vacio-llena .rv-vacio[data-compacto] { border-width: 1px; border-style: dashed; }
+/* Vacíos de tarjeta (Rovaq): ocupan TODO el alto de la gráfica (168 px), caja de 1 px discontinua del filete del sistema, radio 8, padding 20×14,
+   texto centrado. Lo desconocido se dibuja igual en toda la página. */
+[data-ui="v2"] .rv-cont__vacio-llena > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-ui="v2"] .rv-cont__vacio-llena .rv-vacio, [data-ui="v2"] .rv-cont__vacio-llena .rv-vacio[data-compacto] { flex: 1 1 auto; min-height: 168px; justify-content: center; padding: 20px 14px; border: 1px dashed var(--line); border-radius: 8px; }
 /* Dona legible en la paleta monocroma: segundo gajo en gris medio a plena opacidad. */
 [data-ui="v2"] .rv-cont__dona .rv-dona__gajo.rv-tono-1 { stroke-opacity: 1; }
 [data-ui="v2"] .rv-cont__dona .rv-tono-1 { --tono: color-mix(in srgb, var(--ink) 38%, var(--surface)); }
+
+/* «Qué se sabe / Qué no se sabe»: las listas llevan sus marcas (viñetas), no solo sangría. */
+[data-ui="v2"] .rv-esq__saber ul { list-style: disc; }
+[data-ui="v2"] .rv-esq__saber li::marker { color: var(--muted); }

@@ -69,3 +69,6 @@
 /* El texto del consentimiento llena la fila: ya no va en una columna de ~170 px. */
 [data-ui="v2"] .adm-din-forma--ancha .rv-campo--casilla { max-width: none; }
 [data-ui="v2"] .adm-din-forma--ancha .rv-campo--casilla :is(.rv-ayuda, .rv-campo__ayuda, small) { max-width: 72ch; }
+
+/* Vacío de una línea (Rovaq ac-vacio): caja punteada, radio 8, relleno 20×14; la tarjeta ya no se estira a la altura de su vecina. */
+[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }

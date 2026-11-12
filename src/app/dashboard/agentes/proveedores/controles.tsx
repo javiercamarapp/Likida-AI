@@ -8,6 +8,7 @@ import { Upload, Check, X, Copy, Mail } from 'lucide-react';
 import './proveedores.css';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
 import { Boton, CampoArchivo, Disclosure, Icono, Tooltip } from '@/app/ui-v2/componentes';
+import { ZonaSoltar } from '../zona-soltar';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -30,10 +31,13 @@ export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores
 
   return (
     <div className="rv-prov__zona">
-      <form action={accion} className="rv-prov__linea">
-        <CampoArchivo etiqueta={tx('rest.xml_de_la_factura_de_proveedor')} name="archivo" accept=".xml,text/xml,application/xml" required />
-        <BotonSubir />
-      </form>
+      {/* Zona de soltar de Rovaq (FL): borde punteado; arrastrar el XML encima lo pone en el campo de archivo real. */}
+      <ZonaSoltar>
+        <form action={accion} className="rv-prov__linea">
+          <CampoArchivo etiqueta={tx('rest.xml_de_la_factura_de_proveedor')} name="archivo" accept=".xml,text/xml,application/xml" required />
+          <BotonSubir />
+        </form>
+      </ZonaSoltar>
       <ResultadoSubida estado={estado} />
     </div>
   );
@@ -75,12 +79,14 @@ export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }
 
   return (
     <div className="rv-prov__zona">
-      <form action={accion} className="rv-prov__linea">
-        <CampoArchivo etiqueta={tx('rest.foto_de_la_factura_de_proveedor')} name="archivo" accept="image/jpeg,image/png,image/webp" required
-          onChange={(e) => validarArchivoElegido(e.currentTarget)} />
-        {/* Un solo primario por zona: el XML es la vía principal; la foto (lectura con IA) es secundaria. */}
-        <BotonSubir variante="secondary" rotulo={tx('rest.leer_foto_con_ia')} pendienteRotulo={tx('rest.leyendo_la_foto')} />
-      </form>
+      <ZonaSoltar>
+        <form action={accion} className="rv-prov__linea">
+          <CampoArchivo etiqueta={tx('rest.foto_de_la_factura_de_proveedor')} name="archivo" accept="image/jpeg,image/png,image/webp" required
+            onChange={(e) => validarArchivoElegido(e.currentTarget)} />
+          {/* Un solo primario por zona: el XML es la vía principal; la foto (lectura con IA) es secundaria. */}
+          <BotonSubir variante="secondary" rotulo={tx('rest.leer_foto_con_ia')} pendienteRotulo={tx('rest.leyendo_la_foto')} />
+        </form>
+      </ZonaSoltar>
       <p className="rv-prov__nota" data-tono="faint">{tx('rest.maximo_4_mb_por_foto')}</p>
       <ResultadoSubida estado={estado} />
     </div>

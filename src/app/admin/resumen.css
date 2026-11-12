@@ -159,13 +159,19 @@
 /* Notificaciones: el punto de «sin leer» marca algo que requiere acción, así que usa la señal burdeos (decisión 12); el leído queda vacío. */
 [data-ui="v2"] .adm-notif .av-fila:not([data-leido="si"]) .av-punto { background: var(--senal, var(--ink)); }
 @media (max-width: 640px) {
-  /* En móvil el punto se queda en la fila del título (no solo en una línea sobre el chip «Crítico»). */
-  [data-ui="v2"] .adm-notif .av-fila { flex-wrap: nowrap; }
+  /* Móvil (bandeja de Rovaq): tarjeta-fila en dos columnas, punto | cuerpo a todo el ancho, y la acción en su propia fila debajo.
+     Antes `nowrap` dejaba el cuerpo en 0 px (una letra por línea) con las acciones encimadas. */
+  [data-ui="v2"] .adm-notif .av-fila { display: grid; grid-template-columns: 8px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; align-items: start; }
   [data-ui="v2"] .adm-notif .av-punto { margin-top: 6px; }
+  [data-ui="v2"] .adm-notif .av-cuerpo { min-width: 0; width: 100%; }
+  [data-ui="v2"] .adm-notif .av-acciones { grid-column: 2; width: auto; padding-left: 0; justify-content: flex-start; }
 }
 
 /* Móvil: en «Invitar integrante» los campos llenan la columna (Rovaq: 100 % de ancho, 36 px de alto, 44 px táctil). */
 @media (max-width: 640px) {
   [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control { width: 100%; }
   [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control :is(input, select) { max-width: none; min-height: 36px; }
+  /* El envoltorio del campo (flex item) se estira: antes medía ~150 px, el ancho de su contenido, y los campos quedaban cortos y desiguales. */
+  [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control > * { flex: 1 1 100%; width: 100%; min-width: 0; }
 }
+

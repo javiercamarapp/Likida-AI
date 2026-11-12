@@ -1018,6 +1018,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'descargaSat.vista.avisoDeCierreDe': 'Toll close notice (days before)',
   'descargaSat.vista.buzon': 'Mailbox',
   'descargaSat.vista.buzonDelSat': 'SAT mailbox',
+  'descargaSat.vista.noDisponibleAhora': 'Not available right now',
   'descargaSat.vista.buzonSinDeclarar': 'Mailbox not declared',
   'descargaSat.vista.caeSolo': 'Arrives on its own',
   'descargaSat.vista.cargadaEnLaBoveda': 'loaded in the provider\'s vault (ref. {certificadoNumero}{v})',
@@ -2073,4 +2074,5 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'r4.rent_metodo': 'The period measures the trips in that window (margin, revenue and cost). Receivables are the current balance of all invoices and do not change with the period.',
   'r4.timb_ir_hacerlo': 'Go do it',
   'r4.pol_titulo': 'Spending policies',
+  'r7.sus_sin_suscripcion_detalle': 'This fleet does not have a subscription yet. Once Likida activates your plan it shows up here.',
 };

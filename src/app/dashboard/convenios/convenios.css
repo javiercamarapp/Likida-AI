@@ -9,7 +9,7 @@
 .rv-cv__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
 .rv-cv__nota[data-tono="warn"] { color: var(--warn); }
 .rv-cv__nota strong { color: var(--ink); font-weight: 600; }
-.rv-cv__pie { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-cv__pie { margin: 10px 0 0; font-size: var(--t-micro); color: var(--muted); }
 .rv-cv__tenue { font-size: var(--t-micro); color: var(--faint); }
 .rv-cv__enlace { text-decoration: underline; text-underline-offset: 2px; font-size: var(--t-small); color: var(--muted); }
 .rv-cv__descargas { display: flex; flex-wrap: wrap; gap: 4px 12px; }

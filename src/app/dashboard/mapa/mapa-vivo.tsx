@@ -222,15 +222,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
             })}
           </svg>
 
-          {viajes.length === 0 && pines.length === 0 && (
-            <div className="rv-mp__vacio">
-              <p>{sinUbicar > 0
-                ? t('mapa.vacio.sin_ubicar', { n: numero(sinUbicar) })
-                : sinSeguimiento > 0
-                  ? t('mapa.vacio.sin_seguimiento', { n: numero(sinSeguimiento) })
-                  : 'Sin viajes en curso ahora mismo — el próximo que despaches se dibuja aquí.'}</p>
-            </div>
-          )}
+          {/* El vacío («sin viajes», «sin ubicar», «sin seguimiento») se dice UNA sola vez, en el panel lateral: antes salía también sobre el mapa. */}
 
           {/* Leyenda de clases bajo el mapa (Rovaq): qué es cada marca. */}
           <ul className="rv-mp__leyenda" aria-label={t('mapa.leyenda')}>

@@ -36,3 +36,16 @@ export function Proximamente({ contenido, hrefResumen }: { contenido: ContenidoP
     </MarcoPagina>
   );
 }
+
+/** Una ruta «próximamente» sin anuncio (ningún módulo está en esa fase hoy): vacío de página dentro del marco, no el 404 público. Sin datos ni acciones de envío. Los textos llegan del diccionario por `textos`. */
+export interface TextosSinPantalla { titulo: string; apoyo: string; vacio: string; nota: string; volver: string; area: string }
+export function ModuloSinPantalla({ hrefResumen, textos }: { hrefResumen: string; textos: TextosSinPantalla }) {
+  return (
+    <MarcoPagina area={textos.area} titulo={textos.titulo} idTitulo="proximamente-titulo" apoyo={textos.apoyo}>
+      <EstadoVacio pantalla icono={Clock} titulo={textos.vacio}
+        accion={<BotonEnlace href={hrefResumen} variante="secondary" tamano="sm">{textos.volver}</BotonEnlace>}>
+        {textos.nota}
+      </EstadoVacio>
+    </MarcoPagina>
+  );
+}

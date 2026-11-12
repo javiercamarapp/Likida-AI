@@ -138,7 +138,7 @@ export function VistaAgenteProveedores({
       </Tarjeta>
 
 
-        <FilaTarjetas variante="6-6" className="rv-prov__fila">
+        <FilaTarjetas variante="12" className="rv-prov__fila">
       <Tarjeta titulo={tx('proveedores.vista.subir_factura_de_proveedor')} info="proveedores.subir">
         <p className="rv-prov__nota">
           {rico(tx('proveedores.vista.el_xml_es_el_dato'), { rfc: rfcFlota
@@ -290,7 +290,7 @@ function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: Accion
         </>
       ),
     },
-    { id: 'total', titulo: tx('proveedores.vista.total'), alinear: 'der', valor: (f) => f.total, celda: (f) => <span className="cifra-mono">{mxn(f.total, idioma)}</span> },
+    { id: 'total', titulo: tx('proveedores.vista.total'), alinear: 'der', valor: (f) => f.total, celda: (f) => <span className="rv-cifra">{mxn(f.total, idioma)}</span> },
     {
       id: 'estado', titulo: tx('proveedores.vista.estado'), corta: true, valor: (f) => ORDEN_ESTADO[f.estado],
       celda: (f) => (<><PillEstado f={f} tr={tr} /><NotaSat estadoSat={f.estadoSat} tr={tr} /></>),

@@ -1018,6 +1018,7 @@ export const dinero = {
   'descargaSat.vista.avisoDeCierreDe': 'Aviso de cierre de peaje (días antes)',
   'descargaSat.vista.buzon': 'Buzón',
   'descargaSat.vista.buzonDelSat': 'Buzón del SAT',
+  'descargaSat.vista.noDisponibleAhora': 'No disponible ahora',
   'descargaSat.vista.buzonSinDeclarar': 'Buzón sin declarar',
   'descargaSat.vista.caeSolo': 'Cae solo',
   'descargaSat.vista.cargadaEnLaBoveda': 'cargada en la bóveda del proveedor (ref. {certificadoNumero}{v})',
@@ -2073,4 +2074,5 @@ export const dinero = {
   'r4.rent_metodo': 'El periodo mide los viajes de ese lapso (margen, ingreso y costo). La cartera por cobrar es el saldo vigente de todas las facturas, no cambia con el periodo.',
   'r4.timb_ir_hacerlo': 'Ir a hacerlo',
   'r4.pol_titulo': 'Políticas de gasto',
+  'r7.sus_sin_suscripcion_detalle': 'Esta flota todavía no tiene una suscripción. Cuando Likida active tu plan aparece aquí.',
 } as const;

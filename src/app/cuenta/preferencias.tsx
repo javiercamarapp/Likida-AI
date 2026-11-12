@@ -7,7 +7,7 @@ import { solicitarCambioIdioma } from '@/lib/i18n/cambiar';
 import { idiomaElegible, type Idioma } from '@/lib/i18n/idioma';
 
 interface Textos {
-  idioma: string; tema: string; temaClaro: string; temaSistema: string; temaOscuro: string; es: string; en: string; enProximamente: string; fallo: string;
+  idioma: string; tema: string; temaClaro: string; temaSistema: string; temaOscuro: string; es: string; en: string; fallo: string;
 }
 
 /** Las dos filas rótulo-control de la cuenta (Rovaq CF): idioma y tema. Hacen lo mismo que el pie del panel: el tema se guarda en el
@@ -27,14 +27,18 @@ export function PreferenciasCuenta({ idiomaActivo, textos }: { idiomaActivo: Idi
   }
   return (
     <div className="rv-cuenta__prefs">
-      <div className="rv-cuenta__fila">
-        <p>{textos.idioma}</p>
-        <SegmentedControl<Idioma> etiqueta={textos.idioma} valor={idiomaActivo} onChange={(v) => { void cambiarIdioma(v); }}
-          opciones={[
-            { valor: 'es', etiqueta: textos.es },
-            { valor: 'en', etiqueta: idiomaElegible('en') ? textos.en : textos.enProximamente, deshabilitada: !idiomaElegible('en') },
-          ]} />
-      </div>
+      {/* El selector de idioma solo se ofrece cuando AMBOS idiomas son elegibles y operan: nunca una celda «English (próximamente)» deshabilitada.
+          Se enciende solo con `IDIOMA_EN_DISPONIBLE` (lib/i18n/idioma.ts). */}
+      {idiomaElegible('en') && (
+        <div className="rv-cuenta__fila">
+          <p>{textos.idioma}</p>
+          <SegmentedControl<Idioma> etiqueta={textos.idioma} valor={idiomaActivo} onChange={(v) => { void cambiarIdioma(v); }}
+            opciones={[
+              { valor: 'es', etiqueta: textos.es },
+              { valor: 'en', etiqueta: textos.en },
+            ]} />
+        </div>
+      )}
       <div className="rv-cuenta__fila">
         <p>{textos.tema}</p>
         <SegmentedControl<Tema> etiqueta={textos.tema} valor={tema} onChange={elegir}
