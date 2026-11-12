@@ -144,7 +144,7 @@ describe('Resumen v2 · página canónica del contrato visual', () => {
     expect((h.match(/<h1/g) ?? []).length).toBe(1);
     // F26: el marco único lo pone el esqueleto de portada (`rv-esq rv-esq--portada` solo añade disposición).
     expect(h).toMatch(/^<main class="rv-marco rv-esq rv-esq--portada"/);
-    expect((h.match(/class="rv-fila-tarjetas"/g) ?? []).length).toBe(3);
+    expect((h.match(/class="rv-fila-tarjetas"/g) ?? []).length).toBe(4);
     expect(h).toContain('data-variante="6-6"');
     expect(h).toContain('data-variante="4-4-4"');
     // ni el contenedor ni la rejilla ni la envoltura de cifras heredados (las piezas hijas conservan sus propias clases)
