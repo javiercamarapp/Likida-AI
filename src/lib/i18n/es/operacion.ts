@@ -437,6 +437,7 @@ export const operacion = {
   'dsp.cifra.libres': 'Unidades libres',
   'dsp.cifra.taller': 'En taller',
   'dsp.cifra.incidencias': 'Incidencias',
+  'dsp.cifra.fuente': 'Tablero de despacho',
   'dsp.cifra.pod': 'POD pendientes',
   'dsp.porasignar': 'Por asignar',
   'dsp.porasignar.nota': 'Viajes sin chofer — se asigna y el aviso de WhatsApp sale en el mismo paso',

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Inbox, Truck, Users } from 'lucide-react';
 import type { TableroOperacion, ViajeSinAsignar, CargaOperador } from '@/lib/likida/operacion';
 import type { Pagina, ViajeEnCursoRow } from '@/lib/likida/repo_paginado';
-import { numero, fechaCorta } from '@/lib/formato';
+import { numero, fechaMx } from '@/lib/formato';
 import { FormaViaje, type AccionCrearViaje } from '../forma-viaje';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type AccionDespacho } from './acciones';
@@ -126,7 +126,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
         )
       ),
     },
-    { id: 'inicio', titulo: t('dsp.col.inicio'), celda: (v) => <span className="rv-dsp__mono">{fechaCorta(v.fechaInicio, idioma)}</span> },
+    { id: 'inicio', titulo: t('dsp.col.inicio'), celda: (v) => <span className="rv-dsp__mono">{fechaMx(v.fechaInicio, idioma)}</span> },
     { id: 'aviso', titulo: t('dsp.col.aviso'), celda: (v) => <PillAviso v={v} tr={tr} /> },
     {
       id: 'accion', titulo: t('dsp.col.accion'), alinear: 'der',
@@ -139,9 +139,9 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
   // Tira de 4 como Rovaq: «En taller» y «POD pendientes» no se pierden, viajan como sello de la cifra a la que pertenecen (mismo conteo, misma lectura).
   const cifras: PropsCifra[] | undefined = tablero === null ? undefined : [
     { etiqueta: t('dsp.cifra.activos'), valor: numero(tablero.viajesActivos, idioma), info: 'despacho.viajes_activos', sello: `${t('dsp.cifra.pod')}: ${numero(tablero.podPendientes, idioma)}` },
-    { etiqueta: t('dsp.cifra.sinunidad'), valor: numero(tablero.sinUnidad, idioma), tono: tablero.sinUnidad > 0 ? 'warn' : undefined, info: 'despacho.sin_unidad' },
+    { etiqueta: t('dsp.cifra.sinunidad'), valor: numero(tablero.sinUnidad, idioma), tono: tablero.sinUnidad > 0 ? 'warn' : undefined, info: 'despacho.sin_unidad', sello: selloHoy(t('dsp.cifra.fuente')) },
     { etiqueta: t('dsp.cifra.libres'), valor: numero(tablero.unidadesDisponibles, idioma), info: 'despacho.unidades_libres', sello: `${t('dsp.cifra.taller')}: ${numero(tablero.unidadesEnTaller, idioma)}` },
-    { etiqueta: t('dsp.cifra.incidencias'), valor: numero(tablero.incidenciasAbiertas, idioma), tono: tablero.incidenciasAbiertas > 0 ? 'warn' : undefined, info: 'despacho.incidencias' },
+    { etiqueta: t('dsp.cifra.incidencias'), valor: numero(tablero.incidenciasAbiertas, idioma), tono: tablero.incidenciasAbiertas > 0 ? 'warn' : undefined, info: 'despacho.incidencias', sello: selloHoy(t('dsp.cifra.fuente')) },
   ];
 
   return (
@@ -176,7 +176,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
     >
       <FilaTarjetas variante="8-4">
         {/* ── La cola que reparte el día ── */}
-        <Tarjeta titulo={t('dsp.porasignar')} info="despacho.por_asignar">
+        <Tarjeta titulo={t('dsp.porasignar')} info="despacho.por_asignar" className="rv-dsp__tarjeta">
           <p className="rv-dsp__nota">{t('dsp.porasignar.nota')}</p>
           {sinAsignar.length === 0 ? (
             <EstadoVacio contenido icono={Inbox} titulo={t('dsp.nadasin')}>
@@ -189,7 +189,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
                   <div className="rv-dsp__item-cab">
                     <span>{v.folio ?? t('dsp.sinfolio')}</span>
                     <span className="rv-dsp__ruta">{v.origen ?? '—'} → {v.destino ?? '—'}</span>
-                    <span className="rv-dsp__fecha">{fechaCorta(v.fechaInicio, idioma)}</span>
+                    <span className="rv-dsp__fecha">{fechaMx(v.fechaInicio, idioma)}</span>
                   </div>
                   {totalOperadores === 0 ? (
                     <p className="rv-dsp__nota">{t('dsp.sinoperadores')}</p>
@@ -211,7 +211,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
 
         <div className="rv-dsp__pila">
           {/* ── Quién trae cuánto ── */}
-          <Tarjeta titulo={t('dsp.carga')} info="despacho.carga">
+          <Tarjeta titulo={t('dsp.carga')} info="despacho.carga" className="rv-dsp__tarjeta">
             <p className="rv-dsp__nota">{t('dsp.carga.nota')}</p>
             {carga === null ? (
               <EstadoVacio contenido icono={Users} titulo={t('dsp.carga.error')}>{t('dsp.reintenta')}</EstadoVacio>
@@ -242,7 +242,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
       {/* A todo el ancho: con 7 columnas (select de unidad y botón de acción incluidos) no cabe en 8/12 y la acción quedaba cortada. */}
       <FilaTarjetas variante="12">
         {/* ── Lo vivo, con el estado del aviso ── */}
-        <Tarjeta titulo={t('dsp.encurso')} info="despacho.en_curso" className="rv-tarjeta--tabla">
+        <Tarjeta titulo={t('dsp.encurso')} info="despacho.en_curso" className="rv-tarjeta--tabla rv-dsp__tarjeta">
           <p className="rv-dsp__nota">{t('dsp.encurso.orden')}</p>
           {activos.error !== null ? (
             <EstadoVacio contenido icono={Truck} titulo={t('dsp.encurso.noleyo')}>

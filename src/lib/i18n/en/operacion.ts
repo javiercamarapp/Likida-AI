@@ -437,6 +437,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'dsp.cifra.libres': 'Free units',
   'dsp.cifra.taller': 'In the shop',
   'dsp.cifra.incidencias': 'Incidents',
+  'dsp.cifra.fuente': 'Dispatch board',
   'dsp.cifra.pod': 'Pending PODs',
   'dsp.porasignar': 'To assign',
   'dsp.porasignar.nota': 'Trips without a driver — assign and the WhatsApp notice goes out in the same step',
