@@ -12,7 +12,7 @@ export function NavegacionFilas({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let actual = -1;
-    const filas = () => Array.from(raiz.current?.querySelectorAll<HTMLTableRowElement>('tbody tr') ?? []);
+    const filas = () => [...(raiz.current?.querySelectorAll<HTMLTableRowElement>('tbody tr') ?? [])];
     const marcar = (i: number) => {
       const lista = filas();
       lista.forEach((f, k) => { if (k === i) f.setAttribute('data-resaltada', ''); else f.removeAttribute('data-resaltada'); });

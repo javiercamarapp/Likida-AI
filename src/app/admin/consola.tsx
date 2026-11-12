@@ -14,6 +14,7 @@ import type { ResumenNegocio } from '@/lib/admin/negocio';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 
 import { getT } from '@/lib/i18n/servidor';
+import { celdaCsvSegura } from '@/lib/csv_seguro';
 /**
  * Inicio de /admin = el CENTRO DE MANDO (PLAN-MAESTRO §2.1 #1 y §10.1). Orden de lectura: ¿estoy bien? (semáforo) · ¿qué espera mi
  * decisión? (Tu turno, máx. 5, con la caja al lado) · el número norte · gasto y facturas · calidad por agente · plataforma plegada ·
@@ -167,11 +168,7 @@ const columnasFlotas = (t: TrDe<'admin_inicio'>): ColumnaBase<FilaFlota>[] => [
 
 /** CSV de la tabla de flotas tal como se ve (nada que la pantalla no muestre). Una celda que empieza con = + - @ se neutraliza para que una hoja de cálculo no la lea como fórmula. */
 function csvFlotas(filas: ReadonlyArray<FilaFlota>, t: TrDe<'admin_inicio'>): string {
-  const celda = (v: string | number) => {
-    const x = String(v);
-    const seguro = /^[=+\-@]/.test(x) ? `'${x}` : x;
-    return /[",\n]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
-  };
+  const celda = (v: string | number) => celdaCsvSegura(v);
   return [
     [t('consola.flota'), t('consola.plan'), t('consola.viajes'), t('consola.costo_de_ia_historico')].map(celda).join(','),
     ...filas.map((f) => [f.nombre, f.plan, f.viajes, f.costoIaUsd].map(celda).join(',')),

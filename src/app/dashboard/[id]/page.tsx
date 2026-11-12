@@ -65,7 +65,7 @@ async function liquidacionDeViaje(viajeId: string, tenantId: string): Promise<st
   try {
     const { data } = await supabaseAdmin()
       .from('liquidacion').select('id').eq('viaje_id', viajeId).eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle();
     return (data?.id as string | undefined) ?? null;
   } catch { return null; }
 }

@@ -26,7 +26,7 @@ export function ZonaSoltar({ children }: { children: ReactNode }) {
         const archivos = e.dataTransfer.files;
         if (!entrada || entrada.disabled || archivos.length === 0) return;
         const dt = new DataTransfer();
-        for (const f of Array.from(archivos).slice(0, entrada.multiple ? archivos.length : 1)) dt.items.add(f);
+        for (const f of [...archivos].slice(0, entrada.multiple ? archivos.length : 1)) dt.items.add(f);
         entrada.files = dt.files;
         entrada.dispatchEvent(new Event('change', { bubbles: true }));
       }}
