@@ -205,6 +205,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
           </Tarjeta>
         </>
       )}
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
     </EsqueletoTablaMaestra>
   );
 }

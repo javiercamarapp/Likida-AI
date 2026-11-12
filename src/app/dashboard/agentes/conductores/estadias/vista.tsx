@@ -8,7 +8,6 @@ import { Aviso, BarraPeriodo, BotonEnlace, clasesBoton, EstadoError, hrefConPara
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { BarList } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { conFilete } from '../../cifras-filete';
 import { TablaVacia } from '../../vacio-agente';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -115,7 +114,7 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
           {!error && truncada ? <Aviso tono="warn">{tx('rest.hay_mas_viajes_con_llegada_en')}</Aviso> : null}
         </>
       )}
-      cifras={error ? undefined : conFilete([
+      cifras={error ? undefined : ([
         { etiqueta: tx('rest.paradas_del_periodo'), info: 'conductores_estadias.paradas', valor: numero(resumen.paradas), nota: `${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso` },
         { etiqueta: tx('rest.tiempo_medio_en_carga'), info: 'conductores_estadias.medio_carga', valor: carga ? minutos(carga.promedio) : null, nota: carga ? `sobre ${numero(carga.n)} paradas cerradas` : tx('rest.ninguna_carga_cerrada') },
         { etiqueta: tx('rest.tiempo_medio_en_descarga'), info: 'conductores_estadias.medio_descarga', valor: descarga ? minutos(descarga.promedio) : null, nota: descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : tx('rest.ninguna_descarga_cerrada') },
@@ -147,6 +146,7 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
           )}
         </Tarjeta>
       )}
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
     </EsqueletoTablaMaestra>
   );
 }

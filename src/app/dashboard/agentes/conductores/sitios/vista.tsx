@@ -4,6 +4,7 @@ import { DIAS_TEXTOS_SIN_SITIO, PLANTILLA_CSV_SITIOS, TOP_TEXTOS_SIN_SITIO, type
 import type { SitioFila } from '@/lib/likida/conductor/repo_validacion';
 import { FilaTextoSinSitio, FormaImportarEquivalencias } from './formas_equivalencias';
 import { FormaCatalogo } from './formas_catalogo';
+import { CajonImportarSitios } from './cajon-importar';
 import { FormaEstadoSitio } from './formas_estado';
 import { CajonSitio, FormaImportar, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
 import '../conductores.css';
@@ -89,12 +90,39 @@ export function VistaSitios(p: PropsVistaSitios) {
       apoyo={tx('rest.clientes_plantas_y_andenes_con_su')}
       acciones={(
         <>
-          {p.puedeEditar && <CajonSitio key="nuevo" accion={p.accionGuardar} inicial={SITIO_VACIO} clientes={p.clientes} padres={padres} disparador={tx('rest.nuevo_sitio')} />}
+          {p.puedeEditar && (
+            <CajonImportarSitios disparador={tx('rest.importar')} titulo={tx('rest.importar_sitios_desde_csv')}>
+              <section>
+                <h3>{tx('rest.importar_desde_csv')}</h3>
+                <p className="rv-cd__nota">{ricoT(tx('rest.columnas_code_codigo_nombre_tipo_lat'), { code: (c) => <code>{c}</code> })}</p>
+                <Disclosure titulo={tx('rest.ver_el_formato_de_ejemplo')} variante="linea">
+                  <pre className="rv-cd__bloque rv-cd__mono">{PLANTILLA_CSV_SITIOS}</pre>
+                  <p className="rv-cd__micro">{tx('rest.el_ejemplo_trae_las_coordenadas_en')}</p>
+                </Disclosure>
+                <FormaImportar accion={p.accionImportar} />
+              </section>
+              {p.accionCatalogo && (
+                <section>
+                  <h3>{tx('rest.catalogo_depurado_de_origenes_y_destinos')}</h3>
+                  <p className="rv-cd__nota">{ricoT(tx('rest.sin_tope_de_filas_columnas_code'), { code: (c) => <code>{c}</code>, strong: (c) => <strong>{c}</strong> })}</p>
+                  <FormaCatalogo accion={p.accionCatalogo} />
+                </section>
+              )}
+              {p.accionImportarEquivalencias && p.textosSinSitio !== undefined && (
+                <section>
+                  <h3>{tx('rest.importar_equivalencias_desde_csv')}</h3>
+                  <p className="rv-cd__nota">{ricoT(tx('rest.columnas_code_texto_geocerca_codigo_tipo'), { code: (c) => <code>{c}</code> })}</p>
+                  <FormaImportarEquivalencias accion={p.accionImportarEquivalencias} />
+                </section>
+              )}
+            </CajonImportarSitios>
+          )}
+          {p.puedeEditar && <CajonSitio key="nuevo" accion={p.accionGuardar} inicial={SITIO_VACIO} clientes={p.clientes} padres={padres} disparador={tx('rest.nuevo_sitio')} variante="primary" />}
           {p.puedeEditar && p.editando && (
             <CajonSitio key={p.editando.id} accion={p.accionGuardar} inicial={aEditable(p.editando)} clientes={p.clientes} padres={padres} abiertoInicial
               cerrarHref={`/dashboard/agentes/conductores/sitios${p.sufijo}`} />
           )}
-          <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${p.sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>
+          <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/agentes/conductores${p.sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>
         </>
       )}
       filtros={(
@@ -130,30 +158,8 @@ export function VistaSitios(p: PropsVistaSitios) {
         </div>
       </Tarjeta>
 
-      {p.puedeEditar ? (
-        <>
-          <Tarjeta titulo={tx('rest.importar_desde_csv')} info="conductores_sitios.importar_csv">
-            <div className="rv-cd__pila">
-              <p className="rv-cd__nota">{ricoT(tx('rest.columnas_code_codigo_nombre_tipo_lat'), { code: (c) => <code>{c}</code> })}</p>
-              <Disclosure titulo={tx('rest.ver_el_formato_de_ejemplo')} variante="linea">
-                <pre className="rv-cd__bloque rv-cd__mono">{PLANTILLA_CSV_SITIOS}</pre>
-                <p className="rv-cd__micro">{tx('rest.el_ejemplo_trae_las_coordenadas_en')}</p>
-              </Disclosure>
-              <FormaImportar accion={p.accionImportar} />
-            </div>
-          </Tarjeta>
-        </>
-      ) : (
+      {!p.puedeEditar && (
         <p className="rv-cd__nota" data-tono="faint">{tx('rest.solo_el_dueno_de_la_flota_9')}</p>
-      )}
-
-      {p.puedeEditar && p.accionCatalogo && (
-        <Tarjeta titulo={tx('rest.catalogo_depurado_de_origenes_y_destinos')} info="conductores_sitios.catalogo_depurado">
-          <div className="rv-cd__pila">
-            <p className="rv-cd__nota">{ricoT(tx('rest.sin_tope_de_filas_columnas_code'), { code: (c) => <code>{c}</code>, strong: (c) => <strong>{c}</strong> })}</p>
-            <FormaCatalogo accion={p.accionCatalogo} />
-          </div>
-        </Tarjeta>
       )}
 
       {p.textosSinSitio !== undefined && (
@@ -170,13 +176,6 @@ export function VistaSitios(p: PropsVistaSitios) {
             {p.textosTruncado && <p className="rv-cd__nota" data-tono="warn">{tx('rest.hay_mas_viajes_de_los_que')}</p>}
             {p.descargaCsv && p.textosSinSitio !== null && p.textosSinSitio.length > 0 && (
               <p className="rv-cd__nota">{ricoT(tx('rest.e0_descargar_esta_lista_como_csv'), { e0: (c) => <a href={p.descargaCsv ?? undefined} download="textos-sin-sitio.csv" className="rv-cd__enlace">{c}</a>, e1: (c) => <span className="rv-cd__faint">{c}</span> })}</p>
-            )}
-            {p.puedeEditar && p.accionImportarEquivalencias && (
-              <div className="rv-cd__pila">
-                <p className="rv-cd__rotulo">{tx('rest.importar_equivalencias_desde_csv')}</p>
-                <p className="rv-cd__nota">{ricoT(tx('rest.columnas_code_texto_geocerca_codigo_tipo'), { code: (c) => <code>{c}</code> })}</p>
-                <FormaImportarEquivalencias accion={p.accionImportarEquivalencias} />
-              </div>
             )}
           </div>
         </Tarjeta>

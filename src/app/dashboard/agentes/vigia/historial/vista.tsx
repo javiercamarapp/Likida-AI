@@ -208,6 +208,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
           </Seccion>
         </>
       )}
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
     </EsqueletoTablaMaestra>
   );
 }

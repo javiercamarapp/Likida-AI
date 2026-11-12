@@ -11,7 +11,6 @@ import {
 } from './controles';
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import { VacioAgente } from '../vacio-agente';
-import { conFilete } from '../cifras-filete';
 import { AvisoCompacto, Chip as ChipV2, Disclosure, EsqCifrasV2, EsqTablaV2, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 import { TR_ES, type TrAgentes, type TAgentes, selloHoyTr } from '../i18n-agentes';
 import { getT } from '@/lib/i18n/servidor';
@@ -191,11 +190,11 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
   const vencidas = d.conversaciones.filter((c) => c.sinRespuestaDesde && minutosDeEspera(c.sinRespuestaDesde, ahoraMs) >= sla).length;
   const molestasOEscaladas = d.conversaciones.filter((c) => c.molestiaNivel >= 2 || c.escalamientoNivel > 0).length;
   return (
-    <div className="rv-vg__pila">
+    <div className="rv-vg__pila rv-ag-sin-filete">
       {!d.config.habilitado && (
         <AvisoCompacto tono="warn" resumen={<>{tx('vigia.vista.el_vigia_esta_apagado_para')}{' '}<a href="#vg-config" className="rv-vg__enlace">{tx('f26d2.vigia.ir_a_configuracion')}</a></>} />
       )}
-      <TiraCifras sello={selloHoyTr(tr, tx('vigia.vista.sello_avisos_de_viaje'))} items={conFilete([
+      <TiraCifras sello={selloHoyTr(tr, tx('vigia.vista.sello_avisos_de_viaje'))} items={([
         { etiqueta: tx('vigia.vista.conversaciones_activas'), info: 'vigia.conversaciones_activas', valor: numero(d.conversaciones.length), nota: tx('vigia.vista.clientes_con_un_hilo_abierto') },
         { etiqueta: tx('vigia.vista.por_aprobar'), info: 'vigia.por_aprobar', valor: numero(d.pendientes.length), nota: tx('vigia.vista.respuestas_que_esperan_tu_toque'), tono: d.pendientes.length > 0 ? 'warn' : undefined },
         { etiqueta: tx('vigia.vista.sin_respuesta_sla_min', { sla: numero(sla) }), info: 'vigia.sin_respuesta', valor: numero(vencidas), nota: tx('vigia.vista.esperan_mas_de_lo_permitido'), tono: vencidas > 0 ? 'bad' : undefined },
