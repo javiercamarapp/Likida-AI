@@ -29,13 +29,6 @@ export const dynamic = 'force-dynamic';
  * No lleva datos de flotas ni nombres de crons, versiones ni motivos de fallo: solo cinco componentes y tres estados.
  */
 
-const ESTADO: Record<EstadoMedido | 'sin_medicion', { clases: string; fondo: string; texto: string }> = {
-  ok: { clases: 'bg-[var(--okbg)] text-[var(--ok)]', fondo: 'bg-[var(--okbg)]', texto: 'text-[var(--ok)]' },
-  degradado: { clases: 'bg-[var(--warnbg)] text-[var(--warn)]', fondo: 'bg-[var(--warnbg)]', texto: 'text-[var(--warn)]' },
-  caido: { clases: 'bg-[var(--badbg)] text-[var(--bad)]', fondo: 'bg-[var(--badbg)]', texto: 'text-[var(--bad)]' },
-  sin_medicion: { clases: 'bg-[var(--surface)] text-muted', fondo: 'bg-[var(--surface)]', texto: 'text-muted' },
-};
-
 /** Nivel de una celda del historial: lo desconocido se pinta punteado (`sin`), jamás en verde ni como cero. */
 const NIVEL_CELDA: Record<CeldaDia, 'ok' | 'warn' | 'bad' | 'sin'> = { ok: 'ok', degradado: 'warn', caido: 'bad', sin_medicion: 'sin' };
 
@@ -48,9 +41,8 @@ function resumenGeneral(e: EstadoPublico, t: TrPublico['t']): { titulo: string; 
 }
 
 function Etiqueta({ estado, t }: { estado: EstadoMedido | 'sin_medicion'; t: TrPublico['t'] }) {
-  const e = ESTADO[estado];
   return (
-    <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap ${e.clases}`}>
+    <span className="rv-estado__chip" data-estado={estado}>
       {t(`est.e.${estado}`)}
     </span>
   );
@@ -93,10 +85,11 @@ export default async function PaginaEstado() {
       rotulo={t('est.rotulo')}
       titulo={t('est.titulo')}
       apoyo={t('est.apoyo')}
+      ancho="ancho"
     >
       <div className="rv-flujo" aria-hidden="true" />
-        <section aria-live="polite" className={`mt-8 flex items-center justify-between gap-4 rounded-xl px-5 py-4 ${ESTADO[general.estado].fondo}`}>
-          <h2 className={`font-display text-[17px] font-semibold ${ESTADO[general.estado].texto}`}>{general.titulo}</h2>
+        <section aria-live="polite" className="rv-estado__general" data-estado={general.estado}>
+          <h2>{general.titulo}</h2>
           <Etiqueta estado={general.estado} t={t} />
         </section>
         <p className="mt-2 text-[12px] text-muted">
