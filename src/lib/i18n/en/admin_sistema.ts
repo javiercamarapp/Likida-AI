@@ -429,6 +429,7 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'whatsapp_infra.sin_integrar': 'Not integrated',
   'whatsapp_infra.ninguno_de_estos_existe_todavia_en': 'None of these exist in this panel yet; they require integrating the Meta WhatsApp Business API more deeply than Likida uses it today:',
   'capacidad_forecast.capacidad_forecast': 'Capacity & Forecast',
+  'capacidad_forecast.apoyo': 'What the AI will cost if the current pace holds and how many trips the platform can take, with the assumptions in plain sight.',
   'capacidad_forecast.sin_lectura': 'No reading',
   'capacidad_forecast.no_se_pudo_leer_el_costo': 'The cost for the 30-day window could not be read. This does NOT mean there is no spend.',
   'capacidad_forecast.sin_datos': 'No data',
