@@ -3,3 +3,6 @@
 .rv-prox__puntos li { position: relative; padding-left: 14px; }
 .rv-prox__puntos li::before { content: ""; position: absolute; left: 0; top: 0.6em; width: 5px; height: 5px; border-radius: 50%; background: var(--ink); }
 .rv-prox__nota { display: block; font-size: var(--t-small); color: var(--muted); }
+
+/* Vacío de página como el `.empty` de Rovaq: borde punteado #d6d6d9 (el del sistema es sólido). */
+[data-ui="v2"] .rv-vacio[data-pantalla]:has(.rv-prox__puntos) { border: 1px dashed #d6d6d9; }

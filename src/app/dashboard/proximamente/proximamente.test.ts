@@ -40,10 +40,10 @@ describe('la pantalla «Próximamente» no toca datos de la flota', () => {
 });
 
 describe('un módulo sin anuncio', () => {
-  it('no cae al 404 público (la sesión perdería el sidebar): responde un vacío de página dentro del marco', () => {
+  it('es una ruta inexistente: responde 404 (notFound), no un 200 con un vacío', () => {
     const pagina = leer('[modulo]/page.tsx');
-    expect(pagina).not.toMatch(/notFound/);
-    expect(pagina).toContain('ModuloSinPantalla');
+    expect(pagina).toMatch(/if \(!contenido\) notFound\(\)/);
+    expect(pagina).not.toContain('ModuloSinPantalla');
   });
 });
 
