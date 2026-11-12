@@ -47,3 +47,14 @@
 
 /* Subtítulo de las tarjetas de invitar y de roles (Rovaq: 12 px, tono secundario). */
 .rv-usu__sub { margin: 0 0 8px; font-size: var(--t-small, 12px); line-height: 1.4; color: var(--muted); }
+
+/* «Dar de baja» a la vista (Rovaq «Revocar»): botón de peligro de 28 px, radio 8, 13/500, fondo #fdeef0, borde rgba(172,36,64,.24), texto #ac2440. */
+[data-ui="v2"] .rv-usu__celda-acciones .rv-usu__fila-forma { display: flex; gap: 0; }
+[data-ui="v2"] .rv-usu__revocar { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 8px; font-size: var(--t-body, 13px); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; background: #fdeef0; border: 1px solid rgba(172, 36, 64, .24); color: #ac2440; transition: background-color 140ms ease, border-color 140ms ease; }
+[data-ui="v2"] .rv-usu__revocar:hover { background: #fbe0e5; border-color: rgba(172, 36, 64, .5); }
+[data-ui="v2"] .rv-usu__revocar:focus-visible { outline: 2px solid #ac2440; outline-offset: 2px; }
+/* El menú «···» es de la familia flotante: radio 12 y sombra del sistema. */
+[data-ui="v2"] .rv-pop.rv-usu__acciones { border-radius: 12px; box-shadow: var(--sh-pop, 0 8px 24px rgba(0, 0, 0, .12)); }
+/* Tarjeta de invitar compacta (Rovaq «Invitar integrante»): primario de 32 px abajo a la IZQUIERDA y sin la holgura de arriba. */
+[data-ui="v2"] .rv-usu__pie-invitar { justify-content: flex-start; padding-top: 12px; }
+[data-ui="v2"] .rv-usu__pie-invitar .rv-btn { min-height: 32px; }
