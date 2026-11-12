@@ -110,7 +110,9 @@
 /* Móvil: botones de 44 px de alto (zona táctil). */
 @media (max-width: 819px) {
   [data-ui="v2"] .rv-seg { padding: 1px; }
-  [data-ui="v2"] .rv-seg__btn { min-height: 44px; }
+  /* Pastilla de 36 px visibles; la zona táctil de 44 la da el ::after invisible (ronda 8, A2). */
+  [data-ui="v2"] .rv-seg__btn { min-height: 36px; position: relative; }
+  [data-ui="v2"] .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-ui="v2"] .rv-seg__btn { transition: background-color var(--ui-fast) ease, color var(--ui-fast) ease; }
@@ -122,7 +124,7 @@
 /* ── Pestañas de sección (Vexa pc-tabs): 36 px, 13/500, activa 600 con subrayado de 2 px en tinta ───────────────────── */
 [data-ui="v2"] .rv-tabs { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
 [data-ui="v2"] .rv-tabs::-webkit-scrollbar { display: none; }
-[data-ui="v2"] .rv-tabs__tab { display: inline-flex; flex: none; align-items: center; gap: 8px; height: 36px; margin-bottom: -1px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: var(--t-body); font-weight: 500; line-height: 1.25; font-family: var(--font-sans-ui, inherit); text-decoration: none; white-space: nowrap; cursor: pointer; }
+[data-ui="v2"] .rv-tabs__tab { display: inline-flex; flex: none; align-items: center; gap: 8px; height: 32px; margin-bottom: -1px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: var(--t-body); font-weight: 500; line-height: 1.25; font-family: var(--font-sans-ui, inherit); text-decoration: none; white-space: nowrap; cursor: pointer; }
 [data-ui="v2"] .rv-tabs__tab:hover { color: var(--ink); }
 [data-ui="v2"] .rv-tabs__tab[aria-selected="true"],
 [data-ui="v2"] .rv-tabs__tab[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
