@@ -287,3 +287,10 @@
 .cer-tabla-estados .rv-tabla { max-height: 340px; }
 /* Vacío dentro de una tarjeta (Rovaq ac-vacio): borde punteado de 1 px, radio 8, relleno 20×14; nunca sin borde dentro de una tarjeta alta. */
 [data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* Ronda 7 — Ficha de prospecto (Rovaq FI): la tira de cifras lleva el MISMO filete superior de 3 px negro que las demás tiras; solo la Ficha 360
+   de flotas (pf-tile) va sin filete. Se acota por la tarjeta «Ficha» del prospecto (.cer-ficha__datos). */
+[data-ui="v2"] .rv-esq--ficha:has(.cer-ficha__datos) .rv-esq__cifras-sueltas .rv-kpi { border-top: 3px solid var(--ink); }
+
+/* Vacío de una línea (Rovaq ac-vacio): caja punteada, radio 8, relleno 20×14. */
+[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }

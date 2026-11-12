@@ -26,13 +26,13 @@ beforeEach(() => {
   d.techos.mockResolvedValue({ filas: [{ tenantId: 'tn-1', nombre: 'ACME', topeUsd: 5, origen: 'plan', declaradoUsd: null, usadoHoyUsd: 1.5, pctUsado: 30 }], pisoUsd: 1, truncado: false, gastoIlegible: false });
 });
 
-it('la tabla lleva plan, arranque "n de 6", viajes y la Vista rápida; los dos paneles viven en el cajón', async () => {
+it('la tabla lleva plan, arranque "n de 6", viajes y el Detalle (cajón) y la Ficha 360; los dos paneles viven en el cajón', async () => {
   const html = await render();
   expect(html).toContain('ACME');
   expect(html).toContain('>pro<');
   expect(html).toMatch(/\d de 6/);
   expect(html).toContain('/admin/flotas/tn-1');
-  expect(html).toContain('Vista rápida');
+  expect(html).toContain('>Detalle<');
   expect(html).toContain('ver=tn-1');
   // Una sola fila de acciones con dos botones: ya no hay tres por fila ni paneles en la tabla.
   expect(html).not.toContain('/dashboard?tenant=tn-1&amp;rol=flota_admin');
