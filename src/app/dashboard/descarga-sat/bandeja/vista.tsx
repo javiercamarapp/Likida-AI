@@ -21,6 +21,7 @@ import {
   ligarComprobante, ignorarComprobante, revertirResolucion,
 } from '@/lib/likida/sat_descarga/resolucion';
 import { numero } from '@/lib/formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { sufijoTenant } from '../../sufijo';
 import { FilaComprobante, type ResultadoFila } from './fila';
 import { EnlacePagina, NavPaginas } from '../../paginador';
@@ -229,17 +230,20 @@ export async function PanelBandeja({
           {avisoFalta}
         </>
       )}
-      // La tira resume cifras DISTINTAS a las del segmentado (que ya filtra por cada cola): el total bajado y cuánto falta vs. cuánto ya se resolvió.
+      // Misma tira que la pestaña hermana «Descarga» (rótulo, cifra, nota, ⓘ y procedencia), en 4 celdas: lo bajado, las dos colas que esperan una decisión
+      // (por separado, como allá) y lo ya resuelto. Cuatro celdas también parejan la rejilla de 2 columnas del móvil (con 3 quedaba una celda vacía).
       // `null` = la consulta de conteos se cayó: «—», nunca un 0 que nadie midió.
       cifras={([
-        { etiqueta: tr('descargaSat.bandeja.vista.cifraDescargados'), valor: c === null ? null : c.descargados, nota: tr('descargaSat.bandeja.vista.cifraDescargadosNota') },
-        { etiqueta: tr('descargaSat.bandeja.vista.cifraPorResolver'), valor: c === null ? null : c.ambiguos + c.disponibles, nota: tr('descargaSat.bandeja.vista.cifraPorResolverNota') },
-        { etiqueta: tr('descargaSat.bandeja.vista.cifraResueltos'), valor: c === null ? null : c.casados + c.ignorados, nota: tr('descargaSat.bandeja.vista.cifraResueltosNota') },
+        { etiqueta: tr('descargaSat.bandeja.vista.cifraDescargados'), info: 'descarga_sat.bajados', valor: c === null ? null : c.descargados, nota: tr('descargaSat.bandeja.vista.cifraDescargadosNota') },
+        { etiqueta: tr('descargaSat.vista.esperanQueTuDecidas'), info: 'descarga_sat.ambiguos', valor: c === null ? null : c.ambiguos, nota: tr('descargaSat.vista.variosGastosEmpatanLikida') },
+        { etiqueta: tr('descargaSat.vista.sinGastoQueLes'), info: 'descarga_sat.disponibles', valor: c === null ? null : c.disponibles, nota: tr('descargaSat.vista.puedeSerUnGasto') },
+        { etiqueta: tr('descargaSat.bandeja.vista.cifraResueltos'), info: 'descarga_sat.casados', valor: c === null ? null : c.casados + c.ignorados, nota: tr('descargaSat.bandeja.vista.cifraResueltosNota') },
       ] as PropsCifra[]).map((x): PropsCifra => ({
         ...x, formato: 'entero', matiz: 8,
         ...(x.valor === null ? { estado: 'vacio' as const, mensaje: tr('descargaSat.bandeja.vista.noSePudoLeer', { error: '' }) } : {}),
       }))}
       etiquetaCifras={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}
+      selloCifras={selloHoy(tr('descargaSat.vista.buzonDelSat'))}
     >
       {/* ── LA LISTA ───────────────────────────────────────────────── */}
       <Tarjeta titulo={cola.titulo} acciones={bandeja.total !== null ? <Chip>{numero(bandeja.total)}</Chip> : undefined}>

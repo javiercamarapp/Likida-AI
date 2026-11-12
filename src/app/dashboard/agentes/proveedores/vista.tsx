@@ -110,7 +110,7 @@ export function VistaAgenteProveedores({
       ) : undefined}
     >
       <div className="rv-ag-pila rv-ag-compacto">
-        {/* La bandeja primero: es lo que se decide todos los días. Subir y el buzón son la puerta de entrada y van debajo, lado a lado. */}
+        {/* La bandeja primero: es lo que se decide todos los días. Subir y el buzón son la puerta de entrada y van debajo, lado a lado (6/6). */}
       <Tarjeta titulo={tx('proveedores.vista.la_bandeja')} info="proveedores.bandeja">
         <p className="rv-prov__nota">{tx('proveedores.vista.pendientes_arriba_lo_decidido_queda')}</p>
         {facturas.length === 0 ? (
@@ -138,7 +138,7 @@ export function VistaAgenteProveedores({
       </Tarjeta>
 
 
-        <FilaTarjetas variante="12" className="rv-prov__fila">
+        <FilaTarjetas variante="6-6" className="rv-prov__fila">
       <Tarjeta titulo={tx('proveedores.vista.subir_factura_de_proveedor')} info="proveedores.subir">
         <p className="rv-prov__nota">
           {rico(tx('proveedores.vista.el_xml_es_el_dato'), { rfc: rfcFlota
@@ -169,9 +169,11 @@ export function VistaAgenteProveedores({
 
         </FilaTarjetas>
 
-      {recepcion}
-
-      {entrega}
+      {/* Recepción por correo y entrega al contador lado a lado (Rovaq: rejilla 6/6 con 12 px); la que no llega, como falta de dato, no deja hueco a la otra. */}
+      <FilaTarjetas variante="6-6">
+        {recepcion}
+        {entrega}
+      </FilaTarjetas>
 
       <Disclosure titulo={tx('proveedores.vista.que_son_los_csv_de')}>
       <p className="rv-prov__nota">

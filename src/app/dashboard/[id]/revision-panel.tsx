@@ -59,18 +59,23 @@ export function PanelRevision({ estado, gastos, accion, folio, corregir = null }
   const disputados = gastos.filter((g) => g.disputa);
   return (
     <Tarjeta titulo={tr('liquidacion.revision.titulo')}>
-      <div className="rv-liq__firma">
-        <FirmaActual estado={estado} />
+      {/* Dos bloques lado a lado (Rovaq: fichas de 2 columnas): a la izquierda el estado de la firma, las disputas y las notas; a la derecha la forma de
+          firmar. Sin forma (rol sin permiso o ya cerrada) queda una sola columna, sin media tarjeta vacía. */}
+      <div className="rv-liq__rev" data-dos={accion && estado.firmable ? '' : undefined}>
+        <div className="rv-liq__firma">
+          <FirmaActual estado={estado} />
 
-        {disputados.length > 0 && (
-          <Disputas gastos={disputados} firmable={estado.firmable} corregir={estado.firmable ? null : corregir} />
-        )}
+          {disputados.length > 0 && (
+            <Disputas gastos={disputados} firmable={estado.firmable} corregir={estado.firmable ? null : corregir} />
+          )}
+
+          {!accion && estado.firmable && <p className="rv-liq__nota">{tr('liquidacion.revision.rolNoFirma')}</p>}
+          {!estado.firmable && estado.revision === 'rechazada' && <p className="rv-liq__nota">{tr('liquidacion.revision.rechazadaSigue')}</p>}
+        </div>
 
         {accion && estado.firmable && (
           <Forma accion={accion} gastos={gastos} folio={folio} yaFirmadaPorElMotor={estado.revision !== 'pendiente'} />
         )}
-        {!accion && estado.firmable && <p className="rv-liq__nota">{tr('liquidacion.revision.rolNoFirma')}</p>}
-        {!estado.firmable && estado.revision === 'rechazada' && <p className="rv-liq__nota">{tr('liquidacion.revision.rechazadaSigue')}</p>}
       </div>
     </Tarjeta>
   );

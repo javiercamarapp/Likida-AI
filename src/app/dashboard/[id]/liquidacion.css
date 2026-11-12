@@ -99,8 +99,15 @@
 [data-ui="v2"] .rv-liq__ficha .rv-sis.rv-liq__datos { flex: 1 1 auto; grid-auto-rows: minmax(0, 1fr); }
 [data-ui="v2"] .rv-liq__ficha .rv-liq__datos .rv-sis__campo { align-items: center; }
 
-/* Formularios de revisión (Rovaq FM): columna de a lo más 780 px con filas rótulo-control, no un campo de 1350 px. */
-.rv-liq__firma { max-width: 780px; }
+/* Revisión (Rovaq: fichas en bloques de 2 columnas): estado y disputas a la izquierda (5/12), la forma a la derecha (7/12) con un filete entre ambas; en
+   pantallas angostas, una columna. Antes: una forma de 780 px en una tarjeta de 1380 px con la mitad derecha vacía. */
+.rv-liq__rev { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 24px; align-items: start; }
+.rv-liq__rev[data-dos] { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+.rv-liq__rev[data-dos] > .rv-liq__firma:first-child { padding-right: 24px; border-right: 1px solid var(--line); }
+@media (max-width: 899.98px) {
+  .rv-liq__rev[data-dos] { grid-template-columns: minmax(0, 1fr); }
+  .rv-liq__rev[data-dos] > .rv-liq__firma:first-child { padding-right: 0; border-right: 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+}
 
 /* «Qué se sabe / Qué no se sabe»: las listas llevan sus marcas (viñetas), no solo sangría. */
 [data-ui="v2"] .rv-esq__saber ul { list-style: disc; }

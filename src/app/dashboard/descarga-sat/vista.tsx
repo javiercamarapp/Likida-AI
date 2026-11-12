@@ -281,7 +281,8 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
           </FormaConAviso>
         ) : (
           <>
-            <p className="rv-sat__texto" role="status">{motivoBloqueo}</p>
+            {/* Con el proveedor sin configurar el motivo YA va en el aviso de arriba: no se repite palabra por palabra en la tarjeta (Rovaq: a lo más dos avisos, sin repetir el texto). */}
+            {proveedor.configurado && <p className="rv-sat__texto" role="status">{motivoBloqueo}</p>}
             <div><button type="button" disabled className="rv-sat__no-disponible">{tr('descargaSat.vista.noDisponibleAhora')}</button></div>
           </>
         )}

@@ -173,7 +173,8 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
   const encendida = control !== null && control !== 'sin_fila' && control.emisionReal;
   return (
     <Tarjeta titulo={tx('rest.emision_real_de_facturas')}>
-      <div className="rv-fact__pila rv-fact__emision">
+      <div className="rv-fact__emision">
+        <div className="rv-fact__pila rv-fact__emision-col">
         <p className="rv-fact__nota">{ricoT(tx('rest.un_cfdi_emitido_no_se_deshace'), { e0: (c) => <Link className="rv-fact__enlace" href="/dashboard/legal">{c}</Link> })}</p>
         {control === null ? (
           <p role="alert" className="rv-fact__nota" data-tono="bad">{tx('rest.no_se_pudo_leer_el_control')}</p>
@@ -188,6 +189,8 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
             <Limites c={control} esDueno={esDueno} flota={flotaPintada} />
           </>
         )}
+        </div>
+        <div className="rv-fact__pila rv-fact__emision-col">
         <p className="rv-fact__sec">{tx('rest.lotes_por_confirmar')}</p>
         {lotes === null ? (
           <p className="rv-fact__nota" data-tono="bad">{tx('rest.no_se_pudieron_leer_los_lotes')}</p>
@@ -202,6 +205,7 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
         ) : (
           <ul className="rv-fact__reglones">{portales.map((f) => <FilaPortalControl key={f.clave} f={f} minimo={minimoParaAutonoma} esDueno={esDueno} flota={flotaPintada} />)}</ul>
         )}
+        </div>
       </div>
     </Tarjeta>
   );

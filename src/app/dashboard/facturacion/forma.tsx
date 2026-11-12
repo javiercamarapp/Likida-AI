@@ -9,7 +9,7 @@ import { dinero } from '@/lib/i18n/es/dinero';
 // como props desde la página. Mismo contrato que `clientes/forma.tsx`.
 import type { RenglonSinFacturar } from '@/lib/likida/facturacion_clientes';
 import {
-  Boton, BotonEnlace, Casilla, CampoFecha, CampoSelect, CampoTexto, Drawer, Fieldset, FormaEnCajon,
+  Aviso, Boton, BotonEnlace, Casilla, CampoFecha, CampoSelect, CampoTexto, Drawer, Fieldset, FormaEnCajon,
   type AccionDeForma, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 
@@ -69,11 +69,13 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
     <FormaEnCajon
       id="factura-nueva" titulo={tr('facturacion.forma.registrarFactura')} descripcion={tr('facturacion.forma.elVencimientoSaleDe')}
       accion={adaptar(accion)} boton={tr('facturacion.forma.registrarFactura')} disparador={tr('facturacion.forma.registrarFactura')}
+      /* Alta de 2 columnas con ayudas largas: cajón de 640 px (Rovaq: las altas miden 640; el de 420 es de consulta). */
+      tamano="xl"
     >
       {clientes === null ? (
-        <p className="text-[12px] text-[color:var(--bad)]">{tr('facturacion.forma.tuCatalogoDeClientes')}</p>
+        <Aviso tono="error">{tr('facturacion.forma.tuCatalogoDeClientes')}</Aviso>
       ) : clientes.length === 0 ? (
-        <p className="text-[12px] text-[color:var(--warn)]">{tr('facturacion.forma.noTienesClientesDados')}</p>
+        <Aviso tono="warn">{tr('facturacion.forma.noTienesClientesDados')}</Aviso>
       ) : (
         <CampoSelect id="ff-cliente" etiqueta={tr('facturacion.forma.cliente')} name="clienteId" obligatorio defaultValue="">
           <option value="">{tr('facturacion.forma.eligeAlCliente')}</option>

@@ -65,8 +65,9 @@ export function SeccionPorGasto({ config, plan, tablero, tr = TR_ES }: {
                 : ef.medianaHoras === null ? t('cobranza.gasto.avisos_que_produjeron_el_comprobante') : t('cobranza.gasto.mediana_horas', { n: numero(ef.medianaHoras) })],
           ] as const).map(([rotulo, valor, nota]) => (
             <div key={rotulo} className="rv-cob__resumen-fila">
-              <dt>{rotulo}{nota ? <small>{nota}</small> : null}</dt>
+              <dt>{rotulo}</dt>
               <dd className="rv-cifra">{valor}</dd>
+              {nota ? <dd className="rv-cob__resumen-nota">{nota}</dd> : null}
             </div>
           ))}
         </dl>
