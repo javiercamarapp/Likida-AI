@@ -93,6 +93,7 @@ export function VistaSitios(p: PropsVistaSitios) {
           {p.puedeEditar && (
             <CajonImportarSitios disparador={tx('rest.importar')} titulo={tx('rest.importar_sitios_desde_csv')}>
               <section>
+                {/* sin-info: título de un formulario de carga dentro del cajón de importar, no una cifra ni un recuadro de datos */}
                 <h3>{tx('rest.importar_desde_csv')}</h3>
                 <p className="rv-cd__nota">{ricoT(tx('rest.columnas_code_codigo_nombre_tipo_lat'), { code: (c) => <code>{c}</code> })}</p>
                 <Disclosure titulo={tx('rest.ver_el_formato_de_ejemplo')} variante="linea">
@@ -103,6 +104,7 @@ export function VistaSitios(p: PropsVistaSitios) {
               </section>
               {p.accionCatalogo && (
                 <section>
+                  {/* sin-info: título de un formulario de carga dentro del cajón de importar, no una cifra ni un recuadro de datos */}
                   <h3>{tx('rest.catalogo_depurado_de_origenes_y_destinos')}</h3>
                   <p className="rv-cd__nota">{ricoT(tx('rest.sin_tope_de_filas_columnas_code'), { code: (c) => <code>{c}</code>, strong: (c) => <strong>{c}</strong> })}</p>
                   <FormaCatalogo accion={p.accionCatalogo} />
@@ -110,6 +112,7 @@ export function VistaSitios(p: PropsVistaSitios) {
               )}
               {p.accionImportarEquivalencias && p.textosSinSitio !== undefined && (
                 <section>
+                  {/* sin-info: título de un formulario de carga dentro del cajón de importar, no una cifra ni un recuadro de datos */}
                   <h3>{tx('rest.importar_equivalencias_desde_csv')}</h3>
                   <p className="rv-cd__nota">{ricoT(tx('rest.columnas_code_texto_geocerca_codigo_tipo'), { code: (c) => <code>{c}</code> })}</p>
                   <FormaImportarEquivalencias accion={p.accionImportarEquivalencias} />

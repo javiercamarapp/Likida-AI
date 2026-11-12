@@ -54,7 +54,7 @@
 [data-ui="v2"] .rv-usu__revocar:hover { background: #fbe0e5; border-color: rgba(172, 36, 64, .5); }
 [data-ui="v2"] .rv-usu__revocar:focus-visible { outline: 2px solid #ac2440; outline-offset: 2px; }
 /* El menú «···» es de la familia flotante: radio 12 y sombra del sistema. */
-[data-ui="v2"] .rv-pop.rv-usu__acciones { border-radius: 12px; box-shadow: var(--sh-pop, 0 8px 24px rgba(0, 0, 0, .12)); }
+[data-ui="v2"] .rv-usu__acciones.rv-pop { border-radius: 12px; box-shadow: var(--sh-pop, 0 8px 24px rgba(0, 0, 0, .12)); }
 /* Tarjeta de invitar compacta (Rovaq «Invitar integrante»): primario de 32 px abajo a la IZQUIERDA y sin la holgura de arriba. */
 [data-ui="v2"] .rv-usu__pie-invitar { justify-content: flex-start; padding-top: 12px; }
 [data-ui="v2"] .rv-usu__pie-invitar .rv-btn { min-height: 32px; }

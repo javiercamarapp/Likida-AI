@@ -265,7 +265,7 @@
 [data-ui="v2"] .rv-encabezado__texto { min-width: 0; flex: 1 1 auto; }
 [data-ui="v2"] .rv-encabezado__rotulo { margin: 0 0 2px; font: 600 12px/1.3 var(--font-sans-ui, inherit); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 [data-ui="v2"] .rv-encabezado__titulo { margin: 0; font-size: var(--t-page); line-height: 1.2; font-weight: 600; letter-spacing: -.025em; color: var(--ink); }
-[data-ui="v2"] .rv-encabezado__desc { max-width: none; margin: 2px 0 0; font-size: var(--t-body); line-height: 1.4; color: var(--muted); }
+[data-ui="v2"] .rv-encabezado__desc { max-width: none; margin: 2px 0 0; font-size: var(--t-body); line-height: 1.65; color: var(--muted); }
 [data-ui="v2"] .rv-encabezado__acciones { display: flex; align-items: center; gap: 8px; flex: none; }
 @media (max-width: 819px) {
 [data-ui="v2"] .rv-encabezado { flex-wrap: wrap; gap: 8px 12px; }

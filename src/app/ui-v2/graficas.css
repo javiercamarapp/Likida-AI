@@ -371,7 +371,8 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-tabla-grafica__caja { overflow-x: auto; }
 [data-ui="v2"] .rv-tabla-grafica__caja table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 [data-ui="v2"] .rv-tabla-grafica__caja th, [data-ui="v2"] .rv-tabla-grafica__caja td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
-[data-ui="v2"] .rv-tabla-grafica__caja thead th { font-size: 12px; font-weight: 600; color: var(--muted); }
+[data-ui="v2"] .rv-tabla-grafica__caja thead th { height: 36px; padding-block: 0; font-size: 12px; font-weight: 600; color: var(--ink); background: var(--canvas); }
+[data-ui="v2"] .rv-tabla-grafica__caja tbody th, [data-ui="v2"] .rv-tabla-grafica__caja tbody td { height: 40px; padding-block: 0; }
 [data-ui="v2"] .rv-tabla-grafica__caja tbody th { font-weight: 500; }
 [data-ui="v2"] .rv-tabla-grafica__caja .rv-num { text-align: right; }
 @media (max-width: 819px) {
