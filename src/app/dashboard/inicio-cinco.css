@@ -12,9 +12,12 @@
 /* Las filas de tarjetas de la portada se estiran a la altura de la más alta: sin tarjetas bajas junto a una alta. */
 .rv-ic__fila > .rv-tarjeta { height: 100%; }
 
-/* El chip de estado de cada agente es de UNA línea (22 px), nunca de dos ocupando todo el ancho; si el texto no cabe se recorta con puntos suspensivos. */
-[data-ui="v2"] .rv-ic__estado { flex-wrap: nowrap; }
-[data-ui="v2"] .rv-ic__estado > .rv-estado { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 22px; min-height: 22px; padding-block: 0; }
+/* El chip de estado de cada agente se ve COMPLETO: si el texto no cabe en una línea baja a la siguiente (altura mínima 22 px), nunca se recorta con puntos suspensivos. */
+[data-ui="v2"] .rv-ic__estado { flex-wrap: wrap; row-gap: 4px; min-width: 0; }
+[data-ui="v2"] .rv-ic__estado > .rv-estado { white-space: normal; overflow: visible; text-overflow: clip; height: auto; min-height: 22px; padding-block: 3px; line-height: 1.25; max-width: 100%; }
+
+/* La cifra vacía «—» de la tira de la portada mide lo mismo que cualquier cifra (26/700, la escala del sistema), en gris para no leerse como medición. */
+[data-ui="v2"] .rv-esq--portada .rv-kpi__valor[data-vacio] { font-size: var(--t-kpi, 26px); font-weight: 700; color: var(--muted); }
 
 /* Móvil: la tira de los cinco agentes se desliza DENTRO de sí misma. `contain: inline-size` impide que su contenido ensanche el documento
    (antes la página entera medía 934 px sobre un viewport de 412). */

@@ -14,7 +14,7 @@ import { COLOR_EMBUDO, esProspectoTerminal } from '@/lib/admin/prospectos-mapa-c
 import { leerRespuestaMensaje } from '../respuesta_mensaje';
 import { hrefWa, hrefCorreo, mensajeWa, correoProspecto } from '../mensajes';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { Boton, Chip, Icono, StatusChip, Tarjeta, clasesBoton } from '../../../ui-v2/componentes';
+import { Boton, Chip, FilaTarjetas, Icono, StatusChip, Tarjeta, clasesBoton } from '../../../ui-v2/componentes';
 import { EsqueletoFicha } from '../../../ui-v2/esqueletos';
 import { observadas } from '../../sello-observado';
 import { BarraPct } from '../cerebro';
@@ -105,6 +105,8 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
         </Tarjeta>,
       ]}
     >
+      {/* Decisor(es) y ficha en una fila 6-6 (Rovaq FI: bloques a dos columnas que llenan la fila; antes el decisor quedaba solo en 1/3). */}
+      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
       {/* ── Decisores ──────────────────────────────────────────────────── */}
       <Tarjeta titulo={p.personas.length > 0 ? t(p.personas.length > 1 ? 'mapa_prospectos_detalle.decisores_investigados' : 'mapa_prospectos_detalle.decisor_investigado') : t('mapa_prospectos_detalle.decisor')}
         estado={p.personas.length === 0 && !p.contacto ? 'vacio' : 'ok'} contenida mensaje={t('mapa_prospectos_detalle.sin_decisor_confirmado')} detalle={t('mapa_prospectos_detalle.ningun_agente_ha_encontrado_un_decisor')}>
@@ -151,6 +153,7 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
           <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.estimado_no_medido_unidades_18_viajes', { numero: numero(p.numUnidades ?? 0, idioma) })}</p>
         )}
       </Tarjeta>
+      </FilaTarjetas>
 
       {p.historia && (
         <Tarjeta titulo={t('mapa_prospectos_detalle.historia')}><p className="cer-mensaje__texto">{p.historia}</p></Tarjeta>

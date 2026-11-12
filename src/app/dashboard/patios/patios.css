@@ -10,3 +10,6 @@
 
 /* Cabecera y cifra de las columnas numéricas del registro van a la derecha las dos (tabular), no solo la cifra. */
 [data-ui="v2"] .rv-tb table th.num { text-align: right; }
+
+/* Ronda 6: la nota de método vive dentro de la tarjeta de la tabla, bajo ella, con su filete (Rovaq). */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-pt__nota { padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; }

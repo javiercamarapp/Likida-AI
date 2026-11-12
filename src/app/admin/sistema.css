@@ -82,5 +82,14 @@
   [data-ui="v2"] .rv-tb table:has(.adm-sis-sub, .rv-agente-sub) tbody :is(th, td) { height: auto; min-height: 56px; padding-block: 10px; }
 }
 
-/* F26 ronda 5: la tarjeta «contenida» de una fila de la rejilla no se estira a la altura de su vecina (la gráfica con su tabla abierta la dejaba alta y vacía). */
-[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.adm-fase-tabla { height: auto; align-self: start; }
+/* F26 ronda 6: el vacío dentro de una tarjeta es el `ac-vacio` de Rovaq (1 px punteado, radio 8, 20×14) en TODA pantalla de sistema, no solo en las fases. */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* F26 ronda 6: las dos tarjetas de la rejilla de una fase (gráfica + modelos) miden LO MISMO y no dejan hueco (Rovaq): la tabla de modelos se
+   estira a la altura de su vecina y reparte sus filas; el vacío de una línea se centra en el alto sobrante. */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.adm-fase-tabla { height: 100%; align-self: stretch; }
+[data-ui="v2"] .adm-fase-tabla > .rv-tarjeta__cuerpo { display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-fase-tabla .rv-tb { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-fase-tabla .rv-tb__region { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-fase-tabla .rv-tb__region > table { flex: 1 1 auto; height: 100%; }
+[data-ui="v2"] .adm-fase-tabla .adm-sis-vacio-linea { flex: 1 1 auto; display: grid; align-content: center; justify-items: start; }

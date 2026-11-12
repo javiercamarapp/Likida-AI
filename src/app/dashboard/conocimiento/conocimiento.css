@@ -19,3 +19,12 @@
 
 /* La tira de tres cifras: la celda con ⓘ (32 px) fija el alto del rótulo de TODAS, así las cifras quedan a la misma altura. */
 [data-ui="v2"] .rv-esq:has(.rv-conocimiento__tabla) .rv-kpi__cab { min-height: 32px; }
+
+/* Pie «25 de N» con «Ver más» ghost a su lado. */
+.rv-conocimiento__mas { margin-left: 8px; vertical-align: middle; }
+
+/* Móvil: la tabla sigue siendo tabla (filas compactas de Rovaq), sin tarjeta por norma. Se quedan norma, estado y «Ver»; nivel y fecha viven en la Vista rápida. */
+@media (max-width: 780px) {
+  [data-ui="v2"] .rv-conocimiento__tabla table :is(th, td):is(:nth-child(2), :nth-child(4)) { display: none; }
+  [data-ui="v2"] .rv-conocimiento__tabla table tbody :is(th, td) { height: 49px; padding-block: 6px; }
+}

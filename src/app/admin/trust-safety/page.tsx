@@ -11,6 +11,9 @@ import {
 } from '@/lib/seguridad/eventos';
 import { coberturaEventosSeguridad, type CoberturaFuente } from '@/lib/seguridad/cobertura';
 import { fechaHoraMx, numero } from '@/lib/formato';
+import { opcionesBitacora } from '@/lib/admin/bitacora';
+import { ChipCopiable } from '../bitacora/chip-copiable';
+import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
@@ -45,7 +48,11 @@ const pillSeveridad = (t: TSistema = T_SISTEMA_ES): Record<string, { tono: TonoE
   info: { tono: 'neutral', etiqueta: t('trust_safety.info') },
 });
 
-const columnasEventos = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma, pag?: string): ColumnaTabla<FilaSeguridad>[] => ([
+/** Nombres legibles de flotas y personas (id → nombre). Un identificador sin nombre conocido se queda como id-chip: nunca se inventa un nombre. */
+type Nombres = { flotas: Map<string, string>; personas: Map<string, string> };
+const ES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const columnasEventos = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma, pag?: string, nombres: Nombres = { flotas: new Map(), personas: new Map() }): ColumnaTabla<FilaSeguridad>[] => ([
   { id: 'cuando', titulo: t('trust_safety.cuando'), corta: true, celda: (e) => fechaHoraMx(e.creadoEn, idioma) },
   {
     // UNA línea por fila (40 px): el origen es su propia columna, no un segundo renglón.
@@ -70,9 +77,23 @@ const columnasEventos = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma, pag?: stri
   },
   {
     // El actor viene ya truncado a 120 y JAMÁS trae un secreto completo (contrato de registrarEventoSeguridad). Sin actor no se inventa.
-    id: 'actor', titulo: t('trust_safety.actor'), celda: (e) => <span className="adm-sis-celda-texto" title={e.actor ?? undefined}>{e.actor ?? '—'}</span>,
+    id: 'actor', titulo: t('trust_safety.actor'),
+    celda: (e) => {
+      if (e.actor === null || e.actor === '') return '—';
+      const nombre = nombres.personas.get(e.actor);
+      if (nombre) return <span className="adm-sis-celda-texto" title={nombre}>{nombre}</span>;
+      // Un identificador (UUID) va en id-chip de Rovaq, con «Copiar»; un texto ya legible (una llave truncada, una IP) se queda como texto.
+      return ES_UUID.test(e.actor) ? <ChipCopiable texto={e.actor} copiar={t('bitacora.copiar')} copiado={t('bitacora.copiado')} /> : <span className="adm-sis-celda-texto" title={e.actor}>{e.actor}</span>;
+    },
   },
-  { id: 'flota', titulo: t('observabilidad.flota'), celda: (e) => (e.tenantId ? <span className="cifra-mono text-xs text-muted">{e.tenantId.slice(0, 8)}</span> : <span className="text-xs text-muted">{t('trust_safety.sin_flota')}</span>) },
+  {
+    id: 'flota', titulo: t('observabilidad.flota'),
+    celda: (e) => {
+      if (!e.tenantId) return <span className="text-xs text-muted">{t('trust_safety.sin_flota')}</span>;
+      const nombre = nombres.flotas.get(e.tenantId);
+      return nombre ? <span className="adm-sis-celda-texto" title={nombre}>{nombre}</span> : <ChipCopiable texto={e.tenantId} copiar={t('bitacora.copiar')} copiado={t('bitacora.copiado')} />;
+    },
+  },
   {
     id: 'vr', titulo: t('trust_safety.vista_rapida'), tituloOculto: true, alinear: 'der',
     celda: (e) => <BotonEnlace href={`/admin/trust-safety?${new URLSearchParams({ ...(pag ? { pag } : {}), ver: String(e.id) })}`} variante="ghost" tamano="sm">{t('trust_safety.vista_rapida')}</BotonEnlace>,
@@ -103,11 +124,17 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
   const { pag, ver } = (await searchParams) ?? {};
   // Las dos lecturas caen POR SEPARADO: que los conteos fallen no debe
   // esconder la lista, ni al revés — y cada fallo se dice con su alcance.
-  const [eventos, resumen, cobertura] = await Promise.all([
+  const [eventos, resumen, cobertura, opciones] = await Promise.all([
     getEventosSeguridad(LIMITE_LISTA).catch((): FilaSeguridad[] | null => null),
     resumenEventosSeguridad().catch((): ResumenSeguridad | null => null),
     coberturaEventosSeguridad().catch((): CoberturaFuente[] | null => null),
+    opcionesBitacora().catch(() => ({ flotas: null, personas: null })),
   ]);
+  // Si no se pudieron leer los nombres, las celdas caen al id-chip (el identificador real), no a un nombre inventado.
+  const nombres: Nombres = {
+    flotas: new Map((opciones.flotas ?? []).map((f) => [f.id, f.nombre])),
+    personas: new Map((opciones.personas ?? []).map((u) => [u.id, u.nombre])),
+  };
 
   const posicion = ver && eventos ? eventos.findIndex((e) => String(e.id) === ver) : -1;
   const sel = posicion >= 0 && eventos ? eventos[posicion] : null;
@@ -116,6 +143,7 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
   return (
     <EsqueletoTablaMaestra
       titulo={t('trust_safety.trust_safety')}
+      apoyo={t('trust_safety.apoyo')}
       vistaRapida={sel ? (
         <CajonVistaRapida
           titulo={sel.tipo.replace(/_/g, ' ')} subtitulo={t('trust_safety.vr_subtitulo', { n: posicion + 1, total: eventos!.length })} hrefCerrar={hrefCerrar}
@@ -123,11 +151,11 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
             { etiqueta: t('trust_safety.severidad'), valor: (pillSeveridad(t)[sel.severidad] ?? { etiqueta: sel.severidad }).etiqueta },
             { etiqueta: t('trust_safety.cuando'), valor: fechaHoraMx(sel.creadoEn, idioma) },
             { etiqueta: t('trust_safety.vr_veces'), valor: String(sel.repeticiones ?? 1) },
-            { etiqueta: t('observabilidad.flota'), valor: sel.tenantId ? sel.tenantId.slice(0, 8) : t('trust_safety.sin_flota') },
+            { etiqueta: t('observabilidad.flota'), valor: sel.tenantId ? (nombres.flotas.get(sel.tenantId) ?? sel.tenantId.slice(0, 8)) : t('trust_safety.sin_flota') },
           ]}
         >
           <p className="adm-sis-nota">{t('trust_safety.origen')}: {sel.origen}</p>
-          <p className="adm-sis-nota">{t('trust_safety.actor')}: {sel.actor ?? '—'}</p>
+          <p className="adm-sis-nota">{t('trust_safety.actor')}: {sel.actor ? (nombres.personas.get(sel.actor) ?? sel.actor) : '—'}</p>
         </CajonVistaRapida>
       ) : null}
       /* ── Los conteos, medidos en la base ── */
@@ -166,7 +194,7 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
           <EstadoVacio titulo={t('trust_safety.sin_eventos')} icono={ShieldAlert} contenido>{t('trust_safety.ningun_evento_registrado_eso_no_prueba')}</EstadoVacio>
         ) : (
           <>
-            <TablaLista<FilaSeguridad> etiqueta={t('trust_safety.eventos_de_seguridad_registrados')} columnas={columnasEventos(t, idioma, pag)} filas={eventos} idFila={(e) => String(e.id)} base="/admin/trust-safety" params={{ pag }} paginacion={{ tamano: 25 }} />
+            <TablaLista<FilaSeguridad> etiqueta={t('trust_safety.eventos_de_seguridad_registrados')} columnas={columnasEventos(t, idioma, pag, nombres)} filas={eventos} idFila={(e) => String(e.id)} base="/admin/trust-safety" params={{ pag }} paginacion={{ tamano: 25 }} />
             <p className="m-0 mt-3 text-xs text-muted">
               {resumen === null
                 ? t('trust_safety.mostrando_los_ultimos_el_total_historico', { numero: numero(eventos.length, idioma) })
