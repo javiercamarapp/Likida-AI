@@ -65,9 +65,12 @@
 .rv-cifra { font-variant-numeric: tabular-nums; }
 
 /* «Emisión real de facturas» (Rovaq FM): secciones de configuración con filas rótulo-control separadas por un filete, título 14/600 y una sola acción
-   en el pie; columna de a lo más 780 px. */
-.rv-fact__emision { gap: 8px; max-width: 780px; }
-.rv-fact__sec { margin: 8px 0 0; font-size: var(--t-card, 14px); font-weight: 600; line-height: 1.3; color: var(--ink); }
+   en el pie. Dos columnas (estado y límites | lotes y portales) con 12 px de separación y 32 de medianil, en vez de una columna de 780 px con la mitad
+   derecha de la tarjeta vacía; en móvil, una. */
+.rv-fact__emision { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 32px; align-items: start; }
+.rv-fact__emision-col { gap: 8px; min-width: 0; align-content: start; }
+@media (max-width: 899.98px) { .rv-fact__emision { grid-template-columns: minmax(0, 1fr); } }
+.rv-fact__sec { margin: 0; font-size: var(--t-card, 14px); font-weight: 600; line-height: 1.3; color: var(--ink); }
 .rv-fact__ctl-forma { display: grid; }
 .rv-fact__ctl-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 41px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .rv-fact__ctl-etq { min-width: 0; font-size: var(--t-body, 13px); color: var(--ink); }
