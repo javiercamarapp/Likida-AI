@@ -5,9 +5,28 @@
 [data-ui="v2"] .rv-chat-pagina .rv-btn.rv-chat__tema { flex: none; white-space: nowrap; height: 32px; min-height: 32px; }
 
 /* F26 ronda 5 · el lienzo de /preguntale de Rovaq: SIN cabecera de escritorio (el lienzo de puntos ocupa todo el marco y «Historial» va arriba a la
-   derecha, dentro de la página), descripción de 13 px y título 20/600 con tracking -0.5 px (ronda 6). En móvil se conserva la cabecera de 57 px (logo y menú). */
+   derecha, dentro de la página), descripción de 14/20 con ancho máximo de 544 px (ronda 7, como Rovaq) y título 20/600 con tracking -0.5 px (ronda 6). En móvil se conserva la cabecera de 57 px (logo y menú). */
 @media (min-width: 768px) {
   [data-ui="v2"] .rv-col:has(.rv-chat-pagina) .rv-cab-esc { display: none; }
 }
-.rv-chat-pagina .rv-chat:not([data-variante="panel"]) .rv-chat__sub { font-size: 13px; line-height: 19px; }
+.rv-chat-pagina .rv-chat:not([data-variante="panel"]) .rv-chat__sub { font-size: 14px; line-height: 20px; max-width: 544px; }
 .rv-chat-pagina .rv-chat:not([data-variante="panel"]) .rv-chat__hero h1 { letter-spacing: -.5px; }
+
+/* Ronda 7 · móvil: los temas se acomodan en filas (no una tira que se corta en «Fisc…»): todos quedan a la vista dentro de los 412 px. */
+@media (max-width: 767px) {
+  .rv-chat-pagina .rv-chat__temas { flex-wrap: wrap; justify-content: center; overflow: visible; padding: 0; margin: 0; }
+  .rv-chat-pagina .rv-chat__temas > :first-child, .rv-chat-pagina .rv-chat__temas > :last-child { margin-left: 0; margin-right: 0; }
+}
+
+/* Ronda 7 · la dona de la respuesta distingue sus series en monocromo (decisión 10): negro, gris medio, gris claro y trama; el número impreso en la leyenda
+   sigue siendo la señal principal. Mismas tintas que las donas del Contador. */
+[data-ui="v2"] .rv-chat__bloque[data-tipo="dona"] .rv-dona__gajo { stroke-opacity: 1; }
+[data-ui="v2"] .rv-chat__bloque[data-tipo="dona"] .rv-tono-0 { --tono: var(--ink); }
+[data-ui="v2"] .rv-chat__bloque[data-tipo="dona"] .rv-tono-1 { --tono: color-mix(in srgb, var(--ink) 45%, var(--surface)); }
+[data-ui="v2"] .rv-chat__bloque[data-tipo="dona"] .rv-tono-2 { --tono: color-mix(in srgb, var(--ink) 16%, var(--surface)); }
+[data-ui="v2"] .rv-chat__bloque[data-tipo="dona"] .rv-tono-3 { --tono: color-mix(in srgb, var(--ink) 66%, var(--surface)); }
+[data-ui="v2"] .rv-chat__bloque[data-tipo="dona"] .rv-tono-4 { --tono: color-mix(in srgb, var(--ink) 30%, var(--surface)); }
+[data-ui="v2"] .rv-chat__bloque[data-tipo="dona"] .rv-dona__borde { stroke: var(--ink); }
+
+/* Ronda 7 · las acciones de la respuesta (Copiar, Datos CSV, Regenerar o Reintentar) van en UNA fila; si no caben, bajan juntas. */
+.rv-chat__acciones { flex-wrap: wrap; }

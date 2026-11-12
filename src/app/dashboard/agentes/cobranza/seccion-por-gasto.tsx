@@ -8,6 +8,7 @@ import type { AccionSimple } from './controles';
 import { EstadoVacio, FilaTarjetas, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TR_ES, selloHoyTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
+import '../../estados.css';
 import './cobranza.css';
 
 const MAX_FILAS = 40;
@@ -36,7 +37,7 @@ export function SeccionPorGasto({ config, plan, tablero, tr = TR_ES }: {
     { id: 'viaje', titulo: t('cobranza.gasto.viaje'), principal: true, celda: (i) => i.folioViaje ?? t('cobranza.gasto.sin_folio') },
     {
       id: 'gasto', titulo: t('cobranza.gasto.gasto'),
-      celda: (i) => <>{ROTULO_CONCEPTO_COBRANZA[i.concepto] ?? i.concepto} <span className="cifra-mono">{mxn(i.monto, idioma)}</span>{i.fecha ? ` · ${fechaCorta(i.fecha, idioma)}` : ''}</>,
+      celda: (i) => <>{ROTULO_CONCEPTO_COBRANZA[i.concepto] ?? i.concepto} <span className="rv-cifra">{mxn(i.monto, idioma)}</span>{i.fecha ? ` · ${fechaCorta(i.fecha, idioma)}` : ''}</>,
     },
     { id: 'falta', titulo: t('cobranza.gasto.que_falta'), celda: (i) => <StatusChip tono="warn">{ROTULO_MOTIVO[i.motivo]}</StatusChip> },
     { id: 'chofer', titulo: t('cobranza.gasto.chofer'), celda: (i) => i.operadorNombre ?? t('cobranza.gasto.sin_nombre') },
@@ -65,14 +66,14 @@ export function SeccionPorGasto({ config, plan, tablero, tr = TR_ES }: {
           ] as const).map(([rotulo, valor, nota]) => (
             <div key={rotulo} className="rv-cob__resumen-fila">
               <dt>{rotulo}{nota ? <small>{nota}</small> : null}</dt>
-              <dd className="cifra-mono">{valor}</dd>
+              <dd className="rv-cifra">{valor}</dd>
             </div>
           ))}
         </dl>
       </Tarjeta>
 
       {/* ── Qué comprobante falta de qué gasto ── */}
-      <Tarjeta titulo={t('cobranza.gasto.que_falta_gasto_por_gasto')} acciones={<span className="rv-ag-notif__nota">{t('cobranza.gasto.n_gastos', { n: numero(plan.pendientes.length) })}</span>}>
+      <Tarjeta className="rv-tarjeta--tabla" titulo={t('cobranza.gasto.que_falta_gasto_por_gasto')} acciones={<span className="rv-ag-notif__nota">{t('cobranza.gasto.n_gastos', { n: numero(plan.pendientes.length) })}</span>}>
         {plan.pendientes.length === 0 ? (
           <EstadoVacio titulo={t('cobranza.gasto.nada_por_comprobar')} icono={FileWarning} contenido>
             {config.porGasto
@@ -117,7 +118,7 @@ export function SeccionPorGasto({ config, plan, tablero, tr = TR_ES }: {
               <strong>{c.operadorNombre ?? t('cobranza.gasto.chofer')}</strong>
               {' — '}
               {c.concepto ? (ROTULO_CONCEPTO_COBRANZA[c.concepto] ?? c.concepto) : t('cobranza.gasto.gasto_generico')}
-              {c.monto !== null && <> <span className="cifra-mono">{mxn(c.monto, idioma)}</span></>}
+              {c.monto !== null && <> <span className="rv-cifra">{mxn(c.monto, idioma)}</span></>}
               {c.folioViaje && <> {t('cobranza.gasto.viaje_folio', { folio: c.folioViaje })}</>}
               : {ROTULO_MOTIVO[c.motivo]}, {t('cobranza.gasto.tier_n', { tier: c.tier })}.{' '}
               {c.enviado
@@ -162,7 +163,7 @@ function Mini({ t, titulo, filas }: { t: TAgentes; titulo: string; filas: Array<
       {filas.map(([rotulo, avisos, resueltos]) => (
         <div key={rotulo} className="rv-ag-mini__fila">
           <dd>{rotulo}</dd>
-          <dd className="cifra-mono">{t('cobranza.gasto.de_con_comprobante', { resueltos: numero(resueltos), avisos: numero(avisos) })}</dd>
+          <dd className="rv-cifra">{t('cobranza.gasto.de_con_comprobante', { resueltos: numero(resueltos), avisos: numero(avisos) })}</dd>
         </div>
       ))}
     </dl>

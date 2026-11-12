@@ -62,7 +62,7 @@ export default async function Cuenta({
       </div>
       <PreferenciasCuenta idiomaActivo={idioma} textos={{
         idioma: t('cta.idioma'), tema: t('cta.tema'), temaClaro: t('cta.tema.claro'), temaSistema: t('cta.tema.sistema'), temaOscuro: t('cta.tema.oscuro'),
-        es: 'Español', en: 'English', enProximamente: t('cta.en_pronto'), fallo: t('cta.idioma.fallo'),
+        es: 'Español', en: 'English', fallo: t('cta.idioma.fallo'),
       }} />
       <div className="rv-cuenta__pie">
         <Link href={esVendedor ? '/vendedor' : `/dashboard${sufijo}`} className="rv-pub__enlace">{t('cta.volver')}</Link>

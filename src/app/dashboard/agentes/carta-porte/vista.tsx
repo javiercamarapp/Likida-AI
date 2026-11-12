@@ -8,7 +8,7 @@ import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/liki
 import { estadoCatalogosSat, type ConteoCatalogosSat } from '@/lib/likida/carta_porte_docs/catalogos_sat';
 import { DireccionBuzon } from '../proveedores/controles';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
-import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { BarList, Cifra, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import {
   Aviso, AvisoCompacto, clasesBoton, Disclosure, EstadoError, EstadoVacio, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type TonoEstado,
@@ -75,12 +75,17 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
   const esperan = conteo('falta_declarar');
 
   const sinConteo = conteo('si');
+  // Verdad del dato: si el TMS no mandó ningún viaje, «0 viajes en curso» afirmaría algo que nadie midió. Las cuatro cifras salen como «—» con «Sin dato».
+  const sinFuente = typeof sinCcp === 'object' && sinCcp.sinDatosTms?.motivo === 'sin_viajes';
+  const aVacio = (c: PropsCifra): PropsCifra => (sinFuente
+    ? { etiqueta: c.etiqueta, info: c.info, valor: null, estado: 'vacio', mensaje: tx('cartaporte.vista.sin_datos_del_tms') }
+    : c);
   return (
     <EsqueletoTablaMaestra
       titulo={tx('cartaporte.vista.carta_porte_en_automatico')}
       apoyo={tx('cartaporte.vista.al_despachar_corre_el_arbol')}
       avisos={catalogosSat !== undefined ? <AvisoCatalogosSat tr={tr} catalogosSat={catalogosSat} /> : undefined}
-      cifras={datos === null ? undefined : [
+      cifras={datos === null ? undefined : ([
         { info: 'carta_porte_agente.en_curso', etiqueta: tx('cartaporte.vista.viajes_en_curso'), valor: numero(datos.total),
           // La barra solo se pinta si los tres veredictos salen de TODOS los viajes en curso: con la muestra recortada sería una proporción inventada.
           segmentos: datos.viajes.length === datos.total && datos.total > 0
@@ -92,9 +97,9 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
           segmentos: (sinConteo ?? 0) > 0 && armables !== null && sinConteo !== null && datos.viajes.length === datos.total
             ? [{ etiqueta: tx('cartaporte.vista.borradores_sin_fallas'), valor: Math.min(armables, sinConteo) }, { etiqueta: tx('f26d2.cp.sin_armar'), valor: Math.max(0, sinConteo - armables) }]
             : undefined },
-      ]}
+      ] as PropsCifra[]).map(aVacio)}
       etiquetaCifras={tx('cartaporte.vista.carta_porte_en_automatico')}
-      selloCifras={selloHoyTr(tr, tx('cartaporte.vista.sello_viajes_en_curso'))}
+      selloCifras={sinFuente ? undefined : selloHoyTr(tr, tx('cartaporte.vista.sello_viajes_en_curso'))}
     >
       <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
       {datos === null ? (
