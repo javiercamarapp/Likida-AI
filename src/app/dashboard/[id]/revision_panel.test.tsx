@@ -160,4 +160,10 @@ describe('A37-P-01: la disputa de monto del operador llega a la oficina', () => 
     );
     expect(html).not.toContain('<img');
   });
+
+  it('F26 ronda 8: con forma, el estado y la forma van en dos bloques lado a lado; sin forma, una sola columna', () => {
+    expect(pintar(estado())).toContain('data-dos');
+    expect(pintar(estado(), null)).not.toContain('data-dos');
+    expect(pintar(estado({ firmable: false, revision: 'aprobada' }))).not.toContain('data-dos');
+  });
 });
