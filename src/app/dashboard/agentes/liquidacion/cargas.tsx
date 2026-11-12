@@ -50,6 +50,7 @@ export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar, tr
           </div>
         </form>
         <form action={acciones.contactos} className="rv-liq-forma">
+          {/* sin-info: título de una forma dentro del cajón, no de un recuadro */}
           <h3 className="rv-liq-forma__titulo"><Icono icono={Users} />{' '}{tx('rest.correos_de_operadores_y_coordinadores')}</h3>
           <p className="rv-liq-sub">{ricoT(tx('rest.csv_o_excel_con_las_columnas'), { code: (c) => <code>{c}</code> })}</p>
           <ZonaSoltar><CampoArchivo etiqueta={tx('rest.archivo_de_correos')} name="archivo" accept=".csv,.txt,.xlsx,.xls" required /></ZonaSoltar>

@@ -59,7 +59,7 @@
 /* ── Encabezado de página ──────────────────────────────────────────────── */
 .rv-encabezado { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .rv-encabezado__texto { min-width: 0; }
-.rv-encabezado__rotulo { margin: 0 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rv-encabezado__rotulo { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .rv-encabezado__titulo { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 600; color: var(--ink); }
 .rv-encabezado__desc { margin: 4px 0 0; font-size: 13px; color: var(--muted); max-width: 70ch; }
 .rv-encabezado__acciones { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
