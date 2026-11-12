@@ -6,11 +6,12 @@ import { FormaConAviso } from '../../ui/forma';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { accionNuevoAcceso } from './acciones';
 
-// H18/ADM-7: los rótulos salen de `lib/auth/roles.ts` (el catálogo único); aquí decían cosas que ninguna otra pantalla decía.
-const ROLES: Array<{ valor: RolAppUser; etiqueta: string }> = [
-  { valor: 'flota_admin', etiqueta: `${ROTULOS_ROL.flota_admin.nombre} — ${ROTULOS_ROL.flota_admin.detalle}` },
-  { valor: 'encargado', etiqueta: `${ROTULOS_ROL.encargado.nombre} — ${ROTULOS_ROL.encargado.detalle}` },
-  { valor: 'contador', etiqueta: `${ROTULOS_ROL.contador.nombre} — ${ROTULOS_ROL.contador.detalle}` },
+// H18/ADM-7: los rótulos salen de `lib/auth/roles.ts` (el catálogo único). Solo el NOMBRE del rol: la opción larga («Dueño de la flota — Todo el panel…») se
+// cortaba a media palabra; el detalle de cada rol vive en la tarjeta «Qué puede hacer cada rol» y en la ayuda de la fila (Rovaq: opciones cortas).
+const ROLES: Array<{ valor: RolAppUser; etiqueta: string; detalle: string }> = [
+  { valor: 'flota_admin', etiqueta: ROTULOS_ROL.flota_admin.nombre, detalle: ROTULOS_ROL.flota_admin.detalle },
+  { valor: 'encargado', etiqueta: ROTULOS_ROL.encargado.nombre, detalle: ROTULOS_ROL.encargado.detalle },
+  { valor: 'contador', etiqueta: ROTULOS_ROL.contador.nombre, detalle: ROTULOS_ROL.contador.detalle },
 ];
 
 /**
@@ -30,7 +31,7 @@ export function FormaNuevoAcceso({ flotas, preseleccion, t }: { flotas: Readonly
         </FilaConfig>
         <FilaConfig rotulo={t('nuevo_acceso.rol')} ayuda={t('nuevo_acceso.rol_ayuda')}>
           <CampoSelect etiqueta={t('nuevo_acceso.rol')} etiquetaOculta name="rol" required defaultValue="flota_admin">
-            {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
+            {ROLES.map((r) => <option key={r.valor} value={r.valor} title={r.detalle}>{r.etiqueta}</option>)}
           </CampoSelect>
         </FilaConfig>
         <FilaConfig rotulo={t('nuevo_acceso.correo')} ayuda={t('nuevo_acceso.correo_ayuda')}>
