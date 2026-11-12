@@ -8,6 +8,7 @@ import { BotonReintentar } from '../../ui-v2/componentes/boton-reintentar';
 import { Columnas } from '../../ui-v2/graficas';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
+import '../sistema.css';
 
 export const dynamic = 'force-dynamic';
 

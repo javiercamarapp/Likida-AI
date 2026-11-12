@@ -282,8 +282,8 @@
 .cer-familias li span { flex: 1; min-width: 0; }
 .cer-familias li b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Segunda fila: embudo y tabla equivalente con el mismo alto (la tabla desplaza dentro de su tarjeta). */
-.cer-fila-baja { align-items: start; }
-.cer-fila-baja > .rv-tarjeta { height: auto; }
+.cer-fila-baja { align-items: stretch; }
+.cer-fila-baja > .rv-tarjeta { height: 100%; }
 .cer-tabla-estados .rv-tabla { max-height: 340px; }
 /* Vacío dentro de una tarjeta (Rovaq ac-vacio): borde punteado de 1 px, radio 8, relleno 20×14; nunca sin borde dentro de una tarjeta alta. */
 [data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }

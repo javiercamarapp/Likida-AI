@@ -145,12 +145,12 @@ export default async function ObservabilidadPage() {
       ])}
       variante="6-6"
       graficas={[
-        <Tarjeta key="estado" titulo={t('observabilidad.grafica_corridas')}
-          estado={corridas === null ? 'error' : corridas.length === 0 ? 'vacio' : 'ok'} reintentar contenida
-          mensaje={corridas === null ? t('observabilidad.no_se_pudo_leer_el_historial') : t('observabilidad.los_agentes_no_han_corrido_todavia')}
-          detalle={t('observabilidad.el_historial_existe_y_esta_vacio')}>
-          <BarList etiqueta={t('observabilidad.grafica_corridas')} items={porEstado.map((e) => ({ ...e, texto: numero(e.valor, idioma) }))} maximo={Math.max(1, ...porEstado.map((e) => e.valor))} />
-        </Tarjeta>,
+        // Un solo bloque por dato: con el historial vacío o ilegible, «Corridas recientes» (abajo) ya lo dice; no se repite el mismo vacío en una gráfica.
+        ...(corridas !== null && corridas.length > 0 ? [
+          <Tarjeta key="estado" titulo={t('observabilidad.grafica_corridas')} contenida>
+            <BarList etiqueta={t('observabilidad.grafica_corridas')} items={porEstado.map((e) => ({ ...e, texto: numero(e.valor, idioma) }))} maximo={Math.max(1, ...porEstado.map((e) => e.valor))} />
+          </Tarjeta>,
+        ] : []),
         <Tarjeta key="p95" titulo={t('observabilidad.grafica_p95', { dias })}
           estado={latencias === null || rutas === null ? 'error' : ordenP95.length === 0 ? 'vacio' : 'ok'} reintentar contenida
           mensaje={latencias === null || rutas === null ? t('observabilidad.no_se_pudo_leer_la_latencia') : t('observabilidad.sin_muestras_todavia')}

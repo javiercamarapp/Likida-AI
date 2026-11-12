@@ -916,6 +916,7 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'mapa_prospectos_cerebro.se_ensenan_las_60_mejores_de': 'Showing the best 60 of {numero}. Narrow the filter or export the full CSV.',
   'mapa_prospectos_cerebro.el_embudo_en_luces': 'The funnel, in lights',
   'mapa_prospectos_cerebro.prospectos_por_etapa_del_embudo': 'Prospects per funnel stage',
+  'mapa_prospectos_cerebro.cobertura_por_estado': 'Coverage by state',
   'mapa_prospectos_cerebro.donde_vive_la_cartera': 'Where the pipeline lives',
   'mapa_prospectos_cerebro.prospectos_por_estado': 'Prospects per state',
   'mapa_prospectos_cerebro.sin_plaza_conocida_se_dice_no': 'no known location: stated, not given an invented state.',
@@ -1558,4 +1559,5 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'actividad_codigo.sin_conexion_detalle': 'Ask the technical team to connect read access to the repository (read-only). Until then this screen states nothing: it is not that there are no commits, they could not be read.',
   'actividad_codigo.calculando_detalle': 'GitHub is still computing the repository statistics; reload in a few seconds.',
   'actividad_codigo.error_detalle': 'The activity could not be read: {detalle}. This does NOT mean there are no commits.',
+  'trust_safety.apoyo': 'What the security detectors catch: which sources write here and what happened in the last 30 days.',
 };

@@ -38,7 +38,7 @@ const columnas = (t: TResto = T_RESTO_ES): ColumnaBase<ClienteMcpConectado>[] =>
 ]);
 
 export function TablaClientesMcp({ clientes, t = T_RESTO_ES }: { clientes: ClienteMcpConectado[]; t?: TResto }) {
-  return <TablaBase etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={columnas(t)} filas={clientes} idFila={(c) => c.familia} densa altoMaximo={false} tarjetaMovil />;
+  return <TablaBase etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={columnas(t)} filas={clientes} idFila={(c) => c.familia} densa altoMaximo={false} tarjetaMovil className="rv-mcp__tabla" />;
 }
 
 export function ListaSesionesMcp({ sesiones, cortarSesiones, t = T_RESTO_ES }: {
@@ -82,7 +82,7 @@ export function ListaSesionesMcp({ sesiones, cortarSesiones, t = T_RESTO_ES }: {
   }
   return (
     <TablaBase
-      etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={cols} filas={sesiones} idFila={(s) => s.userId} tarjetaMovil altoMaximo={false}
+      etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={cols} filas={sesiones} idFila={(s) => s.userId} tarjetaMovil altoMaximo={false} className="rv-mcp__tabla"
     />
   );
 }

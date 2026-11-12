@@ -32,3 +32,6 @@
 .rv-sat__chip:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }
 
 [data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
+
+/* La nota de cierre guarda su separación de 12 px respecto al contenido de arriba (lista, pie o vacío punteado). */
+.rv-sat__nota:not(:first-child) { margin-top: 12px; }

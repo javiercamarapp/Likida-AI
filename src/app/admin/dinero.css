@@ -30,8 +30,9 @@
 [data-ui="v2"] .adm-flota-acciones { display: inline-flex; gap: 4px; justify-content: flex-end; }
 [data-ui="v2"] .adm-flota-paneles { display: flex; flex-wrap: wrap; gap: 8px; }
 [data-ui="v2"] .adm-flota-alta { scroll-margin-top: 72px; }
-/* Crear organización (Rovaq P2): una columna estrecha bajo su eyebrow, no un formulario de dos columnas a todo el ancho. */
-[data-ui="v2"] .adm-flota-alta .rv-tarjeta { max-width: 480px; }
+/* Crear organización (Rovaq P2, captura P2-organizaciones-crear): el panel va a TODO el ancho y el formulario, en una columna de 520 px adentro. */
+[data-ui="v2"] .adm-flota-alta .rv-tarjeta { max-width: none; }
+[data-ui="v2"] .adm-flota-alta .adm-forma-fina { max-width: 520px; }
 
 /* La tarjeta de una fila de gráficas llena su celda: dos tarjetas de la misma fila miden lo mismo (Rovaq), sin hueco bajo la más baja. */
 [data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta { height: 100%; }
@@ -56,3 +57,15 @@
 /* Fila cuyas tarjetas miden lo que dice su contenido (un vacío de una línea no se estira al alto del formulario vecino). */
 [data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
 [data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > .rv-tarjeta { height: auto; }
+
+/* ── Ronda 6 · Subir archivos (Marketing): zona de soltar punteada en vez del control nativo a medias (Rovaq: panel punteado, radio 8). ── */
+[data-ui="v2"] .adm-din-forma--ancha { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 719px) { [data-ui="v2"] .adm-din-forma--ancha { grid-template-columns: minmax(0, 1fr); } }
+[data-ui="v2"] .adm-din-forma--ancha > .rv-campo:has(.rv-archivo),
+[data-ui="v2"] .adm-din-forma--ancha > .rv-campo:has(textarea) { grid-column: 1 / -1; }
+[data-ui="v2"] .adm-din-forma--ancha .rv-archivo { flex-wrap: wrap; justify-content: center; gap: 8px 12px; padding: 16px 14px; border: 1.5px dashed var(--line2, var(--line)); border-radius: 8px; background: var(--canvas2, var(--canvas)); text-align: center; }
+[data-ui="v2"] .adm-din-forma--ancha .rv-archivo:hover { border-color: var(--ink); }
+[data-ui="v2"] .adm-din-forma--ancha .rv-archivo__nombre { flex: 0 1 auto; max-width: 100%; }
+/* El texto del consentimiento llena la fila: ya no va en una columna de ~170 px. */
+[data-ui="v2"] .adm-din-forma--ancha .rv-campo--casilla { max-width: none; }
+[data-ui="v2"] .adm-din-forma--ancha .rv-campo--casilla :is(.rv-ayuda, .rv-campo__ayuda, small) { max-width: 72ch; }

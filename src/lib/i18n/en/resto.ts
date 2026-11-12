@@ -1332,4 +1332,5 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'e26b.vend_propuesta_nota': 'at the proposal or pilot stage',
   'r4.vend_area': 'Sales',
   'r4.vend_apoyo': 'Your prospect pipeline by stage, what counts toward your commission and what comes next.',
+  'r6.con_mas': 'Show more',
 };
