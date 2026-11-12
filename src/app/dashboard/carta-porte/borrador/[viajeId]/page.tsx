@@ -12,6 +12,7 @@ import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import '../../carta-porte.css';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { cifrasUniformes } from '../../../formato';
+import { selloHoy } from '../../../sello-hoy';
 import { sufijoTenant } from '../../../sufijo';
 
 export const dynamic = 'force-dynamic';
@@ -62,10 +63,10 @@ export default async function PaginaBorradorCcp({
   const capturados = (r: 'cliente' | 'transportista') => delResp(r).filter((c) => c.presente === true).length;
   const validacion = b.borrador === null ? tr('cartaPorte.borrador.viajeId.page.cifraSinArmar') : b.fallas.length === 0 ? tr('cartaPorte.borrador.viajeId.page.cifraPasa') : tr('cartaPorte.borrador.viajeId.page.cifraFallas', { n: numero(b.fallas.length) });
   const cifras: PropsCifra[] = [
-    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraMercancias'), valor: v.mercancias.length, matiz: 8 },
-    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraCliente'), valor: `${numero(capturados('cliente'))} / ${numero(delResp('cliente').length)}`, matiz: 3 },
-    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraTransportista'), valor: `${numero(capturados('transportista'))} / ${numero(delResp('transportista').length)}`, matiz: 3 },
-    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraValidacion'), valor: validacion, matiz: b.borrador !== null && b.fallas.length > 0 ? 6 : 5, tono: b.borrador !== null && b.fallas.length > 0 ? 'bad' : undefined },
+    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraMercancias'), valor: v.mercancias.length, matiz: 8, sello: selloHoy('Borrador de Carta Porte') },
+    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraCliente'), valor: `${numero(capturados('cliente'))} / ${numero(delResp('cliente').length)}`, matiz: 3, sello: selloHoy('Borrador de Carta Porte') },
+    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraTransportista'), valor: `${numero(capturados('transportista'))} / ${numero(delResp('transportista').length)}`, matiz: 3, sello: selloHoy('Borrador de Carta Porte') },
+    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraValidacion'), valor: validacion, matiz: b.borrador !== null && b.fallas.length > 0 ? 6 : 5, tono: b.borrador !== null && b.fallas.length > 0 ? 'bad' : undefined, sello: selloHoy('Borrador de Carta Porte') },
   ];
   const veredicto = v.decision.necesita === 'si' ? tr('cartaPorte.borrador.viajeId.page.necesitaComplemento') : v.decision.necesita === 'no' ? tr('cartaPorte.borrador.viajeId.page.sinComplementoSegunLo') : tr('cartaPorte.borrador.viajeId.page.faltaDeclararParaDecidir');
 
@@ -86,7 +87,7 @@ export default async function PaginaBorradorCcp({
       etiquetaCifras={tr('cartaPorte.borrador.viajeId.page.los37DatosDel')}
       variante="6-6"
       bloques={[
-        <Tarjeta key="veredicto" titulo={tr('cartaPorte.borrador.viajeId.page.veredicto')}>
+        <Tarjeta key="veredicto" titulo={tr('cartaPorte.borrador.viajeId.page.veredicto')} className="rv-cp__ajusta">
           <p className="text-[13px]">
             {veredicto}{' '}
             <span className="text-[var(--muted)]">{v.decision.motivo}</span>{' '}
@@ -96,7 +97,7 @@ export default async function PaginaBorradorCcp({
             {tr('cartaPorte.borrador.viajeId.page.declaradoEnElViaje', { v: v.declarado.pisaFederal === null ? tr('cartaPorte.borrador.viajeId.page.sinDeclarar') : v.declarado.pisaFederal ? tr('cartaPorte.borrador.viajeId.page.sinMin') : tr('cartaPorte.borrador.viajeId.page.noMin'), v2: ' · ', v3: v.declarado.radioKm === null ? tr('cartaPorte.borrador.viajeId.page.sinDeclarar') : tr('cartaPorte.borrador.viajeId.page.radioKm', { km: numero(v.declarado.radioKm) }) })}
           </p>
         </Tarjeta>,
-        <Tarjeta key="validacion" titulo={tr('cartaPorte.borrador.viajeId.page.validacionContraElRechazo')}>
+        <Tarjeta key="validacion" titulo={tr('cartaPorte.borrador.viajeId.page.validacionContraElRechazo')} className="rv-cp__ajusta">
           {b.borrador === null ? (
             <>
               <p className="text-[12px] text-[var(--muted)]">{tr('cartaPorte.borrador.viajeId.page.elBorradorAunNo')}</p>

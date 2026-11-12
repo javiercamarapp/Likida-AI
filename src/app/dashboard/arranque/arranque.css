@@ -37,3 +37,10 @@
 
 /* Ronda 6 (Rovaq /setup): chips de estado de contorno, sin relleno de color. */
 .rv-ar__estado .rv-estado { background: transparent; border: 1px solid var(--line2); color: var(--ink); }
+
+/* Ronda 7 (móvil 412): los enlaces de la lista de automatizaciones y del siguiente paso miden al menos 32 px de alto de toque (antes < 24 px). */
+@media (max-width: 767px) {
+  .rv-ar__lista { gap: 0; }
+  .rv-ar__lista li { display: flex; align-items: center; min-height: 32px; }
+  .rv-ar__enlace { display: inline-flex; align-items: center; min-height: 32px; }
+}

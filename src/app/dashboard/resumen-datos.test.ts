@@ -27,6 +27,20 @@ describe('semanas de cierres', () => {
   });
 });
 
+describe('meses de cierres', () => {
+  it('6 meses calendario hasta el de hoy (parcial); la misma serie diaria alimenta semanas y meses', () => {
+    // 28-oct-2026: del 1 de may al 28 de oct = 31+30+31+31+30+28 = 181 días
+    expect(R.diasParaMeses('2026-10-28')).toBe(181);
+    const m = R.mesesDeSerie([{ dia: '2026-10-28', valor: 4 }, { dia: '2026-10-02', valor: 1 }, { dia: '2026-05-01', valor: 7 }, { dia: '2026-04-30', valor: 99 }], '2026-10-28');
+    expect(m).toHaveLength(6);
+    expect(m[0]).toMatchObject({ inicio: '2026-05-01', valor: 7, parcial: false, etiqueta: 'may 2026' });
+    expect(m[5]).toMatchObject({ inicio: '2026-10-01', valor: 5, parcial: true, etiqueta: 'oct 2026' });
+  });
+  it('sin datos devuelve ceros medidos, no columnas inventadas', () => {
+    expect(R.mesesDeSerie([], '2026-01-15').map((x) => x.inicio)).toEqual(['2025-08-01', '2025-09-01', '2025-10-01', '2025-11-01', '2025-12-01', '2026-01-01']);
+  });
+});
+
 describe('peajes y Carta Porte', () => {
   it('caseta presente se suma; ausente con menos de 3 conceptos es 0 medido; ausente con 3 es desconocido', () => {
     const g = (series: Array<{ nombre: string; valores: number[] }>) => ({ categorias: ['a'], series });

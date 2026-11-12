@@ -287,6 +287,13 @@ export function VistaTuTurno({
                 <div><BotonEnlace href={siguiente.href} variante="primary" tamano="sm">{siguiente.boton}</BotonEnlace></div>
               </div>
             ) : null}
+            {/* Ronda 7: el conteo real por fuente llena la tarjeta (la misma lectura de la tira; una fuente caída dice «—», nunca 0). */}
+            <ul className="bj-lista bj-sig__resumen">
+              <li><span className="bj-lista__texto">{t('turno.f_piezas')}</span><span className="bj-lista__apoyo">{piezasSinDato ? '—' : numero(bus.piezasPendientes.length)}</span></li>
+              <li><span className="bj-lista__texto">{t('turno.f_envios')}</span><span className="bj-lista__apoyo">{numero(envios.length)}</span></li>
+              <li><span className="bj-lista__texto">{t('turno.f_cambios')}</span><span className="bj-lista__apoyo">{prs.estado === 'ok' ? numero(prs.prs.length) : '—'}</span></li>
+              <li><span className="bj-lista__texto">{t('turno.f_escalaciones')}</span><span className="bj-lista__apoyo">{totalEscalaciones === null ? '—' : numero(totalEscalaciones)}</span></li>
+            </ul>
           </Tarjeta>
         </FilaTarjetas>
       ) : null}

@@ -22,7 +22,7 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
 import type { Metadata } from 'next';
 import {
-  CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FormaConAviso, StatusChip, Tarjeta, type ResultadoAccion,
+  Aviso, CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FormaConAviso, StatusChip, Tarjeta, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import { CajonAlta } from '../cajon-alta';
 import { AccionFila } from './accion-fila';
@@ -226,8 +226,8 @@ export default async function PaginaEmergencias({
   const sinConfirmar = proveedores.filter((p) => !p.verificadoEn).length;
 
   const cifras: PropsCifra[] | undefined = leyoOk ? [
-    // Sin póliza la cifra es «—» (ausente, con su marca «Sin dato»), no un texto de 26 px que se lee como una medición; el motivo va en el sello.
-    { etiqueta: t('emg.cifra.poliza'), valor: poliza ? (polizaVencida ? t('emg.poliza.vencida') : t('emg.poliza.vigente')) : null,
+    // Sin póliza la cifra es «—» del mismo tamaño que las demás (26/700) y el motivo va en su sello de procedencia; no se lee como una medición.
+    { etiqueta: t('emg.cifra.poliza'), valor: poliza ? (polizaVencida ? t('emg.poliza.vencida') : t('emg.poliza.vigente')) : '—',
       sello: poliza ? undefined : t('emg.poliza.sin'), tono: !poliza || polizaVencida ? 'warn' : undefined, info: 'emergencias.poliza' },
     { etiqueta: t('emg.cifra.proveedores'), valor: numero(proveedores.length, idioma), info: 'emergencias.proveedores' },
     { etiqueta: t('emg.cifra.sinconfirmar'), valor: numero(sinConfirmar, idioma), tono: sinConfirmar > 0 ? 'warn' : undefined, info: 'emergencias.sin_confirmar' },
@@ -235,7 +235,8 @@ export default async function PaginaEmergencias({
   ] : undefined;
 
   return (
-    <EsqueletoTablaMaestra titulo={t('emg.titulo')} apoyo={t('emg.apoyo')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy('Directorio de emergencia')}>
+    <EsqueletoTablaMaestra titulo={t('emg.titulo')} apoyo={t('emg.apoyo')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy('Directorio de emergencia')}
+      avisos={leyoOk ? <Aviso>{t('emg.protocolo')}</Aviso> : undefined}>
       {!leyoOk && (
         <EstadoVacio pantalla contenido icono={ShieldCheck} titulo={t('emg.error.titulo')}>
           {t('emg.error')}

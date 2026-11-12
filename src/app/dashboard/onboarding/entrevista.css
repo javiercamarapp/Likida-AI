@@ -1,8 +1,8 @@
 /* Perfil de la flota (entrevista) · solo lo que las piezas del sistema no traen. Colores de tokens; sin sombra en flujo. */
 .rv-ob { position: relative; display: flex; flex-direction: column; min-height: 520px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
-.rv-ob__lienzo { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.rv-ob__lienzo { position: static; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
 .rv-ob__pospuesto { margin: 0; padding: 12px 16px 0; font-size: var(--t-small); color: var(--muted); }
-.rv-ob__listo { position: absolute; top: 12px; right: 16px; z-index: 2; }
+.rv-ob__listo { position: relative; z-index: 2; display: flex; justify-content: center; margin: 0 0 12px; }
 .rv-ob__portada { position: relative; z-index: 1; display: flex; flex: 1 1 auto; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; }
 .rv-ob__columna { width: 100%; max-width: 42rem; display: flex; flex-direction: column; align-items: center; }
 .rv-ob__lead { margin: 8px 0 24px; max-width: 28rem; text-align: center; font-size: var(--t-body); color: var(--muted); }
@@ -84,8 +84,8 @@
 [data-ui="v2"] .rv-ob__caja .rv-ob__campo:focus,
 [data-ui="v2"] .rv-ob__caja .rv-ob__campo:focus-visible { border: 0; box-shadow: none; outline: none; background: transparent; border-radius: 0; padding: 0; }
 .rv-ob__caja .rv-ob__clip { order: 0; }
-.rv-ob__caja .rv-ob__barra > .rv-btn { position: absolute; right: 0; bottom: calc(100% + 6px); order: 0; flex: none; background: transparent; border-color: transparent; }
-@media (max-width: 480px) { .rv-ob__caja .rv-ob__barra > .rv-btn { position: absolute; order: 0; flex: none; } }
+.rv-ob__caja .rv-ob__barra > .rv-btn { position: static; order: 0; flex: none; background: transparent; border-color: transparent; }
+@media (max-width: 480px) { .rv-ob__caja .rv-ob__barra > .rv-btn { position: static; order: 0; flex: none; } }
 
 /* Ronda 6: indicador de avance del perfil (barra de 6 px + «N de M»), centrado sobre el compositor de 650 px. */
 .rv-ob__avance { display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 650px; margin: 0 auto 12px; }
@@ -96,3 +96,16 @@
 .rv-ob__avance-txt { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Un solo borde: la caja de 650 px; el campo de 15 px no lleva borde, fondo ni anillo propios (mayor especificidad que el campo genérico de 32 px). */
 [data-ui="v2"] .rv-ob__caja input.rv-ob__campo, [data-ui="v2"] .rv-ob__caja input.rv-ob__campo:hover, [data-ui="v2"] .rv-ob__caja input.rv-ob__campo:focus-visible { height: 40px; min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: 0; padding: 0; }
+
+/* Ronda 7: composición con UN eje central y el fondo de puntos a todo el marco (el lienzo ya no es el ancestro posicionado: el campo cubre el marco entero,
+   no un rectángulo de bordes irregulares). «Consulta» vive dentro del compositor (ya no flota encima), «Ir al panel» va centrado en la columna y
+   «Prefiero el formulario» se centra con el resto. Pasos de la entrevista como tarjetas con chip de estado (plantilla FL de Rovaq). */
+.rv-ob__avance, .rv-ob__pospuesto, .rv-ob__pasos-fl { position: relative; z-index: 1; }
+.rv-ob__pospuesto { text-align: center; }
+.rv-ob__formulario > .rv-disc--linea > .rv-disc__cab { margin-inline: auto; }
+.rv-ob__pasos-fl { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin: 0 0 12px; padding: 0; }
+.rv-ob__paso-fl { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: var(--t-small); }
+.rv-ob__paso-fl[data-estado="actual"] { border-color: var(--ink); }
+.rv-ob__paso-fl-n { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 999px; background: var(--canvas); color: var(--muted); font-size: var(--t-micro); font-variant-numeric: tabular-nums; }
+.rv-ob__paso-fl-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.rv-ob__paso-fl .rv-estado { flex: none; }

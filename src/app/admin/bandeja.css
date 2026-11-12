@@ -118,4 +118,8 @@
 [data-ui="v2"] .rv-tarjeta.bj-sig { border-left: 3px solid var(--ink); }
 [data-ui="v2"] .rv-tarjeta.bj-sig .rv-tarjeta__titulo { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
 [data-ui="v2"] .rv-tarjeta.bj-sig .bj-siguiente { font-size: 14px; line-height: 1.45; font-weight: 500; }
-[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.bj-sig { height: auto; align-self: start; }
+/* Ronda 7: la tarjeta lateral se estira a la altura de «Piezas para tu tap» (no `align-self: start`) y el cuerpo la llena: la acción arriba,
+   el conteo REAL de cada fuente al pie, sin hueco. */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.bj-sig { align-self: stretch; }
+[data-ui="v2"] .rv-tarjeta.bj-sig > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; }
+.bj-sig__resumen { margin-top: auto; padding-top: 12px; }

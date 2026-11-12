@@ -7,7 +7,7 @@ import { MapaVivo, type ViajeEnMapa, type PinUnidad } from './mapa-vivo';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { Aviso, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Aviso, BarraPeriodo, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import './mapa.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
@@ -140,6 +140,8 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
     <EsqueletoPanelCifras
       titulo={t('mapa.titulo')}
       apoyo={t('mapa.apoyo')}
+      // Barra de alcance entre las pestañas y la tira (cabecera → filtros → mapa): chips con lo que el mapa dibuja, medido, sin filtros inventados.
+      filtros={<BarraPeriodo etiqueta={t('mapa.filtros')} chips={[{ id: 'estado', etiqueta: t('mapa.filtros.encurso') }, { id: 'dibujo', etiqueta: recortado ? t('mapa.filtros.recorte', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) }) : t('mapa.filtros.todos') }]} />}
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Viajes en curso')}
       variante="12"

@@ -5,7 +5,7 @@ import { getEstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import { hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  cartaPorteCompletas, diasParaSemanas, peajesDeGasto, semanasDeSerie, SEMANAS_PEAJES, type DatosResumen, type RangoResumen, type ViajeReciente,
+  cartaPorteCompletas, diasParaMeses, diasParaSemanas, mesesDeSerie, peajesDeGasto, semanasDeSerie, SEMANAS_PEAJES, type DatosResumen, type RangoResumen, type ViajeReciente,
 } from './resumen-modelo';
 
 export * from './resumen-modelo';
@@ -32,15 +32,19 @@ async function viajesRecientes(tenantId: string, veDinero: boolean): Promise<Via
 
 export async function leerDatosResumen(tenantId: string, rango: RangoResumen, veDinero: boolean): Promise<DatosResumen> {
   const hoy = hoyMx(new Date(ahoraMs()));
-  const [kpis, peajes, cartaPorte, cierres, porTipo, hechos, escalados, recientes] = await Promise.all([
+  // UNA lectura diaria cubre las 8 semanas y los 6 meses (se lee la ventana mayor y cada serie se deriva de ella).
+  const lecturaDiaria = seguro(() => getLiquidacionesPorDia(tenantId, Math.max(diasParaSemanas(hoy), diasParaMeses(hoy)), hoy));
+  const [kpis, peajes, cartaPorte, serieDiaria, porTipo, hechos, escalados, recientes] = await Promise.all([
     seguro(() => getKpis(tenantId, ventanaDias(rango))),
     veDinero ? seguro(async () => ({ total: peajesDeGasto(await getGastoPorSemana(tenantId, SEMANAS_PEAJES[rango], hoy)), semanas: SEMANAS_PEAJES[rango] })) : Promise.resolve(null),
     seguro(async () => cartaPorteCompletas(await getEstadoCartaPorte(tenantId))),
-    seguro(async () => semanasDeSerie(await getLiquidacionesPorDia(tenantId, diasParaSemanas(hoy), hoy), hoy)),
+    lecturaDiaria,
     veDinero ? seguro(() => getDineroObservadoPorTipo(tenantId)) : Promise.resolve(null),
     seguro(() => getHechosSolos(tenantId, 5)),
     seguro(() => contarEscalados(tenantId)),
     seguro(() => viajesRecientes(tenantId, veDinero)),
   ]);
-  return { rango, hoy, veDinero, kpis, peajes, cartaPorte, cierres, porTipo, hechos, escalados, recientes };
+  const cierres = serieDiaria ? semanasDeSerie(serieDiaria, hoy) : null;
+  const mensuales = serieDiaria ? mesesDeSerie(serieDiaria, hoy) : null;
+  return { rango, hoy, veDinero, kpis, peajes, cartaPorte, cierres, mensuales, porTipo, hechos, escalados, recientes };
 }

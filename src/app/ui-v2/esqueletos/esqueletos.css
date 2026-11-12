@@ -29,7 +29,7 @@
 .rv-esq__saber { display: flex; flex-direction: column; gap: 6px; padding: var(--card-pad, 14px); border: 1px solid var(--ui-border); border-radius: var(--r-card, 12px); background: var(--ui-surface); }
 .rv-esq__saber[data-no-sabe] { background: var(--ui-soft); border-style: dashed; border-color: var(--ui-line-strong); }
 .rv-esq__saber h3 { margin: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
-.rv-esq__saber ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; font: 400 var(--t-body)/1.5 var(--font-sans-ui, inherit); color: var(--ui-secondary); }
+.rv-esq__saber ul { margin: 0; padding-left: 16px; list-style: disc; display: grid; gap: 4px; font: 400 var(--t-body)/1.5 var(--font-sans-ui, inherit); color: var(--ui-secondary); }
 
 /* Ficha: tarjeta de chips (estado, clase de dato) con su línea de descripción. */
 .rv-esq__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 0; list-style: none; }

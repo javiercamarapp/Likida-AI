@@ -314,7 +314,6 @@ export default async function SuscripcionPage({
     <EsqueletoPortada titulo={tr('suscripcion.page.planYFacturacion')} apoyo={tr('suscripcion.page.tuPlanDeLikida')}
       etiquetaCifras={tr('suscripcion.page.tuPlan')}
       cifras={cifrasPlan.length > 0 ? cifrasPlan : undefined}
-      metodo={uso ? tr('suscripcion.page.pasarseDelLimiteNo') : undefined}
       acciones={<>
         {/* H8 (auditoría 24): aquí decía "Pago recibido" solo porque la URL traía `?ok=contratado` — un query string lo escribe cualquiera, no una lectura del cobro. El estado real se pinta con `pill` (lee `suscripcion.estado` de la base). */}
         {/* La fecha de corte ya pasó (DAT-40): una prueba con corte vencido se leía como cliente al corriente y nadie le cobraba nunca. Se DICE, no se apaga nada — el mismo criterio que el límite del plan. */}
@@ -359,7 +358,7 @@ export default async function SuscripcionPage({
         <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan" estado="error" mensaje={tr('suscripcion.page.noSePudoLeer')} reintentar />
       ) : suscripcion === null ? (
         // El vacío es de la propia tarjeta (caja punteada de Rovaq), no una caja dentro de ella.
-        <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan" estado="vacio" mensaje={tr('suscripcion.page.sinSuscripcionTodavia')} detalle={tr('suscripcion.page.estaFlotaTodaviaNo2')} contenida />
+        <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan" estado="vacio" mensaje={tr('suscripcion.page.sinSuscripcionTodavia')} detalle={hayStripe ? tr('suscripcion.page.estaFlotaTodaviaNo2') : tr('r7.sus_sin_suscripcion_detalle')} contenida />
       ) : null}
 
       {/* ── Datos fiscales ── */}
@@ -375,7 +374,7 @@ export default async function SuscripcionPage({
           </EstadoVacio>
         ) : (
           <div className="rv-sus__fiscales">
-          <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales" columnas="md:grid-cols-2">
+          <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales" columnas="md:grid-cols-1">
             <CampoTexto className="rv-fila-c" id="rfc" name="rfc" etiqueta="RFC" obligatorio defaultValue={fiscales?.rfc ?? ''}
               placeholder="TIN010101AB1" ayuda={tr('suscripcion.page.seValidaElDigito')} />
             <CampoTexto className="rv-fila-c" id="razonSocial" name="razonSocial" etiqueta={tr('suscripcion.page.razonSocial')} obligatorio
@@ -396,7 +395,7 @@ export default async function SuscripcionPage({
               defaultValue={fiscales?.email ?? ''} placeholder="contabilidad@miflota.com"
               ayuda={tr('suscripcion.page.ahiTeLlegaEl')} />
             {/* AUDITORÍA 19, CRÍTICO (legal C3 / C.16): la columna existía desde la 0018 y ninguna pantalla la llenaba, así que el aviso de privacidad de TODA flota real respondía 404. Este es el lugar: los mismos datos de la constancia, capturados juntos. */}
-            <CampoTexto className="rv-fila-c" id="domicilioFiscal" name="domicilioFiscal" etiqueta={tr('suscripcion.page.domicilioFiscal')}
+            <CampoTexto className="rv-fila-c rv-fila-c--larga" id="domicilioFiscal" name="domicilioFiscal" etiqueta={tr('suscripcion.page.domicilioFiscal')}
               defaultValue={fiscales?.domicilioFiscal ?? ''}
               placeholder={tr('suscripcion.page.calle60123Col')}
               ayuda={tr('suscripcion.page.completoComoEnTu')} />
@@ -407,6 +406,8 @@ export default async function SuscripcionPage({
 
       {/* ── Planes ── */}
       <Tarjeta titulo={tr('suscripcion.page.planes')} info="suscripcion.planes">
+        {/* La nota del límite vive DENTRO de la tarjeta (12 px, tono secundario), no suelta entre el aviso y el pie. */}
+        {uso && <p className="rv-sus__nota rv-sus__nota--tarjeta">{tr('suscripcion.page.pasarseDelLimiteNo')}</p>}
         {!hayStripe ? (
           <EstadoVacio titulo={tr('suscripcion.page.cobroEnLineaSin')} icono={TriangleAlert} contenido>
             {tr('suscripcion.page.aquiNoHayBoton')}

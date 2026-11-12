@@ -20,7 +20,7 @@
 .rv-comb__datos dd.rv-comb__tenue { grid-column: 1 / -1; text-align: left; font-weight: 400; font-size: var(--t-small); color: var(--muted); }
 
 /* Vacío de Rovaq dentro de una tarjeta (`ac-vacio`): caja punteada de 1 px, radio 8, padding 20/14 (igual que en los demás vacíos de la página). */
-[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line); border-radius: 8px; padding: 20px 14px; max-height: none; }
 /* «Qué se sabe / Qué no se sabe»: cada caja a su alto, sin estirar la corta a la altura de la larga. */
 [data-ui="v2"] .rv-esq--panel .rv-esq__saberes { align-items: start; }
 
@@ -30,3 +30,10 @@
 /* «Cargas y casetas»: la tabla llega a sangre dentro de su tarjeta, sin un segundo marco (el filete la separa del encabezado). */
 [data-ui="v2"] .rv-tarjeta--tabla .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-comb__nota { margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); }
+
+/* «Qué se sabe / Qué no se sabe»: las listas llevan sus marcas (viñetas), no solo sangría. */
+[data-ui="v2"] .rv-esq__saber ul { list-style: disc; }
+[data-ui="v2"] .rv-esq__saber li::marker { color: var(--muted); }
+/* Reparto del gasto (Rovaq «Por canal»): la dona lleva UNA sola lista, la de barras de 6 px de abajo; su leyenda propia repetía los montos. */
+[data-ui="v2"] .rv-comb__dona { display: flex; justify-content: center; }
+[data-ui="v2"] .rv-comb__dona .rv-dona__leyenda { display: none; }

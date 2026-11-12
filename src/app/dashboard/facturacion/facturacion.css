@@ -30,3 +30,6 @@
 .rv-fact__vr dt { font-size: var(--t-small, 12px); font-weight: 500; color: var(--muted); }
 .rv-fact__vr dd { margin: 0; font-size: var(--t-section, 16px); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); overflow-wrap: anywhere; }
 .rv-fact__vr-pie { display: flex; justify-content: flex-end; gap: 8px; width: 100%; }
+
+/* Cifras en la fuente del sistema con dígitos tabulares (Rovaq: Hanken Grotesk), no en monoespaciada. */
+.rv-cifra { font-variant-numeric: tabular-nums; }
