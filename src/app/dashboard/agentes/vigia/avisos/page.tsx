@@ -401,6 +401,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
 
   async function guardarConfiguracion(_p: ResultadoConfig, fd: FormData): Promise<ResultadoConfig> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actorConfig(sp, tenantId);
     if (!a) return falloCfg(tx('rest.solo_el_dueno_o_el_encargado_2'));
     try {
@@ -469,6 +470,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
 
   async function decidir(_p: ResultadoAviso, fd: FormData): Promise<ResultadoAviso> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId);
     if (!a) return fallo(tx('rest.solo_el_dueno_o_el_encargado_3'));
     try {

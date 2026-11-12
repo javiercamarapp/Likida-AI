@@ -22,7 +22,11 @@
 //
 // ESTA RUTA NO ENTREGA: solo recibe y programa. Los correos los manda `procesarEntregasCorreo` (cron).
 //
-// Respuesta `{ datos: { recibidas, idempotentes, retenidas, excepciones: [{ clave, motivo }] } }`.
+// Respuesta `{ datos: { recibidas, idempotentes, retenidas, excepciones: [{ clave, motivo }], resultados: [{ indice, bitacora, estado, motivos? }] } }`.
+//   · `resultados` (piloto 11-nov-2026) trae UNA entrada por bitácora del lote con su estado explícito: recibida | retenida | idempotente |
+//     correccion_pendiente | en_revision | no_guardada. Entregada = las cuatro primeras. Los demás campos no cambian. Ver `desglose_resultados.ts`.
+//   · MODO SIMULACIÓN: cabecera `Likida-Simular: si` ⇒ mismos `resultados` (y `simulada: true`) sin escribir nada: ni liquidaciones, ni Excel,
+//     ni entregas, ni excepciones, ni revisiones. Siempre 200.
 //   · 201 si se guardó al menos una liquidación; 200 si todo ya existía o solo hubo excepciones.
 //   · Un fallo de infraestructura a mitad (Storage, base) es 500 y es seguro REINTENTAR TODO: lo ya guardado vuelve
 //     como idempotente.
@@ -38,6 +42,9 @@ import { logger } from '@/lib/logger';
 import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import { leerPadronOperadores } from '@/lib/likida/liquidacion_externa/repo';
 import { recibirDesglose } from '@/lib/likida/liquidacion_externa/desglose_recibir';
+import {
+  estadoDeConflicto, estadoDeRecepcion, leerSimulacion, type ResultadoBitacoraApi,
+} from '@/lib/likida/liquidacion_externa/desglose_resultados';
 import { DesgloseEnConflicto, abrirExcepcion, listarExcepciones, resolverExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { claveDeBitacora, claveDeLiquidacion } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import {
@@ -62,9 +69,13 @@ export interface RespuestaDesgloses {
   excepciones: Array<{ clave: string; motivo: string }>;
   /** SOLO con el formato `muestra-tms` (SUPUESTO): bitácoras que NO se recibieron y esperan revisión humana, con motivos genéricos. */
   enRevision?: Array<{ indice: number; bitacora: string | null; motivos: Array<{ codigo: string; campo: string }> }>;
+  /** Una entrada por bitácora del lote, en el orden en que se mandaron. Ver `desglose_resultados.ts`. */
+  resultados: ResultadoBitacoraApi[];
+  /** Solo con `Likida-Simular: si`: nada se escribió. */
+  simulada?: true;
 }
 
-type Preparado = { ok: true; desgloses: DesgloseBitacora[]; correccion: { motivo: string } | null } | { ok: false; respuesta: NextResponse };
+type Preparado = { ok: true; desgloses: DesgloseBitacora[]; /** Posición en el lote de cada desglose. */ indices: number[]; correccion: { motivo: string } | null } | { ok: false; respuesta: NextResponse };
 
 /** Extrae y valida TODOS los desgloses del cuerpo; el primero que no cumpla el contrato corta la petición con su índice. */
 function preparar(cuerpo: Record<string, unknown>): Preparado {
@@ -114,7 +125,7 @@ function preparar(cuerpo: Record<string, unknown>): Preparado {
       throw e;
     }
   }
-  return { ok: true, desgloses: validos, correccion };
+  return { ok: true, desgloses: validos, indices: validos.map((_, i) => i), correccion };
 }
 
 export async function POST(req: Request) {
@@ -123,6 +134,10 @@ export async function POST(req: Request) {
 
   const cuerpo = await leerCuerpo(req, MAX_CUERPO_DESGLOSES_BYTES);
   if (!cuerpo.ok) return cuerpo.respuesta;
+
+  const sim = leerSimulacion(req.headers.get('likida-simular'));
+  if (!sim.ok) return errorApi('parametro_invalido', sim.mensaje);
+  const simular = sim.simular;
 
   let preparado: Preparado;
   let sistemaOrigen = SISTEMA_ORIGEN;
@@ -137,8 +152,9 @@ export async function POST(req: Request) {
       }
       const m = prepararMuestraTms(cuerpo.cuerpo, await leerPadronOperadores(acceso.tenantId));
       if (!m.ok) return errorApi('parametro_invalido', m.mensaje);
-      await registrarRevisionesMuestra(acceso.tenantId, m.revisiones, (b) => claveDeBitacora(undefined, b), { abrirExcepcion, ahora: () => new Date() });
-      preparado = { ok: true, desgloses: m.desgloses, correccion: null };
+      // En simulación NO se abre ninguna excepción de revisión.
+      if (!simular) await registrarRevisionesMuestra(acceso.tenantId, m.revisiones, (b) => claveDeBitacora(undefined, b), { abrirExcepcion, ahora: () => new Date() });
+      preparado = { ok: true, desgloses: m.desgloses, indices: m.indices, correccion: null };
       sistemaOrigen = SISTEMA_ORIGEN_MUESTRA_TMS;
       clavesMuestraLimpias = m.desgloses.map((d) => claveDeBitacora(undefined, d.bitacora));
       enRevision = resumenRevisiones(m.revisiones);
@@ -150,7 +166,7 @@ export async function POST(req: Request) {
   }
   if (!preparado.ok) return preparado.respuesta;
 
-  if (clavesMuestraLimpias.length > 0) {
+  if (clavesMuestraLimpias.length > 0 && !simular) {
     try {
       await cerrarRevisionesResueltas(acceso.tenantId, clavesMuestraLimpias, {
         ahora: () => new Date(),
@@ -165,14 +181,21 @@ export async function POST(req: Request) {
     } catch (e) { logger.warn('v1.desgloses.muestra_cierre_revisiones', { err: e instanceof Error ? e.message : String(e) }); }
   }
 
-  const salida: RespuestaDesgloses = { recibidas: 0, idempotentes: 0, retenidas: 0, excepciones: [] };
+  const salida: RespuestaDesgloses = { recibidas: 0, idempotentes: 0, retenidas: 0, excepciones: [], resultados: [] };
   if (enRevision !== undefined) salida.enRevision = enRevision;
+  if (simular) salida.simulada = true;
+  for (const rev of enRevision ?? []) {
+    salida.resultados.push({ indice: rev.indice, bitacora: rev.bitacora, estado: 'en_revision', motivos: rev.motivos.map((m) => ({ codigo: m.codigo, campo: m.campo })) });
+  }
   try {
-    for (const d of preparado.desgloses) {
+    for (const [pos, d] of preparado.desgloses.entries()) {
+      const indice = preparado.indices[pos] ?? pos;
+      const base = { indice, bitacora: d.bitacora, ...(d.folio !== undefined ? { folio: d.folio } : {}) };
       let r: Awaited<ReturnType<typeof recibirDesglose>>;
       try {
         r = await recibirDesglose(acceso.tenantId, d, undefined, {
           sistemaOrigen,
+          ...(simular ? { simular: true } : {}),
           ...(preparado.correccion ? { correccion: { motivo: preparado.correccion.motivo, actor: String(acceso.rol) } } : {}),
         });
       } catch (e) {
@@ -182,9 +205,17 @@ export async function POST(req: Request) {
         const clave = typeof d.numeroLiquidacion === 'string' && d.numeroLiquidacion !== ''
           ? claveDeLiquidacion(d.terminal, d.numeroLiquidacion) : claveDeBitacora(d.terminal, d.bitacora);
         salida.excepciones.push({ clave, motivo: 'bitacora_duplicada' });
+        salida.resultados.push({ ...base, ...estadoDeConflicto() });
         continue;
       }
+      const { estado, motivos } = estadoDeRecepcion(r);
+      salida.resultados.push({ ...base, estado, ...(motivos.length > 0 ? { motivos } : {}) });
       switch (r.estado) {
+        case 'simulada':
+          // Vista previa: cuenta como lo que pasaría, sin haber escrito nada.
+          if (r.retenida) salida.retenidas += 1;
+          else salida.recibidas += 1;
+          break;
         case 'creada':
           if (r.retenida) salida.retenidas += 1;
           else salida.recibidas += 1;
@@ -209,6 +240,8 @@ export async function POST(req: Request) {
     return traducirFalla('v1.liquidaciones_externas.desgloses.post', acceso.tenantId, e);
   }
 
-  const status = salida.recibidas + salida.retenidas > 0 ? 201 : 200;
+  salida.resultados.sort((a, b) => a.indice - b.indice);
+  // Simulación: nunca 201 (no se creó nada).
+  const status = !simular && salida.recibidas + salida.retenidas > 0 ? 201 : 200;
   return NextResponse.json({ datos: salida }, { status });
 }

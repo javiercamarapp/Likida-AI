@@ -100,6 +100,7 @@ export default async function ConfiguracionPage({
 
   async function guardar(_previo: ResultadoGuardar, fd: FormData): Promise<ResultadoGuardar> {
     'use server';
+    const { t } = await getT('resto');
     // Re-gateo ADENTRO: el rol de arriba es del render, no de esta llamada, y
     // una server action es alcanzable sin pasar por la página.
     const s = await resolverTenantAtadoOLanza('/dashboard/configuracion', sp, tenantId);
@@ -137,6 +138,7 @@ export default async function ConfiguracionPage({
   const rfcPrincipal = config?.empresa.rfc ?? '';
   async function guardarRfcs(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     // Re-gateo ADENTRO, igual que la acción de arriba: una server action es
     // alcanzable sin pasar por la página, y esto toca la validación fiscal de
     // TODOS los CFDI de gasto de la flota.

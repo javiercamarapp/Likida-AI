@@ -67,7 +67,6 @@ export default async function PaginaAgenteVigia({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
@@ -82,6 +81,7 @@ export default async function PaginaAgenteVigia({
 
   async function decidir(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId, 'decide');
     if (!a) return { ok: false, error: tx('rest.solo_el_dueno_o_el_encargado_5') };
     const id = texto(fd, 'id');
@@ -109,6 +109,7 @@ export default async function PaginaAgenteVigia({
 
   async function conversacion(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId, 'decide');
     if (!a) return { ok: false, error: tx('rest.solo_el_dueno_o_el_encargado_5') };
     const id = texto(fd, 'id');
@@ -132,6 +133,7 @@ export default async function PaginaAgenteVigia({
 
   async function config(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_15') };
     const v = validarConfig({
@@ -154,6 +156,7 @@ export default async function PaginaAgenteVigia({
 
   async function director(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_16') };
     const id = texto(fd, 'id');
@@ -181,6 +184,7 @@ export default async function PaginaAgenteVigia({
 
   async function servicio(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_16') };
     const id = texto(fd, 'id');
@@ -210,6 +214,7 @@ export default async function PaginaAgenteVigia({
 
   async function alta(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_17') };
     const clienteId = texto(fd, 'clienteId');
@@ -230,6 +235,7 @@ export default async function PaginaAgenteVigia({
 
   async function contacto(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_18') };
     const id = texto(fd, 'id');

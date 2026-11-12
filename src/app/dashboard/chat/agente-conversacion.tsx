@@ -2,7 +2,8 @@
 
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
+import type { DashboardKpis } from '@/lib/likida/analytics';
+import type { AcreditablesOFuera } from './respuestas';
 import LogoV2 from '../shell/logo-v2';
 import { Boton } from '../../ui-v2/componentes/boton';
 import { CampoPixeles } from '../pixeles';
@@ -61,7 +62,7 @@ export interface PropsAgente {
   adjuntos?: boolean;
   /** Solo `modo="cliente"`: lo que el respondedor de reserva usa si el analista falla. */
   kpis?: DashboardKpis | null;
-  acred?: Acreditables | null;
+  acred?: AcreditablesOFuera;
   /** Lo que va a la izquierda de «Historial» en su misma fila (la cinta de «viendo como superadmin»). */
   cabecera?: ReactNode;
 }

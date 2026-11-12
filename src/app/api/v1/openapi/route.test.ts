@@ -197,3 +197,18 @@ describe('A37-S11-09/10 — descripción honesta y caché que respeta la credenc
     expect(r.headers.get('vary')).toMatch(/Cookie/i);
   });
 });
+
+describe('el POST de desgloses documenta el formato muestra-tms (piloto del webhook)', () => {
+  it('trae el sobre, los campos opcionales, la cabecera de simulación y el resultado por bitácora', async () => {
+    const d = await doc() as { paths: Record<string, any>; components: { schemas: Record<string, any> } }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const op = d.paths['/v1/liquidaciones-externas/desgloses'].post;
+    expect(op.parameters.map((p: { name: string }) => p.name)).toContain('Likida-Simular');
+    expect(op.requestBody.content['application/json'].schema.oneOf.map((x: { $ref?: string }) => x.$ref).filter(Boolean)).toEqual(['#/components/schemas/SobreMuestraTms']);
+    const campos = Object.keys(d.components.schemas.BitacoraMuestraTms.properties);
+    for (const c of ['BitacoraID', 'Operador', 'NumeroEmpleado', 'TipoOperador', 'Poliza', 'NumeroPago', 'Neto', 'Folio']) expect(campos).toContain(c);
+    expect(campos).not.toContain('NumeroLiquidacion');
+    const estados = d.components.schemas.ResultadoDesgloses.properties.datos.properties.resultados.items.properties.estado.enum;
+    expect(estados).toEqual(['recibida', 'retenida', 'idempotente', 'correccion_pendiente', 'en_revision', 'no_guardada']);
+  });
+});
+

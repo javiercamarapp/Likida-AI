@@ -50,6 +50,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
   await requireSuperadmin();
   async function accionResolver(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('admin_sistema');
     await requireSuperadmin();
     const solicitudId = String(fd.get('solicitudId') ?? '');
     const resolucion = String(fd.get('resolucion') ?? '').trim();

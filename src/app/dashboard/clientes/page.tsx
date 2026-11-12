@@ -104,6 +104,7 @@ export default async function PaginaClientes({
 
   async function guardarCliente(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tx } = await getT('resto');
   const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('cli.a.rolver') };

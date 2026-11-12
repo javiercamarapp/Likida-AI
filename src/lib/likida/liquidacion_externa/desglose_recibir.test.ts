@@ -8,6 +8,7 @@ import { aLiquidacionExterna } from './desglose_contrato';
 import type { LiquidacionExterna, NuevaLiquidacionExterna } from './repo';
 import { CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo, type NuevaEntrega } from './repo_correo';
 import { MARCA_RETENIDA_OMITIDA } from './desglose_reglas';
+import * as XLSX from 'xlsx';
 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('la base no debe tocarse en estas pruebas'); } }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -833,7 +834,7 @@ describe('A1-01: fecha de corte del arranque', () => {
     it('cuenta los correos que saldrían y los omitidos, sin Storage, sin base y sin excepciones', async () => {
       const b = banco();
       const r = await recibirDesglose(TENANT, desglose(), b.deps, { simular: true });
-      expect(r).toEqual({ estado: 'simulada', claveExterna: 'BIT-T1-B-0001', correos: 4, omitidas: 0, retenida: false, omitida: null });
+      expect(r).toEqual({ estado: 'simulada', claveExterna: 'BIT-T1-B-0001', correos: 4, omitidas: 0, retenida: false, omitida: null, motivos: [] });
       const c = banco({ config: CORTE });
       expect(await recibirDesglose(TENANT, desglose(), c.deps, { simular: true })).toMatchObject({ estado: 'simulada', correos: 0, omitidas: 4, omitida: 'anterior_al_corte' });
       for (const x of [b, c]) {
@@ -941,5 +942,49 @@ describe('A1-02: una corrección -R<n> reemplaza a la original', () => {
     await recibirDesglose(TENANT, distinto(), b.deps);
     expect(b.omitidasIds).toEqual([]);
     expect(saldria(b)).toHaveLength(4);
+  });
+});
+
+describe('1003 · Folio: el número que ve el operador', () => {
+  const celdaBitacora = (bytes: Uint8Array) => XLSX.read(bytes, { type: 'array' }).Sheets['Desglose']['D2']?.v;
+
+  it('con Folio: el Excel muestra el folio, el encabezado lo guarda y la clave sigue siendo la bitácora', async () => {
+    const b = banco();
+    const r = await recibirDesglose(TENANT, desglose({ folio: '1098' }), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', claveExterna: 'BIT-T1-B-0001' });
+    expect(celdaBitacora(b.subidas[0].bytes)).toBe('1098');
+    expect(b.desgloses[0]).toMatchObject({ bitacora: 'B-0001', folioOrigen: '1098' });
+  });
+
+  it('sin Folio: se muestra la bitácora, como siempre, y no se manda folioOrigen', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(celdaBitacora(b.subidas[0].bytes)).toBe('B-0001');
+    expect(b.desgloses[0]).not.toHaveProperty('folioOrigen');
+  });
+
+  it('el folio NO entra en la huella: reenviar igual pero con otro folio es idempotente (no abre corrección)', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose({ folio: '1098' }), b.deps);
+    const r = await recibirDesglose(TENANT, desglose({ folio: '2000' }), b.deps);
+    expect(r.estado).toBe('idempotente');
+    expect(b.excepciones).toHaveLength(0);
+    expect(b.desgloses).toHaveLength(1);
+  });
+
+  it('dos bitácoras distintas pueden traer el MISMO folio (operadores distintos): claves distintas, ambas se guardan', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose({ bitacora: 'A-1', folio: '1098' }), b.deps);
+    const r = await recibirDesglose(TENANT, desglose({ bitacora: 'B-1', folio: '1098', operador: { numeroEmpleado: 'E-2', nombre: 'Otro Operador Ficticio' } }), b.deps);
+    expect(r.estado).toBe('creada');
+    expect(b.liquidaciones.map((l) => l.claveExterna)).toEqual(['BIT-T1-A-1', 'BIT-T1-B-1']);
+    expect(b.desgloses.map((d) => d.folioOrigen)).toEqual(['1098', '1098']);
+  });
+
+  it('una corrección -R1 conserva el folio en el Excel nuevo', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose({ folio: '1098' }), b.deps);
+    await recibirDesglose(TENANT, desglose({ folio: '1098', neto: 4000, percepciones: [{ concepto: 'Sueldo', monto: 9000 }], deducciones: [{ concepto: 'Retención uno', monto: 5000 }] }), b.deps, { correccion: { motivo: 'error de captura', actor: 'llave:administracion' } });
+    expect(celdaBitacora(b.subidas[1].bytes)).toBe('1098 — CORRECCIÓN');
   });
 });

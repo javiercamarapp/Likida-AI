@@ -137,7 +137,6 @@ async function subir(a: { tenantId: string; userId: string }, fd: FormData): Pro
  * Lo ve quien ve el Vigía; solo el dueño y el encargado suben.
  */
 export default async function PaginaProgramaVigia({ searchParams }: { searchParams: Promise<Busqueda> }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -149,6 +148,7 @@ export default async function PaginaProgramaVigia({ searchParams }: { searchPara
 
   async function cargar(_p: ResultadoPrograma, fd: FormData): Promise<ResultadoPrograma> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId);
     if (!a) return error(tx('rest.solo_el_dueno_o_el_encargado_6'));
     try {

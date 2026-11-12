@@ -71,7 +71,6 @@ export default async function PaginaUnidades({
    *  sanea `paginarRegistro`; un link viejo se lee como primera página. */
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string; p?: string; editar?: string }>;
 }) {
-  const { t: tx } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -152,6 +151,7 @@ export default async function PaginaUnidades({
 
   async function guardarUnidad(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tx } = await getT('resto');
   const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('un.a.rolver') };
@@ -246,6 +246,7 @@ export default async function PaginaUnidades({
    */
   async function cambiarEstado(_previo: ResultadoEstado, fd: FormData): Promise<ResultadoEstado> {
     'use server';
+    const { t: tx } = await getT('resto');
   const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('un.a.rolver') };

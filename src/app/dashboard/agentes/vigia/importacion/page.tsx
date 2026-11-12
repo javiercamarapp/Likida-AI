@@ -89,13 +89,13 @@ async function calcular(fd: FormData): Promise<ResultadoImportacion> {
  * día, rotulado como NO verificado contra Track & Trace. Cero pesos; solo lee el archivo, no guarda ni escribe afuera.
  */
 export default async function PaginaImportacionVigia({ searchParams }: { searchParams: Promise<Busqueda> }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { rol, tenantId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   async function calcularAccion(_p: ResultadoImportacion, fd: FormData): Promise<ResultadoImportacion> {
     'use server';
+    const { t: tx } = await getT('agentes');
     // La sesión se vuelve a resolver aquí: la acción no confía en lo que decidió el render.
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return error(tx('rest.no_tienes_permiso_para_ver_esta'));

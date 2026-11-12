@@ -84,7 +84,9 @@ export default function ConfigAvisos({ destino, ambito, prefs: prefsIniciales, s
 
       <Tarjeta titulo={t('notif.cfg.titulo')}>
         <p className="av-nota">{t('notif.cfg.apoyo')}</p>
-        <TablaBase etiqueta={t('notif.cfg.titulo')} columnas={columnas} filas={CATEGORIAS[ambito]} idFila={(cat) => cat} altoMaximo={false} />
+        <div className="av-matriz">
+          <TablaBase etiqueta={t('notif.cfg.titulo')} columnas={columnas} filas={CATEGORIAS[ambito]} idFila={(cat) => cat} altoMaximo={false} />
+        </div>
       </Tarjeta>
 
       <Tarjeta titulo={t('notif.cfg.silencio.titulo')}>

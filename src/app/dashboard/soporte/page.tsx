@@ -102,6 +102,7 @@ export default async function SoportePage({
   // un demo de Javier jamás cuenta como queja del cliente.
   async function accionAbrirTicket(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     // A37-S20-06: la convención de la señal (abierto_por NULL = lo abrió Likida) se decide con
     // el rol REAL de la sesión: con `?rol=flota_admin` el rol efectivo es el previsualizado y un
@@ -133,6 +134,7 @@ export default async function SoportePage({
   // que se perdería si este action pudiera hablar como Likida.
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     try {
       await responderTicket(
@@ -150,6 +152,7 @@ export default async function SoportePage({
 
   async function accionEstado(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     try {
       const r = await cambiarEstadoTicket(

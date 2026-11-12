@@ -52,6 +52,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
 
   async function accionSubirArchivo(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('admin_sistema');
     const { userId } = await requireSuperadmin();
     try {
       const tipo = String(fd.get('tipo') ?? '');
@@ -74,6 +75,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
 
   async function accionSubirTexto(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('admin_sistema');
     const { userId } = await requireSuperadmin();
     try {
       const tipo = String(fd.get('tipo') ?? '');

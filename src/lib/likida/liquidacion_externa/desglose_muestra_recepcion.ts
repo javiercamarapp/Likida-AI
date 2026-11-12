@@ -108,7 +108,7 @@ export interface RevisionMuestra {
 }
 
 export type PreparadoMuestra =
-  | { ok: true; desgloses: DesgloseBitacora[]; revisiones: RevisionMuestra[] }
+  | { ok: true; desgloses: DesgloseBitacora[]; /** Posición en el lote de cada desglose de `desgloses` (misma longitud y orden). */ indices: number[]; revisiones: RevisionMuestra[] }
   | { ok: false; mensaje: string };
 
 /** Valida el sobre y convierte cada bitácora. Nunca lanza por datos malos de una bitácora: la manda a revisión. */
@@ -153,26 +153,35 @@ export function prepararMuestraTms(cuerpo: Record<string, unknown>, padron: Padr
   for (const r of resultados) if (r.bitacoraId !== '') veces.set(r.bitacoraId, (veces.get(r.bitacoraId) ?? 0) + 1);
 
   const desgloses: DesgloseBitacora[] = [];
+  const indices: number[] = [];
   const revisiones: RevisionMuestra[] = [];
   resultados.forEach((r, indice) => {
     const motivos = [...r.revision];
     if (r.bitacoraId !== '' && (veces.get(r.bitacoraId) ?? 0) > 1) {
       motivos.push({ codigo: 'bitacora_repetida', campo: 'BitacoraID', detalle: 'La misma bitácora viene más de una vez en el lote; no se adivina cuál vale.' });
     }
-    if (motivos.length === 0 && r.desglose !== null) desgloses.push(r.desglose);
+    if (motivos.length === 0 && r.desglose !== null) { desgloses.push(r.desglose); indices.push(indice); }
     else revisiones.push({ indice, bitacora: r.bitacoraId === '' ? null : r.bitacoraId, motivos });
   });
-  return { ok: true, desgloses, revisiones };
+  return { ok: true, desgloses, indices, revisiones };
 }
 
 // ── Registrar las revisiones en la bandeja de excepciones existente ─────────
 
 const CODIGOS_OPERADOR: ReadonlySet<CodigoRevision> = new Set<CodigoRevision>([
-  'operador_vacio', 'operador_sin_padron', 'operador_no_encontrado', 'operador_homonimo', 'operador_sin_numero',
+  'operador_vacio', 'operador_sin_padron', 'operador_no_encontrado', 'operador_homonimo', 'operador_sin_numero', 'operador_no_coincide',
 ]);
 
-/** Motivo (`detalle.motivo`) que entiende el panel para «operador sin alta». Homonimia es `nombre_ambiguo`; todo lo demás, `nombre_sin_alta`. */
-export function motivoOperadorDe(codigo: CodigoRevision): 'nombre_ambiguo' | 'nombre_sin_alta' {
+export type MotivoOperadorPanel = 'nombre_ambiguo' | 'nombre_sin_alta' | 'numero_sin_alta' | 'numero_no_coincide' | 'ambiguo';
+
+/**
+ * Motivo (`detalle.motivo`) que entiende el panel para «operador sin alta». Cruce por NOMBRE: homonimia es `nombre_ambiguo`, lo demás
+ * `nombre_sin_alta`. Cruce por NÚMERO DE EMPLEADO (`campo` = `NumeroEmpleado`): `numero_sin_alta`, o `ambiguo` si dos nombres lo comparten;
+ * nombre y número que no coinciden: `numero_no_coincide`.
+ */
+export function motivoOperadorDe(codigo: CodigoRevision, campo = 'Operador'): MotivoOperadorPanel {
+  if (codigo === 'operador_no_coincide') return 'numero_no_coincide';
+  if (campo === 'NumeroEmpleado') return codigo === 'operador_homonimo' ? 'ambiguo' : 'numero_sin_alta';
   return codigo === 'operador_homonimo' ? 'nombre_ambiguo' : 'nombre_sin_alta';
 }
 
@@ -197,7 +206,8 @@ export async function registrarRevisionesMuestra(
     const operador = rev.motivos.filter((m) => CODIGOS_OPERADOR.has(m.codigo));
     const otros = rev.motivos.filter((m) => !CODIGOS_OPERADOR.has(m.codigo));
     if (operador.length > 0) {
-      const motivo = operador.some((m) => m.codigo === 'operador_homonimo') ? 'nombre_ambiguo' : motivoOperadorDe(operador[0].codigo);
+      const ambiguo = operador.find((m) => m.codigo === 'operador_homonimo');
+      const motivo = ambiguo ? motivoOperadorDe(ambiguo.codigo, ambiguo.campo) : motivoOperadorDe(operador[0].codigo, operador[0].campo);
       await d.abrirExcepcion(tenantId, clave, 'operador_no_encontrado', { bitacora: rev.bitacora, motivo, origen: CONTRATO_MUESTRA_TMS }, d.ahora());
       n += 1;
     }

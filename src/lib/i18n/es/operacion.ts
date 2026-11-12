@@ -1176,6 +1176,8 @@ export const operacion = {
   'ini5a.agentes.titulo': 'Tus cinco agentes',
   'ini5a.agentes.resumen': '{n} de 5 con corridas registradas',
   'ini5a.agentes.resumen.cero': 'Ninguno ha corrido todavía',
+  'ini5a.agentes.resumen.sinDato': 'Sin dato de corridas',
+  'ini5a.agentes.resumen.sinLectura': '{n} sin lectura',
   'ini5a.abrir': 'Abrir panel',
   'ini5a.fase.corriendo': 'Corriendo ahora',
   'ini5a.falta.titulo': 'Para que arranque',

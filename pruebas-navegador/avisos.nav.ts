@@ -130,7 +130,7 @@ for (const id of IDENTIDADES) {
         const ruta = new URL(href, 'http://x').pathname;
         const r = await page.goto(href);
         expect(r?.status(), `${href} respondió error`).toBeLessThan(400);
-        await expect(page, `${href} rebotó a otra pantalla`).toHaveURL(new RegExp(`${ruta.replace(/\//g, '\\/')}`));
+        await expect(page, `${href} rebotó a otra pantalla`).toHaveURL(new RegExp(`${ruta.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&')}`));
         await expect(page.locator('body')).not.toContainText(/Application error|Algo salió mal/i);
       }
     });
@@ -331,14 +331,14 @@ for (const id of IDENTIDADES) {
 
     test('(g2) las casillas de la matriz caen bajo la cabecera de su columna', async ({ page }) => {
       await page.goto(`${id.ruta}?seccion=configuracion`);
-      const cabeceras = page.locator('table.av-matriz thead th');
+      const cabeceras = page.locator('#contenido-principal table thead th');
       await expect(cabeceras).toHaveCount(4);
       const centros: number[] = [];
       for (let c = 1; c < 4; c++) {
         const b = (await cabeceras.nth(c).boundingBox())!;
         centros.push(b.x + b.width / 2);
       }
-      const filasMatriz = page.locator('table.av-matriz tbody tr');
+      const filasMatriz = page.locator('#contenido-principal table tbody tr');
       const n = await filasMatriz.count();
       expect(n).toBeGreaterThan(0);
       for (let r = 0; r < n; r++) {

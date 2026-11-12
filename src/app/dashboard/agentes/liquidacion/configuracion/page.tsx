@@ -77,6 +77,7 @@ export default async function PaginaConfiguracionLiquidacion({
 
   async function accionGuardar(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     const f = leerFormularioConfig(fd);

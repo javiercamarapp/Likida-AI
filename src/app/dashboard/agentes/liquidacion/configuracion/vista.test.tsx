@@ -67,6 +67,11 @@ describe('guardado válido', () => {
     expect(c.responderA).toBe('contacto@ejemplo.test');
   });
 
+  it('los tipos nuevos (rabón, posturero, cargador) se pueden elegir y se guardan', () => {
+    const c = ok(formulario({ tiposQueReciben: ['foraneo', 'local', 'rabon', 'posturero', 'cargador'] }));
+    expect(c.tiposQueReciben).toEqual(['foraneo', 'local', 'rabon', 'posturero', 'cargador']);
+  });
+
   it('campos opcionales vacíos quedan en null / lista vacía, y el tipo permisionario se acepta', () => {
     const c = ok(formulario({ remitenteNombre: '', responderA: '', rhCorreos: '', archivoCorreo: '', enviarDesdeHora: '', tiposQueReciben: ['permisionario'], enviaCoordinador: null }));
     expect(c).toMatchObject({ remitenteNombre: null, responderA: null, rhCorreos: [], archivoCorreo: null, enviarDesdeHora: null, tiposQueReciben: ['permisionario'], enviaCoordinador: false, enviaRh: false });

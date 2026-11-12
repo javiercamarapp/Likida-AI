@@ -1,7 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
+import type { DashboardKpis } from '@/lib/likida/analytics';
+import type { AcreditablesOFuera } from './respuestas';
 import AgenteConversacion from './agente-conversacion';
 import type { TemaAgente } from './perfiles';
 
@@ -10,6 +11,6 @@ import type { TemaAgente } from './perfiles';
  * las rutas son las de siempre (`use-analista.ts`); la interfaz es la MISMA que usa el Copiloto de /admin. Solo cruzan datos: `kpis` y
  * `acred` ya calculados en el servidor y `cabecera` (un elemento, no una función).
  */
-export default function ChatFlota({ kpis, acred, cabecera, temas }: { kpis: DashboardKpis | null; acred: Acreditables | null; cabecera?: ReactNode; temas?: TemaAgente[] }) {
+export default function ChatFlota({ kpis, acred, cabecera, temas }: { kpis: DashboardKpis | null; acred: AcreditablesOFuera; cabecera?: ReactNode; temas?: TemaAgente[] }) {
   return <AgenteConversacion modo="cliente" kpis={kpis} acred={acred} cabecera={cabecera} temas={temas} />;
 }

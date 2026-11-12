@@ -19,9 +19,10 @@
 import { claveDeBitacora } from '../../liquidacion_externa/desglose_contrato';
 import { leerRuta } from '../../liquidacion_externa/desglose_mapeo_tms';
 import {
-  CONTRATO_MUESTRA_TMS, convertirBitacoraMuestra, listaDeMuestra, EnvoltorioInvalido,
+  CONTRATO_MUESTRA_TMS, convertirBitacoraMuestra, listaDeMuestra, EnvoltorioInvalido, PATRON_BITACORA_ID,
   type PadronOperadores, type ResultadoBitacoraMuestra,
 } from '../../liquidacion_externa/desglose_muestra_tms';
+import { motivoOperadorDe } from '../../liquidacion_externa/desglose_muestra_recepcion';
 import { fechaDeParametro, type ConfigPullMuestraTms } from '../../liquidacion_externa/desglose_muestra_pull_config';
 import {
   TmsCredenciales, TmsLimite, TmsNoDisponible, type FilaDesgloseRechazada, type LectorDesglosesPuerto,
@@ -30,7 +31,7 @@ import { jsonCualquiera } from '../posiciones_comun';
 import { crearLectorDeVentana, instanteDeCursor, type Entrada } from './lector_desgloses';
 import type { SesionTms } from './sesion';
 
-const CODIGOS_OPERADOR: ReadonlySet<string> = new Set(['operador_vacio', 'operador_sin_padron', 'operador_no_encontrado', 'operador_homonimo', 'operador_sin_numero']);
+const CODIGOS_OPERADOR: ReadonlySet<string> = new Set(['operador_vacio', 'operador_sin_padron', 'operador_no_encontrado', 'operador_homonimo', 'operador_sin_numero', 'operador_no_coincide']);
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -44,7 +45,7 @@ export interface OpcionesLectorMuestra {
 
 function idCrudo(cruda: unknown): string {
   const v = esObjeto(cruda) ? cruda.BitacoraID : undefined;
-  const t = typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? String(v) : typeof v === 'string' && /^[1-9]\d{0,17}$/.test(v.trim()) ? v.trim() : '';
+  const t = typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? String(v) : typeof v === 'string' && PATRON_BITACORA_ID.test(v.trim()) ? v.trim() : '';
   return t === '' ? 'BIT-DESCONOCIDA' : claveDeBitacora(undefined, t);
 }
 
@@ -65,11 +66,12 @@ function aEntradaMuestra(cruda: unknown, cfg: ConfigPullMuestraTms, padron: Padr
 function rechazadaDe(clave: string, r: ResultadoBitacoraMuestra, instante: string): FilaDesgloseRechazada {
   const operador = r.revision.filter((m) => CODIGOS_OPERADOR.has(m.codigo));
   if (operador.length > 0) {
-    const ambiguo = operador.some((m) => m.codigo === 'operador_homonimo');
+    const ambiguo = operador.find((m) => m.codigo === 'operador_homonimo');
+    const motivo = ambiguo ? motivoOperadorDe(ambiguo.codigo, ambiguo.campo) : motivoOperadorDe(operador[0].codigo, operador[0].campo);
     return {
       clave, campo: 'Operador', tipo: 'operador_no_encontrado',
       // Solo bitácora, motivo, origen y el instante (para releer cuando el padrón se complete); nunca el nombre del operador.
-      detalle: { bitacora: r.bitacoraId, motivo: ambiguo ? 'nombre_ambiguo' : 'nombre_sin_alta', origen: CONTRATO_MUESTRA_TMS, desde: instante },
+      detalle: { bitacora: r.bitacoraId, motivo, origen: CONTRATO_MUESTRA_TMS, desde: instante },
     };
   }
   return { clave, campo: r.revision[0]?.campo ?? 'BitacoraID' };

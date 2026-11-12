@@ -71,7 +71,6 @@ export default async function PaginaAgentePeajes({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string }>;
 }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   // Querystring REAL (`?desglose=`): si la sesión expira a media navegación,
@@ -140,6 +139,7 @@ export default async function PaginaAgentePeajes({
     fd: FormData,
   ): Promise<{ error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_subir_estados') };
@@ -181,6 +181,7 @@ export default async function PaginaAgentePeajes({
    */
   async function importarYCruzarDesglose(_prev: EstadoImportar, fd: FormData): Promise<EstadoImportar> {
     'use server';
+    const { t: tx } = await getT('agentes');
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_subir_desgloses') };
@@ -225,6 +226,7 @@ export default async function PaginaAgentePeajes({
    */
   async function declararPeriodoAhora(_prev: EstadoPeriodo, fd: FormData): Promise<EstadoPeriodo> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_declarar_el') };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.este_agente_no_es_de_tu') };
@@ -249,6 +251,7 @@ export default async function PaginaAgentePeajes({
    */
   async function conciliarDesgloseAhora(_prev: EstadoConciliar, fd: FormData): Promise<EstadoConciliar> {
     'use server';
+    const { t: tx } = await getT('agentes');
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_operar_este') };
@@ -277,6 +280,7 @@ export default async function PaginaAgentePeajes({
    */
   async function anularDesgloseAhora(_prev: EstadoAnular, fd: FormData): Promise<EstadoAnular> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'administracion')) return { error: tx('rest.solo_quien_administra_la_flota_puede_3') };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.este_agente_no_es_de_tu') };
@@ -308,6 +312,7 @@ export default async function PaginaAgentePeajes({
     _fd: FormData,
   ): Promise<{ error?: string; resumen?: ResumenBarrido } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_operar_este') };

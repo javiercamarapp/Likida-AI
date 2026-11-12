@@ -29,6 +29,7 @@ import {
 import { reintentarLiquidacionExterna, reenviarCopiaAJefe, reavisarDiscrepancia, canalDeEntregaPorOmision } from '@/lib/likida/liquidacion_externa/servicio';
 import { reenviarDesglose, type DestinoReenvio, type MotivoReenvio } from '@/lib/likida/liquidacion_externa/reenvio_correo';
 import { liberarEnvio } from '@/lib/likida/liquidacion_externa/liberar_envio';
+import { bitacoraVisible } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import { leerFormatoFlota, leerTelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa/importar_archivo';
 import { leerArchivoCarga, cargarDesglosesDePanel, cargarContactosDePanel } from '@/lib/likida/liquidacion_externa/cargas_panel';
@@ -179,7 +180,7 @@ async function cargarDesgloses(
         const [liq, ent] = await Promise.all([leerPorId(tenantId, d.liquidacionExternaId).catch(() => null), entregasDe(tenantId, d.liquidacionExternaId)]);
         if (!ent.ok) throw new Error('entregas no disponibles');
         const fila: FilaDesglose = {
-          liquidacionId: d.liquidacionExternaId, bitacora: d.bitacora, operador: liq?.operadorNombre ?? null,
+          liquidacionId: d.liquidacionExternaId, bitacora: bitacoraVisible(d), operador: liq?.operadorNombre ?? null,
           periodoDesde: liq?.periodoDesde ?? null, periodoHasta: liq?.periodoHasta ?? null, neto: liq?.total ?? null,
           moneda: liq?.moneda ?? 'MXN', terminal: d.terminal || null, destinos: destinosDe(ent.valor, d.retenidaMotivo),
         };
@@ -499,6 +500,7 @@ export default async function PaginaAgenteLiquidacion({
   /** Sube el CSV/Excel de liquidaciones que la oficina ya tiene: entra por el mismo camino que POST /v1/liquidaciones-externas. */
   async function subirLiquidacionesExternas(fd: FormData): Promise<void> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube liquidaciones.');
@@ -601,6 +603,7 @@ export default async function PaginaAgenteLiquidacion({
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) {

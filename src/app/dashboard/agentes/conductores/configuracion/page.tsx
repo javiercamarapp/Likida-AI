@@ -105,7 +105,6 @@ async function ejecutarBajaDocumento(sp: ParametrosPagina, tenantRenderizado: st
  * El jefe de tráfico la ve; el dueño la guarda (misma validación que el PUT).
  */
 export default async function PaginaConfigConductor({ searchParams }: { searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string }> }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -129,6 +128,7 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
 
   async function accionGuardar(_previo: ResultadoConfig, fd: FormData): Promise<ResultadoConfig> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_configuracion') };

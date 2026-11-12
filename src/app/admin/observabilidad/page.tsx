@@ -92,6 +92,7 @@ export default async function ObservabilidadPage() {
   await requireSuperadmin();
   async function accionInterruptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('admin_sistema');
     // RE-GATEO: el action es un endpoint público en la práctica — el layout
     // solo protegió el render.
     const { userId } = await requireSuperadmin();

@@ -15,7 +15,7 @@ import { AvisoSinFlota } from './sin-flota';
 import { FICHAS_CINCO_AGENTES, type FichaAgente } from './inicio-cinco-fichas';
 import { leerPesosInicio, leerUltimasCorridas, leerViajesEnCurso, type PesosLeidos } from './inicio-cinco-lectores';
 import {
-  cifraDeAgente, esFlotaNueva, estadoDeAgente, filaViajesEnCurso, hechosUltimas24h,
+  cifraDeAgente, contarCorridas, esFlotaNueva, estadoDeAgente, filaViajesEnCurso, hechosUltimas24h,
 } from './inicio-cinco-modelo';
 import { TarjetaExtemporaneos, TarjetaHizoSolo24, TarjetaImporteIave } from './inicio-cinco-piezas';
 import { TarjetaAgenteV3 } from './inicio-cinco-agente';
@@ -70,7 +70,7 @@ export async function InicioCincoV2({
     puede, fallidos, extra: [filaViajesEnCurso(enCurso, puede('/dashboard/viajes') ? conSufijo('/dashboard/viajes', sufijo) : null, t)].filter((f) => f !== null),
   }, t);
   const cob = coberturaDe(d);
-  const conCorridas = FICHAS_CINCO_AGENTES.filter((f) => f.corridas && corridas[f.clave]).length;
+  const { conCorrida: conCorridas, sinLectura } = contarCorridas(FICHAS_CINCO_AGENTES.filter((f) => f.corridas).map((f) => corridas[f.clave]));
   // La serie real de cierres (ocho semanas) solo se dibuja si existe y tiene al menos una semana con cierres: nada de gráfica de ceros.
   const serieCierres = !flotaNueva && d.cierres && d.cierres.some((c) => c.valor > 0) ? d.cierres : null;
   const ambito = `${tenantId}:${userId}`;
@@ -110,7 +110,7 @@ export async function InicioCincoV2({
       <section className="rv-ic__seccion" aria-labelledby="rv-ic-agentes-t">
         <header className="rv-ic__seccion-cab">
           <p id="rv-ic-agentes-t" role="heading" aria-level={2} className="rv-ic__seccion-titulo">{tr.t('ini5a.agentes.titulo')}</p>
-          <span className="rv-res__nota">{conCorridas === 0 ? tr.t('ini5a.agentes.resumen.cero') : tr.t('ini5a.agentes.resumen', { n: conCorridas })}</span>
+          <span className="rv-res__nota">{[sinLectura > 0 && conCorridas === 0 ? tr.t('ini5a.agentes.resumen.sinDato') : conCorridas === 0 ? tr.t('ini5a.agentes.resumen.cero') : tr.t('ini5a.agentes.resumen', { n: conCorridas }), sinLectura > 0 ? tr.t('ini5a.agentes.resumen.sinLectura', { n: sinLectura }) : null].filter(Boolean).join(' · ')}</span>
         </header>
         <div className="rv-ic__agentes">
           {FICHAS_CINCO_AGENTES.map((f) => (

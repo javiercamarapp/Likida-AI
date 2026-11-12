@@ -86,7 +86,6 @@ export default async function PaginaAgenteProveedores({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; orden?: string; dir?: string; pag?: string }>;
 }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/proveedores', sp);
@@ -128,6 +127,7 @@ export default async function PaginaAgenteProveedores({
     fd: FormData,
   ): Promise<{ error?: string; aviso?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
 
@@ -177,6 +177,7 @@ export default async function PaginaAgenteProveedores({
     fd: FormData,
   ): Promise<{ error?: string; aviso?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
 
@@ -208,6 +209,7 @@ export default async function PaginaAgenteProveedores({
 
   async function decidir(_prev: { error?: string; confirmar?: boolean } | null, fd: FormData): Promise<{ error?: string; confirmar?: boolean } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
 
@@ -226,6 +228,7 @@ export default async function PaginaAgenteProveedores({
   // función de menor aridad.
   async function generarBuzonAccion(): Promise<{ error?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     try {
@@ -240,6 +243,7 @@ export default async function PaginaAgenteProveedores({
 
   async function rotarBuzonAccion(): Promise<{ error?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     try {
@@ -256,6 +260,7 @@ export default async function PaginaAgenteProveedores({
   /** La configuración de la entrega: CONTROL (a dónde se manda el dinero-papel de la flota), solo el dueño. */
   async function guardarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const crudo = typeof fd.get('destinatarios') === 'string' ? (fd.get('destinatarios') as string).slice(0, 600) : '';
@@ -282,6 +287,7 @@ export default async function PaginaAgenteProveedores({
   /** «Enviar ahora»: arma el lote con lo aprobado sin entregar y lo manda en el acto (el cron reintenta si falla). */
   async function enviarAhora(): Promise<Estado> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     try {
@@ -310,6 +316,7 @@ export default async function PaginaAgenteProveedores({
 
   async function reintentarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const id = idDelForm(fd, 'id');
@@ -321,6 +328,7 @@ export default async function PaginaAgenteProveedores({
 
   async function cancelarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const id = idDelForm(fd, 'id');
@@ -332,6 +340,7 @@ export default async function PaginaAgenteProveedores({
 
   async function descartarArchivo(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const id = idDelForm(fd, 'id');
@@ -343,6 +352,7 @@ export default async function PaginaAgenteProveedores({
   /** «Ver PDF» de una factura o de una recepción: URL firmada de 5 min del bucket privado, siempre por tenant. */
   async function verPdf(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const facturaId = idDelForm(fd, 'facturaId');

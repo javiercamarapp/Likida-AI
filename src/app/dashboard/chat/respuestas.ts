@@ -129,7 +129,7 @@ export function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Res
  *  Cada frase conserva una palabra clave que `responder` entiende —
  *  verificadas contra sus ramas una por una
  *  en `chat_respondedor_catalogo.test.ts` (A37-S16-09). */
-export const catalogoConsulta = (t: TResto = T_RESTO_ES): Array<{ categoria: string; preguntas: string[] }> => ([
+export const catalogoConsulta = (t: TResto = T_RESTO_ES): Array<{ categoria: string; preguntas: string[]; clave?: string }> => ([
   {
     categoria: t('ch.cuadre_y_liquidaciones'),
     preguntas: [
@@ -149,6 +149,7 @@ export const catalogoConsulta = (t: TResto = T_RESTO_ES): Array<{ categoria: str
   },
   {
     categoria: t('ch.fiscal_y_acreditables'),
+    clave: 'fiscal',
     preguntas: [
       t('ch.desglose_de_acreditables_del_periodo'),
       'IVA acreditable del periodo',
@@ -159,7 +160,11 @@ export const catalogoConsulta = (t: TResto = T_RESTO_ES): Array<{ categoria: str
 ]);
 export const CATALOGO_CONSULTA = catalogoConsulta();
 
-export function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null, t: TResto = T_RESTO_ES): Respuesta {
+/** `acred` de una flota con perfil: lo fiscal está FUERA DEL PLAN (no se leyó). Distinto de `null` = «no hay datos / no se pudo leer». */
+export const FUERA_DEL_PLAN = 'fuera_del_plan' as const;
+export type AcreditablesOFuera = Acreditables | null | typeof FUERA_DEL_PLAN;
+
+export function responder(pregunta: string, kpis: DashboardKpis | null, acred: AcreditablesOFuera, t: TResto = T_RESTO_ES): Respuesta {
   const q = pregunta.toLowerCase();
   const sinLiq = { texto: t('ch.todavia_no_hay_liquidaciones_para_calcular') };
   // A37-S16-09: «observado» es el monto que el motor detectó fuera de regla o duplicado, NO lo comprobado (antes caía en la rama «monto»).
@@ -214,6 +219,7 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
     };
   }
   if (q.includes('diesel') || q.includes('diésel') || q.includes('litro')) {
+    if (acred === FUERA_DEL_PLAN) return { texto: t('ch.fuera_del_plan') };
     if (!acred) return { texto: t('ch.todavia_no_hay_datos_de_diesel') };
     return {
       texto: t('ch.elegibles_para_el_estimulo_este_periodo', { litros: litros(acred.litrosDiesel) }),
@@ -234,6 +240,7 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
     };
   }
   if (/\biva\b/.test(q) || q.includes('peaje') || q.includes('caseta') || q.includes('acreditable')) {
+    if (acred === FUERA_DEL_PLAN) return { texto: t('ch.fuera_del_plan') };
     if (!acred) return { texto: t('ch.todavia_no_hay_datos_de_acreditables') };
     return {
       texto: /\biva\b/.test(q)
@@ -265,7 +272,7 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
  * el respondedor local tampoco entiende no necesita este aviso).
  */
 export function respuestaLocal(
-  pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null, motivo: string | null, t: TResto = T_RESTO_ES,
+  pregunta: string, kpis: DashboardKpis | null, acred: AcreditablesOFuera, motivo: string | null, t: TResto = T_RESTO_ES,
 ): Respuesta {
   const base = responder(pregunta, kpis, acred, t);
   if (!motivo) return base;

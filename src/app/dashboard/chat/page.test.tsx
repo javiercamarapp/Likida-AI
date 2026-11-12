@@ -110,9 +110,10 @@ it('flota con perfil cinco_agentes: lo fiscal NI SE LEE ni se ofrece como tema; 
   expect(dobles.getAcreditables).not.toHaveBeenCalled();
   expect(dobles.getKpis).toHaveBeenCalledWith('t-1');
   const chat = buscar(pagina, ChatFlota)[0];
-  expect(chat.props.acred).toBeNull();
+  expect(chat.props.acred).toBe('fuera_del_plan'); // fuera del plan, no «sin datos»
   const temas = chat.props.temas as Array<{ categoria: string }>;
   expect(temas.map((x) => x.categoria)).not.toContain('Fiscal y acreditables');
+  expect(temas.map((x) => (x as { clave?: string }).clave)).not.toContain('fiscal'); // se filtra por clave, no por el texto
   expect(temas.map((x) => x.categoria)).toContain('Cuadre y liquidaciones');
 });
 

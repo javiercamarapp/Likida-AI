@@ -103,6 +103,7 @@ export default async function PaginaConexiones({
 
   async function guardar(_previo: ResultadoCredencial, fd: FormData): Promise<ResultadoCredencial> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
@@ -148,6 +149,7 @@ export default async function PaginaConexiones({
    */
   async function probar(_previo: ResultadoCredencial, fd: FormData): Promise<ResultadoCredencial> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
@@ -178,6 +180,7 @@ export default async function PaginaConexiones({
 
   async function desactivar(_previo: ResultadoCredencial, fd: FormData): Promise<ResultadoCredencial> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
@@ -202,6 +205,7 @@ export default async function PaginaConexiones({
   /** Genera o rota el secreto del GPS propio. El valor en claro viaja UNA vez, de aquí al navegador. */
   async function generarSecreto(_previo: ResultadoSecreto, _fd: FormData): Promise<ResultadoSecreto> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota_4') };
@@ -219,6 +223,7 @@ export default async function PaginaConexiones({
   /** Liga dispositivos GPS a unidades existentes: revisar (no escribe) y confirmar. */
   async function mapearGps(_previo: ResultadoImportacionUI | null, fd: FormData): Promise<ResultadoImportacionUI | null> {
     'use server';
+    const { t } = await getT('resto');
     const vacio = (error: string): ResultadoImportacionUI => ({
       error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
       muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
@@ -234,6 +239,7 @@ export default async function PaginaConexiones({
   /** Trae las geocercas de «mis propias tablas» al catálogo de sitios (el permiso lo vuelve a comprobar la acción). */
   async function importarGeocercas(_previo: ResultadoImportGeocercas, _fd: FormData): Promise<ResultadoImportGeocercas> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota_6') };

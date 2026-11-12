@@ -3,7 +3,7 @@ import type { ModoAgente } from './motor';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 /** Un tema de la portada con sus preguntas: serializable, así que un componente de servidor puede pasarlo como prop. */
-export interface TemaAgente { categoria: string; preguntas: string[] }
+export interface TemaAgente { categoria: string; preguntas: string[]; /** Identificador estable del tema (no depende del idioma): p. ej. 'fiscal'. */ clave?: string }
 
 /** Un chip de la portada: solo se declara lo que es VERDAD para ese modo (la portada no afirma nada que el servidor no haga). */
 export interface ChipAgente { texto: string; ayuda: string }
