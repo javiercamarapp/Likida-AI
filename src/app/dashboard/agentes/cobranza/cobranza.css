@@ -4,19 +4,14 @@
 .rv-cob__cajon h3 { margin: 0; font: 600 var(--t-card, 14px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
 .rv-cob__seccion { margin: 0; font: 600 var(--t-card, 14px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
 
-/* Resumen por gasto: filas rótulo-valor dentro de una tarjeta (Rovaq HB), sin segunda tira de KPI. */
-.rv-cob__resumen { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
-/* Con ancho de escritorio, las cinco medidas van en UNA fila de cinco celdas (rótulo, cifra y nota), sin celdas huérfanas en una segunda fila. */
-@media (min-width: 1100px) {
-  .rv-cob__resumen { grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 0; }
-  .rv-cob__resumen > .rv-cob__resumen-fila { flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 4px; padding: 4px 16px; border-bottom: 0; border-left: 1px solid var(--line); }
-  .rv-cob__resumen > .rv-cob__resumen-fila:first-child { border-left: 0; padding-left: 0; }
-  .rv-cob__resumen-fila dd { font-size: 20px; line-height: 1.2; }
-}
-.rv-cob__resumen-fila { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); min-height: 41px; }
-.rv-cob__resumen-fila dt { margin: 0; font-size: var(--t-body, 14px); font-weight: 600; color: var(--ink); display: grid; gap: 2px; }
-.rv-cob__resumen-fila dt small { font-size: var(--t-small, 12px); font-weight: 400; color: var(--muted); }
-.rv-cob__resumen-fila dd { margin: 0; font-size: var(--t-body, 14px); font-weight: 600; color: var(--ink); }
+/* Resumen por gasto (Rovaq: cuadrícula de cifras DENTRO de una tarjeta, 14/600; la tira de 26/700 es una sola por página y es la de arriba): celdas de rótulo
+   12 apagado, cifra 14/600 y nota de 12, en una rejilla que reparte lo que cabe (cinco en una fila en escritorio, 2-3 por fila en angosto), sin filas
+   rótulo-valor a todo el ancho ni divisores entre ellas. */
+.rv-cob__resumen { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px 16px; }
+.rv-cob__resumen-fila { display: grid; align-content: start; gap: 2px; min-width: 0; margin: 0; }
+.rv-cob__resumen-fila dt { margin: 0; font-size: var(--t-small, 12px); font-weight: 500; color: var(--muted); }
+.rv-cob__resumen-fila dd { margin: 0; font-size: var(--t-card, 14px); line-height: 1.3; font-weight: 600; color: var(--ink); }
+.rv-cob__resumen-fila dd.rv-cob__resumen-nota { font-size: var(--t-small, 12px); line-height: 1.4; font-weight: 400; color: var(--muted); }
 
 /* Cifras en la fuente del sistema con dígitos tabulares (Rovaq: Hanken Grotesk), no en monoespaciada. */
 .rv-cifra { font-variant-numeric: tabular-nums; }
