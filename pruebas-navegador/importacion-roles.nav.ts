@@ -1,5 +1,6 @@
 import { test, expect, request as apiRequest } from './apoyo/fixture';
 import { ESTADOS } from './apoyo/sesion';
+import { abrirImportarTms } from './apoyo/viajes';
 import { entornoLocalE2E } from '../scripts/ci/e2e/entorno-local.mjs';
 
 for (const [rol, financiero] of [['duena', true], ['encargado', true], ['encargado', false]] as const) {
@@ -21,7 +22,7 @@ for (const [rol, financiero] of [['duena', true], ['encargado', true], ['encarga
     });
     test(!financiero ? 'el encargado conserva la importación operativa' : rol === 'duena' ? 'permite importar datos financieros al dueño' : 'rechaza columnas financieras del encargado sin crear viajes', async ({ page, browser }) => {
       await page.goto('/dashboard/viajes');
-      await page.locator('summary').filter({ hasText: 'Importar desde tu TMS' }).click();
+      await abrirImportarTms(page);
       await page.getByLabel('CSV o Excel con los viajes').setInputFiles({
         name: 'viajes-financieros.csv', mimeType: 'text/csv',
         buffer: Buffer.from(financiero

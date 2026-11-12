@@ -28,6 +28,7 @@
  */
 import { test, expect, request as apiRequest } from './apoyo/fixture';
 import { ESTADOS } from './apoyo/sesion';
+import { abrirDetalleDeViaje, abrirNuevoViaje } from './apoyo/viajes';
 import { entornoLocalE2E, getLocalE2E } from '../scripts/ci/e2e/entorno-local.mjs';
 
 const SUPABASE_URL = entornoLocalE2E().supabase;
@@ -59,7 +60,7 @@ for (const rol of ['duena', 'encargado'] as const) {
 
     if (rol === 'encargado') test('rechaza campos financieros inyectados en el formulario antes de crear', async ({ page }) => {
       await page.goto('/dashboard/despacho');
-      const forma = page.locator('form:has(button:has-text("Crear viaje"))');
+      const forma = await abrirNuevoViaje(page);
       await forma.locator('#folio').fill(FOLIO);
       await forma.locator('#origen').fill('Silao, GTO');
       await forma.locator('#destino').fill('Monterrey, NL');
@@ -87,7 +88,7 @@ for (const rol of ['duena', 'encargado'] as const) {
 
     if (rol === 'encargado') test('rechaza en servidor un anticipo por encima del umbral aunque el navegador lo deje pasar', async ({ page }) => {
       await page.goto('/dashboard/despacho');
-      const forma = page.locator('form:has(button:has-text("Crear viaje"))');
+      const forma = await abrirNuevoViaje(page);
       await forma.locator('#folio').fill(FOLIO);
       await forma.locator('#origen').fill('Silao, GTO');
       await forma.locator('#destino').fill('Monterrey, NL');
@@ -109,7 +110,7 @@ for (const rol of ['duena', 'encargado'] as const) {
 
     test('el viaje nace en el panel y el registro lo enseña abierto', async ({ page }) => {
       await page.goto('/dashboard/despacho');
-      const forma = page.locator('form:has(button:has-text("Crear viaje"))');
+      const forma = await abrirNuevoViaje(page);
       await forma.locator('#folio').fill(FOLIO);
       await forma.locator('#origen').fill('Silao, GTO');
       await forma.locator('#destino').fill('Monterrey, NL');
@@ -151,7 +152,7 @@ test.describe('cifras y PDF de la liquidación cuadrada (VJ-2026-0844)', () => {
 
   test('el detalle enseña las cifras reales y ofrece el PDF', async ({ page }) => {
     await page.goto('/dashboard/viajes?f=liquidados');
-    await page.locator('tr', { hasText: 'VJ-2026-0844' }).getByRole('link', { name: /Ver/ }).click();
+    await abrirDetalleDeViaje(page, 'VJ-2026-0844');
     await expect(page).toHaveURL(/\/dashboard\/[0-9a-f-]{36}/);
     await expect(page.locator('body')).toContainText('VJ-2026-0844');
     // Anticipo = comprobado = $10,200 (seed): la cifra que cuadra el papel.
