@@ -238,7 +238,7 @@ export async function InicioContador({
           estado={barrasMes === null ? 'error' : barrasMes.length === 0 ? 'vacio' : 'ok'}
           mensaje={barrasMes === null ? tr('contador.inicioContador.noSePudoCalcular') : tr('contador.panel.barrasVacio')}
           detalle={tr('contador.panel.barrasVacioDetalle')} reintentar acciones={<KindBadge tipo="calculado" />}
-          iconoVacio={ChartNoAxesColumn} contenida={barrasMes !== null && barrasMes.length === 0}>
+          iconoVacio={ChartNoAxesColumn} className="rv-cont__vacio-llena">
           {barrasMes && barrasMes.length > 0 ? (
             <ColumnasApiladas etiqueta={tr('contador.panel.barrasTitulo', { etiqueta: etq })} formato="mxn" matiz={8} alto={168}
               series={[tr('contador.panel.barrasPerdido'), tr('contador.panel.barrasEnRiesgo'), tr('contador.panel.barrasRecuperable')]}
@@ -248,14 +248,16 @@ export async function InicioContador({
         <Tarjeta key="iva" titulo={tr('contador.panel.ivaTitulo')} info="contador.iva_documentado" acciones={<KindBadge tipo="observado" />}
           estado={resumenFiscal === null ? 'error' : resumenFiscal.n === 0 ? 'vacio' : 'ok'}
           mensaje={resumenFiscal === null ? tr('contador.inicioContador.noSePudoLeer2') : tr('contador.inicioContador.sinComprobantesLeidos')}
-          detalle={tr('contador.inicioContador.todaviaNoHayComprobantes')} reintentar>
+          detalle={tr('contador.inicioContador.todaviaNoHayComprobantes')} reintentar className="rv-cont__vacio-llena">
           {resumenFiscal && resumenFiscal.n > 0 ? (
             <>
-              <DonaMini matiz={1} etiqueta={tr('contador.panel.ivaTitulo')} centro={mxn(resumenFiscal.ivaAcreditable + resumenFiscal.ivaNoAcreditable)}
+              <div className="rv-cont__dona">
+                <DonaMini matiz={1} etiqueta={tr('contador.panel.ivaTitulo')} centro={mxn(resumenFiscal.ivaAcreditable + resumenFiscal.ivaNoAcreditable)}
                 gajos={[
                   { etiqueta: tr('contador.inicioContador.ivaAcreditableDocumentado'), valor: resumenFiscal.ivaAcreditable },
                   { etiqueta: tr('contador.inicioContador.ivaDesglosadoQueNo'), valor: resumenFiscal.ivaNoAcreditable },
                 ]} formato="mxn" />
+              </div>
               <p className="rv-cont__nota">{tr('contador.inicioContador.lasDosCubetasSuman')}</p>
             </>
           ) : null}
@@ -341,7 +343,7 @@ async function BloqueTablas({ pAcred, pResumenPerdidas, pSeries, pFacturacion, s
         </Tarjeta>
       </FilaTarjetas>
       <FilaTarjetas variante="12">
-        <Tarjeta titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" acciones={<><SelectorPeriodoMotor /><KindBadge tipo="calculado" /></>}
+        <Tarjeta className="rv-cont__pierdo" titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" acciones={<><SelectorPeriodoMotor /><KindBadge tipo="calculado" /></>}
           estado={resumenPerdidas === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCalcular')} reintentar>
           <MotorFiscalPeriodo series={series} causas={causas.map(({ titulo, n, monto }) => ({ titulo, n, monto }))} />
         </Tarjeta>
@@ -405,10 +407,10 @@ async function BloqueAlertas({ pKpis, pAnomalias, pHuerfanos, pFacturacion, sufi
   return (
     <div className="rv-cont__alertas">
       {alertas.map((a) => (
-        <Link key={a.texto} href={a.href} className="rv-cont__alerta">
-          <span>{a.texto}</span>
-          <span className="rv-cont__ver">{tr('contador.inicioContador.ver')}</span>
-        </Link>
+        <Aviso key={a.texto} tono="warn"
+          acciones={<Link href={a.href} className="rv-cont__ver">{tr('contador.inicioContador.ver')}</Link>}>
+          {a.texto}
+        </Aviso>
       ))}
     </div>
   );

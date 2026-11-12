@@ -48,3 +48,9 @@
 /* Acciones del paso: una línea (sin partir «Ir a Peajes» en dos), y «Omitir este paso» a la izquierda, no centrado en su propia fila. */
 .rv-pem .rv-pem__acciones .rv-btn { white-space: nowrap; }
 .rv-pem .rv-pem__paso > .rv-btn--ghost { align-self: flex-start; padding-left: 0; }
+
+/* Ronda 6 (Rovaq /setup): chips de estado de CONTORNO, sin relleno de color; el paso actual solo se marca con el borde; la nota «Lo vimos nosotros»
+   sin filete verde decorativo (decisión 10: el color queda para los semáforos). */
+.rv-pem .rv-pem__chip { background: transparent; border: 1px solid var(--line2); color: var(--ink); }
+.rv-pem .rv-pem__evidencia, .rv-pem .rv-pem__evidencia[data-tipo="medido"], .rv-pem .rv-pem__evidencia[data-tipo="declarado"] { border-left: 0; border: 1px solid var(--line); background: transparent; }
+.rv-pem .rv-pem__evidencia[data-tipo="declarado"] { border-style: dashed; }

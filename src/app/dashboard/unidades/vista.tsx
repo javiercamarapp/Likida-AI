@@ -6,7 +6,7 @@ import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
 import { clasificarVigencia, avisoVigencias, DIAS_AVISO, type ConteoVigencias } from '@/lib/likida/vigencias';
 import { numero } from '@/lib/formato';
 import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
-import { FiltroRegistro } from '../registro-filtro';
+import { FiltroRegistro, PieRegistro } from '../registro-filtro';
 import { FormaUnidad, type AccionForma, type ProveedorGps, type PatioOpcion } from './forma';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import { AccionesEstadoUnidad, ReactivarUnidad, type AccionEstado } from './estado';
@@ -252,7 +252,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
       selloCifras={selloHoy(t('un.tabla.etiqueta'))}
       filtros={(
         <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
-          sustantivo="unidades" camposOcultos={camposOcultos} />
+          sustantivo="unidades" camposOcultos={camposOcultos} conteoEnPie />
       )}
       avisos={(
         <>
@@ -293,11 +293,13 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
         </EstadoVacio>
       ) : (
         <>
-          <TarjetaTabla titulo={t('un.tabla.etiqueta')} contador={numero(pag.filtrados, idioma)}>
+          <TarjetaTabla titulo={t('un.tabla.etiqueta')}>
           <TablaBase<UnidadRow> etiqueta={t('un.tabla.etiqueta')} columnas={columnas} filas={pag.filas} idFila={(u) => u.id} tarjetaMovil
             vacio={{ titulo: t('un.vacio.sincoincidencias'), texto: t('un.vacio.busqueda', { q: pag.q }) }} />
-          </TarjetaTabla>
+          <PieRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag} sustantivo="unidades" />
+          {/* La nota de método va dentro de la tarjeta, bajo la tabla (Rovaq), no suelta sobre el lienzo. */}
           <p className="rv-un__nota">{t('un.nota.papel')}</p>
+          </TarjetaTabla>
         </>
       )}
 

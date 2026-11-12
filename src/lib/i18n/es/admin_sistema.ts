@@ -914,6 +914,7 @@ export const admin_sistema = {
   'mapa_prospectos_cerebro.se_ensenan_las_60_mejores_de': 'Se enseñan las 60 mejores de {numero}. Afina el filtro o exporta el CSV completo.',
   'mapa_prospectos_cerebro.el_embudo_en_luces': 'El embudo, en luces',
   'mapa_prospectos_cerebro.prospectos_por_etapa_del_embudo': 'Prospectos por etapa del embudo',
+  'mapa_prospectos_cerebro.cobertura_por_estado': 'Cobertura por estado',
   'mapa_prospectos_cerebro.donde_vive_la_cartera': 'Dónde vive la cartera',
   'mapa_prospectos_cerebro.prospectos_por_estado': 'Prospectos por estado',
   'mapa_prospectos_cerebro.sin_plaza_conocida_se_dice_no': 'sin plaza conocida: se dice, no se les inventa estado.',

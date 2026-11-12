@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import { mxn, numero, fechaCorta, fechaHoraMx } from '@/lib/formato';
 import type { FichaCliente } from '@/lib/admin/ficha-cliente';
 import type { InterruptorPipelineTenant } from '@/lib/admin/negocio';
@@ -188,7 +187,7 @@ export function Ficha360({
           columnas={[
             { id: 'casilla', titulo: t('flotas_ficha.casilla'), principal: true, celda: (c) => c.texto },
             { id: 'estado', titulo: t('flotas_ficha.estado'), celda: (c) => <StatusChip tono={TONO_CASILLA[c.estado]}>{rotuloCasilla(t)[c.estado]}</StatusChip> },
-            { id: 'ir', titulo: t('flotas_ficha.resolver'), alinear: 'der', celda: (c) => c.estado === 'ok' ? '' : <Link href={c.href}>{c.accion}</Link> },
+            { id: 'ir', titulo: t('flotas_ficha.resolver'), alinear: 'der', celda: (c) => c.estado === 'ok' ? '' : <BotonEnlace href={c.href} variante="secondary" tamano="sm">{c.accion.charAt(0).toLocaleUpperCase('es') + c.accion.slice(1)}</BotonEnlace> },
           ]}
         />
       </Tarjeta>

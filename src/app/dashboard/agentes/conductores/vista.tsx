@@ -174,6 +174,7 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
           tono={(kpis.escalados ?? 0) > 0 ? 'bad' : undefined} />
       </TiraCifras>
       {(kpis.importados !== undefined || kpis.tiempoAceptacion !== undefined) && (
+        <Tarjeta titulo={tx('f26d6.cd.seguimiento_flota')}>
         <dl className="rv-ag-indic">
           {kpis.importados !== undefined && (
             <div>
@@ -193,6 +194,10 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
             </div>
           )}
         </dl>
+        <p className="rv-cd__micro">
+          {tx('conductores.vista.los_conteos_son_de_toda')}
+        </p>
+        </Tarjeta>
       )}
       {/* FE-5: aquí decía "se calculan sobre los 100 viajes más
           recientes" — un rótulo honesto sobre una cifra inútil (a 50k
@@ -200,9 +205,11 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
           ahora salen de la base y cubren TODOS los viajes en curso de
           la flota; lo único acotado es la LISTA de abajo, que lo dice
           en su propio pie. */}
-      <p className="rv-cd__micro">
-        {tx('conductores.vista.los_conteos_son_de_toda')}
-      </p>
+      {kpis.importados === undefined && kpis.tiempoAceptacion === undefined && (
+        <p className="rv-cd__micro">
+          {tx('conductores.vista.los_conteos_son_de_toda')}
+        </p>
+      )}
     </div>
   );
 }

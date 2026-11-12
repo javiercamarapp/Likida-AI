@@ -22,12 +22,19 @@
 /* Botón de envío de las formas de esta pantalla a la medida de Rovaq (32 px, 13/500, padding 6x12, radio 8): el de `FormaConAviso` trae text-sm de Tailwind (36 px). */
 [data-ui="v2"] form button[type="submit"].px-4.py-2.text-sm { min-height: 32px; padding: 6px 12px; font-size: var(--t-body, 13px); font-weight: 500; line-height: 1.3; border-radius: 8px; }
 
-/* Todo a ancho completo (Rovaq CF: no se alternan anchos): la tira, el cobro pendiente, las facturas y el aviso miden lo mismo que este bloque. Datos fiscales y planes van en DOS columnas
-   iguales (sin hueco a la derecha) y se apilan bajo 1100 px; una tarjeta que queda sola en la última fila ocupa las dos columnas. */
-.rv-sus__dos { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@media (min-width: 1100px) {
-  .rv-sus__dos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rv-sus__dos > :last-child:nth-child(odd) { grid-column: 1 / -1; }
-}
-.rv-sus__fiscales form > div.grid { gap: 0; }
+/* Todo a ancho completo (Rovaq CF: no se alternan anchos) y SIN huecos: «Tu plan» (si solo trae su vacío) va arriba a todo el ancho; datos fiscales y planes se apilan a ancho completo, y los siete campos fiscales
+   van en dos columnas para que la tarjeta no sea una torre de 880 px con 690 px de lienzo vacío al lado. */
+.rv-sus__dos { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.rv-sus__fiscales form > div.grid { gap: 0 24px; }
 .rv-sus__rejilla { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+/* Tira de cifras como la `pc-kpis` de Rovaq (igual que /vendedor y Avisos): sin filete superior y con la PISTA punteada de 6 px. La pista es solo forma (no mide nada) y se omite con la celda en error o sin dato. */
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi { min-height: 0; border-top-width: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__cab { order: 1; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__fila { order: 2; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi:not([data-estado])::after {
+  content: ''; order: 3; display: block; height: 6px; margin: 4px 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
+}
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__nota { order: 4; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; }

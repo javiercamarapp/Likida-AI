@@ -28,3 +28,20 @@
 [data-ui="v2"] .card .rv-cl__sin-ingreso table tbody :is(td, th) { height: 52px; padding-block: 8px; }
 .rv-cl__sin-ingreso + .rv-cl__pie { margin-top: 4px; padding-top: 4px; }
 .rv-cl__sin-ingreso { margin-bottom: 8px; }
+
+/* «Viajes sin ingreso»: la tabla llega a sangre dentro de su tarjeta (Rovaq: padding 0, sin segundo borde); la nota y el pie conservan su respiro. */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-cl__sin-ingreso .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-cl__sin-ingreso .rv-tb__region { border-top: 1px solid var(--line); }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-cl__nota { padding: 10px 14px 8px; }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-cl__pie { margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-cl__sin-ingreso { margin-bottom: 0; }
+
+/* Vacíos dentro de tarjeta (Rovaq `ac-vacio`): UN renglón (título 13/600 y texto 12 en la misma línea), caja de 1 px discontinua, radio 8, padding 20/14.
+   Los vacíos de página entera quedan para la página entera. Solo bajo `.rv-cl__bloques` (Clientes y Tarifas). */
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio:not([data-pantalla]) {
+  flex: 0 0 auto; min-height: 0; max-height: none; flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: flex-start;
+  gap: 2px 8px; padding: 20px 14px; text-align: left; border: 1px dashed var(--line2, var(--line)); border-radius: 8px;
+}
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio .rv-vacio__icono { display: none; }
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio .rv-vacio__titulo { margin: 0; font-size: 13px; font-weight: 600; }
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio .rv-vacio__texto { margin: 0; font-size: 12px; }

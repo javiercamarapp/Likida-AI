@@ -138,7 +138,7 @@ export function VistaAgenteProveedores({
       </Tarjeta>
 
 
-        <FilaTarjetas variante="6-6">
+        <FilaTarjetas variante="6-6" className="rv-prov__fila">
       <Tarjeta titulo={tx('proveedores.vista.subir_factura_de_proveedor')} info="proveedores.subir">
         <p className="rv-prov__nota">
           {rico(tx('proveedores.vista.el_xml_es_el_dato'), { rfc: rfcFlota
