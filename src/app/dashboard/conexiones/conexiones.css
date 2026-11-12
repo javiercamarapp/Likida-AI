@@ -107,3 +107,8 @@
 
 /* Acción bloqueada (p. ej. «Revisar archivo» sin archivo): contorno punteado de 1 px, sin relleno gris (Rovaq). */
 .rv-cx__config .rv-btn:disabled { background: transparent; border: 1px dashed #bfbfc2; color: var(--muted); opacity: 1; }
+
+/* Ronda 8 (Rovaq «Fuentes conectadas»): el detalle de la derecha llena la altura de la lista de tarjetas-pestaña (la ronda 6 lo dejaba a su contenido: 180 px junto a 470). */
+.rv-cx__md-cuerpo { align-items: stretch; }
+.rv-cx__panel { display: flex; flex-direction: column; }
+.rv-cx__panel > .rv-cx__pares { flex: 1 1 auto; align-content: start; }

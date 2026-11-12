@@ -74,10 +74,11 @@ export async function ResumenV2({
         <>
           <li>{t('op.res.corte', { fecha: fechaMx(diaMx, idioma) })}</li>
           <li>{t('op.res.periodo', { periodo: PERIODO_RANGO[rango] })}</li>
+          <li>{`Fuentes ${cob.ok} de ${cob.total}`}</li>
           {cob.ok < cob.total ? <li>{t('op.res.sin_lectura', { n: cob.total - cob.ok, total: cob.total })}</li> : null}
         </>
       )}
-      filtros={<FiltrosResumen rango={rango} periodoTexto={PERIODO_RANGO[rango]} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />}
+      filtros={<FiltrosResumen rango={rango} periodoTexto={PERIODO_RANGO[rango]} />}
       avisos={(
         <>
           {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}

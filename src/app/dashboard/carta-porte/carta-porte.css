@@ -21,9 +21,11 @@
 /* Borrador (ficha): las tablas van a sangre dentro de su tarjeta (sin segundo marco) y los textos que las acompañan conservan su respiro. */
 .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > p { margin: 0; padding: 8px 14px; }
 
-/* Ronda 6: en la ficha del borrador los bloques de la fila 6-6 miden lo que mide su contenido (Rovaq «ficha de problema»): «Veredicto» no se estira
-   a la altura de «Validación contra el rechazo del PAC» dejando medio bloque vacío. */
-[data-ui="v2"] .rv-esq--ficha .rv-fila-tarjetas[data-variante="6-6"] { align-items: start; }
+/* Ronda 8 (Rovaq ficha 06d: bloques de 2 columnas a la MISMA altura): las rondas 6 y 7 los soltaban a su contenido y dejaban 90 px de hueco bajo «Veredicto» y bajo
+   «Del transportista». Los bloques de la fila 6-6 se estiran juntos; el vacío queda arriba, compacto. */
+[data-ui="v2"] .rv-esq--ficha .rv-fila-tarjetas[data-variante="6-6"] { align-items: stretch; }
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.rv-cp__ajusta { height: 100%; align-self: stretch; }
 
-/* Ronda 7: las tarjetas de la ficha del borrador miden lo que mide su contenido (la fila 2 columnas ya no estira «Veredicto» a la altura de «Validación»). */
-[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.rv-cp__ajusta { height: auto; align-self: start; }
+/* Ronda 8: el folio del registro no va subrayado (el enlace subrayado es para texto corrido); «Abrir» es botón de contorno de 28 px. */
+.rv-ccp__folio { font-weight: 500; text-decoration: none; color: var(--ink); }
+.rv-ccp__folio:hover { text-decoration: underline; text-underline-offset: 2px; }

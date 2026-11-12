@@ -95,6 +95,10 @@ function accionesFila(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (nodo.type === AccionFila) salida.push(nodo);
   accionesFila(nodo.props.children as ReactNode, salida);
   accionesFila(nodo.props.acciones as ReactNode, salida); // las formas de alta viven en el cajón del encabezado de cada tarjeta
+  // Ronda 8: proveedores y contactos son TABLAS; sus acciones viven en las celdas (funciones de columna), que se evalúan fila por fila como lo haría la tabla.
+  const columnas = nodo.props.columnas as Array<{ celda: (f: unknown) => ReactNode }> | undefined;
+  const filas = nodo.props.filas as unknown[] | undefined;
+  if (Array.isArray(columnas) && Array.isArray(filas)) for (const f of filas) for (const c of columnas) accionesFila(c.celda(f), salida);
   return salida;
 }
 const deFila = (pagina: ReactNode, etiqueta: string) => {

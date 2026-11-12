@@ -66,3 +66,11 @@
 [data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo { padding: 0; }
 [data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-dsp__nota { padding: 8px 14px 10px; }
 [data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-vacio { margin: 12px 14px; }
+
+/* Ronda 8: la tabla «En curso» va a sangre de verdad (la tarjeta no pone su relleno de 14 px: la cabecera gris arrancaba 14 px adentro), el título y su
+   ayuda comparten el mismo eje de 14 px (antes la nota sumaba otros 14: 318 contra 304) y el vacío de «Por asignar» es la caja compacta de Rovaq
+   (ac-vacio: 1 px punteado, radio 8, padding 20x14), no un bloque de 170 px que se estira al alto de su pareja. */
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta { padding: 0; gap: 0; overflow: hidden; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cab { padding: 10px 14px 0; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-dsp__nota { padding: 2px 14px 10px; }
+[data-ui="v2"] .rv-fila-tarjetas > .rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-vacio { flex: 0 0 auto; min-height: 0; padding: 14px 20px; }

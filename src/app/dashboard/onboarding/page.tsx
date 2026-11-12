@@ -143,6 +143,7 @@ export default async function OnboardingFlotaPage({
         {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
           <form action={posponer} className="rv-ob__pospuesto">{t('op.no_tienes_a_la_mano_tus')}{' '}<Boton type="submit" variante="ghost" tamano="sm">{t('op.lo_confirmo_con_mi_contador')}</Boton>{' '}{t('op.el_resumen_se_abre_con_un')}</form>
         )}
+        <div className="rv-ob__fl">
         {/* Indicador de avance (plantilla FL de Rovaq): cuántos datos del perfil ya están declarados, contados del perfil guardado, nunca estimados. */}
         <div className="rv-ob__avance" role="group" aria-label={t('op.ob.avance', { n: entrevista.declaradas.length, total: CATALOGO.length })}>
           <progress className="rv-ob__avance-barra" max={CATALOGO.length} value={entrevista.declaradas.length} aria-hidden="true" />
@@ -162,6 +163,7 @@ export default async function OnboardingFlotaPage({
             );
           })}
         </ol>
+        </div>
         <ChatEntrevista
           preguntaInicial={preguntaInicial}
           preguntaIdInicial={entrevista.siguiente?.id ?? null}

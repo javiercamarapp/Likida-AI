@@ -226,7 +226,7 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
         <>
           {/* QUÉ ES ESTE DOCUMENTO Y QUÉ NO ES. Va arriba, no en una nota al pie: una flota que crea que esto sustituye la bitácora de horas
               de servicio se lleva la multa del art. 83 con nuestro archivo en la mano. */}
-          <AvisoCompacto tono="warn" resumen={LEYENDA_NO_ES_BITACORA_83} etiquetaMas="Ver más: alcance legal"
+          <AvisoCompacto tono="warn" className="rv-aviso--linea" resumen={LEYENDA_NO_ES_BITACORA_83} etiquetaMas="Ver más: alcance legal"
             mas={(
               <>
                 <strong>{t('jor.nota.ley')}</strong> <InfoTip clave="jornada.alcance" />

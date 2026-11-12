@@ -35,3 +35,22 @@
 /* Ronda 6: pie de la tabla maestra («25 de N» + paginación) dentro de la tarjeta, con filete superior (Rovaq). */
 .rv-reg__pie-tabla { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--line); }
 .rv-un__nota { margin: 0; padding: 0 14px 10px; font-size: 12px; color: var(--muted); }
+/* Ronda 8 — aviso de UNA línea (Rovaq «notice-bar»: padding 10x14, el titular en negritas en línea y la acción a la derecha). Solo para <AvisoCompacto className="rv-aviso--linea">:
+   el resumen se recorta a una línea y «Ver más» queda a su derecha en vez de caer a un renglón propio; abierto, el detalle ocupa el ancho completo debajo. */
+[data-ui="v2"] .rv-aviso--linea { align-items: center; padding: 10px 14px; }
+[data-ui="v2"] .rv-aviso--linea .rv-aviso__compacto { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+[data-ui="v2"] .rv-aviso--linea .rv-aviso__resumen { flex: 1 1 0; min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-line-clamp: unset; line-clamp: unset; }
+[data-ui="v2"] .rv-aviso--linea .rv-aviso__mas { flex: 0 0 auto; margin-top: 0; }
+[data-ui="v2"] .rv-aviso--linea .rv-aviso__mas[open] { flex: 1 1 100%; }
+[data-ui="v2"] .rv-aviso--linea .rv-aviso__mas[open] > .rv-aviso__mas-cab { margin-bottom: 6px; }
+@media (max-width: 767.98px) {
+  [data-ui="v2"] .rv-aviso--linea .rv-aviso__resumen { flex-basis: 100%; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+}
+
+/* Ronda 8: contador de tarjeta/pestaña como pastilla de Rovaq (pc-count: 20 px, radio 999, fondo hundido), no un número suelto. */
+[data-ui="v2"] .rv-tarjeta__contador { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1; }
+
+/* Ronda 8: «No disponible ahora» es SOLO el botón punteado (Rovaq: 1 px dashed #bfbfc2, sin frase al lado, que desbordaba la zona de acciones); el motivo va en su title y queda
+   para lectores de pantalla (recorte visual, no display:none). */
+[data-ui="v2"] .rv-nd__motivo { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+[data-ui="v2"] .rv-nd { position: relative; }

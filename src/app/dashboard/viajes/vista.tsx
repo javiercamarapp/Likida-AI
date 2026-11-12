@@ -3,12 +3,13 @@ import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { TarjetaTabla } from '../bloque';
 import { CajonAlta } from '../cajon-alta';
 import { Eye, Inbox } from 'lucide-react';
+import Link from 'next/link';
 import { numero, fechaMx, mxn } from '@/lib/formato';
 import { PillAviso, PillEstatusViaje } from './pills';
 import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
-import { AvisoCompacto, BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, Icono } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './registro.css';
 import { ahoraMs } from '@/lib/saludo';
@@ -174,8 +175,13 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
         // campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente.
         <BarraFiltros enLinea accion="/dashboard/viajes" buscar etiqueta={t('viajes.filtros')} nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
           ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
-          <FiltroOpciones etiqueta={t('viajes.filtro.estado')} valor={filtro} porDefecto="todos"
-            opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: t(ROTULO_FILTRO[f]), href: hrefRegistro(sufijo, { f, q }) }))} />
+          {/* Ronda 8 (Rovaq FilterBar): el estado es un segmentado de 30 px con la opción vigente en alto contraste, no un select. El periodo no se ofrece:
+              la consulta del registro no filtra por fecha y un filtro que no mueve la tabla sería un rótulo falso (pedido: `desde` en getViajesRegistro). */}
+          <nav className="rv-seg rv-bp__seg" data-tam="sm" aria-label={t('viajes.filtro.estado')}>
+            {(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => (
+              <Link key={f} href={hrefRegistro(sufijo, { f, q })} prefetch={false} scroll={false} className="rv-seg__btn" aria-current={f === filtro ? 'true' : undefined}>{t(ROTULO_FILTRO[f])}</Link>
+            ))}
+          </nav>
           <FiltroBusqueda nombre="q" valor={q} placeholder={t('viajes.buscar.ph')} etiqueta={t('viajes.buscar.aria')} />
         </BarraFiltros>
       )}

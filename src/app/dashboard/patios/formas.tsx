@@ -33,7 +33,7 @@ export function FormaNuevoPatio({ accion }: { accion: AccionForma }) {
         <CampoTexto id="patio-nuevo-ciudad" name="ciudad" etiqueta={t('patios.f.ciudad')} maxLength={80} placeholder={t('patios.f.ciudad.ph')} autoComplete="off" />
       </div>
       <AvisoResultado estado={estado} />
-      <Enviar etiqueta={t('patios.f.crear')} enviando={t('patios.f.creando')} icono={<Icono icono={Plus} />} />
+      <div className="rv-pt__pie"><Enviar etiqueta={t('patios.f.crear')} enviando={t('patios.f.creando')} icono={<Icono icono={Plus} />} /></div>
     </form>
   );
 }

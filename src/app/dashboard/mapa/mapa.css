@@ -90,11 +90,12 @@
   .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: auto 0; }
 }
 
-/* Ronda 7: el panel lateral acompaña su contenido (Rovaq 09), no el alto del mapa: sin 450 px en blanco bajo una fila de ranking y una tarjeta.
-   El vacío del panel es UNA caja punteada compacta (se retiró el mensaje duplicado que flotaba sobre el mapa). */
+/* Ronda 8 (Rovaq 09): el panel lateral ocupa la ALTURA del mapa (la ronda 7 lo soltó a su contenido y dejaba una columna vacía). Las tarjetas de viaje se reparten el alto y la
+   nota queda abajo; sin viajes ni posiciones ya no se dibuja el mapa (ver MapaVivo), así que no hay panel corto junto a un lienzo vacío. */
+.rv-mp__rejilla { align-items: stretch; }
 @media (min-width: 1024px) {
-  .rv-mp__panel .rv-mp__cards { flex: 0 1 auto; max-height: 520px; }
-  .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: 0; }
-  .rv-mp__panel > .rv-mp__nota { margin-top: 4px; }
+  .rv-mp__panel .rv-mp__cards { flex: 1 1 auto; min-height: 0; max-height: 520px; }
+  .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: auto 0; }
+  .rv-mp__panel > .rv-mp__nota { margin-top: auto; }
 }
 .rv-mp__panel .rv-vacio { padding: 14px 20px; min-height: 0; border: 1px dashed var(--line2); border-radius: 8px; box-shadow: none; }
