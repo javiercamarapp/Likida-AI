@@ -41,11 +41,14 @@ const ESTADO_VISUAL: Record<EstadoAsistente, { tono: TonoChip; Icono: typeof Che
 };
 
 function EstadoChip({ estado }: { estado: EstadoAsistente }) {
+  const { t } = useT('resto', restoEs);
   const { tono, Icono } = ESTADO_VISUAL[estado];
+  // Mismo vocabulario que la lista de /dashboard/arranque («Hecho» / «Para revisar»): una sola puesta en marcha, no dos idiomas de estado.
+  const rotulo = estado === 'listo' ? t('cfg.paso.hecho') : estado === 'pendiente' ? t('cfg.paso.para_revisar') : ROTULO_ESTADO[estado];
   return (
-    <Chip tono={tono}>
+    <Chip tono={tono} className="rv-pem__chip">
       <Icono width={12} height={12} strokeWidth={2.2} aria-hidden="true" />
-      {ROTULO_ESTADO[estado]}
+      {rotulo}
     </Chip>
   );
 }
@@ -193,7 +196,7 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
 
       <div className="rv-pem__acciones">
         {paso.accion && !declaraciones.omitidos?.[paso.id] && (
-          <BotonEnlace variante="primary" href={`${paso.accion.href}${sufijo}`} icono={paso.id === 'tms' ? <FileUp /> : undefined}>
+          <BotonEnlace variante="secondary" href={`${paso.accion.href}${sufijo}`} icono={paso.id === 'tms' ? <FileUp /> : undefined}>
             {paso.accion.texto}
           </BotonEnlace>
         )}
@@ -260,7 +263,7 @@ function DrawerSolicitud({ abierto, onCerrar, responsables }: { abierto: boolean
       <div className="rv-pem__texto-bloque">
         <h3>{t('op.para_el_area_de_sistemas')}</h3>
         <textarea readOnly rows={11} value={solicitud} aria-label={t('op.solicitud_para_el_area_de_sistemas')} />
-        <Boton variante="primary" icono={<Copy />} onClick={() => copiar('solicitud', solicitud)}>
+        <Boton variante="secondary" icono={<Copy />} onClick={() => copiar('solicitud', solicitud)}>
           {copiado === 'solicitud' ? 'Copiado' : `Copiar solicitud para ${responsables.ti_tms}`}
         </Boton>
       </div>

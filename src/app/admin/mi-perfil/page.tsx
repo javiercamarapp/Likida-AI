@@ -105,7 +105,7 @@ export default async function MiPerfilPage({
 
   return (
     <EsqueletoConfiguracion
-      area="Cuenta" titulo="Mi perfil" apoyo="Tu nombre y tu foto. El correo y el rol los define la cuenta."
+      titulo="Mi perfil" apoyo="Tu nombre y tu foto. El correo y el rol los define la cuenta."
       avisos={(
         <>
           {sp.ok && <AvisoCompacto tono="ok" resumen={sp.ok === 'avatar' ? 'Foto de perfil actualizada.' : 'Nombre guardado.'} />}

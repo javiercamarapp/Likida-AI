@@ -394,7 +394,7 @@
 [data-ui="v2"] .rv-recuadro-tit { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 4px; min-height: 28px; }
 [data-ui="v2"] .rv-recuadro-tit > .rv-info { margin-left: auto; }
 [data-ui="v2"] .rv-recuadro-tit__texto { margin: 0; min-width: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
-[data-ui="v2"] .rv-tarjeta__cab { display: flex; align-items: center; gap: 4px; height: 32px; }
+[data-ui="v2"] .rv-tarjeta__cab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 32px; }
 [data-ui="v2"] .rv-tarjeta__titulo { margin: 0; min-width: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
 [data-ui="v2"] .rv-tarjeta__acciones { display: flex; align-items: center; gap: 8px; margin-left: auto; padding-left: 8px; flex: none; }
 /* La ⓘ va SIEMPRE en la esquina derecha del encabezado (mismo sitio en toda tarjeta y celda de KPI). */

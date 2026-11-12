@@ -121,10 +121,10 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
   const cifras: PropsCifra[] = [
     { etiqueta: t('mapa.cifra.encurso'), valor: totalVivos === null ? '—' : numero(totalVivos, idioma),
       nota: totalVivos === null ? t('mapa.nocontar') : t('mapa.abiertos'), info: 'mapa.viajes_en_curso' },
-    { etiqueta: t('mapa.cifra.enmapa'), valor: numero(ubicados.length, idioma), info: 'mapa.en_el_mapa' },
-    { etiqueta: t('mapa.cifra.sinubicar'), valor: numero(sinUbicar.length, idioma),
-      nota: sinUbicar.length > 0 ? t('mapa.sinubicar.nota') : undefined,
-      tono: sinUbicar.length > 0 ? 'warn' : undefined, info: 'mapa.sin_ubicar' },
+    // «Sin ubicar» ya no es una celda aparte (la tira es de 4, como Rovaq): se dice en la nota de «En el mapa», y el vacío del mapa y la lista de abajo lo detallan.
+    { etiqueta: t('mapa.cifra.enmapa'), valor: numero(ubicados.length, idioma),
+      nota: sinUbicar.length > 0 ? `${numero(sinUbicar.length, idioma)} ${t('mapa.cifra.sinubicar').toLowerCase()}` : undefined,
+      tono: sinUbicar.length > 0 ? 'warn' : undefined, info: 'mapa.en_el_mapa' },
     { etiqueta: t('mapa.cifra.escalados'), valor: numero(escalados, idioma), tono: escalados > 0 ? 'bad' : undefined, info: 'mapa.escalados' },
     { etiqueta: t('mapa.cifra.unidades'),
       valor: rastreo.unidadesConPosicion === null ? '—' : numero(rastreo.unidadesConPosicion, idioma),
@@ -143,16 +143,9 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Viajes en curso')}
       variante="12"
-      graficas={[<MapaVivo key="mapa" viajes={ubicados} pines={rastreo.pines} sinUbicar={sinUbicar.length} />]}
-      metodo={(
-        // El tope se declara. Antes decía "los N viajes más recientes" mezclando liquidados y vivos; ahora la base ya filtró por estatus
-        // y lo único que se recorta es cuántos caben dibujados.
-        <>
-          {recortado
-            ? t('mapa.dibujan.n', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) })
-            : t('mapa.dibujan.todos')}
-        </>
-      )}
+      graficas={[<MapaVivo key="mapa" viajes={ubicados} pines={rastreo.pines} sinUbicar={sinUbicar.length}
+        // El tope se declara. La nota de método va DENTRO de la tarjeta, bajo el mapa (Rovaq), no suelta sobre el lienzo.
+        nota={recortado ? t('mapa.dibujan.n', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) }) : t('mapa.dibujan.todos')} />]}
     >
       {/* ── EL GPS, CON SUS PALABRAS ──────────────────────────────────
           Tres estados y ninguno se confunde con otro: no se pudo leer / no hay conector ni un solo pin / esto es lo que reportaron las

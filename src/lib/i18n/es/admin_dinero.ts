@@ -96,7 +96,7 @@ export const admin_dinero = {
   'cobranza.cobranza_de_las_mensualidades': 'Cobranza de las mensualidades',
   'cobranza.por_cobrar': 'Por cobrar',
   'cobranza.toques_sin_propuesta': 'Toques sin propuesta',
-  'cobranza.propuestas_pendientes_enviadas_por': 'Propuestas pendientes / enviadas por el sistema',
+  'cobranza.propuestas_pendientes_enviadas_por': 'Propuestas pendientes / enviadas',
   'cobranza.sin_facturas_que_medir': 'Sin facturas que medir todavía',
   'cobranza.incompleto_hay_mas_facturas': 'Incompleto: hay más facturas de las que se leyeron.',
   'cobranza.vencidas': 'Vencidas',

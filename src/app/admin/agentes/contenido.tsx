@@ -14,8 +14,8 @@ import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  Aviso, BotonEnlace, Chip, Disclosure, FormaEnCajon, StatusChip, Tarjeta, CampoTexto, CampoSelect,
-  type ResultadoAccion, type TonoEstado,
+  Aviso, BarraFiltros, BotonEnlace, Chip, Disclosure, FiltroOpciones, FormaEnCajon, StatusChip, Tarjeta, CampoTexto, CampoSelect,
+  type OpcionFiltro, type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
@@ -66,8 +66,8 @@ interface Fila { a: AgenteDefinido; real: EstadoReal; motivo: string | null; cor
 /** El contenido REAL del panel, exportado aparte: la puerta vive en page.tsx y el preview monta ESTO. Las server actions llegan por props. */
 export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionConfig, params = {} }: {
   accionAlta: AccionAlta; accionPalanca: AccionPalanca; accionConfig: AccionConfig;
-  /** Los parámetros de la URL: `pag` (página de 25) y `ver` (el agente del cajón de vista rápida). */
-  params?: { pag?: string; ver?: string };
+  /** Los parámetros de la URL: `pag` (página de 25), `ver` (el agente del cajón de vista rápida), `estado` y `depto` (los filtros). */
+  params?: { pag?: string; ver?: string; estado?: string; depto?: string };
 }) {
   const { t } = await getT('admin_agentes');
   const { t: ts } = await getT('admin_sistema');
@@ -110,6 +110,21 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   const costo30 = consumo === null ? null : consumo.agentes.reduce((s, a) => s + a.gastado30dUsd, 0);
   const rotuloDepto = new Map<string, string>(DEPARTAMENTOS.map((d) => [d.valor, d.rotulo]));
   const estadosRotulo = ESTADOS_AGENTE.map((e) => ({ valor: e.valor as string, rotulo: e.rotulo as string }));
+
+  // Filtros (barra BF de la plantilla TM): estado real y departamento, por la URL. Un valor que no existe no filtra (cae a «Todos»).
+  const estadoFiltro = (Object.keys(TONO_ESTADO_REAL) as EstadoReal[]).find((e) => e === params.estado) ?? '';
+  const deptoFiltro = DEPARTAMENTOS.find((d) => d.valor === params.depto)?.valor ?? '';
+  const opcionesEstado: OpcionFiltro[] = [
+    { valor: '', rotulo: t('agentes_contenido.bf_todos') },
+    ...(Object.keys(TONO_ESTADO_REAL) as EstadoReal[]).filter((e) => filas.some((f) => f.real === e)).map((e) => ({ valor: e, rotulo: rotuloEstadoRealTr(e, ts) })),
+  ];
+  const opcionesDepto: OpcionFiltro[] = [
+    { valor: '', rotulo: t('agentes_contenido.bf_todos_d') },
+    ...DEPARTAMENTOS.filter((d) => filas.some((f) => f.a.departamento === d.valor)).map((d) => ({ valor: d.valor as string, rotulo: d.rotulo as string })),
+  ];
+  const nFiltros = (estadoFiltro ? 1 : 0) + (deptoFiltro ? 1 : 0);
+  const filasVista = filas.filter((f) => (!estadoFiltro || f.real === estadoFiltro) && (!deptoFiltro || f.a.departamento === deptoFiltro));
+  const paramsUrl = { pag: params.pag, estado: estadoFiltro || undefined, depto: deptoFiltro || undefined };
 
   const columnas: ColumnaTabla<Fila>[] = [
     {
@@ -182,7 +197,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
       id: 'acciones', titulo: t('agentes_contenido.acciones'), alinear: 'der', tituloOculto: true,
       celda: ({ a, apagado }) => (
         <span className="rv-agente-acciones">
-          <BotonEnlace href={`/admin/agentes?${new URLSearchParams({ ...(params.pag ? { pag: params.pag } : {}), ver: a.id })}`} variante="ghost" tamano="sm">{t('agentes_contenido.vista_rapida')}</BotonEnlace>
+          <BotonEnlace href={`/admin/agentes?${new URLSearchParams({ ...(params.pag ? { pag: params.pag } : {}), ...(estadoFiltro ? { estado: estadoFiltro } : {}), ...(deptoFiltro ? { depto: deptoFiltro } : {}), ver: a.id })}`} variante="ghost" tamano="sm">{t('agentes_contenido.vista_rapida')}</BotonEnlace>
           <AccionesAgente
             id={a.id} nombre={a.nombre} palanca={`agente:${a.id}`}
             apagado={a.estado === 'vivo' && typeof apagado === 'boolean' ? apagado : null}
@@ -198,14 +213,21 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
     },
   ];
 
-  const posicion = params.ver ? filas.findIndex((f) => f.a.id === params.ver) : -1;
-  const sel = posicion >= 0 ? filas[posicion] : null;
-  const hrefCerrar = params.pag ? `/admin/agentes?pag=${encodeURIComponent(params.pag)}` : '/admin/agentes';
+  const posicion = params.ver ? filasVista.findIndex((f) => f.a.id === params.ver) : -1;
+  const sel = posicion >= 0 ? filasVista[posicion] : null;
+  const qCerrar = new URLSearchParams({ ...(params.pag ? { pag: params.pag } : {}), ...(estadoFiltro ? { estado: estadoFiltro } : {}), ...(deptoFiltro ? { depto: deptoFiltro } : {}) }).toString();
+  const hrefCerrar = qCerrar ? `/admin/agentes?${qCerrar}` : '/admin/agentes';
   const exitoSel = sel ? exito?.get(sel.a.id) : undefined;
 
   return (
     <EsqueletoTablaMaestra
       area="Agentes"
+      filtros={(
+        <BarraFiltros accion="/admin/agentes" enLinea etiqueta={t('agentes_contenido.bf_filtros')} nActivos={nFiltros} limpiarHref="/admin/agentes">
+          <FiltroOpciones etiqueta={t('agentes_contenido.bf_estado')} nombre="estado" valor={estadoFiltro} opciones={opcionesEstado} />
+          <FiltroOpciones etiqueta={t('agentes_contenido.bf_depto')} nombre="depto" valor={deptoFiltro} opciones={opcionesDepto} />
+        </BarraFiltros>
+      )}
       titulo={t('agentes_contenido.agentes')}
       apoyo={t('agentes_contenido.que_agentes_hay_cuales')}
       acciones={(
@@ -227,7 +249,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
       )}
       vistaRapida={sel ? (
         <CajonVistaRapida
-          titulo={sel.a.nombre} subtitulo={t('agentes_contenido.vr_subtitulo', { n: posicion + 1, total: filas.length })} hrefCerrar={hrefCerrar}
+          titulo={sel.a.nombre} subtitulo={t('agentes_contenido.vr_subtitulo', { n: posicion + 1, total: filasVista.length })} hrefCerrar={hrefCerrar}
           cifras={[
             { etiqueta: t('agentes_contenido.estado_real'), valor: rotuloEstadoRealTr(sel.real, ts) },
             { etiqueta: t('agentes_contenido.autonomia'), valor: `${autonomiaDe(sel.a.id).nivel}` },
@@ -267,12 +289,14 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
         <TablaLista
           etiqueta={t('agentes_contenido.agentes_del_catalogo')}
           columnas={columnas}
-          filas={filas}
+          filas={filasVista}
           idFila={(f) => f.a.id}
           base="/admin/agentes"
-          params={{ pag: params.pag }}
+          params={paramsUrl}
           paginacion={{ tamano: 25 }}
-          vacio={{ titulo: t('agentes_contenido.sin_agentes') }}
+          vacio={nFiltros > 0
+            ? { titulo: t('agentes_contenido.bf_ninguno'), texto: t('agentes_contenido.bf_quita') }
+            : { titulo: t('agentes_contenido.sin_agentes') }}
         />
       </Tarjeta>
 

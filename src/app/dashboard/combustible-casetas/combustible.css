@@ -23,3 +23,10 @@
 [data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
 /* «Qué se sabe / Qué no se sabe»: cada caja a su alto, sin estirar la corta a la altura de la larga. */
 [data-ui="v2"] .rv-esq--panel .rv-esq__saberes { align-items: start; }
+
+/* Dona legible en la paleta monocroma: el segundo gajo es gris MEDIO (no casi negro) y a plena opacidad, para separarlo del negro. */
+[data-ui="v2"] .rv-comb__dona .rv-dona__gajo.rv-tono-1 { stroke-opacity: 1; }
+[data-ui="v2"] .rv-comb__dona .rv-tono-1 { --tono: color-mix(in srgb, var(--ink) 38%, var(--surface)); }
+/* «Cargas y casetas»: la tabla llega a sangre dentro de su tarjeta, sin un segundo marco (el filete la separa del encabezado). */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-comb__nota { margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); }

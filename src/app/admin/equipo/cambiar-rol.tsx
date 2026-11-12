@@ -2,6 +2,7 @@
 
 import { useActionState, useRef } from 'react';
 import { ROLES_INVITABLES } from '@/lib/auth/invitar';
+import { nombreDeRol } from '@/lib/auth/roles';
 import type { AccionDeForma, ResultadoAccion } from '../ui/forma';
 
 /**
@@ -15,9 +16,10 @@ export function CambiarRol({ id, rol, accion, etiqueta }: { id: string; rol: str
   return (
     <form ref={forma} action={enviar} className="adm-rol-celda">
       <input type="hidden" name="id" value={id} />
-      <select name="rol" aria-label={etiqueta} defaultValue={ROLES_INVITABLES.some((r) => r.valor === rol) ? rol : ''} disabled={pendiente}
+      <select name="rol" aria-label={etiqueta} defaultValue={rol} disabled={pendiente}
         className="adm-rol-select" onChange={() => forma.current?.requestSubmit()}>
-        <option value="" disabled>—</option>
+        {/* Un rol que no se puede asignar desde aquí (p. ej. nómina) SÍ se muestra con su nombre real; no se ofrece como destino. */}
+        {ROLES_INVITABLES.some((r) => r.valor === rol) ? null : <option value={rol} disabled>{rol ? nombreDeRol(rol) : '—'}</option>}
         {ROLES_INVITABLES.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
       </select>
       <span aria-live="polite" className="adm-rol-aviso" data-error={estado?.error ? '' : undefined}>{estado?.error ?? estado?.ok ?? ''}</span>

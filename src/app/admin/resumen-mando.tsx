@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { fechaHoraMx, numero, porcentaje, usd } from '@/lib/formato';
@@ -74,7 +75,7 @@ export async function BloqueTuTurno() {
               {f.detalle ? <span className="adm-res-fila__detalle">{f.detalle}</span> : null}
             </div>
             <StatusChip tono={f.urgencia === 'neutral' ? 'neutral' : f.urgencia}>{f.etiqueta}</StatusChip>
-            {f.href ? <Link className="adm-res-fila__ver" href={f.href}>{ta('a1r4.ver_detalle')}<span aria-hidden="true"> ›</span><span className="rv-sr"> · {f.accion}</span></Link> : <StatusChip tono="muted">{ta('resumen_mando.sin_pantalla')}</StatusChip>}
+            {f.href ? <BotonEnlace tamano="sm" variante="secondary" href={f.href}>{ta('a1r4.ver_detalle')}<span aria-hidden="true"> ›</span><span className="rv-sr"> · {f.accion}</span></BotonEnlace> : <StatusChip tono="muted">{ta('resumen_mando.sin_pantalla')}</StatusChip>}
           </li>
         ))}
       </ul>
@@ -125,7 +126,7 @@ const columnasCalidad = (ta: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES):
 ];
 
 /** 5. ¿Quién trabaja bien? Una fila por agente; lo que no se mide dice «sin medir». */
-export async function BloqueCalidad() {
+export async function BloqueCalidad({ semaforo }: { semaforo?: ReactNode } = {}) {
   const { t: ta } = await getT('admin_inicio');
   const { t: tSis } = await getT('admin_sistema');
   const [cal, p] = await Promise.all([calidadAgentes(), parados()]);
@@ -141,6 +142,7 @@ export async function BloqueCalidad() {
       elevar entra="tarjeta"
     >
       <p className="adm-eyebrow">{ta('a1r4.eb_calidad')}</p>
+      {semaforo}
       {cal && cal.errores.length > 0 ? <AvisoCompacto tono="warn" resumen="Alguna fuente de calidad no se pudo leer: sus columnas dicen «sin dato», no cero." /> : null}
       <TablaBase
         etiqueta={ta('resumen_mando.calidad_de_los_agentes')}

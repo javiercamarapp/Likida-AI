@@ -171,13 +171,14 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
   );
 }
 
-export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocultos, hrefMapa, pregunta, tareas, notificaciones, mapa, totalEnCurso, t = T_RESTO_ES }: {
+export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocultos, pregunta, tareas, notificaciones, mapa, totalEnCurso, sinSeguimiento = 0, t = T_RESTO_ES }: {
   tablero: TableroViajes;
   filtros: FiltrosVistaViajes;
   catalogo: CatalogoVista;
   accionUrl: string;
   ocultos: Record<string, string>;
-  hrefMapa: string;
+  /** @deprecated sin efecto: «Ver el mapa» se retiró (la pestaña Mapa ya lo es). */
+  hrefMapa?: string;
   /** Hay chat disponible para este perfil: se ofrece el enlace a «Pregunta a tus datos» (la caja propia de esta página se retiró). */
   pregunta?: ReactNodeLike;
   tareas: ReactNodeLike;
@@ -186,7 +187,9 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
   /** El mapa de los viajes del tablero (componente de cliente armado en el servidor con `mapaDelTablero`). Va antes de la tabla: la tabla es su equivalente. */
   mapa?: ReactNodeLike;
   /** Los viajes en curso de la flota contados en la base (los mismos que cuenta el Mapa). `null` = no se pudo contar; sin él se usa el conteo del tablero. */
-  totalEnCurso?: number | null; t?: TResto;
+  totalEnCurso?: number | null;
+  /** Viajes en curso (base) que el tablero del conductor aún no sigue: la tabla vacía lo dice en vez de negar el viaje. */
+  sinSeguimiento?: number; t?: TResto;
 }) {
   const c = tablero.conteos;
   const cifras: PropsCifra[] = [
@@ -206,9 +209,8 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       acciones={(
         <>
           <ActualizarSolo />
-          {/* El chat vive en «Pregunta a tus datos» (un solo compositor); aquí solo se enlaza, sin una caja propia. */}
-          {pregunta ? <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/chat${ocultos.tenant ? `?tenant=${encodeURIComponent(ocultos.tenant)}` : ''}`}>{t('op.preguntale_al_asistente')}</BotonEnlace> : null}
-          <BotonEnlace tamano="sm" href={hrefMapa}>{t('op.ver_el_mapa')}</BotonEnlace>
+          {/* El chat vive en «Pregunta a tus datos» (un solo compositor); aquí solo se enlaza, sin una caja propia. «Ver el mapa» se retiró: ya es la pestaña Mapa. */}
+          {pregunta ? <BotonEnlace href={`/dashboard/chat${ocultos.tenant ? `?tenant=${encodeURIComponent(ocultos.tenant)}` : ''}`}>{t('op.preguntale_al_asistente')}</BotonEnlace> : null}
         </>
       )}
       filtros={<Filtros t={t} f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />}
@@ -226,7 +228,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
           tarjetaMovil
           vacio={{
             titulo: t('op.sin_viajes_que_mostrar'),
-            texto: filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? t('op.ningun_viaje_cumple_los_filtros') : t('op.no_hay_viajes_en_curso'),
+            texto: filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? t('op.ningun_viaje_cumple_los_filtros') : sinSeguimiento > 0 ? t('op.viajes_sin_seguimiento', { n: numero(sinSeguimiento) }) : t('op.no_hay_viajes_en_curso'),
           }}
         />
       </TarjetaTabla>

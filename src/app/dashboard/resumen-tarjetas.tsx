@@ -1,9 +1,9 @@
 import { Bell, Flag } from 'lucide-react';
 import { fechaCorta, mxnEntero, numero, porcentaje } from '@/lib/formato';
-import { BotonEnlace, Tarjeta } from '@/app/ui-v2/componentes';
+import { BotonEnlace, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { BarList, Bullet, Columnas, KindBadge, type ItemKpi } from '@/app/ui-v2/graficas';
 import { rotuloDiferencia } from './agentes/liquidacion/rotulo-diferencia';
-import { PERIODO_RANGO, RUTA_LIQUIDACION, type DatosResumen } from './resumen-modelo';
+import { PERIODO_RANGO, RUTA_LIQUIDACION, type DatosResumen, type ViajeReciente } from './resumen-modelo';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 /** ¿Este rol (en este perfil) abre esa pantalla? Sin ello el enlace no se ofrece: nunca un KPI que rebota. */
@@ -127,6 +127,35 @@ export function TarjetaHizoSolo({ d, sufijo, puede = siempre, t = T_RESTO_ES }: 
             </li>
           ))}
         </ul>
+      ) : null}
+    </Tarjeta>
+  );
+}
+
+const TONO_VIAJE: Record<string, TonoEstado> = { liquidado: 'ok', en_cuadre: 'warn', abierto: 'neutral' };
+
+/** «Viajes recientes» (plantilla PO, fila 6-6 junto a la serie): los últimos viajes con su estatus real y, con acceso al dinero, su diferencia. null = no se pudo leer. */
+export function TarjetaViajesRecientes({ d, sufijo, puede = siempre, t = T_RESTO_ES }: { d: DatosResumen; sufijo: string; puede?: PuedeRuta; t?: TResto }) {
+  const filas = d.recientes ?? null;
+  const rotulo: Record<string, string> = { liquidado: t('op.res.est_liquidado'), en_cuadre: t('op.res.est_en_cuadre'), abierto: t('op.res.est_abierto') };
+  return (
+    <Tarjeta
+      titulo={t('op.res.viajes_recientes')} className="rv-res__recientes"
+      estado={filas === null ? 'error' : filas.length === 0 ? 'vacio' : 'ok'} reintentar
+      mensaje={filas && filas.length === 0 ? t('op.res.sin_viajes_recientes') : undefined}
+      acciones={puede('/dashboard/viajes') ? <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/viajes${sufijo}`}>{t('op.res.ver_viajes')}</BotonEnlace> : undefined}
+    >
+      {filas && filas.length > 0 ? (
+        <TablaBase<ViajeReciente>
+          etiqueta={t('op.res.viajes_recientes')} densa altoMaximo={false} tarjetaMovil
+          filas={filas} idFila={(v) => v.id}
+          columnas={[
+            { id: 'folio', titulo: t('op.res.col_folio'), principal: true, celda: (v) => <b className="rv-id">{v.folio}</b> },
+            { id: 'ruta', titulo: t('op.res.col_ruta'), celda: (v) => v.ruta ?? '—' },
+            { id: 'estatus', titulo: t('op.res.col_estatus'), celda: (v) => <StatusChip tono={TONO_VIAJE[v.estatus] ?? 'neutral'}>{rotulo[v.estatus] ?? v.estatus}</StatusChip> },
+            ...(d.veDinero ? [{ id: 'dif', titulo: t('op.res.col_diferencia'), alinear: 'der' as const, celda: (v: ViajeReciente) => (v.diferencia === null ? '—' : mxnEntero(v.diferencia)) }] : []),
+          ]}
+        />
       ) : null}
     </Tarjeta>
   );
