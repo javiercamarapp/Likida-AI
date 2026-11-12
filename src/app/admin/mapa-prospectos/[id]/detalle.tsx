@@ -109,7 +109,11 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
       <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
       {/* ── Decisores ──────────────────────────────────────────────────── */}
       <Tarjeta titulo={p.personas.length > 0 ? t(p.personas.length > 1 ? 'mapa_prospectos_detalle.decisores_investigados' : 'mapa_prospectos_detalle.decisor_investigado') : t('mapa_prospectos_detalle.decisor')}
-        estado={p.personas.length === 0 && !p.contacto ? 'vacio' : 'ok'} contenida mensaje={t('mapa_prospectos_detalle.sin_decisor_confirmado')} detalle={t('mapa_prospectos_detalle.ningun_agente_ha_encontrado_un_decisor')}>
+        >
+        {/* Vacío de una línea (Rovaq ac-vacio: caja punteada compacta), no una tarjeta alta de ~300 px junto a «Ficha». */}
+        {p.personas.length === 0 && !p.contacto && (
+          <p className="adm-vacio-linea"><strong>{t('mapa_prospectos_detalle.sin_decisor_confirmado')}</strong> {t('mapa_prospectos_detalle.ningun_agente_ha_encontrado_un_decisor')}</p>
+        )}
         {p.personas.length === 0 && p.contacto && <p className="cer-prospecto__contacto">{p.contacto}</p>}
         {p.personas.length > 0 && (
           <div className="cer-personas">
