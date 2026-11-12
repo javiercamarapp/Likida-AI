@@ -768,10 +768,9 @@ export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones
 }) {
   const { t: tx } = tr;
   return (
-    <EsqueletoTablaMaestra titulo={tx('liquidacion.vista.liquidacion_automatica')} apoyo={tx('rest.los_desgloses_de_liquidacion_que_llegan')}>
+    <EsqueletoTablaMaestra titulo={tx('liquidacion.vista.liquidacion_automatica')} apoyo={tx('rest.los_desgloses_de_liquidacion_que_llegan')} acciones={cargas}>
       <div className="rv-ag-pila">
         {desgloses}
-        {cargas}
         {detalle}
         {excepciones}
         {notificaciones}

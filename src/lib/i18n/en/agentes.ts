@@ -539,6 +539,7 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'facturas.vista.vencidos': 'Expired',
   'facturas.vista.y_mas_el_total_de': 'and {n} more — the total above adds them all up.',
   'liquidacion.page.titulo': 'Automatic settlement',
+  'liquidacion.importar_datos': 'Import data',
   'liquidacion.vista.abiertos': 'Open',
   'liquidacion.vista.amarro_solo_comprobantes_que_llegaro': 'Matched {strong} receipts on its own that arrived without an assigned trip.',
   'liquidacion.vista.aun_nada_que_presumir': 'Nothing to show yet',
