@@ -3236,4 +3236,5 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'f26d5.liq.periodo_todo': 'All',
   'f26d5.liq.periodo_hoy': 'Today',
   'f26d5.vg.ajustes_revision': 'Review settings',
+  'f26d8.sin_atender.configuracion': 'Settings',
 };

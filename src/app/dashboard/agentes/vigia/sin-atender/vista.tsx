@@ -8,6 +8,7 @@ import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import type { ConfigGuardadaSinAtender } from '@/lib/likida/vigia/sin_atender_aviso/motor';
 import { FormaRevision, type AccionEnviar, type AccionRevisar } from './formas';
 import { FormaConfiguracion, type AccionGuardarConfig } from './configuracion';
+import { CajonConfiguracionSinAtender } from './cajon-config';
 import { textoHorario } from './texto_horario';
 import { TablaSinAtender, duracion } from './tabla';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
@@ -47,7 +48,16 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
     <EsqueletoTablaMaestra
       titulo={tx('rest.conversaciones_sin_atender')}
       apoyo={tx('rest.vigia_por_exportacion_de_chats_sin')}
-      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}
+      acciones={(
+        <>
+          {puedeEnviar && error === null && (
+            <CajonConfiguracionSinAtender disparador={tx('f26d8.sin_atender.configuracion')} titulo={tx('rest.configuracion_de_tu_flota')}>
+              <FormaConfiguracion guardar={acciones.guardar} flota={flota} guardada={guardada} configLeida={configLeida} />
+            </CajonConfiguracionSinAtender>
+          )}
+          <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>
+        </>
+      )}
       avisos={(
         <>
           <Aviso tono="info">{ricoT(tx('rest.esta_lista_sale_de_los_chats'), { e0: (c) => <a className="rv-vg__enlace" href={`/dashboard/agentes/vigia/historial${sufijo}`}>{c}</a> })}</Aviso>
@@ -83,12 +93,6 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
             <p className="rv-vg__nota">{tx('rest.los_mensajes_que_solo_traen_una')}</p>
             <FormaRevision revisar={acciones.revisar} enviar={acciones.enviar} flota={flota} puedeEnviar={puedeEnviar} inicial={<TablaSinAtender tr={tr} alertas={resultado?.alertas ?? []} />} />
           </Seccion>
-
-          {puedeEnviar && (
-            <Seccion id="sin-atender-config" titulo={tx('rest.configuracion_de_tu_flota')} info="vigia_sin_atender.config">
-              <FormaConfiguracion guardar={acciones.guardar} flota={flota} guardada={guardada} configLeida={configLeida} />
-            </Seccion>
-          )}
 
           <Seccion id="sin-atender-correo" titulo={tx('rest.resumen_por_correo')} info="vigia_sin_atender.correo">
             <p className="rv-vg__nota">

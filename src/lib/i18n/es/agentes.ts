@@ -3234,4 +3234,5 @@ export const agentes = {
   'f26d5.liq.periodo_todo': 'Todo',
   'f26d5.liq.periodo_hoy': 'Hoy',
   'f26d5.vg.ajustes_revision': 'Ajustes de la revisión',
+  'f26d8.sin_atender.configuracion': 'Configuración',
 } as const;

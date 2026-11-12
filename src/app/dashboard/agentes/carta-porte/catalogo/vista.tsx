@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { useActionState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, Upload } from 'lucide-react';
 import '../carta-porte.css';
 import { numero as fmtNumero } from '@/lib/formato';
 import { llaveTexto } from '@/lib/likida/carta_porte_docs/catalogos';
@@ -13,7 +13,7 @@ import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDe
 import { Aviso, BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
 import {
-  Aviso as AvisoV2, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, EstadoError, Icono, Tarjeta,
+  Aviso as AvisoV2, BarraFiltros, Boton, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, Drawer, EstadoError, Icono, Tarjeta, useAbrirPorUrl,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { useT } from '@/lib/i18n/proveedor';
@@ -185,7 +185,7 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
   const [tipo, setTipo] = useState<TipoPlantilla>('producto');
   const [archivo, setArchivo] = useState<File | null>(null);
   return (
-    <Tarjeta titulo={tx('rest.importar_un_csv')} info="carta_porte_catalogo.importar">
+    <>
       <div className="rv-cp__pila">
         <p className="rv-cp__nota">{tx('rest.descarga_la_plantilla_llenala_una_fila')}</p>
         <ul className="rv-cp__acciones" aria-label={tx('rest.plantillas')}>
@@ -214,7 +214,21 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
         </form>
         <ResultadoImportar estado={estado} />
       </div>
-    </Tarjeta>
+    </>
+  );
+}
+
+/** «Importar CSV» como en Rovaq: un botón secundario en la cabecera que abre un cajón (la carga no ocupa una tarjeta larga de la página). La acción de servidor es la misma. */
+function CajonImportador({ ver, importar }: { ver: VerComo; importar: AccionesCatalogo['importar'] }) {
+  const { t: tx } = useT('agentes', agentesEs);
+  const { abierto, abrir, cerrar } = useAbrirPorUrl({ id: 'importar' });
+  return (
+    <>
+      <Boton type="button" variante="secondary" tamano="sm" icono={<Icono icono={Upload} tam={14} />} aria-haspopup="dialog" onClick={abrir}>{tx('rest.importar_un_csv')}</Boton>
+      <Drawer abierto={abierto} onCerrar={cerrar} titulo={tx('rest.importar_un_csv')}>
+        <Importador ver={ver} importar={importar} />
+      </Drawer>
+    </>
   );
 }
 
@@ -256,7 +270,12 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
     <EsqueletoTablaMaestra
       titulo={tx('rest.catalogo_del_cliente')}
       apoyo={tx('rest.lo_que_el_agente_aprende_una')}
-      acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte')}</BotonEnlace>}
+      acciones={(
+        <>
+          <CajonImportador ver={ver} importar={acciones.importar} />
+          <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte')}</BotonEnlace>
+        </>
+      )}
       filtros={clientes.length === 0 ? undefined : (
         <div className="rv-cp__pila" role="group" aria-label={tx('vigia.vista.cliente')}>
           {clientes.length > 8 && (
@@ -295,8 +314,6 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
           <VacioAgente titulo={tx('rest.aun_no_hay_clientes_en_tu')} />
         </Tarjeta>
       )}
-      <Importador ver={ver} importar={acciones.importar} />
-
       {elegido === null ? (
         clientes.length > 0 && (
           <Tarjeta titulo={tx('rest.catalogo_del_cliente')} info="carta_porte_catalogo.productos">
@@ -313,6 +330,7 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
           <Tabla tipo="parte" titulo={tx('rest.remitentes_y_destinatarios')} filas={catalogo.partes} clienteId={elegido.id} ver={ver} acciones={acciones} />
         </>
       )}
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
     </EsqueletoTablaMaestra>
   );
 }

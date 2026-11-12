@@ -178,7 +178,8 @@ describe('Inicio v2: estructura', () => {
   it('los enlaces se filtran por puedeVerRuta: el encargado no recibe Peajes', async () => {
     const e = hrefs(await html('encargado'));
     expect(e).toContain('/dashboard/agentes/carta-porte');
-    expect(e).toContain('/dashboard/viajes');
+    // Sin tarjeta de atajos (la portada de Rovaq no la tiene): el enlace a Viajes ya no se ofrece como atajo.
+    expect(texto(await html('encargado'))).not.toContain('Atajos');
     expect(e.some((x) => x.includes('/agentes/peajes'))).toBe(false);
     const d = hrefs(await html('flota_admin'));
     expect(d).toContain('/dashboard/agentes/peajes');

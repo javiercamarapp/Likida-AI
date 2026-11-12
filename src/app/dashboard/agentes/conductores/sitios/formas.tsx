@@ -95,9 +95,9 @@ export function FormaSitio({ accion, inicial, clientes, padres, idForma, alOk, a
  * disparador. La acción de servidor es la misma de siempre (puerta de permisos y flota atada en `page.tsx`); un rechazo deja el cajón
  * abierto con el aviso, solo `{ ok }` lo cierra. Con `cerrarHref` (edición por `?editar=`) cerrar quita el parámetro de la URL.
  */
-export function CajonSitio({ accion, inicial, clientes, padres, disparador, abiertoInicial = false, cerrarHref }: {
+export function CajonSitio({ accion, inicial, clientes, padres, disparador, abiertoInicial = false, cerrarHref, variante = 'secondary' }: {
   accion: AccionSitio; inicial: SitioEditable; clientes: Array<{ id: string; nombre: string }>; padres: Array<{ id: string; nombre: string }>;
-  disparador?: string; abiertoInicial?: boolean; cerrarHref?: string;
+  disparador?: string; abiertoInicial?: boolean; cerrarHref?: string; variante?: 'primary' | 'secondary';
 }) {
   const { t: tx } = useT('agentes', agentesEs);
   const idForma = useId();
@@ -107,7 +107,7 @@ export function CajonSitio({ accion, inicial, clientes, padres, disparador, abie
   const editar = Boolean(inicial.id);
   return (
     <>
-      {disparador ? <Boton type="button" variante="secondary" tamano="sm" aria-haspopup="dialog" onClick={() => setAbierto(true)}>{disparador}</Boton> : null}
+      {disparador ? <Boton type="button" variante={variante} tamano="sm" aria-haspopup="dialog" onClick={() => setAbierto(true)}>{disparador}</Boton> : null}
       <Drawer
         abierto={abierto} onCerrar={cerrar} cierraConFondo={false}
         titulo={editar ? `Editar «${inicial.nombre}»` : tx('rest.nuevo_sitio')}

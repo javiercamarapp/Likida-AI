@@ -76,12 +76,21 @@
 /* Los campos de un formulario de importación: rótulos de UNA línea (elipsis) y todos los controles en la escala de 32 px. */
 .rv-pj-forma--rejilla .rv-campo__etq { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Tira de cifras de un Hub (Rovaq `pc-kpis`): celdas iguales y SIN filete de color. Con el filete en solo unas celdas, las demás quedaban 3 px más abajo y
-   «parecía un error». Se activa con la clase `rv-ag-sin-filete` en un contenedor, o con la marca oculta `.rv-ag-sin-filete-marca` dentro del esqueleto. */
-[data-ui="v2"] .rv-ag-sin-filete .rv-kpis > .rv-kpi.rv-kpi,
-[data-ui="v2"] .rv-esq:has(.rv-ag-sin-filete-marca) .rv-kpis > .rv-kpi.rv-kpi { border-top-width: 0; min-height: 0; }
-[data-ui="v2"] .rv-ag-sin-filete .rv-kpi__etq,
-[data-ui="v2"] .rv-esq:has(.rv-ag-sin-filete-marca) .rv-kpi__etq { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Tira de cifras de TODAS las páginas de los cinco agentes (Rovaq `pc-kpis`): celdas iguales, SIN filete de color y con la pista de 6 px bajo la cifra.
+   Antes cada agente hacía lo suyo (Vigía, Referencia y Estadías con filete en las cuatro celdas; Liquidación, Peajes, Conductores y Carta Porte sin él) y
+   `matizDeEtiqueta` marcaba SOLO una celda según la palabra de su rótulo («Activos», «Sin datos para evaluar»…): quedaba 3 px desfasada, «como seleccionada o rota».
+   El filete NO lo da el rótulo: aquí no lo lleva ninguna celda, con o sin `data-matiz`. Se activa con la clase `rv-ag-sin-filete` en un contenedor, o con la marca
+   oculta `.rv-ag-sin-filete-marca` dentro del esqueleto. (pedido_compartido: que `matizDeEtiqueta` no marque celdas sueltas y que `Cifra` dibuje la barra/pista.) */
+[data-ui="v2"] :is(.rv-ag-sin-filete, .rv-esq:has(.rv-ag-sin-filete-marca)) .rv-kpis > .rv-kpi.rv-kpi { border-top-width: 0; min-height: 0; gap: 6px; }
+[data-ui="v2"] :is(.rv-ag-sin-filete, .rv-esq:has(.rv-ag-sin-filete-marca)) .rv-kpi__etq { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Orden de la celda: rótulo, cifra, barra (o pista punteada si no hay datos que segmentar), nota y pie. La pista es Rovaq `pc-seg` vacío: 6 px, 1 px dashed, radio 999. */
+[data-ui="v2"] :is(.rv-ag-sin-filete, .rv-esq:has(.rv-ag-sin-filete-marca)) .rv-kpis > .rv-kpi > .rv-kpi__cab { order: 0; }
+[data-ui="v2"] :is(.rv-ag-sin-filete, .rv-esq:has(.rv-ag-sin-filete-marca)) .rv-kpis > .rv-kpi > .rv-kpi__fila { order: 1; }
+[data-ui="v2"] :is(.rv-ag-sin-filete, .rv-esq:has(.rv-ag-sin-filete-marca)) .rv-kpis > .rv-kpi > .rv-kpi__segs { order: 2; }
+[data-ui="v2"] :is(.rv-ag-sin-filete, .rv-esq:has(.rv-ag-sin-filete-marca)) .rv-kpis > .rv-kpi:not(:has(.rv-kpi__segs))::after {
+  content: ""; order: 2; flex: none; height: 6px; box-sizing: border-box; border: 1px dashed var(--line2, var(--line)); border-radius: 999px;
+}
+[data-ui="v2"] :is(.rv-ag-sin-filete, .rv-esq:has(.rv-ag-sin-filete-marca)) .rv-kpis > .rv-kpi > :is(.rv-kpi__error, .rv-kpi__nota, .rv-kpi__pie) { order: 3; }
 
 /* Una rejilla de indicadores dentro de una tarjeta (definiciones rótulo / cifra / nota): compacta, sin tira. */
 .rv-ag-indic { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 10px 20px; margin: 0; }

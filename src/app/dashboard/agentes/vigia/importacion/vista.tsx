@@ -131,7 +131,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
     { id: 'sin', titulo: tx('rest.sin_estatus'), alinear: 'der', celda: (d) => miles(d.porEstado.desconocido) },
   ];
   return (
-    <div className="rv-vg__pila" aria-live="polite">
+    <div className="rv-vg__pila rv-ag-sin-filete" aria-live="polite">
       {/* Tira de cifras del resultado (Rovaq «Importaciones»): solo lo que el archivo dijo, nunca un conteo inventado. */}
       <BloqueCifras
         etiqueta={tx('rest.estatus_de_importacion')}

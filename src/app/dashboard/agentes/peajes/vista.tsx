@@ -382,6 +382,7 @@ export function VistaAgentePeajes({
 
       {notificaciones}
       </div>
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
     </EsqueletoTablaMaestra>
   );
 }
@@ -442,7 +443,7 @@ function EstadoConciliado({ v, tr = TR_ES }: { v: { resumen: ResumenVerificacion
   }
   const r = v.resumen;
   return (
-    <div className="rv-pj-conciliado">
+    <div className="rv-pj-conciliado rv-ag-sin-filete">
       <TiraCifras sello={selloHoyTr(tr, tx('peajes.vista.estados_de_cuenta_de_peaje'))}>
         <Cifra etiqueta={tx('peajes.vista.cuadran')} info="peajes.cuadran" valor={numero(r.cuadra)} nota={mxn(r.montoCuadra, tr.idioma)} />
         <Cifra etiqueta={tx('peajes.vista.por_verificar_2')} info="peajes.por_verificar" valor={numero(r.porVerificar)} nota={tx('peajes.vista.el_dato_no_alcanza_o', { montoPorVerificar: mxn(r.montoPorVerificar, tr.idioma) })} tono={r.porVerificar > 0 ? 'warn' : undefined} />

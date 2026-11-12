@@ -90,3 +90,10 @@
    cargue su ruta (pedido_compartido: llevarlo a esqueletos.css y a EstadoVacio). */
 [data-ui="v2"] .rv-esq--tabla > .rv-esq__tabla { display: grid; gap: var(--sp-gap, 12px); }
 [data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
+
+/* Cajón de importación (Rovaq: la carga de datos vive en un cajón de 420, no en tarjetas largas dentro de la página): secciones apiladas con divisor de 1 px. */
+.rv-cd__cajon { display: grid; gap: 0; min-width: 0; }
+.rv-cd__cajon > section { display: grid; gap: 10px; padding: 14px 0; border-top: 1px solid var(--line); }
+.rv-cd__cajon > section:first-child { padding-top: 0; border-top: 0; }
+.rv-cd__cajon > section:last-child { padding-bottom: 0; }
+.rv-cd__cajon h3 { margin: 0; font: 600 var(--t-body, 13px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }

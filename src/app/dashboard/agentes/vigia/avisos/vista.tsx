@@ -318,6 +318,7 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, pendie
           ) : null}
         </div>
       </Tarjeta>
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
     </EsqueletoTablaMaestra>
   );
 }

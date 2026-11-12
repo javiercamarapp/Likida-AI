@@ -15,9 +15,9 @@ import { AvisoSinFlota } from './sin-flota';
 import { FICHAS_CINCO_AGENTES, type FichaAgente } from './inicio-cinco-fichas';
 import { leerPesosInicio, leerUltimasCorridas, leerViajesEnCurso, type PesosLeidos } from './inicio-cinco-lectores';
 import {
-  ATAJOS_CINCO, cifraDeAgente, esFlotaNueva, estadoDeAgente, filaViajesEnCurso, hechosUltimas24h,
+  cifraDeAgente, esFlotaNueva, estadoDeAgente, filaViajesEnCurso, hechosUltimas24h,
 } from './inicio-cinco-modelo';
-import { TarjetaAtajos, TarjetaExtemporaneos, TarjetaHizoSolo24, TarjetaImporteIave } from './inicio-cinco-piezas';
+import { TarjetaExtemporaneos, TarjetaHizoSolo24, TarjetaImporteIave } from './inicio-cinco-piezas';
 import { TarjetaAgenteV3 } from './inicio-cinco-agente';
 import { esperaConexionDe, faseDeAgente } from './inicio-cinco-fase';
 import type { ClaveIconoAgente } from '@/app/ui-v2/componentes/icono-agente';
@@ -31,7 +31,7 @@ import './inicio-cinco.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INICIO v2 DE UNA FLOTA `cinco_agentes` (L11, rediseño 11-nov). Orden por jerarquía: «Hoy» (lo que espera decisión) · Puesta en marcha →
-// los cinco agentes con su fase real → franja de pesos (solo dueño y finanzas) → «Lo que hizo solo» y la gráfica de cierres → atajos.
+// los cinco agentes con su fase real → franja de pesos (solo dueño y finanzas) → «Lo que hizo solo» y la gráfica de cierres (sin tarjeta de atajos: la portada de Rovaq no la tiene).
 // (Ronda 2: el orden calca la portada de Rovaq — filtros → procedencia → tira → los cinco agentes en el lugar de la fila 1 → fila 4-4-4 → cifras.) Lo rápido se lee de golpe; la lectura pesada de pesos (hasta tres meses de
 // archivos IAVE) va en `Suspense`, con un esqueleto por tarjeta, y NO bloquea el resto. Cada cifra dice fuente y periodo; sin dato nunca es $0.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -69,7 +69,6 @@ export async function InicioCincoV2({
   const filas = filasAtencion(d, principales, sufijo, 3, {
     puede, fallidos, extra: [filaViajesEnCurso(enCurso, puede('/dashboard/viajes') ? conSufijo('/dashboard/viajes', sufijo) : null, t)].filter((f) => f !== null),
   }, t);
-  const atajos = ATAJOS_CINCO.filter((a) => puede(a.href));
   const cob = coberturaDe(d);
   const conCorridas = FICHAS_CINCO_AGENTES.filter((f) => f.corridas && corridas[f.clave]).length;
   // La serie real de cierres (ocho semanas) solo se dibuja si existe y tiene al menos una semana con cierres: nada de gráfica de ceros.
@@ -78,7 +77,8 @@ export async function InicioCincoV2({
 
   // La tira de cifras de la portada (Rovaq «Hoy»): las MISMAS cuatro del Resumen de las cuentas generales, sin pesos (esta lectura va con
   // `veDinero=false`). En una flota nueva «0 por revisar» leería como medición de algo que no existe: ahí cada celda dice «sin dato».
-  const cifras = itemsKpi(d, sufijo, puede, t).map((c) => (flotaNueva ? { ...c, valor: null, sello: undefined } : c));
+  // Rovaq «Hoy»: cada celda lleva su línea de procedencia («● Observado · fuente · periodo»): lo leído de la fuente se marca Observado; sin dato no hay sello.
+  const cifras = itemsKpi(d, sufijo, puede, t).map((c) => (flotaNueva ? { ...c, valor: null, sello: undefined } : c.sello && c.valor !== null && c.valor !== undefined && c.tipo === undefined ? { ...c, tipo: 'observado' as const } : c));
 
   // Cifras de las filas inferiores: se pintan solo las que existen (importe/extemporáneos para dueño y finanzas, la serie real de cierres).
   const cartasInferiores = [verPesos ? 'importe' : null, verPesos ? 'extemporaneos' : null, serieCierres ? 'cierres' : null].filter((x) => x !== null);
@@ -127,7 +127,8 @@ export async function InicioCincoV2({
 
       {/* 2 · Fila 4-4-4 (Rovaq): lo que espera decisión HOY · la puesta en marcha (siguiente mejor acción) · lo que hizo solo. */}
       <div className={`rv-ic__fila ${senales ? 'rv-ic__fila--4-4-4' : 'rv-ic__fila--6-6'}`}>
-        <Tarjeta titulo="Hoy" info="inicio.hoy" acciones={<span className="rv-res__nota">{t('op.requiere_tu_atencion')}</span>} className="rv-ic__hoy" elevar entra="tarjeta">
+        {/* Rovaq: «Requiere tu atención (3)» — el contador va EN el título, no como texto suelto a la derecha. */}
+        <Tarjeta titulo={`${t('op.requiere_tu_atencion')}${!(flotaNueva && senales) && filas.length > 0 ? ` (${filas.length})` : ''}`} info="inicio.hoy" className="rv-ic__hoy" elevar entra="tarjeta">
           {flotaNueva && senales
             ? <PrimerosPasos senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
             : <ListaAtencion filas={filas} senales={null} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />}
@@ -155,7 +156,6 @@ export async function InicioCincoV2({
         </div>
       ) : null}
 
-      <TarjetaAtajos t={t} atajos={atajos} sufijo={sufijo} />
     </EsqueletoPortada>
   );
 }

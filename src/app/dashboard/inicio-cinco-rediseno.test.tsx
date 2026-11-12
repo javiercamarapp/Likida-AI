@@ -145,6 +145,6 @@ describe('ronda 7: la portada no se desplaza de lado ni deja huecos', () => {
     const { readFileSync } = await import('node:fs');
     const css = readFileSync(new URL('./inicio-cinco.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.rv-ic__agentes > \.rv-ic__agente \{[^}]*position: relative/);
-    expect(css).toMatch(/\.rv-ic__fila > \.rv-tarjeta\[data-contenida\] \{[^}]*height: auto/);
+    expect(css).toMatch(/\.rv-ic__fila > \.rv-tarjeta\[data-contenida\] \{[^}]*height: 100%/); // ronda 8: se estira como las demás (Rovaq), ya no se ajusta al contenido
   });
 });

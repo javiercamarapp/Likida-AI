@@ -93,7 +93,7 @@ export function VistaAgenteLiquidacion({
 }) {
   const { t: tx } = tr;
   return (
-    <MarcoPagina titulo={tx('liquidacion.vista.liquidacion_automatica')} apoyo={tx('liquidacion.vista.el_agente_arma_la_liquidacion')}>
+    <MarcoPagina className="rv-ag-sin-filete" titulo={tx('liquidacion.vista.liquidacion_automatica')} apoyo={tx('liquidacion.vista.el_agente_arma_la_liquidacion')}>
 
       <Bloque mensaje={tx('liquidacion.vista.no_se_pudieron_leer_los')} esqueleto={<EsqCifrasV2 n={4} />}>
         <BloqueKpis kpis={kpis} />

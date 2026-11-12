@@ -91,6 +91,7 @@ export function VistaReferencia({ tablero, clientes, exigen, folios, truncado, s
           ))}
         </ul>
       </Tarjeta>
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
     </EsqueletoTablaMaestra>
   );
 }
