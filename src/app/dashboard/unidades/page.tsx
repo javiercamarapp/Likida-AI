@@ -151,6 +151,7 @@ export default async function PaginaUnidades({
 
   async function guardarUnidad(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tx } = await getT('resto');
   const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('un.a.rolver') };
@@ -224,7 +225,7 @@ export default async function PaginaUnidades({
       if (e instanceof Error && e.message.includes('uq_unidad_gps')) {
         return { ok: false, error: t('un.a.gps.dup') };
       }
-      return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la unidad' : 'dar de alta la unidad') };
+      return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la unidad' : tx('op.dar_de_alta_la_unidad')) };
     }
   }
 
@@ -245,6 +246,7 @@ export default async function PaginaUnidades({
    */
   async function cambiarEstado(_previo: ResultadoEstado, fd: FormData): Promise<ResultadoEstado> {
     'use server';
+    const { t: tx } = await getT('resto');
   const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('un.a.rolver') };
@@ -273,7 +275,7 @@ export default async function PaginaUnidades({
           : `Unidad en «${ESTADOS_UNIDAD[estado] ?? estado}».`,
       };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'cambiar el estado de la unidad') };
+      return { ok: false, error: mensajeParaPantalla(e, tx('op.cambiar_el_estado_de_la_unidad')) };
     }
   }
 

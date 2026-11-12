@@ -8,6 +8,10 @@ import { useFormStatus } from 'react-dom';
 import { Check, ClipboardCopy, Send, Trash2, Truck } from 'lucide-react';
 import type { GrupoDia, TarjetaAviso } from '@/lib/likida/vigia/aviso/bandeja';
 import { AVISO_AUTOMATICO_CONECTADO, TEXTO_AVISO_AUTOMATICO_POR_CONECTAR, VACIO_BANDEJA_POR_CONECTAR } from '@/lib/likida/vigia/aviso/conexion';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA BANDEJA «AVISOS DE VIAJE» (Agente 4, T-A4-22).
@@ -23,19 +27,19 @@ export type ResultadoAviso = null | { ok: true; mensaje: string } | { ok: false;
 export type AccionAviso = (previo: ResultadoAviso, fd: FormData) => Promise<ResultadoAviso>;
 
 /** Regla provisional del «listo» (E4): hasta tener la leyenda de colores, caja + unidad + carta porte lista. */
-export const AYUDA_REGLA_PROVISIONAL =
-  'Regla provisional: un servicio cuenta como «listo» cuando ya tiene caja + unidad + carta porte (CCP) lista. '
-  + 'Cambiará cuando tengamos la leyenda de colores del programa; mientras tanto, revisa cada aviso antes de confirmar.';
+export const ayudaReglaProvisional = (tx: TAgentes = TR_ES.t) => (tx('rest.regla_provisional_un_servicio_cuenta_como')
+  + tx('rest.cambiara_cuando_tengamos_la_leyenda_de'));
+export const AYUDA_REGLA_PROVISIONAL = ayudaReglaProvisional();
 
-export const POLITICA_PRIVACIDAD =
-  'Privacidad: al cliente solo le llegan la caja, sus placas y estado, la unidad, sus placas y el nombre del operador. '
-  + 'La licencia, su vigencia y el teléfono del operador se pueden guardar aquí, pero NO se envían al cliente mientras la dueña '
-  + 'de la flota no los habilite por escrito.';
+export const politicaPrivacidad = (tx: TAgentes = TR_ES.t) => (tx('rest.privacidad_al_cliente_solo_le_llegan')
+  + tx('rest.la_licencia_su_vigencia_y_el_2')
+  + tx('rest.de_la_flota_no_los_habilite'));
+export const POLITICA_PRIVACIDAD = politicaPrivacidad();
 
-const VACIO_TODOS = AVISO_AUTOMATICO_CONECTADO
-  ? 'Aún no hay avisos de viaje. Cuando el programa del día tenga servicios con caja y unidad, aparecerán aquí para que los revises.'
-  : VACIO_BANDEJA_POR_CONECTAR;
-const VACIO_PENDIENTES = 'No hay avisos esperando a nadie. Todo lo que se armó ya se envió o se descartó.';
+const vacioTodos = (tx: TAgentes = TR_ES.t) => (AVISO_AUTOMATICO_CONECTADO
+  ? tx('rest.aun_no_hay_avisos_de_viaje')
+  : VACIO_BANDEJA_POR_CONECTAR);
+const vacioPendientes = (tx: TAgentes = TR_ES.t) => (tx('rest.no_hay_avisos_esperando_a_nadie'));
 
 /** AAAA-MM-DD → DD/MM/AAAA, sin pasar por Date. */
 function dia(fecha: string): string {
@@ -69,6 +73,7 @@ function Boton({ accion, children, tono }: { accion: string; children: React.Rea
 
 /** «Copiar y marcar enviado»: copia el texto al portapapeles y, en el mismo toque, deja constancia de que ya salió. */
 function BotonCopiar({ texto }: { texto: string }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <BotonV2
@@ -76,13 +81,12 @@ function BotonCopiar({ texto }: { texto: string }) {
       onClick={() => {
         try { void navigator.clipboard?.writeText(texto); } catch { /* sin portapapeles: el texto sigue a la vista para copiarlo a mano */ }
       }}
-    >
-      Copiar y marcar enviado
-    </BotonV2>
+    >{tx('rest.copiar_y_marcar_enviado')}</BotonV2>
   );
 }
 
 function TarjetaAvisoViaje({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionAviso; puedeDecidir: boolean }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, despachar] = useActionState(accion, null);
   const p = t.puede;
   return (
@@ -96,50 +100,49 @@ function TarjetaAvisoViaje({ t, accion, puedeDecidir }: { t: TarjetaAviso; accio
         </div>
         <div className="rv-vg__fin rv-vg__der">
           <span data-testid="estado"><StatusChip tono={TONO_ESTADO[t.estado] ?? 'neutral'}>{t.estadoRotulo}</StatusChip></span>
-          <p className="rv-vg__nota">
-            Versión {t.version}{t.tipo === 'actualizacion' ? ' (actualización)' : t.tipo === 'cancelacion' ? ' (cancelación)' : ''}
+          <p className="rv-vg__nota">{tx('rest.version')}{' '}{t.version}{t.tipo === 'actualizacion' ? tx('rest.actualizacion') : t.tipo === 'cancelacion' ? tx('rest.cancelacion') : ''}
             {t.editadoPorPersona ? ' · editado a mano' : ''}
           </p>
         </div>
       </header>
 
       {t.interno ? (
-        <p className="rv-vg__nota">Alerta interna para la oficina: no se manda al cliente.</p>
+        <p className="rv-vg__nota">{tx('rest.alerta_interna_para_la_oficina_no')}</p>
       ) : null}
-      {t.cambio ? <p className="rv-vg__nota" data-testid="cambio"><strong>Qué cambió:</strong> {t.cambio}</p> : null}
+      {t.cambio ? <p className="rv-vg__nota" data-testid="cambio">{ricoT(tx('rest.strong_que_cambio_strong'), { strong: (c) => <strong>{c}</strong> })}{' '}{t.cambio}</p> : null}
 
       {t.errorLlano ? <Aviso>{t.errorLlano}</Aviso> : null}
       {t.causas.length > 0 ? (
-        <ul className="rv-vg__bullets" aria-label="Por qué no hay destinatario" data-tono="bad">
+        <ul className="rv-vg__bullets" aria-label={tx('rest.por_que_no_hay_destinatario')} data-tono="bad">
           {t.causas.map((c) => <li key={c}>{c}</li>)}
         </ul>
       ) : null}
 
       <div className="rv-vg__cuad">
         <div className="rv-vg__pila--s">
-          <p className="rv-vg__rotulo">Qué datos tiene</p>
+          <p className="rv-vg__rotulo">{tx('rest.que_datos_tiene')}</p>
           {t.tiene.length > 0 ? (
-            <ul className="rv-vg__ul" aria-label="Datos que tiene">
+            <ul className="rv-vg__ul" aria-label={tx('rest.datos_que_tiene')}>
               {t.tiene.map((d) => (
                 <li key={d.campo}>
                   <span className="rv-vg__medio">{d.rotulo}:</span> {d.valor} <span className="rv-vg__muted">({d.fuente})</span>
                 </li>
               ))}
             </ul>
-          ) : <p className="rv-vg__nota">Todavía no tiene ningún dato.</p>}
+          ) : <p className="rv-vg__nota">{tx('rest.todavia_no_tiene_ningun_dato')}</p>}
         </div>
         <div className="rv-vg__pila--s">
-          <p className="rv-vg__rotulo">Qué falta</p>
+          <p className="rv-vg__rotulo">{tx('cobranza.gasto.que_falta')}</p>
           {t.faltan.length > 0 ? (
-            <ul className="rv-vg__bullets" aria-label="Datos que faltan" data-tono="bad">
+            <ul className="rv-vg__bullets" aria-label={tx('rest.datos_que_faltan')} data-tono="bad">
               {t.faltan.map((f) => <li key={f.campo}>{f.texto}</li>)}
             </ul>
-          ) : <p className="rv-vg__nota">No falta nada.</p>}
+          ) : <p className="rv-vg__nota">{tx('rest.no_falta_nada')}</p>}
         </div>
       </div>
 
       <div className="rv-vg__pila--s">
-        <p className="rv-vg__rotulo">Lo que se le va a decir al cliente</p>
+        <p className="rv-vg__rotulo">{tx('rest.lo_que_se_le_va_a')}</p>
         <pre className="rv-vg__texto" data-testid="texto">{t.texto}</pre>
       </div>
 
@@ -147,61 +150,61 @@ function TarjetaAvisoViaje({ t, accion, puedeDecidir }: { t: TarjetaAviso; accio
         <>
           <form action={despachar} className="rv-vg__linea">
             <input type="hidden" name="id" value={t.id} />
-            {p.confirmar ? <Boton accion="confirmar"><Icono icono={Send} tam={14} />Confirmar y enviar</Boton> : null}
+            {p.confirmar ? <Boton accion="confirmar"><Icono icono={Send} tam={14} />{tx('rest.confirmar_y_enviar')}</Boton> : null}
             {p.copiar ? <BotonCopiar texto={t.texto} /> : null}
           </form>
 
           {p.editar ? (
-            <Disclosure titulo="Editar" variante="linea">
+            <Disclosure titulo={tx('rest.editar')} variante="linea">
               <form action={despachar} className="rv-vg__pila">
                 <input type="hidden" name="id" value={t.id} />
-                <CampoTextarea etiqueta="Texto del aviso (hasta 1 000 letras)" name="texto" required maxLength={1000} rows={6} defaultValue={t.texto} />
-                <div><Boton accion="editar"><Icono icono={Check} tam={14} />Guardar el texto</Boton></div>
+                <CampoTextarea etiqueta={tx('rest.texto_del_aviso_hasta_1_000')} name="texto" required maxLength={1000} rows={6} defaultValue={t.texto} />
+                <div><Boton accion="editar"><Icono icono={Check} tam={14} />{tx('rest.guardar_el_texto')}</Boton></div>
               </form>
             </Disclosure>
           ) : null}
 
           {p.capturar ? (
-            <Disclosure titulo="Capturar lo que falta" variante="linea">
+            <Disclosure titulo={tx('rest.capturar_lo_que_falta')} variante="linea">
               <form action={despachar} className="rv-vg__pila">
                 <input type="hidden" name="id" value={t.id} />
                 <div className="rv-vg__cuad">
-                  <CampoTexto etiqueta="Operador" name="operadorNombre" maxLength={120} autoComplete="off" />
-                  <CampoTexto etiqueta="Placas de la unidad" name="placasUnidad" maxLength={14} autoComplete="off" />
-                  <CampoTexto etiqueta="Placas de la caja" name="placasCaja" maxLength={14} autoComplete="off" />
-                  <CampoSelect etiqueta="Estado de la caja" name="estadoCaja" defaultValue="">
-                    <option value="">No cambiar</option>
-                    <option value="vacia">Vacía</option>
-                    <option value="cargada">Cargada</option>
-                    <option value="en_patio">En patio</option>
-                    <option value="en_transito">En tránsito</option>
-                    <option value="desconocido">Desconocido</option>
+                  <CampoTexto etiqueta={tx('conductores.forma.operador')} name="operadorNombre" maxLength={120} autoComplete="off" />
+                  <CampoTexto etiqueta={tx('rest.placas_de_la_unidad')} name="placasUnidad" maxLength={14} autoComplete="off" />
+                  <CampoTexto etiqueta={tx('rest.placas_de_la_caja')} name="placasCaja" maxLength={14} autoComplete="off" />
+                  <CampoSelect etiqueta={tx('rest.estado_de_la_caja')} name="estadoCaja" defaultValue="">
+                    <option value="">{tx('rest.no_cambiar')}</option>
+                    <option value="vacia">{tx('rest.vacia')}</option>
+                    <option value="cargada">{tx('rest.cargada')}</option>
+                    <option value="en_patio">{tx('rest.en_patio')}</option>
+                    <option value="en_transito">{tx('rest.en_transito')}</option>
+                    <option value="desconocido">{tx('rest.desconocido')}</option>
                   </CampoSelect>
-                  <CampoTexto etiqueta="Licencia (no se envía al cliente)" name="licencia" maxLength={40} autoComplete="off" />
-                  <CampoFecha etiqueta="Vigencia de la licencia (no se envía)" name="licenciaVence" />
-                  <CampoTexto etiqueta="Teléfono del operador (no se envía)" name="telefono" tipo="tel" inputMode="tel" maxLength={16} autoComplete="off" />
+                  <CampoTexto etiqueta={tx('rest.licencia_no_se_envia_al_cliente')} name="licencia" maxLength={40} autoComplete="off" />
+                  <CampoFecha etiqueta={tx('rest.vigencia_de_la_licencia_no_se')} name="licenciaVence" />
+                  <CampoTexto etiqueta={tx('rest.telefono_del_operador_no_se_envia')} name="telefono" tipo="tel" inputMode="tel" maxLength={16} autoComplete="off" />
                 </div>
                 <div data-testid="borrar-datos">
-                  <Fieldset leyenda="Quitar un dato mal escrito (déjalo vacío arriba y márcalo aquí)">
+                  <Fieldset leyenda={tx('rest.quitar_un_dato_mal_escrito_dejalo')}>
                     <div className="rv-vg__linea">
-                      {([['operadorNombre', 'Operador'], ['placasUnidad', 'Placas unidad'], ['placasCaja', 'Placas caja'], ['estadoCaja', 'Estado caja'], ['licencia', 'Licencia'], ['licenciaVence', 'Vigencia'], ['telefono', 'Teléfono']] as const).map(([v, r]) => (
+                      {([['operadorNombre', 'Operador'], ['placasUnidad', 'Placas unidad'], ['placasCaja', 'Placas caja'], ['estadoCaja', 'Estado caja'], ['licencia', 'Licencia'], ['licenciaVence', 'Vigencia'], ['telefono', tx('rest.telefono')]] as const).map(([v, r]) => (
                         <Casilla key={v} name="borrar" value={v} etiqueta={r} />
                       ))}
                     </div>
                   </Fieldset>
                 </div>
-                <p className="rv-vg__nota" data-testid="privacidad">{POLITICA_PRIVACIDAD}</p>
-                <div><Boton accion="capturar"><Icono icono={Truck} tam={14} />Guardar los datos</Boton></div>
+                <p className="rv-vg__nota" data-testid="privacidad">{politicaPrivacidad(tx)}</p>
+                <div><Boton accion="capturar"><Icono icono={Truck} tam={14} />{tx('rest.guardar_los_datos')}</Boton></div>
               </form>
             </Disclosure>
           ) : null}
 
           {p.descartar ? (
-            <Disclosure titulo="Descartar" variante="linea">
+            <Disclosure titulo={tx('rest.descartar')} variante="linea">
               <form action={despachar} className="rv-vg__pila">
                 <input type="hidden" name="id" value={t.id} />
-                <p className="rv-vg__nota">Este aviso no se enviará. Si el servicio cambia, el sistema arma uno nuevo.</p>
-                <div><Boton accion="descartar" tono="peligro"><Icono icono={Trash2} tam={14} />Sí, descartar</Boton></div>
+                <p className="rv-vg__nota">{tx('rest.este_aviso_no_se_enviara_si')}</p>
+                <div><Boton accion="descartar" tono="peligro"><Icono icono={Trash2} tam={14} />{tx('rest.si_descartar')}</Boton></div>
               </form>
             </Disclosure>
           ) : null}
@@ -231,40 +234,38 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
   sinMigrar: boolean;
   accion: AccionAviso;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const base = `/dashboard/agentes/vigia/avisos${sufijo}`;
   const conPendientes = `${base}${sufijo ? '&' : '?'}pendientes=1`;
   return (
-    <MarcoPagina titulo="Avisos de viaje" apoyo="Los avisos que el Vigía arma para tus clientes, por día, para confirmarlos, editarlos o descartarlos.">
-      <nav aria-label="Navegación" className="rv-vg__herr">
-        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">Volver a servicio al cliente</Link>
-        <FiltroChip href={soloPendientes ? base : conPendientes} activo={soloPendientes}>Solo pendientes</FiltroChip>
+    <MarcoPagina titulo={tx('vigia.vista.sello_avisos_de_viaje')} apoyo={tx('rest.los_avisos_que_el_vigia_arma')}>
+      <nav aria-label={tx('rest.navegacion')} className="rv-vg__herr">{ricoT(tx('rest.e0_volver_a_servicio_al_cliente'), { e0: (c) => <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">{c}</Link> })}<FiltroChip href={soloPendientes ? base : conPendientes} activo={soloPendientes}>{tx('rest.solo_pendientes')}</FiltroChip>
       </nav>
 
-      <p className="rv-vg__nota" data-testid="ayuda">{AYUDA_REGLA_PROVISIONAL}</p>
+      <p className="rv-vg__nota" data-testid="ayuda">{ayudaReglaProvisional(tx)}</p>
 
       {!AVISO_AUTOMATICO_CONECTADO ? (
         <div data-testid="por-conectar"><AvisoCompacto tono="warn" resumen={TEXTO_AVISO_AUTOMATICO_POR_CONECTAR} /></div>
       ) : null}
       {avisoEncendido === false ? (
-        <AvisoCompacto tono="warn" resumen="El aviso de viaje está apagado: no se arman ni se envían avisos nuevos hasta que el dueño lo encienda." />
+        <AvisoCompacto tono="warn" resumen={tx('rest.el_aviso_de_viaje_esta_apagado_4')} />
       ) : null}
       {avisoEncendido === null && !sinMigrar && !errorLectura ? (
-        <p className="rv-vg__nota">No pude confirmar si el aviso de viaje está encendido.</p>
+        <p className="rv-vg__nota">{tx('rest.no_pude_confirmar_si_el_aviso')}</p>
       ) : null}
       {!puedeDecidir ? (
-        <p className="rv-vg__nota">Solo el dueño o el encargado de la flota confirma, edita o descarta avisos. Tú puedes verlos, sin teléfonos completos.</p>
+        <p className="rv-vg__nota">{tx('rest.solo_el_dueno_o_el_encargado_4')}</p>
       ) : null}
 
-      {sinMigrar ? <Aviso>La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.</Aviso> : null}
+      {sinMigrar ? <Aviso>{tx('rest.la_base_de_datos_todavia_no')}</Aviso> : null}
       {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
 
       {!sinMigrar && !errorLectura && total === 0 ? (
-        <div data-testid="vacio"><EstadoVacio titulo="Sin avisos que revisar" contenido>{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</EstadoVacio></div>
+        <div data-testid="vacio"><EstadoVacio titulo={tx('rest.sin_avisos_que_revisar')} contenido>{soloPendientes ? vacioPendientes(tx) : vacioTodos(tx)}</EstadoVacio></div>
       ) : null}
 
       {hayMas ? (
-        <p className="rv-vg__nota" data-testid="hay-mas">
-          Se muestran los {total} avisos más recientes; puede haber más antiguos. {soloPendientes ? 'Resuelve los pendientes para ver el resto.' : 'Usa «Solo pendientes» para ver lo que falta por resolver.'}
+        <p className="rv-vg__nota" data-testid="hay-mas">{tx('rest.se_muestran_los_avisos_mas_recientes', { total })}{' '}{soloPendientes ? tx('rest.resuelve_los_pendientes_para_ver_el') : tx('rest.usa_solo_pendientes_para_ver_lo')}
         </p>
       ) : null}
 

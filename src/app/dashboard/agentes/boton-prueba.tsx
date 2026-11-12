@@ -3,8 +3,10 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Send } from 'lucide-react';
-import { AvisoCompacto, Boton, Icono } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, Icono, Tooltip } from '@/app/ui-v2/componentes';
 import './agentes.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL BOTÓN «MÁNDATE UNA PRUEBA» (auditoría 4, B5).
@@ -33,6 +35,7 @@ export function BotonPrueba({ mandarPrueba, canalListo }: {
    *  nada. El acuse cubre igual el caso (el render puede quedar viejo). */
   canalListo: boolean;
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, accion] = useActionState(mandarPrueba, null);
 
   return (
@@ -41,9 +44,7 @@ export function BotonPrueba({ mandarPrueba, canalListo }: {
         <form action={accion}>
           <BotonMandar apagado={!canalListo} />
         </form>
-        <p className="rv-ag-notif__nota">
-          Comprueba que estos avisos llegan de verdad: la prueba va solo a tu correo, no al reparto.
-        </p>
+        <p className="rv-ag-notif__nota">{t('ch.comprueba_que_estos_avisos_llegan_de')}</p>
       </div>
       {estado?.enviado && <AvisoCompacto tono="ok" resumen={estado.enviado} />}
       {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
@@ -52,12 +53,13 @@ export function BotonPrueba({ mandarPrueba, canalListo }: {
 }
 
 function BotonMandar({ apagado }: { apagado: boolean }) {
+  const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
-  return (
+  const boton = (
     <Boton type="submit" variante="secondary" loading={pending} disabled={pending || apagado}
-      title={apagado ? 'El correo no está configurado en este entorno' : undefined}
       icono={<Icono icono={Send} tam={14} />}>
-      {pending ? 'Mandando…' : 'Mándate una prueba'}
+      {pending ? 'Mandando…' : t('ch.mandate_una_prueba')}
     </Boton>
   );
+  return apagado ? <Tooltip texto={t('ch.el_correo_no_esta_configurado_en')}>{boton}</Tooltip> : boton;
 }

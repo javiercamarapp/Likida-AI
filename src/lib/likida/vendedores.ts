@@ -30,7 +30,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo, traerTodoEnParalelo } from './pg';
 import { acotada } from './presupuesto';
-import { DatoInvalido } from './errores';
+import { datoInvalido, etiqueta } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { provisionarUsuario } from '@/lib/auth/provisionar';
 import { validarInvitacionVendedor } from '@/lib/auth/invitar';
@@ -231,7 +231,7 @@ export interface ProspectoValido {
 function opcional(crudo: string, campo: string, max: number): string | null {
   const t = crudo.trim();
   if (t === '') return null;
-  if (t.length > max) throw new DatoInvalido(`${campo} no puede pasar de ${max} caracteres.`);
+  if (t.length > max) throw datoInvalido('operacion.no_puede_pasar_de_caracteres', { campo, max });
   return t;
 }
 
@@ -242,21 +242,21 @@ export function validarProspecto(p: ProspectoCrudo): ProspectoValido {
   // Lo ÚNICO obligatorio es la empresa: el censo trae filas con puros nombre
   // y vacante, y exigir más dejaría fuera justo el material de trabajo.
   const empresa = p.empresa.trim();
-  if (empresa === '') throw new DatoInvalido('Falta la empresa: es lo único obligatorio de un prospecto.');
-  if (empresa.length > 160) throw new DatoInvalido('El nombre de la empresa no puede pasar de 160 caracteres.');
+  if (empresa === '') throw datoInvalido('vendedores.falta_la_empresa_es_lo');
+  if (empresa.length > 160) throw datoInvalido('vendedores.el_nombre_de_la_empresa');
 
-  const correo = opcional(p.correo, 'El correo', 160);
+  const correo = opcional(p.correo, etiqueta('etq.el_correo'), 160);
   if (correo !== null && !CORREO_RE.test(correo)) {
-    throw new DatoInvalido(`"${correo}" no se ve como un correo. Escríbelo completo o déjalo vacío.`);
+    throw datoInvalido('vendedores.no_se_ve_como_un', { correo });
   }
 
   // Contacto de VENTAS, no identidad de WhatsApp: se guarda como se tecleó
   // (extensiones incluidas), solo se comprueba que alcance para marcar.
-  const telefono = opcional(p.telefono, 'El teléfono', 40);
+  const telefono = opcional(p.telefono, etiqueta('etq.el_telefono'), 40);
   if (telefono !== null) {
     const digitos = telefono.replace(/\D/g, '');
     if (digitos.length < 10 || digitos.length > 15) {
-      throw new DatoInvalido('El teléfono necesita entre 10 y 15 dígitos (con lada). Déjalo vacío si no lo tienes.');
+      throw datoInvalido('vendedores.el_telefono_necesita_entre_10');
     }
   }
 
@@ -265,17 +265,17 @@ export function validarProspecto(p: ProspectoCrudo): ProspectoValido {
     vendedorId = p.vendedorId.trim();
     // Basura aquí llegaría a Postgres como `22P02 invalid input syntax for
     // type uuid`, que en pantalla no le dice nada a nadie.
-    if (!esUuidValido(vendedorId)) throw new DatoInvalido('El vendedor no es válido. Vuelve a elegirlo de la lista.');
+    if (!esUuidValido(vendedorId)) throw datoInvalido('vendedores.el_vendedor_no_es_valido');
   }
 
   return {
     empresa,
-    contactoNombre: opcional(p.contactoNombre, 'El contacto', 120),
+    contactoNombre: opcional(p.contactoNombre, etiqueta('etq.el_contacto'), 120),
     telefono,
     correo,
-    ciudad: opcional(p.ciudad, 'La ciudad', 120),
-    vacante: opcional(p.vacante, 'La vacante', 160),
-    notas: opcional(p.notas, 'Las notas', 2000),
+    ciudad: opcional(p.ciudad, etiqueta('etq.la_ciudad'), 120),
+    vacante: opcional(p.vacante, etiqueta('etq.la_vacante'), 160),
+    notas: opcional(p.notas, etiqueta('etq.las_notas'), 2000),
     vendedorId,
   };
 }
@@ -512,8 +512,10 @@ export async function listarVendedores(opciones: { soloActivos?: boolean } = {})
       'listarVendedores.cuentas',
     ),
     traerTodoEnParalelo<Record<string, unknown>>(
+      // w15/perf: solo los ASIGNADOS cuentan para el desempeño por vendedor (los sin asignar caen en `?? conteosVacios()`). Antes se
+      // bajaban las ~33 mil filas, casi todas sin vendedor, para tirarlas en `agruparConteos`.
       (d, h) => admin.from('prospecto').select('id, vendedor_id, estado', conteo(d))
-        .is('duplicado_de', null).order('id').range(d, h),
+        .is('duplicado_de', null).not('vendedor_id', 'is', null).order('id').range(d, h),
       'listarVendedores.prospectos',
     ),
   ]);
@@ -603,7 +605,7 @@ export async function crearProspecto(
   atribucion: Record<string, string> | null = null,
 ): Promise<string> {
   if (p.vendedorId !== null && !(await esVendedor(p.vendedorId))) {
-    throw new DatoInvalido('Esa cuenta no es un vendedor. Vuelve a elegirlo de la lista.');
+    throw datoInvalido('vendedores.esa_cuenta_no_es_un');
   }
 
   // El DEDUP (c5-7): la fila nueva se guarda igual — los datos capturados
@@ -649,11 +651,11 @@ export async function invitarVendedor(correo: string, nombre: string): Promise<{
 /** Asignar o reasignar (`null` = devolver al pool). Solo el admin lo llama:
  *  el panel del vendedor no ofrece asignar, y su server action tampoco. */
 export async function asignarProspecto(prospectoId: string, vendedorId: string | null): Promise<void> {
-  if (!esUuidValido(prospectoId)) throw new DatoInvalido('No se reconoce ese prospecto. Recarga la pantalla.');
+  if (!esUuidValido(prospectoId)) throw datoInvalido('vendedores.no_se_reconoce_ese_prospecto');
   if (vendedorId !== null) {
-    if (!esUuidValido(vendedorId)) throw new DatoInvalido('No se reconoce ese vendedor. Recarga la pantalla.');
+    if (!esUuidValido(vendedorId)) throw datoInvalido('vendedores.no_se_reconoce_ese_vendedor');
     if (!(await esVendedor(vendedorId))) {
-      throw new DatoInvalido('Esa cuenta no es un vendedor. Vuelve a elegirlo de la lista.');
+      throw datoInvalido('vendedores.esa_cuenta_no_es_un');
     }
   }
 
@@ -663,7 +665,7 @@ export async function asignarProspecto(prospectoId: string, vendedorId: string |
   if (error) throw new Error(`asignarProspecto: ${error.message}`);
   // Un UPDATE de cero filas no es éxito (patrón `editarCliente`).
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró ese prospecto. Puede que alguien lo haya borrado — recarga la pantalla.');
+    throw datoInvalido('vendedores.no_se_encontro_ese_prospecto');
   }
 }
 
@@ -684,24 +686,22 @@ export async function cambiarEstadoProspecto(
   estadoNuevo: string,
   opts: { notas?: string; soloDeVendedor?: string } = {},
 ): Promise<void> {
-  if (!esUuidValido(prospectoId)) throw new DatoInvalido('No se reconoce ese prospecto. Recarga la pantalla.');
-  if (!esEstadoProspecto(estadoNuevo)) throw new DatoInvalido('Ese estado no existe en el embudo.');
-  const notas = opts.notas === undefined ? undefined : opcional(opts.notas, 'Las notas', 2000);
+  if (!esUuidValido(prospectoId)) throw datoInvalido('vendedores.no_se_reconoce_ese_prospecto');
+  if (!esEstadoProspecto(estadoNuevo)) throw datoInvalido('vendedores.ese_estado_no_existe_en');
+  const notas = opts.notas === undefined ? undefined : opcional(opts.notas, etiqueta('etq.las_notas'), 2000);
 
   let lectura = supabaseAdmin().from('prospecto').select('id, estado').eq('id', prospectoId).is('duplicado_de', null);
   if (opts.soloDeVendedor) lectura = lectura.eq('vendedor_id', opts.soloDeVendedor);
   const { data: fila, error: errLee } = await acotada(lectura.maybeSingle(), 'cambiarEstadoProspecto.lee');
   if (errLee) throw new Error(`cambiarEstadoProspecto: ${errLee.message}`);
-  if (!fila) throw new DatoInvalido('Ese prospecto no existe o no es tuyo.');
+  if (!fila) throw datoInvalido('vendedores.ese_prospecto_no_existe_o');
 
   const actual = String((fila as Record<string, unknown>).estado);
   const actualCanonico = normalizarEstadoProspecto(actual);
   if (!puedeTransicionar(actual, estadoNuevo)) {
-    throw new DatoInvalido(
-      `De "${rotuloEstado(actual)}" no se puede pasar a "${rotuloEstado(estadoNuevo)}". `
-      + (actualCanonico === 'won'
-        ? 'Un trato cerrado no se reabre desde el tablero: ya tiene fecha de cierre y de él cuelga la comisión.'
-        : 'Mueve el prospecto por las etapas del embudo.'),
+    throw datoInvalido(
+      actualCanonico === 'won' ? 'vendedores.transicion_ganado' : 'vendedores.transicion_embudo',
+      { de: rotuloEstado(actual), a: rotuloEstado(estadoNuevo) },
     );
   }
 
@@ -723,7 +723,7 @@ export async function cambiarEstadoProspecto(
   const { data, error } = await acotada(up.select('id'), 'cambiarEstadoProspecto');
   if (error) throw new Error(`cambiarEstadoProspecto: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('El prospecto cambió mientras lo movías. Recarga la pantalla y vuelve a intentarlo.');
+    throw datoInvalido('vendedores.el_prospecto_cambio_mientras_lo');
   }
 }
 
@@ -734,8 +734,8 @@ export async function actualizarNotasProspecto(
   notas: string,
   opts: { soloDeVendedor?: string } = {},
 ): Promise<void> {
-  if (!esUuidValido(prospectoId)) throw new DatoInvalido('No se reconoce ese prospecto. Recarga la pantalla.');
-  const valor = opcional(notas, 'Las notas', 2000);
+  if (!esUuidValido(prospectoId)) throw datoInvalido('vendedores.no_se_reconoce_ese_prospecto');
+  const valor = opcional(notas, etiqueta('etq.las_notas'), 2000);
 
   let up = supabaseAdmin().from('prospecto')
     .update({ notas: valor, updated_at: new Date().toISOString() })
@@ -744,7 +744,7 @@ export async function actualizarNotasProspecto(
   const { data, error } = await acotada(up.select('id'), 'actualizarNotasProspecto');
   if (error) throw new Error(`actualizarNotasProspecto: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Ese prospecto no existe o no es tuyo.');
+    throw datoInvalido('vendedores.ese_prospecto_no_existe_o');
   }
 }
 

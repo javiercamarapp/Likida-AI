@@ -44,10 +44,11 @@ async function exigirPermiso(sp: SpFlota, tenantId: string): Promise<string | nu
 
 /** Igual, pero devuelve también el actor para la bitácora (A37-S12-04). */
 async function exigirPermisoConActor(sp: SpFlota, tenantId: string): Promise<{ negado: string | null; userId: string }> {
+  const { t: tx } = await getT('agentes');
   // MX-002: la flota que se pintó es la que escribe (el superadmin ya no se salta el cruce).
   const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/cobranza', sp, tenantId);
   if (!sesion) return { negado: MENSAJE_FLOTA_CAMBIO, userId: '' };
-  if (!puedeVerArea(sesion.rol, 'dinero')) return { negado: 'Tu rol no puede operar este agente.', userId: sesion.userId };
+  if (!puedeVerArea(sesion.rol, 'dinero')) return { negado: tx('rest.tu_rol_no_puede_operar_este'), userId: sesion.userId };
   return { negado: null, userId: sesion.userId };
 }
 
@@ -124,6 +125,7 @@ export default async function PaginaAgenteCobranza({
 
   async function alternarPausa(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const { negado, userId } = await exigirPermisoConActor(sp, tenantId);
     if (negado) return { error: negado };
 
@@ -131,7 +133,7 @@ export default async function PaginaAgenteCobranza({
     // inversión del que hay ahora (una página vieja reactivaba una pausa).
     const actual = await leerConfigCobranza(tenantId);
     const decision = decidirPausa(actual.activo, fd.get('deseado'));
-    if (decision.accion === 'recargar') return { error: 'Recarga la página: no pude saber si querías pausar o reanudar.' };
+    if (decision.accion === 'recargar') return { error: tx('rest.recarga_la_pagina_no_pude_saber') };
     if (decision.accion === 'cambiar') {
       const r = await guardarConfigCobranza(tenantId, { ...actual, activo: decision.activo });
       if (r.error) return { error: r.error };

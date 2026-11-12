@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
 import { generarLlave } from './llave-api';
 import type { Area } from './visibilidad';
@@ -100,7 +100,7 @@ export function expiraEnDesdeVigencia(vigencia: string | undefined, ahoraMs = Da
   if (v === 'nunca') return null;
   const dias = Number(v);
   if (!Number.isInteger(dias) || dias < 1 || dias > MAX_DIAS_VIGENCIA) {
-    throw new DatoInvalido('Elige una vigencia de la lista: 90 días, 1 año, 2 años o sin caducidad.');
+    throw datoInvalido('llave_api_escr.elige_una_vigencia_de_la');
   }
   return new Date(ahoraMs + dias * 86_400_000).toISOString();
 }
@@ -159,13 +159,13 @@ export async function crearLlaveApi(
     // El mismo porqué que el constraint `nombre_no_vacio` de la 0093: una
     // lista de hashes sin nombre es indistinguible y nadie se atreve a
     // revocar ninguna.
-    throw new DatoInvalido('Ponle un nombre que diga quién la usa — "TMS propio", "tablero de Tableau". Sin nombre no vas a saber cuál revocar.');
+    throw datoInvalido('llave_api_escr.ponle_un_nombre_que_diga');
   }
   if (nombre.length > MAX_NOMBRE) {
-    throw new DatoInvalido(`El nombre de la llave no puede pasar de ${MAX_NOMBRE} caracteres.`);
+    throw datoInvalido('llave_api_escr.el_nombre_de_la_llave', { MAX_NOMBRE });
   }
   if (!esAreaDeLlave(datos.area)) {
-    throw new DatoInvalido('Esa área no existe: elige operación, dinero o administración.');
+    throw datoInvalido('llave_api_escr.esa_area_no_existe_elige');
   }
 
   // Antes de generar nada: una vigencia inválida no debe dejar una llave a
@@ -210,7 +210,7 @@ export async function revocarLlaveApi(
   llaveId: string,
   revocadaPor?: string,
 ): Promise<void> {
-  if (!esUuidValido(llaveId)) throw new DatoInvalido('No se reconoce esa llave. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(llaveId)) throw datoInvalido('llave_api_escr.no_se_reconoce_esa_llave');
 
   const { data, error } = await acotada(supabaseAdmin().from('tenant_api_key')
     .update({ revocada_en: new Date().toISOString() })
@@ -223,7 +223,7 @@ export async function revocarLlaveApi(
 
   if (error) throw new Error(`revocarLlaveApi: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Esa llave no está viva en tu flota. Puede que ya estuviera revocada — recarga la pantalla.');
+    throw datoInvalido('llave_api_escr.esa_llave_no_esta_viva');
   }
 
   await anotar(tenantId, 'llave_api.revocada', llaveId, {}, revocadaPor);

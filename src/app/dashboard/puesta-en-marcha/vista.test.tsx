@@ -24,7 +24,8 @@ describe('pantalla Puesta en marcha', () => {
   it('cuenta vacía: 0 de 6, seis pasos de ruta crítica y «Después» colapsado', () => {
     const h = html(vacias);
     expect(h).toContain('0 de 6');
-    expect(h).toContain('Deja lista tu operación');
+    // El encabezado (título y apoyo) lo pone MarcoPagina en page.tsx; aquí queda el cuerpo del asistente.
+    expect(h).toContain('Tus pasos');
     for (const t of ['Tu equipo', 'Tu sistema de transporte', 'Correo', 'Operadores, unidades y supervisores', 'Quién revisa la Carta Porte', 'Simulacro de punta a punta']) expect(h).toContain(t);
     expect(h).toMatch(/<details class="rv-pem__despues">/);
     expect(h).not.toMatch(/<details[^>]* open/);

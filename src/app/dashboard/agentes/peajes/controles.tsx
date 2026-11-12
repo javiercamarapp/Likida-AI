@@ -5,8 +5,10 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import type { ResumenBarrido } from '@/lib/likida/intake/consolidado';
-import { Boton, Icono } from '@/app/ui-v2/componentes';
+import { Boton, Icono, Tooltip } from '@/app/ui-v2/componentes';
 import './peajes.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
 export type EstadoBarrer = { error?: string; resumen?: ResumenBarrido } | null;
 export type AccionBarrer = (prev: EstadoBarrer, fd: FormData) => Promise<EstadoBarrer>;
@@ -28,6 +30,7 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
   /** Lo que la página alcanzó a leer. `null` = la cola no se pudo leer. */
   pendientes: number | null;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(ejecutarAhora, null);
   const [confirmando, setConfirmando] = useState(false);
   const router = useRouter();
@@ -48,17 +51,14 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
         <form action={accion} onSubmit={() => setConfirmando(false)} className="rv-pj-confirmar">
           <span className="rv-pj-sub">
             {pendientes === null
-              ? '¿Barrer las líneas pendientes contra los gastos de hoy?'
-              : `¿Barrer ${pendientes === 1 ? 'la línea pendiente' : `las ${pendientes} líneas pendientes`} contra los gastos de hoy?`}
+              ? tx('rest.barrer_las_lineas_pendientes_contra_los')
+              : tx(pendientes === 1 ? 'rest.barrer_la_linea_pendiente.uno' : 'rest.barrer_la_linea_pendiente.otros', { n: pendientes })}
           </span>
           <BotonConfirmar />
-          <Boton onClick={() => setConfirmando(false)}>Cancelar</Boton>
+          <Boton onClick={() => setConfirmando(false)}>{tx('cobranza.controles.cancelar')}</Boton>
         </form>
       ) : (
-        <Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}
-          title="Volver a cruzar las líneas pendientes contra los gastos que llegaron después">
-          Ejecutar ahora
-        </Boton>
+        <Tooltip texto={tx('rest.volver_a_cruzar_las_lineas_pendientes')}><Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}>{tx('cobranza.controles.ejecutar_ahora')}</Boton></Tooltip>
       )}
 
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
@@ -69,28 +69,18 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
               de la primera línea da 0 revisadas sobre 1,000 pendientes. La
               cola vacía es la que además no cortó nada. */}
           {r.revisadas === 0 && r.cortadosPorReloj === 0 ? (
-            'No había nada pendiente que barrer.'
+            tx('rest.no_habia_nada_pendiente_que_barrer')
           ) : r.revisadas === 0 ? (
-            <>
-              No alcancé a revisar ninguna en esta pasada: quedaron{' '}
-              <strong className="cifra-mono">{r.cortadosPorReloj}</strong>{' '}
-              {r.cortadosPorReloj === 1 ? 'línea pendiente' : 'líneas pendientes'} fuera por tiempo.
-              Vuelve a ejecutar para seguir donde se quedó.
-            </>
+            <>{tx('rest.no_alcance_a_revisar_ninguna_en')}{' '}<strong className="cifra-mono">{r.cortadosPorReloj}</strong>{' '}
+              {r.cortadosPorReloj === 1 ? tx('rest.linea_pendiente') : tx('rest.lineas_pendientes')}{' '}{tx('rest.fuera_por_tiempo_vuelve_a_ejecutar')}</>
           ) : (
-            <>
-              Revisé <strong className="cifra-mono">{r.revisadas}</strong>{' '}
-              {r.revisadas === 1 ? 'línea pendiente' : 'líneas pendientes'}; amarré{' '}
-              <strong className="cifra-mono">{r.conciliadas}</strong> contra
-              gastos nuevos; refresqué candidatos de <span className="cifra-mono">{r.candidatosRefrescados}</span>;
+            <>{tx('rest.revise')}{' '}<strong className="cifra-mono">{r.revisadas}</strong>{' '}
+              {r.revisadas === 1 ? tx('rest.linea_pendiente') : tx('rest.lineas_pendientes')}{tx('rest.amarre')}{' '}<strong className="cifra-mono">{r.conciliadas}</strong>{' '}{tx('rest.contra_gastos_nuevos_refresque_candidatos_de')}{' '}<span className="cifra-mono">{r.candidatosRefrescados}</span>;
               {' '}{r.siguenPendientes === 1 ? 'sigue' : 'siguen'} <span className="cifra-mono">{r.siguenPendientes}</span>.
               {/* REN-30-C1: sin esta línea, «revisé 40» sobre una cola de 1,000
                   se lee como que la cola quedó limpia. */}
               {r.cortadosPorReloj > 0 && (
-                <>
-                  {' '}Quedaron <strong className="cifra-mono">{r.cortadosPorReloj}</strong>{' '}
-                  fuera de esta pasada por tiempo: vuelve a ejecutar para seguir donde se quedó.
-                </>
+                <>{tx('rest.quedaron')}{' '}<strong className="cifra-mono">{r.cortadosPorReloj}</strong>{' '}{tx('rest.fuera_de_esta_pasada_por_tiempo')}</>
               )}
             </>
           )}
@@ -101,10 +91,11 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
 }
 
 function BotonConfirmar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={RefreshCw} />}>
-      {pending ? 'Barriendo…' : 'Sí, barrer'}
+      {pending ? 'Barriendo…' : tx('rest.si_barrer')}
     </Boton>
   );
 }

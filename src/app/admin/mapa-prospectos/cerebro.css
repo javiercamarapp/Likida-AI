@@ -25,6 +25,20 @@
 
 .cer-raiz { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
 
+/* La rampa SECUENCIAL del mapa de color (un solo matiz, de claro a oscuro; la de Rovaq es verde y aquí sale del mismo token --chart-3). Cinco pasos:
+   el 0 es «sin prospectos». Los límites de cada paso los calcula `limitesRampa` y la leyenda los enseña tal cual. */
+.cer-raiz {
+  --cer-m1: color-mix(in srgb, var(--chart-3, var(--muted)) 16%, var(--surface));
+  --cer-m2: color-mix(in srgb, var(--chart-3, var(--muted)) 34%, var(--surface));
+  --cer-m3: color-mix(in srgb, var(--chart-3, var(--muted)) 54%, var(--surface));
+  --cer-m4: color-mix(in srgb, var(--chart-3, var(--muted)) 78%, var(--surface));
+  --cer-m5: color-mix(in srgb, var(--chart-3, var(--muted)) 100%, var(--ink) 18%);
+}
+
+/* Mapa + ranking: dos columnas donde cabe; apilados en pantallas chicas. */
+.cer-cuerpo { display: grid; gap: var(--ui-rhythm); grid-template-columns: minmax(0, 1fr); align-items: stretch; min-width: 0; }
+@media (min-width: 1100px) { .cer-cuerpo { grid-template-columns: minmax(0, 1fr) 320px; } }
+
 /* ── Barra de herramientas sobre el mapa ── */
 .cer-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cer-barra__resumen { flex: 1 1 240px; margin: 0; font-size: var(--t-small); color: var(--muted); min-width: 0; }
@@ -38,18 +52,17 @@
 .cer-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 .cer-svg:active { cursor: grabbing; }
 .cer-camara { transform-origin: 0 0; will-change: transform; }
-.cer-estado { cursor: pointer; fill: color-mix(in srgb, var(--ink) 12%, var(--surface)); stroke: var(--input); }
-.cer-estado[data-nivel="1"] { fill: color-mix(in srgb, var(--ink) 16%, var(--surface)); }
-.cer-estado[data-nivel="2"] { fill: color-mix(in srgb, var(--ink) 20%, var(--surface)); }
-.cer-estado[data-nivel="3"] { fill: color-mix(in srgb, var(--ink) 24%, var(--surface)); }
-.cer-estado[data-nivel="4"] { fill: color-mix(in srgb, var(--ink) 28%, var(--surface)); }
-.cer-estado[data-nivel="5"] { fill: color-mix(in srgb, var(--ink) 32%, var(--surface)); }
-.cer-estado[data-nivel="6"] { fill: color-mix(in srgb, var(--ink) 36%, var(--surface)); }
-.cer-estado[data-activo="true"] { fill: color-mix(in srgb, var(--ink) 5%, var(--surface)); stroke: var(--ink); }
+.cer-estado { cursor: pointer; fill: color-mix(in srgb, var(--ink) 6%, var(--surface)); stroke: var(--input); }
+.cer-estado[data-paso="1"] { fill: var(--cer-m1); }
+.cer-estado[data-paso="2"] { fill: var(--cer-m2); }
+.cer-estado[data-paso="3"] { fill: var(--cer-m3); }
+.cer-estado[data-paso="4"] { fill: var(--cer-m4); }
+.cer-estado[data-paso="5"] { fill: var(--cer-m5); }
+.cer-estado[data-activo="true"] { stroke: var(--ink); }
 .cer-estado[data-sobre="true"] { stroke: var(--ink); }
 .cer-estado[data-apagado="true"] { opacity: .18; }
 .cer-pin { fill: var(--etapa); stroke: var(--surface); opacity: .95; pointer-events: none; }
-.cer-ala, .cer-leyenda, .cer-tip, .cer-nota-luces, .cer-nota-sin-punto, .cer-cabeza-panel { background: var(--surface); border: 1px solid var(--line); }
+.cer-ala, .cer-tip, .cer-nota-luces, .cer-nota-sin-punto, .cer-cabeza-panel { background: var(--surface); border: 1px solid var(--line); }
 
 /* El ala izquierda solo existe donde sobra pantalla (pantallas de 1900 px o más): en laptop taparía el país. */
 .cer-ala { position: absolute; left: 16px; top: 16px; bottom: 20px; z-index: 10; width: 300px; display: none; flex-direction: column; gap: 12px; overflow-y: auto; padding: 0; background: transparent; border: 0; }
@@ -66,8 +79,38 @@
 .cer-ala__cerrable p:last-child { color: var(--muted); }
 .cer-punto { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: var(--etapa); flex: none; }
 
-.cer-leyenda { position: absolute; left: 16px; bottom: 16px; right: 16px; z-index: 10; display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px; border-radius: 12px; width: max-content; max-width: calc(100% - 32px); }
-@media (min-width: 1900px) { .cer-leyenda { left: 332px; max-width: calc(100% - 348px); } }
+/* Rótulos del mapa: código del estado y cifra, con el color de texto que le toca a cada paso de la rampa. */
+.cer-rotulo { font-weight: 600; fill: var(--ink); pointer-events: none; font-variant-numeric: tabular-nums; }
+.cer-rotulo[data-paso="4"], .cer-rotulo[data-paso="5"] { fill: var(--surface); }
+
+/* El ranking lateral */
+.cer-rank { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
+@media (min-width: 1100px) { .cer-rank { height: calc(100dvh - 17rem); min-height: 480px; overflow-y: auto; } }
+.cer-rank__bloque { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.cer-rank__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+[data-ui="v2"] .rv-btn.cer-rank__fila::after { content: none; }
+[data-ui="v2"] .rv-btn.cer-rank__fila { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: minmax(70px, 1.1fr) minmax(40px, 1.4fr) auto; align-items: center; gap: 8px; min-height: 26px; padding: 0 6px; border-radius: 8px; cursor: pointer; font-size: var(--t-small); color: var(--ink); }
+[data-ui="v2"] .rv-btn.cer-rank__fila:hover:not(:disabled) { background: var(--canvas); }
+[data-ui="v2"] .rv-btn.cer-rank__fila[aria-pressed="true"] { background: var(--seg-activo-bg); color: var(--seg-activo-fg); }
+[data-ui="v2"] .rv-btn.cer-rank__fila:disabled { cursor: default; }
+[data-ui="v2"] .rv-btn.cer-rank__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cer-rank__nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cer-rank__pista { display: block; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.cer-rank__barra { fill: var(--chart-3, var(--muted)); }
+[data-ui="v2"] .rv-btn.cer-rank__fila b { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; min-width: 32px; }
+.cer-rank__cifra { margin: 0; font-size: var(--t-body); color: var(--muted); }
+.cer-rank__cifra b { font-size: 22px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* La leyenda de la rampa: cinco muestras con su rango real. */
+.cer-rampa { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--t-micro); color: var(--muted); }
+.cer-rampa li { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.cer-rampa i { display: inline-block; width: 16px; height: 12px; border-radius: 4px; border: 1px solid var(--line); background: var(--cer-m1); }
+.cer-rampa li[data-paso="2"] i { background: var(--cer-m2); }
+.cer-rampa li[data-paso="3"] i { background: var(--cer-m3); }
+.cer-rampa li[data-paso="4"] i { background: var(--cer-m4); }
+.cer-rampa li[data-paso="5"] i { background: var(--cer-m5); }
+
+.cer-leyenda { display: flex; flex-wrap: wrap; gap: 6px 12px; }
 .cer-leyenda span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-micro); color: var(--muted); }
 
 .cer-tip { position: absolute; left: 16px; bottom: 64px; z-index: 20; padding: 10px 14px; border-radius: 12px; color: var(--ink); }
@@ -187,6 +230,7 @@
   .cer-pin[data-urgente="true"] { animation: cer-pulso 2.6s ease-in-out infinite; }
   .cer-pin[data-nuevo="true"] { animation: cer-llega 1.1s cubic-bezier(.22, 1, .36, 1) 3; }
   .cer-panel { animation: cer-panel .42s cubic-bezier(.22, 1, .36, 1); }
+  .cer-rank__barra { transition: width .4s cubic-bezier(.22, 1, .36, 1); }
   @keyframes cer-entra { from { opacity: 0; } to { opacity: 1; } }
   @keyframes cer-pulso { 0%, 100% { opacity: .95; } 50% { opacity: .35; } }
   @keyframes cer-llega { 0% { opacity: 0; } 35% { opacity: 1; } 65% { opacity: .25; } 100% { opacity: .95; } }

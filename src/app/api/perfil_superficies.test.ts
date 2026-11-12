@@ -80,10 +80,16 @@ describe('chat «Pregunta a tus datos»', () => {
       headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' },
     })) as Promise<Response>;
   };
-  it('bajo el perfil: 403 y el analista NO se toca (no gasta modelo)', async () => {
+  it('bajo el perfil: responde (el chat se abrió el 11-nov) y es el analista quien recorta sus herramientas al perfil', async () => {
     const res = await llamar();
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/plan de tu cuenta/);
+    expect(res.status).toBe(200);
+    await res.body?.cancel();
+    expect(ejecutarAnalista).toHaveBeenCalledTimes(1);
+  });
+  it('bajo el perfil, con un rol sin acceso al chat: se niega y el analista NO se toca', async () => {
+    rol = 'vendedor';
+    const res = await llamar();
+    expect([401, 403]).toContain(res.status);
     expect(ejecutarAnalista).not.toHaveBeenCalled();
   });
   it('sin perfil: responde como siempre', async () => {
@@ -92,9 +98,9 @@ describe('chat «Pregunta a tus datos»', () => {
     expect(res.status).toBe(200);
     await res.body?.cancel();
   });
-  it('el historial del chat también se niega', async () => {
+  it('el historial del chat también se abre bajo el perfil, con las mismas guardas de usuario y tenant', async () => {
     const { GET } = await import('@/app/api/dashboard/conversaciones/route');
-    expect((await GET(reqNext('http://x.test/api/dashboard/conversaciones')) as Response).status).toBe(403);
+    expect((await GET(reqNext('http://x.test/api/dashboard/conversaciones')) as Response).status).toBe(200);
     tenantDeSesion = SIN;
     reiniciarCachePerfil();
     expect((await GET(reqNext('http://x.test/api/dashboard/conversaciones')) as Response).status).toBe(200);

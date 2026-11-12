@@ -14,7 +14,11 @@ import { armarLectura, sha256Hex, sincronizarPrograma } from '@/lib/likida/vigia
 import { sufijoTenant } from '../../../sufijo';
 import { VistaProgramaVigia, TOPE_ARCHIVO_PROGRAMA_BYTES, type ResultadoPrograma, type ResumenPrograma } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Programa de despacho' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.programa_de_despacho') };
+}
 
 export const dynamic = 'force-dynamic';
 // A37-S59-05: la subida (hasta 4 MB tras quitar el relleno, escritura serial por lotes) puede pasar del tope por omisión; que no muera a medias.
@@ -53,16 +57,17 @@ function decodificar(bytes: Uint8Array): string {
 const error = (texto: string): ResultadoPrograma => ({ ok: false, error: texto });
 
 async function subir(a: { tenantId: string; userId: string }, fd: FormData): Promise<ResultadoPrograma> {
+  const { t: tx } = await getT('agentes');
   const terminal = String(fd.get('terminal') ?? '').trim().toUpperCase().replace(/\s+/g, ' ');
-  if (!TERMINAL_VALIDA.test(terminal)) return error('Escribe la terminal con su código corto, por ejemplo GDL (letras y números, hasta 40).');
+  if (!TERMINAL_VALIDA.test(terminal)) return error(tx('rest.escribe_la_terminal_con_su_codigo'));
 
   const archivo = fd.get('archivo');
-  if (!(archivo instanceof File) || archivo.size === 0) return error('Elige el archivo del programa (CSV).');
+  if (!(archivo instanceof File) || archivo.size === 0) return error(tx('rest.elige_el_archivo_del_programa_csv'));
   if (archivo.size > TOPE_ARCHIVO_PROGRAMA_BYTES) {
-    return error(`El archivo pesa más de ${TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB. Sube solo el programa de los últimos días.`);
+    return error(tx('rest.el_archivo_pesa_mas_de_mb_2', { v: TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024) }));
   }
   if (/\.(xlsx|xlsm|xls)$/i.test(archivo.name)) {
-    return error('Los archivos de Excel (.xlsx) todavía no se pueden leer. En Excel usa «Guardar como» y elige CSV, y vuelve a subirlo.');
+    return error(tx('rest.los_archivos_de_excel_xlsx_todavia'));
   }
 
   const texto = decodificar(new Uint8Array(await archivo.arrayBuffer()));
@@ -72,13 +77,13 @@ async function subir(a: { tenantId: string; userId: string }, fd: FormData): Pro
     lector = leerProgramaCsv(texto, { terminal });
   } catch (e) {
     if (e instanceof ErrorLectorPrograma) {
-      return error(/encabezados/.test(e.message) ? `El archivo no parece un programa de despacho. ${e.message}` : e.message);
+      return error(/encabezados/.test(e.message) ? tx('rest.el_archivo_no_parece_un_programa', { message: e.message }) : e.message);
     }
     throw e;
   }
   const normalizado = normalizarPrograma(lector);
   if (normalizado.filas.length === 0) {
-    return error('El archivo no parece un programa de despacho: no encontré ninguna fila con caja, unidad o cliente que pueda leer.');
+    return error(tx('rest.el_archivo_no_parece_un_programa_2'));
   }
 
   const guardado = await sincronizarPrograma(
@@ -143,14 +148,15 @@ export default async function PaginaProgramaVigia({ searchParams }: { searchPara
 
   async function cargar(_p: ResultadoPrograma, fd: FormData): Promise<ResultadoPrograma> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId);
-    if (!a) return error('Solo el dueño o el encargado de la flota sube el programa de despacho.');
+    if (!a) return error(tx('rest.solo_el_dueno_o_el_encargado_6'));
     try {
       const r = await subir(a, fd);
       if (r?.ok) revalidatePath(RUTA);
       return r;
     } catch (e) {
-      if (e instanceof ProgramaSinMigrar) return error('La base de datos todavía no está lista para guardar el programa. Avísale a soporte.');
+      if (e instanceof ProgramaSinMigrar) return error(tx('rest.la_base_de_datos_todavia_no_2'));
       // Nunca el contenido del archivo en el log: solo el mensaje técnico.
       logger.error('vigia.programa_carga_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
       return error(mensajeParaPantalla(e, 'cargar el programa'));

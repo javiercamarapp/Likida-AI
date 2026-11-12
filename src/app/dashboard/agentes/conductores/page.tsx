@@ -103,6 +103,7 @@ export default async function PaginaAgenteConductores({
     terminal?: string; cliente?: string; chofer?: string; semaforo?: string; dias?: string;
   }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
@@ -259,12 +260,13 @@ export default async function PaginaAgenteConductores({
 
   async function accionOficina(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     // Dos candados: la ruta (¿puede ver esta pantalla?) y la acción (¿puede mover un hito?). El segundo también vive
     // dentro de `ejecutarAccionOficina`: una acción de servidor es un endpoint, no un botón.
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores') || !puedeAsignar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico pueden hacer esto.' };
+      return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_8') };
     }
     const pedida = leerAccion(fd);
     if ('error' in pedida) return { ok: false, error: pedida.error };
@@ -276,9 +278,10 @@ export default async function PaginaAgenteConductores({
 
   async function accionSitios(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores')) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico pueden hacer esto.' };
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores')) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_8') };
     const r = await asignarSitiosDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd);
     if (r.ok) revalidatePath('/dashboard/agentes/conductores');
     return r;
@@ -286,16 +289,17 @@ export default async function PaginaAgenteConductores({
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores') || !puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota cambia la estrategia del agente.' };
+      return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_6') };
     }
     try {
       const horas = validarHorasEscalacion(String(fd.get('horasEscalacion') ?? ''));
       await guardarEstrategiaAgente(s.tenantId, { conductores: { horasEscalacion: horas } }, { id: s.userId });
       revalidatePath('/dashboard/agentes/conductores');
-      return { ok: true, mensaje: `Listo: se escala a las ${horas} horas sin confirmación, desde la siguiente corrida.` };
+      return { ok: true, mensaje: tx('rest.listo_se_escala_a_las_horas', { horas }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar la estrategia') };
     }
@@ -306,16 +310,16 @@ export default async function PaginaAgenteConductores({
       tr={tr}
       tablero={
         <>
-          <Bloque mensaje="No se pudo revisar si la flota está lista." esqueleto={<EsqTarjetaV2 alto={60} />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_revisar_si_la_2')} esqueleto={<EsqTarjetaV2 alto={60} />}>
             <BloqueBannerPreflight pPreflight={pPreflight} sufijo={sufijoTenant(sp)} />
           </Bloque>
-          <Bloque mensaje="No se pudieron leer los insights." esqueleto={<EsqTarjetaV2 alto={160} />}>
+          <Bloque mensaje={tx('rest.no_se_pudieron_leer_los_insights')} esqueleto={<EsqTarjetaV2 alto={160} />}>
             <BloqueInsights pInsights={pInsights} pIndicadores={pIndicadores} dias={filtrosVista.dias} />
           </Bloque>
-          <Bloque mensaje="No se pudo leer la constancia de reportes." esqueleto={<EsqTarjetaV2 alto={120} />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_la_constancia')} esqueleto={<EsqTarjetaV2 alto={120} />}>
             <BloqueConstancia pConstancia={pConstancia} dias={filtrosVista.dias} />
           </Bloque>
-          <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTablaV2 />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_el_tablero')} esqueleto={<EsqTablaV2 />}>
             <BloqueTableroHitos
               pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
               accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina} accionSitios={accionSitios}
@@ -332,16 +336,16 @@ export default async function PaginaAgenteConductores({
           {/* La estrategia (B4): solo el dueño la edita, y solo con la config
               actual legible — sin ella, la forma guardaría a ciegas. */}
           {puedeAdministrar(rol) && (
-            <Bloque mensaje="No se pudo leer la estrategia del agente." esqueleto={<EsqTarjetaV2 alto={120} />}>
+            <Bloque mensaje={tx('rest.no_se_pudo_leer_la_estrategia')} esqueleto={<EsqTarjetaV2 alto={120} />}>
               <BloqueEstrategia pConfig={pConfig} accion={guardarEstrategia} />
             </Bloque>
           )}
-          <Bloque mensaje="No se pudo leer la bitácora de corridas." esqueleto={<EsqTablaV2 />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_la_bitacora')} esqueleto={<EsqTablaV2 />}>
             <BloqueCorridas pCorridas={pCorridas} />
           </Bloque>
           {/* Notificaciones hace SUS propias lecturas: en su propio boundary
               no retiene a nadie. */}
-          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTablaV2 />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_la_configuracion_2')} esqueleto={<EsqTablaV2 />}>
             <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="conductores" />
           </Bloque>
         </>

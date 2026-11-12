@@ -8,7 +8,11 @@ import { sufijoTenant } from '../sufijo';
 import { AUTOMATIZACIONES } from '../rutas';
 import { VistaPuestaEnMarcha } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Puesta en marcha' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('cfg.puesta_en_marcha') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +29,7 @@ export default async function PaginaPuestaEnMarcha({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -37,7 +42,7 @@ export default async function PaginaPuestaEnMarcha({
   for (const a of AUTOMATIZACIONES) hrefAutomatizacion[a.href] = puedeVerRuta(rol, a.href) ? `${a.href}${sufijo}` : null;
 
   return (
-    <VistaPuestaEnMarcha
+    <VistaPuestaEnMarcha t={t}
       pasos={pasos} resumen={resumenMarcha(pasos)}
       puedeAdministrar={puedeAdministrar(rol)} hrefAutomatizacion={hrefAutomatizacion}
     />

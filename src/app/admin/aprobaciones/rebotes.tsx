@@ -7,6 +7,8 @@ import { Tarjeta } from '../../ui-v2/componentes/tarjeta';
 import { StatusChip } from '../../ui-v2/componentes/status-chip';
 import '../bandeja.css';
 
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 /**
  * REBOTES Y BAJAS — lo que Resend ya sabía y nadie enseñaba.
  *
@@ -18,25 +20,26 @@ import '../bandeja.css';
  * Exportada para poder probar el render sin Next (patrón
  * `seccion-credenciales.test.tsx`).
  */
-export function RebotesYBajas({ rebotes, suprimidos }: {
+export function RebotesYBajas({ rebotes, suprimidos, t = trAdminInicioEs }: {
   rebotes: PiezaEnCola[] | null;
-  suprimidos: CorreoSuprimido[] | null;
+  suprimidos: CorreoSuprimido[] | null; t?: TrDe<'admin_inicio'>;
 }) {
   return (
-    <Tarjeta titulo={rebotes !== null ? `Rebotes, quejas y bajas (${rebotes.length})` : 'Rebotes, quejas y bajas'}>
+    <Tarjeta titulo={rebotes !== null ? t('aprobaciones_rebotes.rebotes_quejas_y_bajas', { length: rebotes.length }) : t('aprobaciones_rebotes.rebotes_quejas_y_bajas_2')}>
       <p className="bj-nota">
-        Lo que el proveedor reportó DESPUÉS de aceptar el envío. Un rebote no es un correo
-        perdido: es reputación del dominio, y es lo que decide si llegan los siguientes.
+        
+        {t('aprobaciones_rebotes.lo_que_el_proveedor')}
       </p>
 
       {rebotes === null ? (
         <p className="bj-item__aviso" role="alert">
-          No se pudieron leer los rebotes ahora mismo — eso NO significa que no haya.
+          
+          {t('aprobaciones_rebotes.no_se_pudieron_leer')}
         </p>
       ) : rebotes.length === 0 ? (
         <p className="bj-nota">
-          Ninguna pieza enviada ha rebotado ni recibido queja. Con envíos recientes, así debe
-          verse; sin envíos, esto no dice nada todavía.
+          
+          {t('aprobaciones_rebotes.ninguna_pieza_enviada_ha')}
         </p>
       ) : (
         <ul className="bj-lista">
@@ -44,7 +47,7 @@ export function RebotesYBajas({ rebotes, suprimidos }: {
             <li key={p.id}>
               {/* Queja de spam y rebote NO son lo mismo y no se funden: el rebote suele ser una dirección muerta; la queja es una
                   persona que marcó el correo, y esa pesa mucho más. */}
-              <StatusChip tono="bad">{p.entregaEstado === 'queja' ? 'Queja de spam' : 'Rebotó'}</StatusChip>
+              <StatusChip tono="bad">{p.entregaEstado === 'queja' ? t('aprobaciones_rebotes.queja_de_spam') : t('aprobaciones_rebotes.reboto')}</StatusChip>
               <span className="bj-lista__texto">{p.prospectoCorreo ?? p.titulo}</span>
               {p.prospectoEmpresa && <span className="bj-lista__apoyo">{p.prospectoEmpresa}</span>}
               {p.entregaEventoEn && <span className="bj-lista__apoyo">{fechaHoraMx(p.entregaEventoEn)}</span>}
@@ -53,14 +56,14 @@ export function RebotesYBajas({ rebotes, suprimidos }: {
         </ul>
       )}
 
-      <p className="bj-item__titulo">Lista de bajas — a estas direcciones ya no se escribe</p>
+      <p className="bj-item__titulo">{t('aprobaciones_rebotes.lista_de_bajas_a')}</p>
       {suprimidos === null ? (
         <p className="bj-item__aviso" role="alert">
-          No se pudo leer la lista de bajas. El enviador la consulta aparte y falla cerrado, así
-          que un fallo aquí NO significa que alguien vaya a recibir correo de más.
+          
+          {t('aprobaciones_rebotes.no_se_pudo_leer')}
         </p>
       ) : suprimidos.length === 0 ? (
-        <p className="bj-nota">Nadie en la lista de bajas todavía.</p>
+        <p className="bj-nota">{t('aprobaciones_rebotes.nadie_en_la_lista')}</p>
       ) : (
         <ul className="bj-lista">
           {suprimidos.map((s) => (
@@ -73,8 +76,8 @@ export function RebotesYBajas({ rebotes, suprimidos }: {
         </ul>
       )}
       <p className="bj-nota">
-        Aquí no hay botón para reactivar a nadie: suprimir es para siempre y quitar una fila es
-        una decisión manual sobre la base.
+        
+        {t('aprobaciones_rebotes.aqui_no_hay_boton')}
       </p>
     </Tarjeta>
   );

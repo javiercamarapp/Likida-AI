@@ -1,0 +1,2 @@
+/* Campo de píxeles suave: el color del canvas (lo lee getComputedStyle) es el gris medio del tema. */
+.rv-pixeles--suave { color: var(--g3); }

@@ -1,5 +1,6 @@
 import { Lock, MessageSquare } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
+import { Icono } from '@/app/ui-v2/componentes/icono';
 import type { MensajeHilo } from '@/lib/likida/soporte';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -31,7 +32,7 @@ export function HiloSoporte({
 }) {
   if (mensajes.length === 0) {
     return (
-      <p className="text-[12.5px] py-2" style={{ color: 'var(--muted)' }}>
+      <p className="py-2 text-[12px] text-[var(--muted)]">
         {vacio}
       </p>
     );
@@ -42,28 +43,24 @@ export function HiloSoporte({
       {mensajes.map((m) => (
         <li
           key={m.id}
-          className="rounded-lg px-3 py-2.5"
-          style={{
-            background: m.interna ? 'var(--warnbg)' : 'var(--canvas)',
-            border: `1px solid ${m.interna ? 'var(--warn)' : 'var(--line2)'}`,
-          }}
+          className={`rounded-lg border px-3 py-2 ${m.interna ? 'border-[var(--warn)] bg-[var(--warnbg)]' : 'border-[var(--line2)] bg-[var(--canvas)]'}`}
         >
-          <div className="flex items-center gap-2 flex-wrap text-xs" style={{ color: 'var(--muted)' }}>
+          <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--muted)]">
             {m.interna ? (
-              <Lock width={13} height={13} strokeWidth={1.9} style={{ color: 'var(--warn)' }} />
+              <Icono icono={Lock} className="text-[var(--warn)]" />
             ) : (
-              <MessageSquare width={13} height={13} strokeWidth={1.75} />
+              <Icono icono={MessageSquare} />
             )}
             {/* El nombre puede faltar (la cuenta se dio de baja: la FK es
                 `on delete set null`). Se dice "—", no se inventa un autor. */}
-            <span className="font-medium" style={{ color: 'var(--ink)' }}>
+            <span className="font-medium text-[var(--ink)]">
               {m.autorNombre ?? '—'}
             </span>
             <span>{m.deLikida ? 'Likida' : 'la flota'}</span>
             <span>·</span>
             <span className="tabular">{fechaHoraMx(m.creadoEn)}</span>
             {m.interna && (
-              <span className="font-medium" style={{ color: 'var(--warn)' }}>
+              <span className="font-medium text-[var(--warn)]">
                 Nota interna — el cliente NO la ve
               </span>
             )}

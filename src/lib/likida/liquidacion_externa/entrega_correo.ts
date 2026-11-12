@@ -33,6 +33,7 @@ import { enviarCorreo, type OpcionesEnvio, type ResultadoEnvio } from '@/lib/cor
 import type { Correo } from '@/lib/correo/plantilla';
 import { aInstanteMx } from '../peajes/formatos';
 import { esPolizaProvisional, MARCA_POLIZA_PROVISIONAL } from './poliza_provisional';
+import { bitacoraVisible } from './desglose_contrato';
 import { leerPorId, registrarEvento, transicionar, type TipoEvento } from './repo';
 import {
   abrirExcepcion, firmarXlsx, leerConfigCorreo, leerDesglose, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
@@ -265,7 +266,8 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
       let polizaProvisional = false;
       try {
         const d = await leerDesglose(tenantId, id);
-        if (d.ok && d.valor?.bitacora) bitacora = d.valor.bitacora;
+        // 1003: el folio de origen (lo que conoce el operador) manda sobre el identificador interno.
+        if (d.ok && d.valor?.bitacora) bitacora = bitacoraVisible(d.valor);
         if (d.ok && d.valor?.retenidaMotivo) retenidaMotivo = d.valor.retenidaMotivo;
         if (d.ok && esPolizaProvisional(d.valor?.poliza)) polizaProvisional = true;
       } catch { /* sin encabezado: se usa la clave */ }

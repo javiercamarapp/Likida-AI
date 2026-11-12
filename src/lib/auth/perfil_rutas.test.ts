@@ -71,7 +71,7 @@ describe('clasificación de rutas', () => {
   it('la lista permitida cubre a los cinco agentes y no deja entrar nada de dinero fiscal', () => {
     const modulos = new Set(Object.values(RUTAS_PERFIL_CINCO_AGENTES));
     for (const m of ['liquidacion', 'peajes', 'carta_porte', 'vigia', 'conductor', 'base']) expect(modulos.has(m as never)).toBe(true);
-    for (const r of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion',
+    for (const r of ['/dashboard/facturacion', '/dashboard/suscripcion',
       '/dashboard/sesiones-mcp', '/dashboard/timbrado', '/dashboard/descarga-sat']) {
       expect(permitidas).not.toContain(r);
     }
@@ -177,11 +177,11 @@ describe('API bajo el perfil', () => {
     expect(apiPermitidaEnPerfil('cinco_agentes', '/api/export/liquidaciones')).toBe(true);
     expect(apiPermitidaEnPerfil('cinco_agentes', '/api/export/pdf/123')).toBe(true);
   });
-  it('dashboard: el chat y sus hermanas se niegan; solo el pageview pasa', () => {
-    for (const n of ['chat', 'archivo', 'ingesta', 'conversaciones', 'onboarding-chat']) {
+  it('dashboard: el chat y su historial pasan (11-nov); archivo, ingesta y el chat de onboarding se niegan', () => {
+    for (const n of ['archivo', 'ingesta', 'onboarding-chat']) {
       expect(apiPermitidaEnPerfil('cinco_agentes', `/api/dashboard/${n}`), n).toBe(false);
     }
-    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/dashboard/evento')).toBe(true);
+    for (const n of ['evento', 'chat', 'conversaciones']) expect(apiPermitidaEnPerfil('cinco_agentes', `/api/dashboard/${n}`), n).toBe(true);
   });
   it('otras raíces (/api/mcp, /api/cron) no son de esta lista: se niegan', () => {
     expect(apiPermitidaEnPerfil('cinco_agentes', '/api/mcp')).toBe(false);

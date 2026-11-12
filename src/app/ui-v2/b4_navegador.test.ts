@@ -231,7 +231,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
       await p.close();
     });
   }
-  it('1440: «Filtros» abre los avanzados en el cajón de 420 (no empuja el contenido, ya no es un popover) y el chip activo es azul suave de Rovaq', async () => {
+  it('1440: «Filtros» abre los avanzados en el cajón de 420 (no empuja el contenido, ya no es un popover) y el chip activo es gris claro con anillo negro (alto contraste)', async () => {
     const p = await abrir();
     const antes = await p.evaluate(() => document.querySelector('#esc')!.getBoundingClientRect().top);
     await p.getByRole('button', { name: /Filtros/ }).click();
@@ -241,7 +241,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
     await p.keyboard.press('Escape');
     await p.waitForSelector('dialog.rv-ov--drawer[open]', { state: 'detached' });
     expect(r.despues).toBe(antes);
-    expect(rgb(r.activo)).toEqual([230, 237, 250]); // --seg-activo-bg = #e6edfa (azul de Rovaq, decisión 7-nov-2026)
+    expect(rgb(r.activo)).toEqual([228, 228, 230]); // --seg-activo-bg = #e4e4e6 (alto contraste neutro, punto 10 del dueño 11-nov-2026)
     await p.close();
   });
   it('390: «Filtros» abre una hoja inferior', async () => {
@@ -260,18 +260,18 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del shell)', () => {
-  it('claro: azul suave de Rovaq con texto 1f4fb0 (AA), nunca un bloque sólido', async () => {
+  it('claro: gris claro con texto negro (AAA), nunca un bloque sólido', async () => {
     const p = await abrir();
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([230, 237, 250]); // --seg-activo-bg #e6edfa
-    expect(rgb(c.fg)).toEqual([31, 79, 176]); // --seg-activo-fg #1f4fb0
+    expect(rgb(c.bg)).toEqual([228, 228, 230]); // --seg-activo-bg #e4e4e6
+    expect(rgb(c.fg)).toEqual([14, 14, 16]); // --seg-activo-fg #0e0e10
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
-  it('oscuro: fondo azul oscuro con texto azul claro (AA)', async () => {
+  it('oscuro: gris profundo con texto claro (AAA)', async () => {
     const p = await abrir(1440, { oscuro: true });
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([29, 36, 51]); // --seg-activo-bg oscuro #1d2433
+    expect(rgb(c.bg)).toEqual([52, 52, 58]); // --seg-activo-bg oscuro #34343a
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });

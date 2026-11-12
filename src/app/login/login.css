@@ -143,3 +143,9 @@
 @media (prefers-reduced-motion: no-preference) {
   .login-editorial .login-glifo { transition: width 150ms ease, opacity 150ms ease; }
 }
+
+/* Marca de Google (colores oficiales del logo): fuera del JSX para que el marcado no lleve colores sueltos. */
+.login-g-azul { fill: #4285F4; }
+.login-g-verde { fill: #34A853; }
+.login-g-amarillo { fill: #FBBC05; }
+.login-g-rojo { fill: #EA4335; }

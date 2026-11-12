@@ -21,7 +21,7 @@ const leer = (ruta: string) =>
 const STAND_BY = {
   v1: ['clientes'],
   export: ['bitacora-conciliada', 'bitacora-peaje', 'convenios', 'facturas-proveedor', 'jornada', 'peajes-reclamacion', 'poliza'],
-  dashboard: ['archivo', 'chat', 'conversaciones', 'ingesta', 'onboarding-chat'],
+  dashboard: ['archivo', 'ingesta', 'onboarding-chat'], // `chat` y `conversaciones` se abrieron el 11-nov (D12): sus guardas de sesión, rol, tenant y tope diario viven en su ruta.
 };
 /** /v1 que NO pasan por `abrir`: documentación pública, sin datos de ninguna flota. */
 const V1_SIN_DATOS = ['openapi'];

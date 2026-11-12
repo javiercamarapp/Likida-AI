@@ -39,7 +39,7 @@
 .rv-pem__item:hover { background: var(--canvas); }
 .rv-pem__item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-pem__item[data-activo] { background: var(--canvas); }
-.rv-pem__item[data-activo]::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--senal, var(--ink)); }
+.rv-pem__item[data-activo]::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--nav-activo-barra, var(--ink)); }
 .rv-pem__num {
   flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px;
   font: 600 12px/1 var(--font-sans-ui, inherit); font-variant-numeric: tabular-nums;
@@ -154,7 +154,7 @@ button.rv-at__fila:hover { background: var(--canvas); }
 button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-at__punto { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .rv-at__punto[data-sev="accion"] { background: var(--senal); }
-.rv-at__punto[data-sev="atencion"] { background: var(--chart-4, var(--muted)); }
+.rv-at__punto[data-sev="atencion"] { background: var(--warn, var(--muted)); }
 .rv-at__punto[data-sev="ok"] { background: var(--ok); }
 .rv-at__texto { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .rv-at__titulo { font-size: 13px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -259,16 +259,32 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 .rv-ic__agentes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
 .rv-ic__agentes > .rv-tarjeta { min-width: 0; }
 .rv-ic__agente-cuerpo { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.rv-ic__estado { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--muted); }
-.rv-ic__estado > svg { flex: none; margin-top: 3px; }
+.rv-ic__estado { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); }
 .rv-ic__cifra-fila { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin: 0; }
 .rv-ic__cifra { font: 700 var(--t-kpi)/1.1 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
 .rv-ic__cifra[data-vacio] { font-size: 18px; font-weight: 600; color: var(--muted); }
 .rv-ic__nota { margin: 0; font-size: 12px; line-height: 1.35; color: var(--muted); }
-.rv-ic__enlace { font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.rv-ic__enlace { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-top: auto; padding-top: 2px; font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: none; }
+.rv-ic__enlace:hover { text-decoration: underline; text-underline-offset: 3px; }
+.rv-ic__enlace > svg { flex: none; color: var(--muted); }
+.rv-ic__seccion { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rv-ic__seccion-cab { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.rv-ic__seccion-titulo { margin: 0; font: 600 14px/1.3 var(--font-display, inherit); letter-spacing: -.01em; color: var(--ink); }
+.rv-ic__icono { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--surface, transparent); color: var(--ink); }
+.rv-ic__icono[data-fase="sin_corridas"], .rv-ic__icono[data-fase="espera"], .rv-ic__icono[data-fase="proximamente"], .rv-ic__icono[data-fase="sin_lectura"] { color: var(--muted); }
+.rv-ic__estado > .rv-ic__icono { margin-top: 0; }
+/* Chip de estado de la tarjeta de agente: a 1440 px (5 columnas ≈ 200 px) «Esperando conexión…» no cabe en la pastilla fija de 22 px nowrap y se
+   recortaba/salía de la tarjeta. Aquí la fila envuelve y la pastilla crece en alto con el texto (radio 11 px), sin salirse del ancho. */
+.rv-ic__estado { flex-wrap: wrap; row-gap: 6px; min-width: 0; }
+[data-ui="v2"] .rv-ic__estado > .rv-estado { height: auto; min-height: 22px; min-width: 0; padding-block: 4px; border-radius: 11px; white-space: normal; line-height: 1.25; overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-ic__estado > .rv-estado .rv-estado__punto { flex: none; }
+.rv-ic__falta { margin: 0; padding-top: 6px; border-top: 1px dotted var(--line2); font-size: 12px; line-height: 1.4; color: var(--muted); }
+.rv-ic__falta > b { font-weight: 600; color: var(--ink); }
+.rv-ic__fila--12 > * { grid-column: 1 / -1; }
+.rv-ic__fila--6-6 > :only-child { grid-column: 1 / -1; }
 .rv-ic__fila { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
 .rv-ic__fila > * { min-width: 0; }
-.rv-ic__fila--7-5 { align-items: start; }
+.rv-ic__fila--7-5 { align-items: stretch; }
 .rv-ic__fila--7-5 > :only-child { grid-column: 1 / -1; }
 .rv-ic__fila--7-5 > :first-child:not(:only-child) { grid-column: span 7; }
 .rv-ic__fila--7-5 > :last-child:not(:only-child) { grid-column: span 5; }
@@ -346,3 +362,7 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 .rv-barlist__pista { display: block; height: 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .rv-barlist__relleno { fill: var(--ink); }
 .rv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ── Notificaciones del panel: alerta = Tarjeta con su chip de tipo ── */
+.rv-notif__texto { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink); }
+.rv-notif__acciones { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

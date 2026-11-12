@@ -2,19 +2,23 @@
 
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
+import type { DashboardKpis } from '@/lib/likida/analytics';
+import type { AcreditablesOFuera } from './respuestas';
 import LogoV2 from '../shell/logo-v2';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { CampoPixeles } from '../pixeles';
 import Composer, { MAX_PREGUNTA } from './composer';
 import PanelHistorial, { BotonHistorial } from './historial';
 import { BurbujaUsuario, RespuestaVista } from './mensajes';
 import { comportamientoScroll, useMovimientoReducido } from './movimiento';
 import type { Motor, ModoAgente } from './motor';
-import { PERFILES, type TemaAgente, type TextosAgente } from './perfiles';
+import { perfiles, type TemaAgente, type TextosAgente } from './perfiles';
 import TemasRapidos from './sugerencias';
 import BriefingDecideHoy from './briefing-decide-hoy';
 import { useAnalista } from './use-analista';
 import { useCopiloto } from './use-copiloto';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 // ¿Bajo `lg` (1024 px)? Ahí el historial es un Drawer (hoja inferior en <820, cajón en 820–1023); sobre `lg`, una columna.
 const CONSULTA_LG = '(max-width: 1023.98px)';
@@ -58,7 +62,7 @@ export interface PropsAgente {
   adjuntos?: boolean;
   /** Solo `modo="cliente"`: lo que el respondedor de reserva usa si el analista falla. */
   kpis?: DashboardKpis | null;
-  acred?: Acreditables | null;
+  acred?: AcreditablesOFuera;
   /** Lo que va a la izquierda de «Historial» en su misma fila (la cinta de «viendo como superadmin»). */
   cabecera?: ReactNode;
 }
@@ -78,7 +82,8 @@ function ConMotorSuperadmin(p: PropsAgente) {
 }
 
 function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca = 'horizontal', acciones, adjuntos, cabecera, motor: a }: PropsAgente & { motor: Motor }) {
-  const perfil = PERFILES[modo];
+  const { t: tl } = useT('resto', restoEs);
+  const perfil = perfiles(tl)[modo];
   const tx: TextosAgente = { ...perfil.textos, ...textos };
   const listaTemas = temas ?? perfil.temas;
   const conAcciones = acciones ?? perfil.acciones;
@@ -86,7 +91,7 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
   const endpointAccion = endpoint ?? perfil.endpoint;
   const panel = variante === 'panel';
   /** El título de la portada: encabezado de nivel 1 en la página y de nivel 2 en el panel lateral (ver la nota donde se pinta). */
-  const Titulo = panel ? 'h2' : 'h1';
+  const Encabezado = panel ? 'h2' : 'h1';
   const [texto, setTexto] = useState('');
   const [histAbierto, setHistAbierto] = useState(false);
   const [lejosDelFondo, setLejosDelFondo] = useState(false);
@@ -189,14 +194,14 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
             <header className="rv-chat__hero" data-onboarding="pantalla.titulo">
               <LogoV2 variante={marca === 'simbolo' ? 'simbolo' : 'horizontal'} alto={28} className="rv-chat__logo" />
               {/* UN solo encabezado de nivel 1 por página: el panel lateral del Copiloto vive en el chrome de /admin junto al título de cada pantalla, así que ahí baja a nivel 2. */}
-              <Titulo>{tx.titulo}</Titulo>
+              <Encabezado>{tx.titulo}</Encabezado>
               <p className="rv-chat__sub">{tx.subtitulo}</p>
             </header>
           )}
-          {hay && <Titulo className="rv-sr">{tx.titulo}</Titulo>}
+          {hay && <Encabezado className="rv-sr">{tx.titulo}</Encabezado>}
           {hay && (
             <div className="rv-chat__hilo-caja">
-              <div ref={hilo} className="rv-chat__hilo" role="log" aria-live="polite" tabIndex={0} aria-label="Conversación" onScroll={medirFondo}>
+              <div ref={hilo} className="rv-chat__hilo" role="log" aria-live="polite" tabIndex={0} aria-label={tl('cfg.conversacion')} onScroll={medirFondo}>
                 <div ref={hiloIn} className="rv-chat__hilo-in">
                   {a.historial.map((t, i) => (
                     <div key={t.id} data-turno-id={t.id} className="rv-chat__turno">
@@ -209,21 +214,22 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
                 </div>
               </div>
               {lejosDelFondo && (
-                <button type="button" className="rv-btn rv-btn--secondary rv-chat__redondo rv-chat__bajar" aria-label="Ir al final de la conversación" onClick={bajar}>
+                <Boton className="rv-chat__redondo rv-chat__bajar" aria-label={tl('ch.ir_al_final_de_la_conversacion')} onClick={bajar}>
                   <ArrowDown aria-hidden="true" />
-                </button>
+                </Boton>
               )}
             </div>
           )}
           <div className="rv-chat__dock">{composer}</div>
           {!hay && (
             <>
-              {modo === 'superadmin' && !panel && <BriefingDecideHoy onPreguntar={preguntar} deshabilitado={a.ocupado} endpoint={endpointAccion} />}
               <TemasRapidos temas={listaTemas} onPreguntar={preguntar} deshabilitado={a.ocupado} />
               <p className="rv-chat__meta">
                 {tx.chips.map((c) => <span key={c.texto} className="rv-chip" title={c.ayuda}>{c.texto}</span>)}
               </p>
               <p className="rv-chat__pie">{tx.pie}</p>
+              {/* «Decide hoy»: tarjeta aparte, plegada y DESPUÉS de los temas (como Rovaq: logo, título, recuadro y temas, sin tarjetas entre medias). */}
+              {modo === 'superadmin' && !panel && <BriefingDecideHoy onPreguntar={preguntar} deshabilitado={a.ocupado} endpoint={endpointAccion} />}
             </>
           )}
         </div>

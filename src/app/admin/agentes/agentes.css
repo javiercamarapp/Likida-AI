@@ -8,3 +8,30 @@
 @media (max-width: 767.98px) { .rv-agente-fila-accion, .rv-agente-acciones { flex-wrap: wrap; } }
 .rv-agente-alta { display: grid; gap: 12px; }
 @media (min-width: 768px) { .rv-agente-alta { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* Tabla del catálogo (11-nov): columnas alineadas y una sola línea por dato. La fecha es texto llano; el resultado va debajo; «Insumos» es un enlace del sistema. */
+.rv-agente-fecha { display: block; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rv-agente-resultado { display: flex; align-items: center; flex-wrap: nowrap; gap: 4px; white-space: nowrap; }
+.rv-agente-enlace { font-size: var(--t-small); font-weight: 500; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.rv-agente-enlace:hover { color: var(--muted); }
+.rv-agente-enlace:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; border-radius: 4px; }
+.rv-agente-acciones { gap: 12px; }
+@media (min-width: 768px) {
+  .rv-tb table td { vertical-align: middle; }
+}
+
+/* Menú «⋯» de la fila (Rovaq: acciones por fila dentro de un menú, 28 px): la destructiva «Apagar» vive ahí, no como botón rojo por fila. */
+.rv-agente-menu-btn.rv-btn { width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; justify-content: center; }
+.rv-agente-menu-btn svg { width: 16px; height: 16px; }
+
+/* Móvil (≤ 819 px): la ficha-fila de la tabla es UNA columna que puede encogerse (minmax(0,1fr)); sin esto el texto «nowrap» ensancha la
+   ficha y se sale por la derecha. Aquí sí pueden bajar de renglón, y nunca hay scroll horizontal de página. */
+@media (max-width: 819px) {
+  .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub),
+  .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub) > tr { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub) td { min-width: 0; flex-wrap: wrap; }
+  .rv-agente-nowrap, .rv-agente-fecha, .rv-agente-resultado, .rv-agente-enlace { white-space: normal; }
+  .rv-agente-resultado { flex-wrap: wrap; }
+  .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub) td > * { max-width: 100%; min-width: 0; }
+  .rv-agente-sub { overflow-wrap: anywhere; }
+}

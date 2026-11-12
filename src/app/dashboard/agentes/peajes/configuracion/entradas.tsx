@@ -1,6 +1,9 @@
 import { Mail, Download, Trash2, KeyRound } from 'lucide-react';
 import type { ConfigEntradas } from '@/lib/likida/peajes/datos';
-import { Icono } from '@/app/ui-v2/componentes';
+import { Icono, Boton, Tooltip } from '@/app/ui-v2/componentes';
+import { SeccionConfig } from './seccion';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -20,30 +23,22 @@ export interface EntradasVista {
 }
 
 
-function Titulo({ t, nota }: { t: string; nota: React.ReactNode }) {
-  return (
-    <>
-      <h2 className="font-display text-[15px] font-semibold mb-1">{t}</h2>
-      <p className="text-[11px] mb-3 rv-pj-c-faint">{nota}</p>
-    </>
-  );
-}
-
-function SoloAdmin() {
-  return <p className="text-[11px] rv-pj-c-faint">Solo quien administra la flota cambia esto.</p>;
+function SoloAdmin({ tr = TR_ES }: { tr?: TrAgentes }) {
+  const { t: tx } = tr;
+  return <p className="text-[11px] rv-pj-c-faint">{tx('rest.solo_quien_administra_la_flota_cambia_2')}</p>;
 }
 
 const minutos = (n: number) => (n % 60 === 0 ? `${n / 60} h` : `${n} min`);
 
 /** Los dos canales de entrada nuevos del desglose: correo y pull (0563). */
-export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVista; acciones: AccionesEntradas }) {
+export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: EntradasVista; acciones: AccionesEntradas; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   const { config, puedeAdministrar } = entradas;
   if (config === null && entradas.direccionCorreo === null && !puedeAdministrar) return null;
   return (
     <>
-      <section className="rv-tarjeta" id="correo">
-        <Titulo t="Recepción por correo"
-          nota="El proveedor (o tú) manda el archivo del corte como adjunto a la dirección de tu flota; el agente lo recibe, lo importa y lo cruza en el siguiente ciclo. La flota se reconoce por la dirección, no por el remitente." />
+      <SeccionConfig id="correo" titulo={tx('rest.recepcion_por_correo')}
+          nota={tx('rest.el_proveedor_o_tu_manda_el')}>
         <div className="space-y-3 text-[12px]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="cifra-mono rv-pj-pill" data-tono={config?.correoActivo ? 'ok' : undefined}>
@@ -52,81 +47,72 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
             {puedeAdministrar ? (
               config?.correoActivo ? (
                 <>
-                  <form action={acciones.rotarCorreo}><button type="submit" className="rv-btn rv-btn--secondary" title="La dirección anterior deja de servir al instante"><Icono icono={KeyRound} />Cambiar dirección</button></form>
-                  <form action={acciones.desactivarCorreo}><button type="submit" className="rv-btn rv-btn--secondary">Apagar</button></form>
+                  <form action={acciones.rotarCorreo}><Tooltip texto={tx('rest.la_direccion_anterior_deja_de_servir')}><Boton type="submit" variante="secondary" tamano="sm"><Icono icono={KeyRound} />{tx('rest.cambiar_direccion')}</Boton></Tooltip></form>
+                  <form action={acciones.desactivarCorreo}><Boton type="submit" variante="secondary" tamano="sm">{tx('rest.apagar')}</Boton></form>
                 </>
               ) : (
-                <form action={acciones.activarCorreo}><button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Mail} /> Activar correo</button></form>
+                <form action={acciones.activarCorreo}><Boton type="submit" variante="primary" tamano="sm"><Icono icono={Mail} />{' '}{tx('rest.activar_correo')}</Boton></form>
               )
-            ) : <SoloAdmin />}
+            ) : <SoloAdmin tr={tr} />}
           </div>
           {config?.correoActivo && (
             entradas.direccionCorreo
               ? (
-                <label className="block">
-                  <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">Dirección de tu flota (quien la conozca puede mandar cortes: compártela solo con el proveedor)</span>
-                  <input readOnly value={entradas.direccionCorreo} className="w-full cifra-mono mt-0.5 rv-ctl" />
+                <label className="block">{ricoT(tx('rest.e0_direccion_de_tu_flota_quien'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<input readOnly value={entradas.direccionCorreo} className="w-full cifra-mono mt-0.5 rv-ctl" />
                 </label>
               )
-              : <p className="rv-pj-c-warn">Falta configurar el dominio de correo en el servidor (lo hace el equipo de Likida): sin él no se puede armar la dirección.</p>
+              : <p className="rv-pj-c-warn">{tx('rest.falta_configurar_el_dominio_de_correo')}</p>
           )}
           {puedeAdministrar && config?.correoActivo && (
             <form action={acciones.guardarRemitentes} className="space-y-1.5">
-              <label className="block">
-                <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">Remitentes permitidos (correo o dominio, uno por línea; sin al menos uno, el buzón no recibe correos)</span>
-                <textarea name="remitentes" rows={3} defaultValue={config.remitentes.join('\n')} maxLength={2500} className="w-full cifra-mono mt-0.5 rv-ctl" />
+              <label className="block">{ricoT(tx('rest.e0_remitentes_permitidos_correo_o_dominio'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<textarea name="remitentes" rows={3} defaultValue={config.remitentes.join('\n')} maxLength={2500} className="w-full cifra-mono mt-0.5 rv-ctl" />
               </label>
-              <button type="submit" className="rv-btn rv-btn--secondary">Guardar remitentes</button>
-              <p className="text-[11px] rv-pj-c-faint">Un correo de otro remitente se ignora (no entra ni se cruza). Con la lista vacía no entra ninguno.</p>
+              <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.guardar_remitentes')}</Boton>
+              <p className="text-[11px] rv-pj-c-faint">{tx('rest.un_correo_de_otro_remitente_se')}</p>
             </form>
           )}
         </div>
-      </section>
+      </SeccionConfig>
 
-      <section className="rv-tarjeta" id="pull">
-        <Titulo t="Consulta automática a tu sistema"
-          nota="Si tu TMS o un script tuyo publica los cortes en una dirección HTTPS, Likida la consulta cada cierto tiempo y lo que traiga entra a la misma cola. Pide al equipo de Likida el formato exacto del archivo. SFTP no está disponible." />
+      <SeccionConfig id="pull" titulo={tx('rest.consulta_automatica_a_tu_sistema')}
+          nota={tx('rest.si_tu_tms_o_un_script')}>
         {config === null ? (
-          <p className="text-[12px] rv-pj-c-muted">No se pudo leer esta configuración ahora mismo.</p>
+          <p className="text-[12px] rv-pj-c-muted">{tx('rest.no_se_pudo_leer_esta_configuracion')}</p>
         ) : (
           <div className="space-y-3 text-[12px]">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="cifra-mono rv-pj-pill" data-tono={config.pullActivo ? 'ok' : undefined}>{config.pullActivo ? 'activo' : 'apagado'}</span>
               {config.pullActivo && <span className="rv-pj-c-muted">cada {minutos(config.pullIntervaloMin)}</span>}
-              {config.pullUltimoEn && <span className="text-[11px] rv-pj-c-faint">última consulta buena: {config.pullUltimoEn.slice(0, 16).replace('T', ' ')} UTC</span>}
+              {config.pullUltimoEn && <span className="text-[11px] rv-pj-c-faint">{tx('rest.ultima_consulta_buena_utc', { config: config.pullUltimoEn.slice(0, 16).replace('T', ' ') })}</span>}
               {puedeAdministrar && config.pullActivo && (
-                <form action={acciones.apagarPull}><button type="submit" className="rv-btn rv-btn--secondary">Apagar</button></form>
+                <form action={acciones.apagarPull}><Boton type="submit" variante="secondary" tamano="sm">{tx('rest.apagar')}</Boton></form>
               )}
             </div>
-            {config.pullUltimoError && <p role="alert" className="text-[12px] rv-pj-c-bad">Última consulta con problema: {config.pullUltimoError}</p>}
+            {config.pullUltimoError && <p role="alert" className="text-[12px] rv-pj-c-bad">{tx('rest.ultima_consulta_con_problema')}{' '}{config.pullUltimoError}</p>}
             {puedeAdministrar ? (
               <form action={acciones.guardarPull} className="space-y-2">
-                <label className="block">
-                  <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">Dirección HTTPS que publica los cortes</span>
-                  <input name="url" type="url" required defaultValue={config.pullUrl ?? ''} placeholder="https://tms.tuflota.mx/cortes-peaje" maxLength={500} className="w-full mt-0.5 rv-ctl" />
+                <label className="block">{ricoT(tx('rest.e0_direccion_https_que_publica_los'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<input name="url" type="url" required defaultValue={config.pullUrl ?? ''} placeholder="https://tms.tuflota.mx/cortes-peaje" maxLength={500} className="w-full mt-0.5 rv-ctl" />
                 </label>
                 <div className="flex gap-2 flex-wrap items-end">
-                  <label className="block">
-                    <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">Cada (minutos, 15 a 1,440)</span>
-                    <input name="intervalo" type="number" min={15} max={1440} step={5} required defaultValue={config.pullIntervaloMin} className="w-28 mt-0.5 rv-ctl" />
+                  <label className="block">{ricoT(tx('rest.e0_cada_minutos_15_a_1'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<input name="intervalo" type="number" min={15} max={1440} step={5} required defaultValue={config.pullIntervaloMin} className="w-28 mt-0.5 rv-ctl" />
                   </label>
                   <label className="block flex-1 min-w-[200px]">
-                    <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">Token Bearer (opcional){config.pullConCredencial ? ' · ya hay uno guardado; déjalo vacío para conservarlo' : ''}</span>
+                    <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{tx('rest.token_bearer_opcional')}{config.pullConCredencial ? tx('rest.ya_hay_uno_guardado_dejalo_vacio') : ''}</span>
                     <input name="token" type="password" autoComplete="off" maxLength={500} disabled={!entradas.cofreConfigurado} className="w-full mt-0.5 rv-ctl" />
                   </label>
-                  <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Download} /> Guardar y encender</button>
+                  <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Download} />{' '}{tx('rest.guardar_y_encender')}</Boton>
                 </div>
-                {!entradas.cofreConfigurado && <p className="text-[11px] rv-pj-c-warn">Falta configurar el cofre de credenciales en el servidor (lo hace el equipo de Likida): sin él no se puede guardar un token de forma segura (la lectura sin token sí funciona).</p>}
+                {!entradas.cofreConfigurado && <p className="text-[11px] rv-pj-c-warn">{tx('rest.falta_configurar_el_cofre_de_credenciales')}</p>}
               </form>
-            ) : <SoloAdmin />}
+            ) : <SoloAdmin tr={tr} />}
             {puedeAdministrar && config.pullConCredencial && (
               <form action={acciones.borrarCredencialPull}>
-                <button type="submit" className="rv-btn rv-btn--secondary"><Icono icono={Trash2} />Borrar el token guardado</button>
+                <Boton type="submit" variante="secondary" tamano="sm"><Icono icono={Trash2} />{tx('rest.borrar_el_token_guardado')}</Boton>
               </form>
             )}
           </div>
         )}
-      </section>
+      </SeccionConfig>
     </>
   );
 }

@@ -1,6 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex -- pruebas que leen archivos de FUENTE del propio repo; ninguna ruta viene de entrada de usuario. */
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToReadableStream, renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,6 +40,7 @@ vi.mock('next/navigation', () => ({
   redirect: dobles.redirect,
   usePathname: () => '/dashboard',
   useSearchParams: () => new URLSearchParams(''),
+  useRouter: () => ({ refresh() {}, replace() {}, push() {} }),
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/env', () => ({ appUrl: () => 'https://app.sintetica.test' }));
@@ -78,6 +79,17 @@ vi.mock('@/lib/saas/stripe', () => ({
   crearPortal: dobles.crearPortal, stripeConfigurado: () => true, modoStripe: () => 'live',
 }));
 vi.mock('@/lib/saas/transferencia', () => ({ datosBancarios: () => null }));
+// El Resumen del perfil (v2) lee por estos lectores: datos sintéticos, sin pesos.
+vi.mock('../sin-flota', () => ({ AvisoSinFlota: () => null }));
+vi.mock('../inicio-cinco-lectores', () => ({
+  leerPesosInicio: async () => null,
+  leerUltimasCorridas: async () => ({ liquidacion: undefined, peajes: undefined, carta_porte: undefined, vigia: undefined, conductor: undefined }),
+  leerViajesEnCurso: async () => 0,
+}));
+vi.mock('../resumen-datos', async () => ({ ...(await import('../resumen-modelo')), leerDatosResumen: async () => ({
+  rango: '30', hoy: '2026-10-02', veDinero: false, peajes: null, porTipo: null, kpis: null, cartaPorte: null, cierres: [], hechos: [], escalados: null,
+}) }));
+vi.mock('@/lib/likida/asistente/senales', () => ({ leerSenalesAsistente: async () => null }));
 vi.mock('@/lib/saas/fiscal', async (importar) => ({
   ...(await importar<typeof import('@/lib/saas/fiscal')>()),
   getDatosFiscales: dobles.getDatosFiscales,
@@ -197,7 +209,9 @@ describe('ningún texto de la app bajo el perfil trae un «$» de plan', () => {
     const arbol = await InicioCincoAgentes({ tenantId: 't-1', tenantNombre: 'Flota sintetica', nombre: 'Ana' }).catch(() => null);
     // Si el Resumen necesita más contexto del que esta prueba simula, no se calla: se falla.
     expect(arbol, 'el Resumen del perfil no se pudo montar con datos sintéticos').not.toBeNull();
-    const html = renderToStaticMarkup(arbol as ReactElement);
+    const flujo = await renderToReadableStream(arbol as ReactElement);
+    await flujo.allReady;
+    const html = await new Response(flujo).text();
     expect(texto(html)).not.toMatch(PLANES);
   });
 });

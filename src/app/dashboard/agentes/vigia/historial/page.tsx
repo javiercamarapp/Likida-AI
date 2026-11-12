@@ -17,14 +17,19 @@ import { VistaHistorialVigia } from './vista';
 import type { ResultadoGrupos } from './formas';
 import type { ResultadoLote } from '@/lib/likida/vigia/historial/lote_nombres';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Grupos de clientes e histórico' };
+import { getT } from '@/lib/i18n/servidor';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.grupos_de_clientes_e_historico') };
+}
 
 export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/agentes/vigia/historial';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const NO_DISPONIBLE = 'Esto no está disponible en tu plan.';
+const noDisponible = (tx: TAgentes = TR_ES.t) => (tx('rest.esto_no_esta_disponible_en_tu'));
 
 type Busqueda = { vista?: string; tenant?: string; rol?: string; grupo?: string };
 
@@ -64,50 +69,56 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
 
   async function alta(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
-    if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
+    if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     const r = await altaGrupoPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
     return r;
   }
   async function critico(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
-    if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
+    if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     const r = await criticoGrupoPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
     return r;
   }
   async function borrar(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
-    if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
+    if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     const r = await borrarGrupoPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
     return r;
   }
   async function aprobarRapida(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
-    if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
-    if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: NO_DISPONIBLE };
+    if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
+    if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: noDisponible(tx) };
     const r = await aprobarRespuestaRapidaPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
     return r;
   }
   async function retirarRapida(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
-    if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
-    if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: NO_DISPONIBLE };
+    if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
+    if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: noDisponible(tx) };
     const r = await retirarRespuestaRapidaPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
     return r;
   }
   async function importar(_p: ResultadoLote | null, fd: FormData): Promise<ResultadoLote | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
-    if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
+    if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     // Un campo vacío del navegador (sin archivo elegido) llega como File sin nombre ni bytes: no cuenta como archivo.
     // El nombre del grupo viaja con el índice de SU archivo (grupoNombre_0, grupoNombre_1...): un hueco no desalinea los demás.
     const entradas: EntradaLote[] = [];

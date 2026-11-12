@@ -141,17 +141,8 @@ export async function getFacturasProveedorPendientes(): Promise<FacturaProveedor
 
 // ── La cola unificada ───────────────────────────────────────────────────────
 
-export type FuenteEscalacion =
-  | 'arco' | 'corridas' | 'talachas' | 'facturas_proveedor' | 'tickets' | 'liquidaciones';
-
-export const NOMBRE_FUENTE: Record<FuenteEscalacion, string> = {
-  arco: 'Solicitudes ARCO',
-  corridas: 'Corridas en fallo',
-  talachas: 'Talachas por autorizar',
-  facturas_proveedor: 'Facturas de proveedor',
-  tickets: 'Tickets de soporte',
-  liquidaciones: 'Liquidaciones en revisión',
-};
+export { NOMBRE_FUENTE, type FuenteEscalacion } from './escalaciones-fuentes';
+import type { FuenteEscalacion } from './escalaciones-fuentes';
 
 export interface ItemEscalacion {
   fuente: FuenteEscalacion;

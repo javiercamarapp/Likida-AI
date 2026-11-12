@@ -28,7 +28,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { traerTodo, conteo as conteoDesde } from '../pg';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { pesoArchivo } from '@/lib/formato';
 import {
   TIPOS_INSUMO, esTipoInsumo, TIPOS_ARCHIVO, TIPOS_TEXTO,
@@ -261,7 +261,7 @@ export async function subirArchivoInsumo(
   if (rechazo) throw new DatoInvalido(rechazo);
   if (departamento !== undefined) validarTipoAceptado(agenteId, departamento, tipo);
   const buf = Buffer.from(await archivo.arrayBuffer());
-  if (!firmaCoincide(archivo.type, buf)) throw new DatoInvalido('El contenido del archivo no corresponde a su tipo.');
+  if (!firmaCoincide(archivo.type, buf)) throw datoInvalido('insumos.el_contenido_del_archivo_no');
   const ruta = `${agenteId}/${crypto.randomUUID()}.${EXT_POR_MIME[archivo.type] ?? 'bin'}`;
   const { error } = await acotada(
     supabaseAdmin().storage.from('agente-insumos').upload(ruta, buf, { contentType: archivo.type, upsert: false }),
@@ -274,7 +274,7 @@ export async function subirArchivoInsumo(
 export function validarTipoAceptado(agente: string, departamento: string, tipo: TipoInsumo): void {
   const aceptados = tiposAceptadosPorAgente(agente, departamento);
   if (!aceptados.includes(tipo)) {
-    throw new DatoInvalido(`Este agente no recibe insumos de tipo "${tipo}" — acepta: ${aceptados.join(', ')}.`);
+    throw datoInvalido('insumos.este_agente_no_recibe_insumos', { tipo, v: aceptados.join(', ') });
   }
 }
 
@@ -284,7 +284,7 @@ export function validarTipoAceptado(agente: string, departamento: string, tipo: 
  *  el tipo no aceptado; cualquier otro error es de la base. */
 export async function crearInsumoArchivo(a: AltaInsumoArchivo): Promise<string> {
   validarTipoAceptado(a.agente, a.departamento, a.tipo);
-  if (a.titulo.length > MAX_TITULO_INSUMO) throw new DatoInvalido(`El título pasa de ${MAX_TITULO_INSUMO} caracteres.`);
+  if (a.titulo.length > MAX_TITULO_INSUMO) throw datoInvalido('insumos.el_titulo_pasa_de_caracteres', { MAX_TITULO_INSUMO });
   const { data, error } = await supabaseAdmin()
     .from('agente_insumo')
     .insert({
@@ -307,14 +307,14 @@ export const MAX_LINK_INSUMO = 2_048;
 /** A37-S05-05: valida EN EL SERVIDOR título y contenido de un insumo de texto/link (el `type=url` del
  *  formulario es solo del cliente). El link debe ser una URL https sin credenciales. */
 export function validarContenidoInsumo(tipo: TipoInsumo, titulo: string, contenido: string): void {
-  if (titulo.length > MAX_TITULO_INSUMO) throw new DatoInvalido(`El título pasa de ${MAX_TITULO_INSUMO} caracteres.`);
+  if (titulo.length > MAX_TITULO_INSUMO) throw datoInvalido('insumos.el_titulo_pasa_de_caracteres', { MAX_TITULO_INSUMO });
   if (tipo === 'link') {
-    if (contenido.length > MAX_LINK_INSUMO) throw new DatoInvalido(`El link pasa de ${MAX_LINK_INSUMO} caracteres.`);
+    if (contenido.length > MAX_LINK_INSUMO) throw datoInvalido('insumos.el_link_pasa_de_caracteres', { MAX_LINK_INSUMO });
     let u: URL;
-    try { u = new URL(contenido); } catch { throw new DatoInvalido('El link no es una URL válida.'); }
-    if (u.protocol !== 'https:' || u.username || u.password) throw new DatoInvalido('El link debe ser https y sin usuario ni contraseña.');
+    try { u = new URL(contenido); } catch { throw datoInvalido('insumos.el_link_no_es_una'); }
+    if (u.protocol !== 'https:' || u.username || u.password) throw datoInvalido('insumos.el_link_debe_ser_https');
   } else if (contenido.length > MAX_CONTENIDO_INSUMO) {
-    throw new DatoInvalido(`El texto pasa de ${MAX_CONTENIDO_INSUMO} caracteres.`);
+    throw datoInvalido('insumos.el_texto_pasa_de_caracteres', { MAX_CONTENIDO_INSUMO });
   }
 }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { dinero as dineroEs } from '@/lib/i18n/es/dinero';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS MISMOS CONCEPTOS, ESCRITOS EN TRES SITIOS, YA SE DESINCRONIZARON DOS VECES.
@@ -19,6 +20,11 @@ import { join, relative } from 'node:path';
 // un import que no siempre es posible.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Un valor que es una CLAVE del diccionario (el panel traduce sus rótulos) se compara por el texto en español que dice, no por la clave. */
+function textoDe(valor: string): string {
+  return (dineroEs as Record<string, string>)[valor] ?? valor;
+}
+
 /** Saca los pares `clave: 'Etiqueta'` de un mapa literal del fuente. */
 function etiquetas(ruta: string, ancla: string): Record<string, string> {
   const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
@@ -26,14 +32,14 @@ function etiquetas(ruta: string, ancla: string): Record<string, string> {
   expect(i, `no se encontró el ancla "${ancla}" en ${ruta}`).toBeGreaterThanOrEqual(0);
   const bloque = src.slice(i, src.indexOf('}', i));
   const out: Record<string, string> = {};
-  for (const m of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) out[m[1]] = m[2];
+  for (const m of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) out[m[1]] = textoDe(m[2]);
   return out;
 }
 
 // ── EL BARRIDO (auditoría 18, M1 — reincidencia) ───────────────────────────
 //
 // Este test anclaba por RUTAS LITERALES, así que un archivo nuevo entraba al
-// repo por fuera de su radar: `gasto-semanal-chart.tsx` nació el 16-ago con un
+// repo por fuera de su radar: `gasto-semanal-chart.tsx` (retirado el 11-nov-2026 con el Resumen v1) nació el 16-ago con un
 // `CONCEPTO_LABEL` propio —el nombre que este test prohíbe en el PDF— y ya
 // divergía en tres valores contra el motor con la suite en verde. El mecanismo
 // que sí escala es el de formato.ts: buscar el PATRÓN en TODO `src/`. Cada
@@ -60,7 +66,7 @@ function mapasDeConcepto(): Array<{ ruta: string; mapa: Record<string, string> }
     if (!m) continue;
     const bloque = src.slice(m.index, src.indexOf('}', m.index));
     const mapa: Record<string, string> = {};
-    for (const k of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) mapa[k[1]] = k[2];
+    for (const k of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) mapa[k[1]] = textoDe(k[2]);
     out.push({ ruta: relative(RAIZ_SRC, f), mapa });
   }
   return out;
@@ -73,7 +79,6 @@ describe('etiquetas de concepto — TODAS las copias del árbol dicen lo mismo q
   it('el barrido encuentra las copias conocidas (si esto falla, el patrón se quedó ciego)', () => {
     const rutas = copias.map((c) => c.ruta);
     expect(rutas).toContain('app/dashboard/[id]/page.tsx');
-    expect(rutas).toContain('app/dashboard/gasto-semanal-chart.tsx');
   });
 
   it('cada copia cubre los mismos conceptos que el motor, con la MISMA etiqueta', () => {
@@ -154,7 +159,9 @@ function etiquetasAnidadas(ruta: string, ancla: string): Record<string, Record<s
   const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
   const i = src.indexOf(ancla);
   expect(i, `no se encontró el ancla "${ancla}" en ${ruta}`).toBeGreaterThanOrEqual(0);
-  const bloque = src.slice(i, src.indexOf('\n};', i) >= 0 ? src.indexOf('\n};', i) : src.indexOf('} as const', i));
+  // El mapa termina en `\n};`, en `} as const` o, si es una función que lo devuelve (para traducir los rótulos), en `\n});`.
+  const fines = ['\n};', '\n});', '} as const'].map((f) => src.indexOf(f, i)).filter((n) => n >= 0);
+  const bloque = src.slice(i, fines.length > 0 ? Math.min(...fines) : undefined);
   const out: Record<string, Record<string, string>> = {};
   for (const m of bloque.matchAll(/(\w+):\s*\{([^}]*)\}/g)) {
     const campos: Record<string, string> = {};
@@ -213,7 +220,7 @@ describe('etiquetas de estatus — las TRES copias coinciden en la severidad', (
   const copias: { ruta: string; ancla: string; campo: string }[] = [
     { ruta: '../../app/dashboard/estatus.ts', ancla: 'export const ESTATUS', campo: 'color' },
     { ruta: '../../app/dashboard/agentes/liquidacion/vista.tsx', ancla: 'const ESTATUS', campo: 'tono' },
-    { ruta: '../../app/dashboard/agentes/liquidacion/cola.tsx', ancla: 'const ROTULO_ESTADO', campo: 'fg' },
+    { ruta: '../../app/dashboard/agentes/liquidacion/cola.tsx', ancla: 'const rotuloEstado', campo: 'fg' },
   ];
 
   it('el barrido encuentra las tres copias (si esto falla, el patrón se quedó ciego)', () => {

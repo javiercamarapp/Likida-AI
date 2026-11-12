@@ -11,7 +11,11 @@ import { sufijoTenant } from '../../../sufijo';
 import { VistaSitios } from './vista';
 import type { ResultadoSitio } from './formas';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Catálogo de sitios' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.catalogo_de_sitios') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -46,9 +50,10 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionGuardar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan el catálogo.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_9') };
     const r = aResultado(await guardarSitioDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd));
     if (r?.ok) revalidatePath(RUTA);
     return r;
@@ -56,13 +61,14 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionImportar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan sitios.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_10') };
     const archivo = fd.get('archivo');
     let texto = '';
     if (archivo instanceof File && archivo.size > 0) {
-      if (archivo.size > MAX_BYTES_CSV_SITIOS) return { ok: false, error: 'El archivo pesa más de 1 MB; divídelo en partes.' };
+      if (archivo.size > MAX_BYTES_CSV_SITIOS) return { ok: false, error: tx('rest.el_archivo_pesa_mas_de_1') };
       texto = await archivo.text();
     } else if (typeof fd.get('csv') === 'string') texto = fd.get('csv') as string;
     const dTxt = typeof fd.get('radio_defecto') === 'string' ? (fd.get('radio_defecto') as string).trim() : '';
@@ -73,13 +79,14 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionImportarEquivalencias(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan equivalencias.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_11') };
     const archivo = fd.get('archivo');
     let texto = '';
     if (archivo instanceof File && archivo.size > 0) {
-      if (archivo.size > MAX_BYTES_CSV_SITIOS) return { ok: false, error: 'El archivo pesa más de 1 MB; divídelo en partes.' };
+      if (archivo.size > MAX_BYTES_CSV_SITIOS) return { ok: false, error: tx('rest.el_archivo_pesa_mas_de_1') };
       texto = await archivo.text();
     } else if (typeof fd.get('csv') === 'string') texto = fd.get('csv') as string;
     const r = aResultado(await importarEquivalenciasDelPanel({ tenantId: s.tenantId, rol: s.rol }, { texto }));
@@ -89,12 +96,13 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionCatalogo(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan el catálogo.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_12') };
     const archivo = fd.get('archivo');
-    if (!(archivo instanceof File) || archivo.size === 0) return { ok: false, error: 'Elige el archivo del catálogo.' };
-    if (archivo.size > MAX_BYTES_CATALOGO) return { ok: false, error: 'El archivo pesa más de 8 MB; divídelo en partes.' };
+    if (!(archivo instanceof File) || archivo.size === 0) return { ok: false, error: tx('rest.elige_el_archivo_del_catalogo') };
+    if (archivo.size > MAX_BYTES_CATALOGO) return { ok: false, error: tx('rest.el_archivo_pesa_mas_de_8') };
     const cupo = Number(fd.get('cupo'));
     const dTxt = typeof fd.get('radio_defecto') === 'string' ? (fd.get('radio_defecto') as string).trim() : '';
     const r = aResultado(await importarCatalogoDelPanel({ tenantId: s.tenantId, rol: s.rol }, {
@@ -107,9 +115,10 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionAsignarEquivalencia(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan las equivalencias.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_13') };
     const r = aResultado(await asignarEquivalenciaDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd));
     if (r?.ok) revalidatePath(RUTA);
     return r;
@@ -117,9 +126,10 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionEstado(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan el catálogo.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_9') };
     // A37-S13-06: el resultado se DEVUELVE (antes se descartaba): un fallo o «ya no existe» tiene que verse.
     const r = aResultado(await archivarSitioDelPanel({ tenantId: s.tenantId, rol: s.rol }, String(fd.get('id') ?? ''), fd.get('activa') === 'si'));
     if (r?.ok) revalidatePath(RUTA);

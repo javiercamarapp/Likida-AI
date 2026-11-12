@@ -10,7 +10,7 @@
   clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 
-/* Organización: rótulo en mayúsculas 11/500 con tracking, selector de 32 y «Ir ↗» */
+/* Organización: rótulo en mayúsculas 11/500 con tracking, selector de 32 y «Ir ↗». Tipografía del pie como Rovaq (medido en vivo 10-nov): selector 12/400, «Ir» y acceso cruzado 12/500 (antes 13). */
 [data-ui="v2"] .rv-ps-org { display: grid; gap: 5px; margin: 0; padding: 0 2px 2px; min-width: 0; }
 [data-ui="v2"] .rv-ps-cap { margin: 0 2px; font-size: 11px; font-weight: 500; line-height: 1.5; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 [data-ui="v2"] .rv-ps-org__fila { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -19,7 +19,7 @@
 [data-ui="v2"] .rv-ps-campo {
   box-sizing: border-box; width: 100%; min-width: 0; height: 32px; padding: 0 28px 0 10px; display: flex; align-items: center;
   border: 1px solid var(--ui-line-strong); border-radius: 8px; background: var(--ui-surface); color: var(--ink);
-  font: 500 13px/1 var(--font-sans-ui, inherit); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 12px/1 var(--font-sans-ui, inherit); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   appearance: none; -webkit-appearance: none; cursor: pointer;
 }
 [data-ui="v2"] .rv-ps-campo { flex: 1 1 0%; cursor: default; padding-right: 10px; }
@@ -29,7 +29,7 @@
 [data-ui="v2"] .rv-ps-ir {
   position: relative; flex: none; box-sizing: border-box; height: 32px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px;
   border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-secondary);
-  font: 500 13px/1 var(--font-sans-ui, inherit); text-decoration: none;
+  font: 500 12px/1 var(--font-sans-ui, inherit); text-decoration: none;
 }
 [data-ui="v2"] .rv-ps-ir::after { content: ""; position: absolute; inset: -6px 0; }
 [data-ui="v2"] .rv-ps-ir:hover { background: var(--ui-soft); color: var(--ink); }
@@ -43,13 +43,14 @@
   border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1; background: var(--ui-soft); color: var(--muted);
 }
 [data-ui="v2"] .rv-ps-avisos { border: 0; background: transparent; }
-[data-ui="v2"] .rv-ps-avisos .rv-contador[data-urgente="si"] { background: var(--senal); color: var(--surface); }
+/* Punto de no leídos: 8 px burdeos (--senal), al extremo derecho de la fila; en el riel se monta sobre la esquina del icono */
+[data-ui="v2"] .rv-ps-punto { margin-left: auto; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--senal); }
 
 /* Acceso cruzado: tarjeta de 36 con borde, icono y texto (como «Administración de Rovaq AI») */
 [data-ui="v2"] .rv-ps-acceso {
   position: relative; display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 36px; margin: 0; padding: 7px 10px;
   border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-secondary);
-  font: 500 13px/1.25 var(--font-sans-ui, inherit); text-decoration: none;
+  font: 500 12px/1.25 var(--font-sans-ui, inherit); text-decoration: none;
 }
 [data-ui="v2"] .rv-ps-acceso svg { flex: none; }
 [data-ui="v2"] .rv-ps-acceso__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -101,7 +102,7 @@
   [data-ui="v2"] .rv-sb[data-riel] .rv-ps-acceso { justify-content: center; margin: 0 8px; padding: 0; height: 40px; border-color: transparent; background: transparent; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-ps-acceso__txt { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-ps-sindato { display: none; }
-  [data-ui="v2"] .rv-sb[data-riel] .rv-ps-avisos .rv-contador { display: none; }
+  [data-ui="v2"] .rv-sb[data-riel] .rv-ps-avisos .rv-ps-punto { position: absolute; top: 8px; right: 18px; margin: 0; }
 }
 @media (min-width: 768px) and (max-width: 1023.98px) {
   [data-ui="v2"] .rv-sb .rv-ps-org > .rv-ps-cap,
@@ -113,7 +114,7 @@
   [data-ui="v2"] .rv-sb .rv-ps-acceso { justify-content: center; margin: 0 8px; padding: 0; height: 40px; border-color: transparent; background: transparent; }
   [data-ui="v2"] .rv-sb .rv-ps-acceso__txt { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   [data-ui="v2"] .rv-sb .rv-ps-sindato { display: none; }
-  [data-ui="v2"] .rv-sb .rv-ps-avisos .rv-contador { display: none; }
+  [data-ui="v2"] .rv-sb .rv-ps-avisos .rv-ps-punto { position: absolute; top: 8px; right: 18px; margin: 0; }
 }
 
 /* ── Cabecera de escritorio: botón «Guía» como el de Rovaq (píldora de 28, borde 1, fondo suave, texto atenuado) ── */
@@ -123,3 +124,7 @@
 }
 [data-ui="v2"] .rv-cab-esc .rv-guia__btn:hover,
 [data-ui="v2"] .rv-cab-esc .rv-guia__btn[aria-expanded="true"] { background: var(--ui-surface); color: var(--ink); border-color: var(--ui-border); box-shadow: 0 0 0 1px var(--ui-border); }
+
+/* Fila con Tooltip del sistema (Avisos): el envoltorio ocupa la fila completa para no cambiar el ancho ni el alto del ítem. */
+[data-ui="v2"] .rv-ps .rv-ps-tip-fila { display: flex; width: 100%; }
+[data-ui="v2"] .rv-ps .rv-ps-tip-fila > .rv-item { flex: 1 1 auto; min-width: 0; }

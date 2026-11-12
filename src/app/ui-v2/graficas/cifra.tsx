@@ -3,6 +3,7 @@ import { Children, cloneElement, isValidElement, type ReactElement, type ReactNo
 import { numero } from '@/lib/formato';
 import { resolverFormato, type FormatoPreset } from '../formato-preset';
 import { metrica, type MetricaId } from '../metricas';
+import { matizDeEtiqueta } from './matiz-etiqueta';
 import type { InfoClave } from '../info-catalogo';
 import { InfoTip } from '../componentes/info-tip';
 import { BotonReintentar } from '../componentes/boton-reintentar';
@@ -79,7 +80,8 @@ export function Cifra(p: PropsCifra) {
   const error = p.estado === 'error';
   const vacio = !error && (p.estado === 'vacio' || p.valor === null || p.valor === undefined || p.valor === '—');
   const m = p.metrica ? metrica(p.metrica) : null;
-  const matiz = m?.matiz ?? p.matiz;
+  // Sin métrica ni matiz declarados, el matiz sale de lo que la etiqueta mide (matiz-etiqueta.ts); una celda de tono de atención o sin familia no lleva filete de dato.
+  const matiz = m?.matiz ?? p.matiz ?? (p.tono ? undefined : matizDeEtiqueta(p.etiqueta));
   const tipo: TipoDato | undefined = error ? 'sin_dato' : vacio ? 'sin_dato' : (p.tipo ?? m?.clase);
   const texto = vacio || error ? '—' : typeof p.valor === 'number' ? (p.formato ? resolverFormato(p.formato)(p.valor) : numero(p.valor)) : (p.valor as string);
   const delta = p.delta ?? (p.deltaPct ? {
@@ -150,12 +152,6 @@ export function selloDe(fuente: string, corte?: string | null): string {
   return corte ? `${fuente} · corte ${corte}` : fuente;
 }
 
-/** Matiz de datos (1..5) que una cifra SIN identidad de métrica toma por su lugar en la tira: así todo indicador lleva su filete de color.
- *  No es un ranking ni depende del dato: el lugar es fijo. Quien conozca la métrica pasa `metrica` y el color pasa a ser el de ella. */
-/** Una tira de cifras lleva UN solo acento neutro (matiz 8, la tinta), como Rovaq: antes cada celda estrenaba un color de datos distinto (azul, naranja, verde,
- *  teal, morado) que no decía nada del estado. El color por estado sigue siendo el tono (ok/warn/bad) y el de una métrica concreta, el suyo. */
-const MATIZ_NEUTRO = 8 as const;
-
 /** Tira de indicadores en UNA sola tarjeta (112 px): celdas separadas por filetes. Recibe `Cifra` como hijos o una lista `items`. */
 export function TiraCifras({ items, children, etiqueta = 'Indicadores', sello, className, elevar, entra }: {
   items?: PropsCifra[];
@@ -173,12 +169,11 @@ export function TiraCifras({ items, children, etiqueta = 'Indicadores', sello, c
     const el = c as ReactElement<PropsCifra>;
     const extra: Partial<PropsCifra> = {};
     if (sello && el.props.sello === undefined) extra.sello = sello;
-    if (el.props.metrica === undefined && el.props.matiz === undefined && el.props.tono === undefined) extra.matiz = MATIZ_NEUTRO;
     return Object.keys(extra).length ? cloneElement(el, extra) : c;
   });
   return (
     <section className={className ? `rv-kpis ${className}` : 'rv-kpis'} aria-label={etiqueta} data-lift={elevar || undefined} data-entra={entra}>
-      {items ? items.map((it) => <Cifra key={it.etiqueta} {...it} sello={it.sello ?? sello} matiz={it.metrica === undefined && it.matiz === undefined && it.tono === undefined ? MATIZ_NEUTRO : it.matiz} />) : null}
+      {items ? items.map((it) => <Cifra key={it.etiqueta} {...it} sello={it.sello ?? sello} />) : null}
       {hijos}
     </section>
   );

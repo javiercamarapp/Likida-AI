@@ -15,7 +15,12 @@ import { FormaEmision, type ResultadoForma } from './forma';
 import { ListaLlaves } from './vista';
 import { MarcoPagina, AvisoCompacto, EstadoError, Tarjeta } from '@/app/ui-v2/componentes';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Llaves de API' };
+import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('llaves.llaves_de_api') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +50,7 @@ export default async function PaginaLlavesApi({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t, idioma } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -60,10 +66,11 @@ export default async function PaginaLlavesApi({
 
   async function emitirLlave(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota emite llaves de API.' };
+      return { ok: false, error: t('llaves.solo_el_dueno_de_la_flota') };
     }
     const pasoMfa = await exigirStepUpAccion(s.rol, 'llave_api', { tenantId: s.tenantId, userId: s.userId });
     if (pasoMfa) return { ok: false, error: pasoMfa };
@@ -81,8 +88,8 @@ export default async function PaginaLlavesApi({
       return {
         ok: true,
         mensaje: llave.expiraEn
-          ? `Llave emitida. Deja de valer el ${fechaMx(llave.expiraEn)}: apunta la fecha para renovarla antes.`
-          : 'Llave emitida SIN caducidad: va a valer hasta que alguien la revoque a mano.',
+          ? t('llaves.llave_emitida_deja_de_valer_el', { fechaMx: fechaMx(llave.expiraEn, idioma) })
+          : t('llaves.llave_emitida_sin_caducidad_va_a'),
         // El ÚNICO viaje del secreto: del motor a esta respuesta y a la
         // pantalla. No se guarda en ningún lado — ver `SecretoUnaVez`.
         secreto: { enClaro: llave.enClaro, prefijo: llave.prefijo },
@@ -94,10 +101,11 @@ export default async function PaginaLlavesApi({
 
   async function revocarLlave(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota revoca llaves de API.' };
+      return { ok: false, error: t('llaves.solo_el_dueno_de_la_flota_2') };
     }
     const pasoMfa = await exigirStepUpAccion(s.rol, 'llave_api', { tenantId: s.tenantId, userId: s.userId });
     if (pasoMfa) return { ok: false, error: pasoMfa };
@@ -105,25 +113,25 @@ export default async function PaginaLlavesApi({
     try {
       await revocarLlaveApi(s.tenantId, String(fd.get('id') ?? '').trim(), s.userId);
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Llave revocada.' };
+      return { ok: true, mensaje: t('llaves.llave_revocada') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'revocar la llave') };
     }
   }
 
   return (
-    <MarcoPagina titulo="Llaves de API" apoyo="Con una llave, un sistema tuyo consume la API de Likida sin navegador ni sesión. Aquí las emites y las revocas.">
+    <MarcoPagina titulo={t('llaves.llaves_de_api')} apoyo={t('llaves.con_una_llave_un_sistema_tuyo')}>
       <AvisoCompacto tono="info"
-        resumen="Con una llave, un sistema tuyo (un TMS, un tablero) consume la API de Likida sin navegador ni sesión."
-        mas={<p>La llave se manda como <code className="cifra-mono">Authorization: Bearer</code> en cada petición. La referencia completa vive en <code className="cifra-mono">/api/v1/openapi</code>.</p>} />
+        resumen={t('llaves.con_una_llave_un_sistema_tuyo_2')}
+        mas={<p>{rico(t('llaves.la_llave_se_manda_como_e0'), { e0: (c) => <code className="cifra-mono">{c}</code>, e1: (c) => <code className="cifra-mono">{c}</code> })}</p>} />
 
       {llaves === null ? (
-        <EstadoError reintentar>No pude leer las llaves de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre llaves eso invita a emitir duplicados.</EstadoError>
+        <EstadoError reintentar>{t('llaves.no_pude_leer_las_llaves_de')}</EstadoError>
       ) : (
         <>
-          <ListaLlaves llaves={llaves} revocarLlave={revocarLlave} />
+          <ListaLlaves t={t} llaves={llaves} revocarLlave={revocarLlave} />
 
-          <Tarjeta titulo="Emitir una llave" info="llaves_api.emitir">
+          <Tarjeta titulo={t('llaves.emitir_una_llave')} info="llaves_api.emitir">
             <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
               vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
           </Tarjeta>

@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 
 // FASE 9 · P-DAS-DIN: lo fiscal y de dinero que ya vive en el sistema único (arco, legal, politicas, rentabilidad, cotizaciones, combustible-casetas, reglas,
-// suscripcion, contador, timbrado, descarga-sat y la lista de carta-porte). Pendiente de migrar: facturacion y carta-porte/documentos y borrador. Una pantalla que vuelva al kit viejo, a `.card` a mano, a `style=`,
+// suscripcion, contador, timbrado, descarga-sat y la lista de carta-porte). Pendiente de migrar: facturacion, borrador y la revisión de un documento (carta-porte/documentos/[id]); la bandeja de documentos y el detalle de liquidación los vigila pantallas_viejas_ui_v2.test.ts. Una pantalla que vuelva al kit viejo, a `.card` a mano, a `style=`,
 // a una tabla escrita a mano o a un emoji rompe esta prueba.
 const RAIZ = join(process.cwd(), 'src/app/dashboard');
 const CARPETAS = ['arco', 'legal', 'politicas', 'rentabilidad', 'cotizaciones', 'combustible-casetas', 'reglas', 'suscripcion', 'contador', 'timbrado', 'descarga-sat'];

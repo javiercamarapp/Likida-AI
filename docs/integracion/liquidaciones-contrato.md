@@ -15,6 +15,7 @@ Reglas generales: JSON en UTF-8; fechas `AAAA-MM-DD` (días en hora del Centro d
 | Campo | Obligatorio | Qué es |
 |---|---|---|
 | `bitacora` | sí | Folio de la bitácora principal (hasta 40 caracteres). |
+| `folio` | no | El número de bitácora que conoce el operador (hasta 40 caracteres). Solo se guarda y se muestra (Excel, asunto del correo y panel); no entra en la clave ni en la huella. Sin él se muestra `bitacora`. |
 | `bitacoras` | no | Todos los folios que junta la liquidación; debe incluir `bitacora`. Cada elemento es el folio o `{ "bitacora", "unidad" }`. Bitácoras de unidades distintas se rechazan. |
 | `numeroLiquidacion` | no, recomendado | Consecutivo de la liquidación en el sistema de origen. Si viene, es la clave de idempotencia. |
 | `numeroPago` | no, recomendado | Número del pago con el que se cubrió. |
@@ -81,6 +82,7 @@ Respuesta del push: `{ "datos": { "recibidas", "idempotentes", "retenidas", "exc
 {
   "terminal": "T01",
   "bitacora": "B-0001",
+  "folio": "F-0001",
   "bitacoras": ["B-0001", "B-0002"],
   "numeroLiquidacion": "L-0001",
   "numeroPago": "P-0001",

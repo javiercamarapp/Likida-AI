@@ -21,13 +21,13 @@ describe('CabeceraEscritorio: título, Guía pegada al título y ⌘K visible (i
     expect(html).toMatch(/class="rv-cab-esc__titulo" aria-hidden="true"/);
   });
 
-  it('el orden es plegar, título, Guía: el botón Guía queda DESPUÉS del título y en el lado izquierdo', () => {
+  it('el orden es título, Guía: el botón Guía queda DESPUÉS del título y en el lado izquierdo', () => {
     const izq = html.indexOf('rv-cab-esc__izq');
     const der = html.indexOf('rv-cab-esc__der');
     const titulo = html.indexOf('rv-cab-esc__titulo');
     const guia = html.indexOf('rv-guia__btn');
     expect(izq).toBeGreaterThanOrEqual(0);
-    expect(titulo).toBeGreaterThan(html.indexOf('rv-cab-esc__plegar'));
+    expect(titulo).toBeGreaterThan(izq);
     expect(guia).toBeGreaterThan(titulo);
     expect(guia).toBeLessThan(der);
   });
@@ -40,16 +40,15 @@ describe('CabeceraEscritorio: título, Guía pegada al título y ⌘K visible (i
     expect(html.indexOf('rv-cab-esc__buscar')).toBeGreaterThan(html.indexOf('rv-cab-esc__der'));
   });
 
-  it('el botón de plegar no usa title= (tiene Tooltip y aria-label)', () => {
-    expect(html).toMatch(/aria-label="Plegar el menú"/);
-    expect(html).toContain('role="tooltip"');
+  it('la cabecera no trae botón de plegar (vive en la marca del sidebar) y no usa title=', () => {
+    expect(html).not.toContain('rv-cab-esc__plegar');
     expect(html).not.toMatch(/title=/);
   });
 });
 
 describe('title= en el shell: ningún botón de solo icono lo usa', () => {
   it('los botones de icono del shell (plegar, Guía compacta, campana móvil) usan Tooltip', () => {
-    for (const f of ['cabecera-escritorio.tsx', 'sidebar-v2.tsx', 'cabecera-movil.tsx']) {
+    for (const f of ['sidebar-v2.tsx', 'cabecera-movil.tsx']) {
       expect(leer(f), f).not.toMatch(/\btitle=/);
       expect(leer(f), f).toContain('Tooltip');
     }

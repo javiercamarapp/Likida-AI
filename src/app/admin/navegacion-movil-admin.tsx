@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { LayoutGrid } from 'lucide-react';
-import { SECCIONES, type Item } from './rutas';
+import { COPILOTO, SECCIONES, type Item } from './rutas';
 import { PieAdmin } from './sidebar-nav';
 import { useRequiereAccion, etiquetaCampana } from './cabecera-admin';
 import { CabeceraMovilVista } from '../dashboard/shell/cabecera-movil';
@@ -23,9 +23,9 @@ import { useT } from '@/lib/i18n/proveedor';
 
 const RESUMEN: Item = { href: '/admin', nombre: 'Resumen', Icono: LayoutGrid };
 
-/** El menú del admin con la forma que entiende `ArbolMenu`: Resumen arriba y las cuatro secciones como grupos. */
+/** El menú del admin con la forma que entiende `ArbolMenu`: Resumen y Copiloto arriba (primer nivel) y las cuatro secciones como grupos. */
 export const MENU_ADMIN: MenuV2 = {
-  resumen: [RESUMEN],
+  resumen: [RESUMEN, COPILOTO],
   grupos: SECCIONES.map((s) => ({ id: s.titulo.toLowerCase(), titulo: s.titulo, items: s.items })),
   pie: [],
 };
@@ -39,7 +39,7 @@ const DESTINOS_BARRA: ReadonlyArray<{ href: string; etiqueta: string }> = [
 
 /** Los destinos de la barra, resueltos contra el mapa real (si una entrada desaparece de `rutas.ts`, desaparece de la barra). */
 export function destinosBarraAdmin(): DestinoMovil[] {
-  const porHref = new Map<string, Item>([RESUMEN, ...SECCIONES.flatMap((s) => s.items)].map((i) => [i.href, i]));
+  const porHref = new Map<string, Item>([RESUMEN, COPILOTO, ...SECCIONES.flatMap((s) => s.items)].map((i) => [i.href, i]));
   return DESTINOS_BARRA.flatMap((d) => {
     const it = porHref.get(d.href);
     return it ? [{ href: it.href, nombre: it.nombre, etiqueta: d.etiqueta, Icono: it.Icono }] : [];

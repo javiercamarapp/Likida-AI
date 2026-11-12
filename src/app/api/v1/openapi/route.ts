@@ -33,6 +33,7 @@
 // cosmético — varios generadores toman el primer esquema como el default.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { DESCRIPCION_MUESTRA_TMS, ESQUEMAS_MUESTRA_TMS, PARAMETRO_SIMULAR, PROPIEDAD_FOLIO, PROPIEDADES_RESULTADO_MUESTRA } from '@/lib/likida/liquidacion_externa/openapi_muestra_tms';
 import { NextResponse } from 'next/server';
 import { clientIp, rateLimit } from '@/lib/ratelimit';
 import { getSessionTenant } from '@/lib/auth/session';
@@ -615,6 +616,7 @@ function documento(servidor: string) {
       },
       schemas: {
         Error: cuerpoError,
+        ...ESQUEMAS_MUESTRA_TMS,
         ResultadoDesgloses: {
           type: 'object',
           properties: { datos: { type: 'object', properties: {
@@ -622,7 +624,8 @@ function documento(servidor: string) {
             idempotentes: { type: 'integer', description: 'Ya existían con el mismo contenido: no se hizo nada.' },
             retenidas: { type: 'integer', description: 'Guardadas pero detenidas por una guarda: sin entregas hasta que una persona decida.' },
             excepciones: { type: 'array', items: { type: 'object', properties: { clave: { type: 'string' }, motivo: { type: 'string', description: 'p. ej. `correccion_pendiente`, `operador_no_encontrado`, `sin_poliza`, `operador_sin_correo`.' } }, required: ['clave', 'motivo'] } },
-          }, required: ['recibidas', 'idempotentes', 'retenidas', 'excepciones'] } },
+            ...PROPIEDADES_RESULTADO_MUESTRA,
+          }, required: ['recibidas', 'idempotentes', 'retenidas', 'excepciones', 'resultados'] } },
           required: ['datos'],
         },
         // ── 0370: la liquidación que calculó el SAP/TMS del cliente ────────
@@ -1482,11 +1485,14 @@ function documento(servidor: string) {
             + 'ESTRICTA Y TODO-O-NADA: un campo desconocido (también un identificador de flota: la flota sale de tu credencial), un renglón en cero o un neto que no cuadra en CUALQUIER elemento es 400 con su índice y no se guarda ninguno.\n\n'
             + 'IDEMPOTENTE: la clave sale de `terminal` + `bitacora`. La misma bitácora con el mismo contenido cuenta en `idempotentes` y no reenvía nada. La misma bitácora con OTRO contenido NO se sobrescribe: sale en `excepciones` con `motivo = correccion_pendiente` y una persona decide si manda la corrección. Una guarda que retiene (neto negativo, sin póliza, concepto prohibido) cuenta en `retenidas`.\n\n'
             + 'CORRECCIÓN DECIDIDA: con `correccion: { motivo }` en el sobre, quien administra manda estas bitácoras como corrección de las ya recibidas: entran como `<clave>-R<n>` (archivo nuevo; el operador las recibe rotuladas «CORRECCIÓN») y la original queda como constancia. Reintentar la misma corrección es idempotente.\n\n'
-            + 'ESTA RUTA NO ENTREGA: solo recibe y programa; los correos salen aparte. 201 si se guardó al menos una; 200 si todo ya existía o solo hubo excepciones. Un 500 a mitad es seguro de reintentar completo: lo ya guardado vuelve como idempotente.',
+            + 'ESTA RUTA NO ENTREGA: solo recibe y programa; los correos salen aparte. 201 si se guardó al menos una; 200 si todo ya existía o solo hubo excepciones. Un 500 a mitad es seguro de reintentar completo: lo ya guardado vuelve como idempotente.\n\n'
+            + DESCRIPCION_MUESTRA_TMS,
           tags: ['liquidaciones', 'dinero'],
-          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { desgloses: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', properties: {
+          parameters: [PARAMETRO_SIMULAR],
+          requestBody: { required: true, content: { 'application/json': { schema: { oneOf: [{ $ref: '#/components/schemas/SobreMuestraTms' }, { type: 'object', properties: { desgloses: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', properties: {
             terminal: { type: 'string', maxLength: 40 },
             bitacora: { type: 'string', maxLength: 40 },
+            folio: PROPIEDAD_FOLIO,
             poliza: { type: 'string', nullable: true, maxLength: 40 },
             operador: { type: 'object', properties: { numeroEmpleado: { type: 'string', maxLength: 40 }, nombre: { type: 'string', maxLength: 120 } }, required: ['numeroEmpleado'], additionalProperties: false },
             unidad: { type: 'string', maxLength: 40 },
@@ -1498,7 +1504,7 @@ function documento(servidor: string) {
             deducciones: { type: 'array', maxItems: 100, items: { type: 'object', properties: { concepto: { type: 'string', maxLength: 120 }, monto: { type: 'number', exclusiveMinimum: 0 }, vale: { type: 'string', maxLength: 60 } }, required: ['concepto', 'monto'], additionalProperties: false } },
             neto: { type: 'number' },
             enviadoOrigen: { type: 'boolean' },
-          }, required: ['bitacora', 'operador', 'desde', 'hasta'], additionalProperties: false } }, correccion: { type: 'object', properties: { motivo: { type: 'string', minLength: 3, maxLength: 300 } }, required: ['motivo'], additionalProperties: false } }, required: ['desgloses'], additionalProperties: false } } } },
+          }, required: ['bitacora', 'operador', 'desde', 'hasta'], additionalProperties: false } }, correccion: { type: 'object', properties: { motivo: { type: 'string', minLength: 3, maxLength: 300 } }, required: ['motivo'], additionalProperties: false } }, required: ['desgloses'], additionalProperties: false }] } } } },
           responses: {
             '200': { description: 'Nada nuevo se guardó (todo ya existía o solo hubo excepciones).', content: { 'application/json': { schema: { $ref: '#/components/schemas/ResultadoDesgloses' } } } },
             '201': { description: 'Se guardó al menos una liquidación.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ResultadoDesgloses' } } } },

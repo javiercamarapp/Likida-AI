@@ -13,6 +13,9 @@ import {
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { FormaConAviso, CampoTexto, Tarjeta, Disclosure, type ResultadoAccion } from '@/app/ui-v2/componentes';
 import './unidades.css';
+import { getT } from '@/lib/i18n/servidor';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 /**
  * EL TALLER (Fase 9, 0209) — la sección de mantenimiento del registro de
@@ -34,17 +37,17 @@ import './unidades.css';
 
 const RUTA = '/dashboard/unidades';
 
-const MOTIVO: Record<PropuestaRutina['motivo'], string> = {
-  vencida_por_dias: 'vencida por días',
-  vencida_por_km: 'vencida por kilómetros',
-  sin_historial: 'sin historial — nunca se le ha hecho; propuesta de arranque',
-  sin_odometro: 'sin odómetro declarado — la rutina es por km y la unidad no tiene km capturado: no se puede evaluar',
-  odometro_desactualizado: 'odómetro desactualizado — el km de la unidad quedó atrás del km del último servicio: captura el km actual en la unidad para poder leer el reloj',
-};
+const motivoTr = (t: TResto = T_RESTO_ES): Record<PropuestaRutina['motivo'], string> => ({
+  vencida_por_dias: t('op.vencida_por_dias'),
+  vencida_por_km: t('op.vencida_por_kilometros'),
+  sin_historial: t('op.sin_historial_nunca_se_le_ha'),
+  sin_odometro: t('op.sin_odometro_declarado_la_rutina_es'),
+  odometro_desactualizado: t('op.odometro_desactualizado_el_km_de_la'),
+});
 
-function Origen({ o }: { o: OrdenTaller }) {
-  if (o.deAveria) return <span>de avería autorizada (talacha)</span>;
-  if (o.deRutina) return <span>de rutina «{o.deRutina}»</span>;
+function Origen({ o, t = T_RESTO_ES }: { o: OrdenTaller; t?: TResto }) {
+  if (o.deAveria) return <span>{t('op.de_averia_autorizada_talacha')}</span>;
+  if (o.deRutina) return <span>{t('op.de_rutina', { deRutina: o.deRutina })}</span>;
   return <span>capturada</span>;
 }
 
@@ -53,6 +56,7 @@ export async function BloqueTaller({
 }: {
   sp: { tenant?: string; rol?: string; vista?: string };
 }) {
+  const { t, idioma } = await getT('resto');
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) return null;
 
@@ -80,9 +84,10 @@ export async function BloqueTaller({
 
   async function accionCrearRutina(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede ver las unidades.' };
-    if (!puedeAdministrar(s.rol)) return { error: 'Solo el dueño de la flota declara rutinas de mantenimiento.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: t('op.tu_rol_no_puede_ver_las') };
+    if (!puedeAdministrar(s.rol)) return { error: t('op.solo_el_dueno_de_la_flota_2') };
     try {
       const v = validarRutina({
         nombre: String(fd.get('nombre') ?? ''),
@@ -91,7 +96,7 @@ export async function BloqueTaller({
       });
       await crearRutina(s.tenantId, v, s.userId);
       revalidatePath(RUTA);
-      return { ok: `La rutina «${v.nombre}» quedó declarada. Sus propuestas salen aquí en cuanto venza en alguna unidad.` };
+      return { ok: t('op.la_rutina_quedo_declarada_sus_propuestas', { nombre: v.nombre }) };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'declarar la rutina') };
     }
@@ -99,15 +104,16 @@ export async function BloqueTaller({
 
   async function accionAbrirOrden(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return { error: 'Abrir órdenes de taller es del encargado o del dueño.' };
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return { error: t('op.abrir_ordenes_de_taller_es_del') };
     try {
       // A37-S20-01: el patio de la unidad sale de la BASE; fuera del alcance no se abre.
       const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
       const unidadId = String(fd.get('unidadId') ?? '');
       const actual = await terminalDeRegistro('unidad', s.tenantId, unidadId);
       if (!alcanceAccion || !actual.encontrado || !dentroDelAlcance(alcanceAccion, actual.terminalId)) {
-        return { error: 'Esa unidad no es de tu patio.' };
+        return { error: t('op.esa_unidad_no_es_de_tu') };
       }
       await abrirOrdenProgramada(s.tenantId, String(fd.get('rutinaId') ?? ''), unidadId);
     } catch (e) {
@@ -125,23 +131,24 @@ export async function BloqueTaller({
 
   async function accionCerrarOrden(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede ver las unidades.' };
-    if (!puedeAsignar(s.rol)) return { error: 'Cerrar órdenes de taller es del encargado o del dueño.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: t('op.tu_rol_no_puede_ver_las') };
+    if (!puedeAsignar(s.rol)) return { error: t('op.cerrar_ordenes_de_taller_es_del') };
     try {
       // A37-S20-01: la unidad de la orden y su patio salen de la BASE, no del
       // formulario; un POST con la orden de otro patio rebota antes de cerrarla.
       const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-      if (!alcanceAccion) return { error: 'No pude comprobar tu patio — no se cerró nada. Vuelve a intentar.' };
+      if (!alcanceAccion) return { error: t('op.no_pude_comprobar_tu_patio_no') };
       const ordenId = String(fd.get('ordenId') ?? '');
       const unidadId = await unidadDeOrden(s.tenantId, ordenId);
-      if (!unidadId) return { error: 'Esa orden no existe en tu flota. Recarga la pantalla.' };
+      if (!unidadId) return { error: t('op.esa_orden_no_existe_en_tu') };
       const actual = await terminalDeRegistro('unidad', s.tenantId, unidadId);
-      if (!actual.encontrado) return { error: 'No se encontró la unidad de esa orden en tu flota. Recarga la pantalla.' };
+      if (!actual.encontrado) return { error: t('op.no_se_encontro_la_unidad_de') };
       exigirDentroDelAlcance(alcanceAccion, actual.terminalId);
       const kmCrudo = String(fd.get('kmServicio') ?? '').trim();
       const km = kmCrudo === '' ? null : Number(kmCrudo);
-      if (km !== null && !Number.isFinite(km)) return { error: 'El kilometraje tiene que ser un número (o déjalo vacío si no se sabe).' };
+      if (km !== null && !Number.isFinite(km)) return { error: t('op.el_kilometraje_tiene_que_ser_un') };
       await cerrarOrden(s.tenantId, ordenId, km === null ? null : Math.trunc(km));
       revalidatePath(RUTA);
       return { ok: 'Orden cerrada.' };
@@ -151,30 +158,24 @@ export async function BloqueTaller({
   }
 
   return (
-    <section className="rv-un__taller" aria-label="Taller de las unidades">
+    <section className="rv-un__taller" aria-label={t('op.taller_de_las_unidades')}>
       {/* ── Órdenes abiertas ── */}
-      <Tarjeta titulo={`Taller: órdenes abiertas (${taller.ordenesAbiertas.length})`}>
+      <Tarjeta titulo={t('op.taller_ordenes_abiertas', { length: taller.ordenesAbiertas.length })}>
         {taller.ordenesAbiertas.length === 0 ? (
-          <p className="rv-un__nota">
-            {/* c3-5: la promesa completa. Los viajes dados de alta por WhatsApp no
-                traen unidad asignada (0047) y su avería NO puede abrir orden — para
-                una flota 100 % WhatsApp el texto anterior era mentira permanente. */}
-            Sin órdenes abiertas. Las averías que tu jefe de patio autoriza por WhatsApp abren la suya solas
-            cuando el viaje tiene unidad asignada; sin unidad, la orden se abre aquí a mano.
-          </p>
+          <p className="rv-un__nota">{t('op.sin_ordenes_abiertas_las_averias_que')}</p>
         ) : (
           <div className="rv-un__bloque">
             {taller.ordenesAbiertas.map((o) => (
               <Disclosure key={o.id} variante="tarjeta"
-                titulo={<>Unidad {o.unidadEco} · {o.tipo} · <Origen o={o} /></>}
-                resumen={fechaHoraMx(o.abiertaEn)}>
+                titulo={<>Unidad {o.unidadEco} · {o.tipo} · <Origen t={t} o={o} /></>}
+                resumen={fechaHoraMx(o.abiertaEn, idioma)}>
                 <div className="rv-un__detalle">
                   {o.descripcion && <span>{o.descripcion}</span>}
                   {opera && dentro(o.unidadId) && (
-                    <FormaConAviso accion={accionCerrarOrden} boton="Cerrar orden" columnas="md:grid-cols-2">
+                    <FormaConAviso accion={accionCerrarOrden} boton={t('op.cerrar_orden')} columnas="md:grid-cols-2">
                       <input type="hidden" name="ordenId" value={o.id} />
-                      <CampoTexto name="kmServicio" tipo="number" etiqueta="Km al momento del servicio"
-                        ayuda="Déjalo vacío si no se sabe: un km que no se midió no se inventa. Alimenta el reloj de las rutinas por km." />
+                      <CampoTexto name="kmServicio" tipo="number" etiqueta={t('op.km_al_momento_del_servicio')}
+                        ayuda={t('op.dejalo_vacio_si_no_se_sabe')} />
                     </FormaConAviso>
                   )}
                 </div>
@@ -187,34 +188,25 @@ export async function BloqueTaller({
       {/* ── Propuestas de las rutinas ── */}
       <Tarjeta titulo={`Rutinas preventivas: propuestas (${taller.propuestas.length})`}>
         {taller.rutinas.length === 0 ? (
-          <p className="rv-un__nota">
-            Sin rutinas declaradas. Declara abajo la primera (p. ej. «Servicio de motor» cada 10,000 km o 180 días) y Likida
-            te propone aquí cuál unidad ya la trae vencida.
-          </p>
+          <p className="rv-un__nota">{t('op.sin_rutinas_declaradas_declara_abajo_la')}</p>
         ) : taller.propuestas.length === 0 ? (
-          <p className="rv-un__nota">
-            Ninguna rutina vencida en las unidades activas, con los relojes que se pueden leer (el km solo cuenta si está
-            capturado en la unidad y en el servicio anterior).
-          </p>
+          <p className="rv-un__nota">{t('op.ninguna_rutina_vencida_en_las_unidades')}</p>
         ) : (
           <div className="rv-un__bloque">
             {taller.propuestas.map((p) => (
               <div key={`${p.rutinaId}|${p.unidadId}`} className="rv-un__item">
-                <div className="rv-un__item-cab">
-                  <strong>Unidad {p.unidadEco}</strong>
-                  <span>«{p.rutinaNombre}»</span>
-                  <span className="rv-un__apagado">
-                    {MOTIVO[p.motivo]}
-                    {p.diasDesdeServicio !== null && ` · ${p.diasDesdeServicio} días del último servicio`}
-                    {p.kmDesdeServicio !== null && ` · ${numero(p.kmDesdeServicio)} km recorridos`}
+                <div className="rv-un__item-cab">{rico(t('op.strong_unidad_strong_e1_e1', { unidadEco: p.unidadEco, rutinaNombre: p.rutinaNombre }), { strong: (c) => <strong>{c}</strong>, e1: (c) => <span>{c}</span> })}<span className="rv-un__apagado">
+                    {motivoTr(t)[p.motivo]}
+                    {p.diasDesdeServicio !== null && t('op.dias_del_ultimo_servicio', { diasDesdeServicio: p.diasDesdeServicio })}
+                    {p.kmDesdeServicio !== null && ` · ${numero(p.kmDesdeServicio, idioma)} km recorridos`}
                   </span>
                   {opera && p.motivo === 'sin_odometro' && (
-                    <span className="rv-un__fin">captura el km de la unidad para evaluarla</span>
+                    <span className="rv-un__fin">{t('op.captura_el_km_de_la_unidad')}</span>
                   )}
                 </div>
                 {/* Los motivos de dato faltante piden capturar el dato, no abrir una orden que nadie sabe si toca. */}
                 {opera && dentro(p.unidadId) && p.motivo !== 'sin_odometro' && p.motivo !== 'odometro_desactualizado' && (
-                  <FormaConAviso accion={accionAbrirOrden} boton="Abrir orden" columnas="md:grid-cols-1">
+                  <FormaConAviso accion={accionAbrirOrden} boton={t('op.abrir_orden')} columnas="md:grid-cols-1">
                     <input type="hidden" name="rutinaId" value={p.rutinaId} />
                     <input type="hidden" name="unidadId" value={p.unidadId} />
                   </FormaConAviso>
@@ -227,11 +219,11 @@ export async function BloqueTaller({
 
       {/* ── Declarar rutina ── */}
       {administra && (
-        <Disclosure variante="tarjeta" titulo="Declarar una rutina de mantenimiento">
-          <FormaConAviso accion={accionCrearRutina} boton="Declarar rutina">
-            <CampoTexto name="nombre" etiqueta="Nombre" placeholder="Servicio de motor" obligatorio />
-            <CampoTexto name="cadaDias" tipo="number" etiqueta="Cada cuántos días" ayuda="Vacío si la rutina no corre por tiempo." />
-            <CampoTexto name="cadaKm" tipo="number" etiqueta="Cada cuántos km" ayuda="Vacío si no corre por km. Con ambos, vence lo que ocurra primero." />
+        <Disclosure variante="tarjeta" titulo={t('op.declarar_una_rutina_de_mantenimiento')}>
+          <FormaConAviso accion={accionCrearRutina} boton={t('op.declarar_rutina')}>
+            <CampoTexto name="nombre" etiqueta={t('llaves.nombre')} placeholder={t('op.servicio_de_motor')} obligatorio />
+            <CampoTexto name="cadaDias" tipo="number" etiqueta={t('op.cada_cuantos_dias')} ayuda={t('op.vacio_si_la_rutina_no_corre')} />
+            <CampoTexto name="cadaKm" tipo="number" etiqueta={t('op.cada_cuantos_km')} ayuda={t('op.vacio_si_no_corre_por_km')} />
           </FormaConAviso>
         </Disclosure>
       )}

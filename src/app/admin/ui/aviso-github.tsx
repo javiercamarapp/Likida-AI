@@ -8,17 +8,18 @@ import { AvisoCompacto } from '../../ui-v2/componentes/aviso';
  * Sin funciones como props: se pinta desde componentes de servidor.
  */
 export function AvisoGitHub({ causa }: { causa: 'sin_token' | 'error' }) {
+  // Lo visible NO nombra variables de entorno ni paneles de despliegue (Rovaq nunca los muestra): el nombre de la variable y dónde
+  // se define quedan en el comentario de arriba, para quien arregle la configuración.
   return (
     <AvisoCompacto
       tono="warn"
       resumen={causa === 'sin_token'
-        ? <>Falta configurar el acceso a GitHub: define la variable <code>GITHUB_TOKEN</code> en Vercel (Production).</>
-        : <>GitHub no dejó leer el repo: revisa que <code>GITHUB_TOKEN</code> en Vercel siga vigente y tenga lectura del repositorio.</>}
+        ? <>Falta configurar el acceso a GitHub: pídele al equipo técnico que conecte la lectura del repositorio.</>
+        : <>GitHub no dejó leer el repositorio: el acceso configurado puede haber vencido o no tener permiso de lectura.</>}
       mas={(
         <>
-          <p>Va en Vercel → Settings → Environment Variables → Production, y se necesita un nuevo despliegue para que la tome. El repo es privado, así que el token
-            debe ser de solo lectura sobre <code>javiercamarapp/likida.ai</code> (otro repo: variable <code>GITHUB_REPO</code>).</p>
-          {causa === 'error' && <p>Un error 401 significa que el token existe pero venció, fue revocado o no tiene ese permiso: genera uno nuevo y sustitúyelo.</p>}
+          <p>Es una configuración del servidor, no algo que se corrija desde esta pantalla; el acceso debe ser de solo lectura sobre el repositorio y se estrena con un nuevo despliegue.</p>
+          {causa === 'error' && <p>Si GitHub rechazó el acceso (vencido o revocado), hay que generar uno nuevo y sustituirlo.</p>}
           <p>Mientras tanto estas secciones no afirman nada: no es que no haya commits, es que no se pudieron leer.</p>
         </>
       )}

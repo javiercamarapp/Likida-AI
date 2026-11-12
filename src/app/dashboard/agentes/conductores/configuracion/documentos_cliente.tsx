@@ -7,6 +7,8 @@ import '../conductores.css';
 import { Boton, Casilla, CampoSelect, CampoTexto, Icono } from '@/app/ui-v2/componentes';
 import { Aviso, type AccionSitio } from '../sitios/formas';
 import { catalogoDeCliente, type DocumentoCliente } from '@/lib/likida/conductor/documentos_cliente';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS DOCUMENTOS QUE PIDE CADA CLIENTE (T-A5-52, R24, 0809): ver, agregar y quitar, en lenguaje llano.
@@ -15,17 +17,19 @@ import { catalogoDeCliente, type DocumentoCliente } from '@/lib/likida/conductor
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BotonAgregar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Plus} tam={14} />}>
-      {pending ? 'Guardando…' : 'Agregar documento'}
+      {pending ? 'Guardando…' : tx('rest.agregar_documento')}
     </Boton>
   );
 }
 
 function BotonQuitar({ nombre }: { nombre: string }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
-  return <Boton type="submit" tamano="sm" loading={pending} aria-label={`Quitar ${nombre}`}>{pending ? 'Quitando…' : 'Quitar'}</Boton>;
+  return <Boton type="submit" tamano="sm" loading={pending} aria-label={`Quitar ${nombre}`}>{pending ? 'Quitando…' : tx('rest.quitar')}</Boton>;
 }
 
 const textoRequisitos = (d: DocumentoCliente): string => {
@@ -50,22 +54,23 @@ function FilaDocumento({ d, accion }: { d: DocumentoCliente; accion?: AccionSiti
 }
 
 function FormaAgregar({ clientes, accion }: { clientes: Array<{ id: string; nombre: string }>; accion: AccionSitio }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="rv-cd__pila" aria-label="Agregar documento de un cliente">
+    <form action={enviar} className="rv-cd__pila" aria-label={tx('rest.agregar_documento_de_un_cliente')}>
       <div className="rv-cd__cuad">
-        <CampoSelect etiqueta="Cliente" name="clienteId" required defaultValue="">
-          <option value="" disabled>Elige un cliente</option>
+        <CampoSelect etiqueta={tx('vigia.vista.cliente')} name="clienteId" required defaultValue="">
+          <option value="" disabled>{tx('rest.elige_un_cliente')}</option>
           {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </CampoSelect>
-        <CampoTexto etiqueta="Documento" name="nombre" required maxLength={80} placeholder="Ej.: carta porte, ticket de báscula cargado" />
-        <CampoSelect etiqueta="¿Es indispensable?" name="tipo" defaultValue="basico">
-          <option value="basico">Básico (sin él no se cierra el viaje)</option>
-          <option value="complementario">Complementario (se pide, pero no frena el cierre)</option>
+        <CampoTexto etiqueta={tx('rest.documento')} name="nombre" required maxLength={80} placeholder={tx('rest.ej_carta_porte_ticket_de_bascula')} />
+        <CampoSelect etiqueta={tx('rest.es_indispensable')} name="tipo" defaultValue="basico">
+          <option value="basico">{tx('rest.basico_sin_el_no_se_cierra')}</option>
+          <option value="complementario">{tx('rest.complementario_se_pide_pero_no_frena')}</option>
         </CampoSelect>
         <div className="rv-cd__linea">
-          <Casilla name="requiereFirma" etiqueta="Debe venir firmado" />
-          <Casilla name="requiereSello" etiqueta="Debe venir sellado" />
+          <Casilla name="requiereFirma" etiqueta={tx('rest.debe_venir_firmado')} />
+          <Casilla name="requiereSello" etiqueta={tx('rest.debe_venir_sellado')} />
         </div>
       </div>
       <div className="rv-cd__linea"><BotonAgregar /></div>
@@ -81,11 +86,10 @@ export function DocumentosCliente({ clientes, documentos, accionAlta, accionBaja
   accionAlta?: AccionSitio;
   accionBaja?: AccionSitio;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   if (documentos === null) {
     return (
-      <p role="alert" className="rv-cd__nota" data-tono="bad">
-        No se pudo leer el catálogo de documentos ahora mismo; intenta de nuevo en un momento. Si se repite, avísale a Likida.
-      </p>
+      <p role="alert" className="rv-cd__nota" data-tono="bad">{tx('rest.no_se_pudo_leer_el_catalogo_2')}</p>
     );
   }
   const nombres = new Map(clientes.map((c) => [c.id, c.nombre]));
@@ -99,11 +103,9 @@ export function DocumentosCliente({ clientes, documentos, accionAlta, accionBaja
     <div className="rv-cd__pila">
       {accionAlta && (clientes.length > 0
         ? <FormaAgregar clientes={clientes} accion={accionAlta} />
-        : <p role="status" className="rv-cd__nota">Todavía no hay clientes dados de alta; cuando los haya, aquí eliges de cuál son los documentos.</p>)}
+        : <p role="status" className="rv-cd__nota">{tx('rest.todavia_no_hay_clientes_dados_de')}</p>)}
       {conCatalogo.length === 0 ? (
-        <p role="status" className="rv-cd__nota">
-          Ningún cliente tiene documentos propios todavía. A todos se les pide solo el comprobante de entrega de siempre.
-        </p>
+        <p role="status" className="rv-cd__nota">{tx('rest.ningun_cliente_tiene_documentos_propios_todavia')}</p>
       ) : (
         <div className="rv-cd__pila">
           {conCatalogo.map((c) => {
@@ -113,13 +115,13 @@ export function DocumentosCliente({ clientes, documentos, accionAlta, accionBaja
                 <p className="rv-cd__medio">{c.nombre}</p>
                 {cat.basicos.length > 0 && (
                   <div>
-                    <p className="rv-cd__nota">Básicos: sin ellos no se cierra el viaje</p>
-                    <ul className="rv-cd__lista" aria-label={`Documentos básicos de ${c.nombre}`}>{cat.basicos.map((d) => <FilaDocumento key={d.id} d={d} accion={accionBaja} />)}</ul>
+                    <p className="rv-cd__nota">{tx('rest.basicos_sin_ellos_no_se_cierra')}</p>
+                    <ul className="rv-cd__lista" aria-label={tx('rest.documentos_basicos_de', { nombre: c.nombre })}>{cat.basicos.map((d) => <FilaDocumento key={d.id} d={d} accion={accionBaja} />)}</ul>
                   </div>
                 )}
                 {cat.complementarios.length > 0 && (
                   <div>
-                    <p className="rv-cd__nota">Complementarios: se piden, pero no frenan el cierre</p>
+                    <p className="rv-cd__nota">{tx('rest.complementarios_se_piden_pero_no_frenan')}</p>
                     <ul className="rv-cd__lista" aria-label={`Documentos complementarios de ${c.nombre}`}>{cat.complementarios.map((d) => <FilaDocumento key={d.id} d={d} accion={accionBaja} />)}</ul>
                   </div>
                 )}
@@ -128,8 +130,7 @@ export function DocumentosCliente({ clientes, documentos, accionAlta, accionBaja
           })}
           {sinCatalogo > 0 && (
             <p className="rv-cd__nota">
-              {sinCatalogo} cliente{sinCatalogo === 1 ? '' : 's'} sin documentos propios: a {sinCatalogo === 1 ? 'ese' : 'esos'} se les pide solo el comprobante de entrega de siempre.
-            </p>
+              {tx(sinCatalogo === 1 ? 'rest.n_cliente_sin_documentos_propios.uno' : 'rest.n_cliente_sin_documentos_propios.otros', { n: sinCatalogo })}</p>
           )}
         </div>
       )}

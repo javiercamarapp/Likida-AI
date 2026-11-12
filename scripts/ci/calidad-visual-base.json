@@ -1,0 +1,17 @@
+{
+  "//": "Base que SOLO BAJA (F22). Cada entrada es un defecto o excepción conocida de hoy; una guarda nueva que falle por algo que NO está aquí rompe el CI. Al arreglar una, bórrala de la lista (el test falla si la base trae entradas que ya no existen).",
+  "colisiones": [
+    ".rv-cab-esc__izq|gap",
+    ".rv-esq-dos|gap",
+    ".rv-kpi__cab|position",
+    ".rv-marco|gap",
+    ".rv-marco|padding",
+    ".rv-tarjeta|padding"
+  ],
+  "alturasAViewport": [
+    "src/app/admin/mapa-prospectos/cerebro.css::|.cer-zona:fullscreen",
+    "src/app/ui-v2/chat.css::|html:has(.rv-chat-pagina)",
+    "src/app/ui-v2/chat.css::|html:has(.rv-chat-pagina) body",
+    "src/app/ui-v2/shell.css::@media (min-width: 768px)|.rv-fila"
+  ]
+}

@@ -7,6 +7,8 @@ import { enviarCorreo, correoConfigurado } from '@/lib/correo/enviar';
 import type { Correo } from '@/lib/correo/plantilla';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { getT } from '@/lib/i18n/servidor';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 /** La ruta con la que esta acción pasa por la puerta del perfil (clasificada en visibilidad.ts). */
 const RUTA = '/dashboard/puesta-en-marcha';
@@ -20,16 +22,16 @@ export type ResultadoPruebaCorreo =
   | { ok: false; error: string };
 
 /** El correo con el que se pasa de «lo configuré» a «lo vi llegar». Sin cifras ni datos de la flota. */
-const CORREO_PRUEBA: Correo = {
-  asunto: '[Likida] Prueba de correo — puesta en marcha',
-  avance: 'Todo en orden: es la prueba que pediste, no un incidente.',
-  titulo: 'Tu correo sí recibe los avisos de Likida',
+const correoPrueba = (t: TResto = T_RESTO_ES): Correo => ({
+  asunto: t('op.likida_prueba_de_correo_puesta_en'),
+  avance: t('op.todo_en_orden_es_la_prueba'),
+  titulo: t('op.tu_correo_si_recibe_los_avisos'),
   parrafos: [
-    'Este correo confirma que los mensajes de Likida llegan a esta dirección. No hay ningún problema real: pediste la prueba desde «Puesta en marcha» y comprobar la entrega es todo lo que hace.',
+    t('op.este_correo_confirma_que_los_mensajes'),
   ],
   tono: 'neutral',
-  porQueLoRecibes: 'Recibes este correo porque pediste una prueba desde «Puesta en marcha» en Likida. No es recurrente: llega solo cuando tú la pides.',
-};
+  porQueLoRecibes: t('op.recibes_este_correo_porque_pediste_una'),
+});
 
 /** «a•••@dominio.mx»: el acuse confirma el destino sin repetir la dirección completa en pantalla. */
 function correoEnmascarado(correo: string): string {
@@ -47,18 +49,19 @@ function correoEnmascarado(correo: string): string {
  * asistente) sin cambiar la firma.
  */
 export async function enviarPruebaCorreo(): Promise<ResultadoPruebaCorreo> {
+  const { t } = await getT('resto');
   const sesion = await requireSessionTenant(RUTA);
   if (!puedeVerRuta(sesion.rol, RUTA)) {
-    return { ok: false, error: 'Tu cuenta no puede mandar esta prueba.' };
+    return { ok: false, error: t('op.tu_cuenta_no_puede_mandar_esta') };
   }
 
   const permitido = await rateLimit(`puesta-en-marcha:prueba-correo:${sesion.userId}`, LIMITE_PRUEBAS, VENTANA_MS);
   if (!permitido) {
-    return { ok: false, error: 'Ya mandaste varias pruebas hace poco. Espera unos minutos y vuelve a intentar.' };
+    return { ok: false, error: t('op.ya_mandaste_varias_pruebas_hace_poco') };
   }
 
   if (!correoConfigurado()) {
-    return { ok: false, error: 'El envío de correo todavía no está encendido en esta plataforma, así que la prueba no salió. Avisa a Likida.' };
+    return { ok: false, error: t('op.el_envio_de_correo_todavia_no') };
   }
 
   let destino: string | null;
@@ -66,16 +69,16 @@ export async function enviarPruebaCorreo(): Promise<ResultadoPruebaCorreo> {
     destino = await emailDeUsuario(sesion.userId);
   } catch (e) {
     logger.error('puesta_en_marcha.prueba_correo_ilegible', { tenantId: sesion.tenantId, err: e instanceof Error ? e.message : String(e) });
-    return { ok: false, error: 'No se pudo leer el correo de tu cuenta, así que la prueba no salió. Inténtalo de nuevo.' };
+    return { ok: false, error: t('op.no_se_pudo_leer_el_correo') };
   }
   if (!destino) {
-    return { ok: false, error: 'Tu cuenta no tiene correo capturado, así que no hay a dónde mandarte la prueba.' };
+    return { ok: false, error: t('op.tu_cuenta_no_tiene_correo_capturado') };
   }
 
-  const envio = await enviarCorreo(destino, CORREO_PRUEBA);
+  const envio = await enviarCorreo(destino, correoPrueba(t));
   if (!envio.ok) {
     logger.warn('puesta_en_marcha.prueba_correo_no_enviada', { tenantId: sesion.tenantId, motivo: envio.motivo });
-    return { ok: false, error: 'El correo no salió. Inténtalo de nuevo en unos minutos.' };
+    return { ok: false, error: t('op.el_correo_no_salio_intentalo_de') };
   }
   logger.info('puesta_en_marcha.prueba_correo_enviada', { tenantId: sesion.tenantId });
   return { ok: true, destino: correoEnmascarado(destino) };

@@ -16,18 +16,20 @@ import { MapaCalor } from '../../ui-v2/graficas';
 import { getT } from '@/lib/i18n/servidor';
 import { BLOQUES_HORA, matrizDeCorridas } from './calor';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
-import { ETIQUETA_INTERRUPTOR, etiquetaInterruptor } from '../observabilidad/etiquetas';
+import { etiquetaInterruptorTr, etiquetaInterruptor } from '../observabilidad/etiquetas';
 import { BloqueAgentesParados } from '../escalaciones/agentes-parados';
 import { PiePaginas } from '../pie-paginas';
 import '../sistema.css';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 export const dynamic = 'force-dynamic';
 
-const CHIP: Record<string, { tono: TonoEstado; etiqueta: string }> = {
+const chipTr = (tx: TSistema = T_SISTEMA_ES): Record<string, { tono: TonoEstado; etiqueta: string }> => ({
   ok: { tono: 'ok', etiqueta: 'OK' },
-  parcial: { tono: 'warn', etiqueta: 'Parcial' },
-  fallo: { tono: 'bad', etiqueta: 'Fallo' },
-};
+  parcial: { tono: 'warn', etiqueta: tx('observabilidad.parcial') },
+  fallo: { tono: 'bad', etiqueta: tx('observabilidad.fallo') },
+});
 
 function duracion(ms: number | null): string {
   if (ms === null) return '—';
@@ -36,42 +38,42 @@ function duracion(ms: number | null): string {
 }
 
 /** Los agentes del catálogo de palancas, por su nombre (el filtro compara el id exacto; un nombre mal escrito jamás coincidiría). */
-const OPCIONES_AGENTE: OpcionFiltro[] = [
-  { valor: '', rotulo: 'Cualquier agente' },
-  ...Object.entries(ETIQUETA_INTERRUPTOR).filter(([id]) => id.startsWith('agente:')).map(([id, nombre]) => ({ valor: id.slice('agente:'.length), rotulo: nombre })),
-];
+const opcionesAgente = (tx: TSistema = T_SISTEMA_ES): OpcionFiltro[] => ([
+  { valor: '', rotulo: tx('corridas.cualquier_agente') },
+  ...Object.entries(etiquetaInterruptorTr(tx)).filter(([id]) => id.startsWith('agente:')).map(([id, nombre]) => ({ valor: id.slice('agente:'.length), rotulo: nombre })),
+]);
 
 interface SearchParams { agente?: string; estado?: string; tenant?: string; p?: string }
 
-const COLUMNAS: ColumnaTabla<CorridaCruzada>[] = [
+const columnasTr = (tx: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaTabla<CorridaCruzada>[] => ([
   {
-    id: 'agente', titulo: 'Agente', principal: true,
+    id: 'agente', titulo: tx('observabilidad.agente'), principal: true,
     celda: (c) => (
       <>
-        <Link href={`/admin/corridas/${c.id}`}>{etiquetaInterruptor(c.agente)}</Link>
+        <Link href={`/admin/corridas/${c.id}`}>{etiquetaInterruptor(c.agente, tx)}</Link>
         {/* EL ERROR, EN LA LISTA. Estaba solo dentro de la traza, una por una: con 50 corridas y tres fallos, encontrar el motivo eran tres
             clics a ciegas. El motivo ya viene REDACTADO para una persona (no un stack), así que se puede pintar tal cual. */}
         {c.error !== null && c.error !== '' ? <span className="adm-sis-error-fila" title={c.error}>{c.error}</span> : null}
       </>
     ),
   },
-  { id: 'flota', titulo: 'Flota', celda: (c) => c.tenantNombre ?? 'Likida (negocio)' },
-  { id: 'estado', titulo: 'Estado', celda: (c) => { const e = CHIP[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }; return <StatusChip tono={e.tono}>{e.etiqueta}</StatusChip>; } },
-  { id: 'inicio', titulo: 'Inicio', corta: true, celda: (c) => fechaHoraMx(c.inicio) },
+  { id: 'flota', titulo: tx('observabilidad.flota'), celda: (c) => c.tenantNombre ?? tx('observabilidad.likida_negocio') },
+  { id: 'estado', titulo: tx('salud_sistema.estado'), celda: (c) => { const e = chipTr(tx)[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }; return <StatusChip tono={e.tono}>{e.etiqueta}</StatusChip>; } },
+  { id: 'inicio', titulo: tx('observabilidad.inicio'), corta: true, celda: (c) => fechaHoraMx(c.inicio, idioma) },
   {
-    id: 'duracion', titulo: 'Duración',
+    id: 'duracion', titulo: tx('observabilidad.duracion'),
     // Tareas: ambos o ninguno — la regla de la casa.
-    celda: (c) => <>{duracion(c.duracionMs)}<span className="adm-sis-sub">{c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal} tareas` : 'sin tareas medidas'}</span></>,
+    celda: (c) => <>{duracion(c.duracionMs)}<span className="adm-sis-sub">{c.tareasHechas !== null && c.tareasTotal !== null ? tx('corridas.tareas_de_total', { hechas: c.tareasHechas, total: c.tareasTotal }) : tx('corridas.sin_tareas_medidas')}</span></>,
   },
   {
-    id: 'gasto', titulo: 'Gasto', alinear: 'der',
+    id: 'gasto', titulo: tx('corridas.gasto'), alinear: 'der',
     // `usd4` y no `usd`: una corrida cuesta céntimos de céntimo, y `usd` los redondearía a US$0.00, que se lee «no gastó». NULL se pinta
     // «—» con su porqué: no se midió, no es que saliera gratis.
     celda: (c) => (c.costoUsd === null
-      ? <span title="Esta corrida no midió su gasto. No significa que no gastara.">—</span>
+      ? <span title={tx('corridas.esta_corrida_no_midio_su_gasto')}>—</span>
       : usd4(c.costoUsd)),
   },
-];
+]);
 
 /**
  * EL ÍNDICE DE CORRIDAS — /admin/corridas (16-ago-2026; filtros + paginación ADM-10, auditoría 24).
@@ -81,6 +83,7 @@ const COLUMNAS: ColumnaTabla<CorridaCruzada>[] = [
  * «Agentes que no corrieron y por qué» vive también aquí (es la otra mitad de la pregunta «qué pasó con las corridas»).
  */
 export default async function IndiceCorridas({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const { t: tx, idioma } = await getT('admin_sistema');
   await requireSuperadmin();
   const sp = await searchParams;
   const agente = (sp.agente ?? '').trim();
@@ -104,28 +107,28 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
   const [parados, cola, opciones] = await Promise.all([
     getAgentesParados(ahoraMs()), leerResumenBandeja(ahoraMs()), opcionesBitacora(),
   ]);
-  const flotas: OpcionFiltro[] | null = opciones.flotas === null ? null : [{ valor: '', rotulo: 'Todas las flotas' }, ...opciones.flotas.map((f) => ({ valor: f.id, rotulo: f.nombre }))];
+  const flotas: OpcionFiltro[] | null = opciones.flotas === null ? null : [{ valor: '', rotulo: tx('corridas.todas_las_flotas') }, ...opciones.flotas.map((f) => ({ valor: f.id, rotulo: f.nombre }))];
   const params = { agente: agente || undefined, estado: estado || undefined, tenant: tenant || undefined };
   const { t } = await getT('graficas');
   const calor = resultado !== null && resultado.corridas.length > 0 ? matrizDeCorridas(resultado.corridas.map((c) => c.inicio), t('corridas.calor.dias').split(',')) : null;
 
   return (
-    <MarcoPagina titulo="Corridas" apoyo="Las corridas de los agentes en todas las flotas, y qué agentes no corrieron y por qué. Cada corrida abre su traza completa.">
-      <BarraFiltros accion="/admin/corridas" enLinea buscar etiqueta="Filtrar corridas" nActivos={[agente, estado, tenant].filter(Boolean).length} limpiarHref="/admin/corridas">
-        <FiltroOpciones etiqueta="Agente" nombre="agente" valor={agente} opciones={OPCIONES_AGENTE} />
-        <FiltroOpciones etiqueta="Estado" nombre="estado" valor={estado} opciones={[{ valor: '', rotulo: 'Cualquier estado' }, ...ESTADOS_CORRIDA.map((e) => ({ valor: e, rotulo: CHIP[e].etiqueta }))]} />
-        {flotas ? <FiltroOpciones etiqueta="Flota" nombre="tenant" valor={tenant} opciones={flotas} /> : null}
+    <MarcoPagina titulo={tx('corridas.corridas')} apoyo={tx('corridas.las_corridas_de_los_agentes_en')}>
+      <BarraFiltros accion="/admin/corridas" enLinea buscar etiqueta={tx('corridas.filtrar_corridas')} nActivos={[agente, estado, tenant].filter(Boolean).length} limpiarHref="/admin/corridas">
+        <FiltroOpciones etiqueta={tx('observabilidad.agente')} nombre="agente" valor={agente} opciones={opcionesAgente(tx)} />
+        <FiltroOpciones etiqueta={tx('salud_sistema.estado')} nombre="estado" valor={estado} opciones={[{ valor: '', rotulo: tx('corridas.cualquier_estado') }, ...ESTADOS_CORRIDA.map((e) => ({ valor: e, rotulo: chipTr(tx)[e].etiqueta }))]} />
+        {flotas ? <FiltroOpciones etiqueta={tx('observabilidad.flota')} nombre="tenant" valor={tenant} opciones={flotas} /> : null}
       </BarraFiltros>
 
       {resultado === null ? (
-        <EstadoError reintentar>No se pudieron leer las corridas. La consulta falló; no es que no existan.</EstadoError>
+        <EstadoError reintentar>{tx('corridas.no_se_pudieron_leer_las_corridas')}</EstadoError>
       ) : (
         <>
           <TablaLista<CorridaCruzada>
-            etiqueta="Corridas de agentes" columnas={COLUMNAS} filas={resultado.corridas} idFila={(c) => c.id} base="/admin/corridas" params={params}
+            etiqueta={tx('corridas.corridas_de_agentes')} columnas={columnasTr(tx, idioma)} filas={resultado.corridas} idFila={(c) => c.id} base="/admin/corridas" params={params}
             vacio={hayFiltro
-              ? { titulo: 'Ninguna corrida coincide', texto: 'Ninguna corrida coincide con el filtro. Quita un filtro o cambia el agente.' }
-              : { titulo: 'Aún no hay corridas', texto: 'Cada corrida de un agente deja aquí su fila; la primera aparecerá cuando un agente trabaje.' }}
+              ? { titulo: tx('corridas.ninguna_corrida_coincide'), texto: tx('corridas.ninguna_corrida_coincide_con_el_filtro') }
+              : { titulo: tx('corridas.aun_no_hay_corridas'), texto: tx('corridas.cada_corrida_de_un_agente_deja') }}
           />
           {calor !== null && calor.contadas > 0 ? (
             <Tarjeta titulo={t('corridas.calor.titulo')} elevar entra="tarjeta">
@@ -144,4 +147,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
   );
 }
 
-export const metadata: Metadata = { title: 'Corridas' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('corridas.corridas') };
+}

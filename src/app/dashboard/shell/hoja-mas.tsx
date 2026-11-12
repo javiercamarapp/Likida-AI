@@ -14,16 +14,18 @@ import type { MenuV2 } from './menu-por-perfil';
  *
  * NO VERIFICADO en Safari iOS real (el plan lo lista como riesgo): `showModal()` es estándar desde iOS 15.4.
  */
-export default function HojaMas({ abierta, alCerrar, rol, rolEtiqueta, nombre, perfil, usoIa, cerrarSesion, insignias, organizacion }: {
+export default function HojaMas({ abierta, alCerrar, rol, rolEtiqueta, nombre, perfil, usoIa, cerrarSesion, insignias, organizacion, flotas }: {
   abierta: boolean; alCerrar: () => void; rol: string; rolEtiqueta: string; nombre: string | null; perfil?: PerfilTenant | null;
   usoIa?: { pct: number } | null; cerrarSesion?: () => Promise<void>; insignias?: Record<string, string>;
   organizacion?: { id: string; nombre: string } | null;
+  /** Solo el superadmin: las flotas (para resolver `?tenant=` en el pie). `null` = lectura caída; ausente = no aplica. */
+  flotas?: Array<{ id: string; nombre: string }> | null;
 }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
   return (
     <HojaMasVista abierta={abierta} alCerrar={alCerrar} menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} insignias={insignias}
       pie={<PieMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre}
-        usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} alNavegar={alCerrar} organizacion={organizacion} />} />
+        usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} alNavegar={alCerrar} organizacion={organizacion} flotas={flotas} />} />
   );
 }
 

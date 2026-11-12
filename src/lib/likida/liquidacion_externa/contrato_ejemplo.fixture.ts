@@ -10,6 +10,7 @@ import type { DesgloseBitacora } from './desglose_contrato';
 export const CONTRATO_EJEMPLO: DesgloseBitacora = {
   terminal: 'T01',
   bitacora: 'B-0001',
+  folio: 'F-0001',
   bitacoras: ['B-0001', 'B-0002'],
   numeroLiquidacion: 'L-0001',
   numeroPago: 'P-0001',

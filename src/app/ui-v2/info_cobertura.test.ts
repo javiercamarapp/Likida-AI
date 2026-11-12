@@ -47,15 +47,10 @@ function etiquetas(src: string, nombre: string): string[] {
 /** Archivos hijo (sin `MarcoPagina`) con títulos de recuadro todavía sin ⓘ al cerrar L4: 52 archivos, 96 títulos. Pendiente declarado: cada vez que uno se
  *  cubre, su tope baja o se borra la línea. Un archivo nuevo o un tope superado hace fallar la prueba. */
 const HIJOS_SIN_CUBRIR: Record<string, number> = {
-  '[id]/revision-panel.tsx': 1,
   'agentes/insights/panel-insights.tsx': 1,
   'agentes/insights/tarjeta-insight.tsx': 1,
-  'agentes/peajes/configuracion/entradas.tsx': 1,
   'carta-porte/borrador/[viajeId]/page.tsx': 6,
   'carta-porte/documentos/[id]/vista.tsx': 1,
-  'inicio-cinco-agentes.tsx': 1,
-  'opera-whatsapp.tsx': 1,
-  'primera-liquidacion.tsx': 1,
   'puesta-en-marcha/vista.tsx': 3,
   'reglas/vista.tsx': 2,
   'resumen-visual.tsx': 1,

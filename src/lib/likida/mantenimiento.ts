@@ -24,7 +24,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { conteo, traerTodo } from './pg';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido, etiqueta } from './errores';
 
 const DIA_MS = 86_400_000;
 
@@ -345,18 +345,18 @@ export interface NuevaRutina {
 /** Valida la captura de una rutina — la misma función que prueba el test. */
 export function validarRutina(v: { nombre: string; cadaDias: string; cadaKm: string }): NuevaRutina {
   const nombre = v.nombre.replace(/\s+/g, ' ').trim();
-  if (!nombre || nombre.length > 80) throw new DatoInvalido('El nombre de la rutina es obligatorio (máximo 80 caracteres).');
+  if (!nombre || nombre.length > 80) throw datoInvalido('mantenimiento.el_nombre_de_la_rutina');
   const leerEntero = (crudo: string, etiqueta: string): number | null => {
     const t = crudo.trim();
     if (!t) return null;
     const n = Number(t);
-    if (!Number.isInteger(n) || n < 1 || n > 100_000) throw new DatoInvalido(`${etiqueta} tiene que ser un entero entre 1 y 100,000.`);
+    if (!Number.isInteger(n) || n < 1 || n > 100_000) throw datoInvalido('mantenimiento.tiene_que_ser_un_entero', { etiqueta });
     return n;
   };
-  const cadaDias = leerEntero(v.cadaDias, 'La cadencia en días');
-  const cadaKm = leerEntero(v.cadaKm, 'La cadencia en kilómetros');
+  const cadaDias = leerEntero(v.cadaDias, etiqueta('etq.la_cadencia_en_dias'));
+  const cadaKm = leerEntero(v.cadaKm, etiqueta('etq.la_cadencia_en_kilometros'));
   if (cadaDias === null && cadaKm === null) {
-    throw new DatoInvalido('Una rutina necesita al menos una cadencia: días, kilómetros o ambas.');
+    throw datoInvalido('mantenimiento.una_rutina_necesita_al_menos');
   }
   return { nombre, cadaDias, cadaKm };
 }
@@ -371,7 +371,7 @@ export async function crearRutina(tenantId: string, r: NuevaRutina, creadaPor: s
   }), 'mantenimiento.crear_rutina');
   if (error) {
     if (error.code === '23505' || /rutina_mantenimiento_nombre_unico/.test(error.message)) {
-      throw new DatoInvalido(`Ya existe una rutina llamada "${r.nombre}" — edítala o usa otro nombre.`);
+      throw datoInvalido('mantenimiento.ya_existe_una_rutina_llamada', { nombre: r.nombre });
     }
     throw new Error(`crearRutina: ${error.message}`);
   }
@@ -396,7 +396,7 @@ export async function abrirOrdenProgramada(
   const { data: rut, error: errR } = await acotada(supabaseAdmin().from('rutina_mantenimiento')
     .select('nombre').eq('id', rutinaId).eq('tenant_id', tenantId).maybeSingle(), 'mantenimiento.rutina_propia');
   if (errR) throw new Error(`abrirOrdenProgramada: ${errR.message}`);
-  if (!rut) throw new DatoInvalido('Esa rutina no existe en tu flota.');
+  if (!rut) throw datoInvalido('mantenimiento.esa_rutina_no_existe_en');
 
   const { error } = await acotada(supabaseAdmin().from('mantenimiento').insert({
     tenant_id: tenantId,
@@ -411,7 +411,7 @@ export async function abrirOrdenProgramada(
       throw new OrdenYaAbierta();
     }
     // La FK compuesta de la 0145 rechaza una unidad ajena con foreign key.
-    if (error.code === '23503') throw new DatoInvalido('Esa unidad no existe en tu flota.');
+    if (error.code === '23503') throw datoInvalido('mantenimiento.esa_unidad_no_existe_en');
     throw new Error(`abrirOrdenProgramada: ${error.message}`);
   }
 }
@@ -435,7 +435,7 @@ export async function unidadDeOrden(tenantId: string, ordenId: string): Promise<
  */
 export async function cerrarOrden(tenantId: string, ordenId: string, kmServicio: number | null): Promise<void> {
   if (kmServicio !== null && (!Number.isInteger(kmServicio) || kmServicio < 0 || kmServicio > 10_000_000)) {
-    throw new DatoInvalido('El kilometraje del servicio tiene que ser un entero entre 0 y 10,000,000.');
+    throw datoInvalido('mantenimiento.el_kilometraje_del_servicio_tiene');
   }
   const { data, error } = await acotada(supabaseAdmin().from('mantenimiento')
     .update({ estado: 'cerrada', cerrada_en: new Date().toISOString(), km_servicio: kmServicio })
@@ -443,7 +443,7 @@ export async function cerrarOrden(tenantId: string, ordenId: string, kmServicio:
     .select('id, unidad_id'), 'mantenimiento.cerrar');
   if (error) throw new Error(`cerrarOrden: ${error.message}`);
   const fila = (data ?? [])[0] as { id: string; unidad_id: string | null } | undefined;
-  if (!fila) throw new DatoInvalido('Esa orden ya estaba cerrada o no existe en tu flota.');
+  if (!fila) throw datoInvalido('mantenimiento.esa_orden_ya_estaba_cerrada');
 
   // c3-3 (segunda mitad): la lectura del tablero al cerrar es MÁS FRESCA que
   // el km declarado en la forma de unidades — que rara vez se vuelve a tocar.

@@ -1,6 +1,8 @@
 import { PaginaLegal, FaltaDato, type SeccionLegal } from '../../legal/marco';
 import { avisoProspectos } from '@/lib/likida/privacidad';
 import { LEGAL_CONFIG } from '@/lib/legal/config';
+import { trPublico } from '@/lib/i18n/publico_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO DE PRIVACIDAD PARA PROSPECTOS — Likida como RESPONSABLE.
@@ -26,10 +28,10 @@ import { LEGAL_CONFIG } from '@/lib/legal/config';
 // de imprimir un marcador rojo hardcodeado en un documento público.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const metadata = {
-  title: 'Aviso de privacidad para contactos comerciales — Likida',
-  description: 'Qué datos tiene Likida de las personas a las que contacta para ofrecer su servicio, de dónde salieron y cómo pedir que se borren.',
-};
+export async function generateMetadata() {
+  const { t } = await trPublico();
+  return { title: t('av.prospectos.meta.titulo'), description: t('av.prospectos.meta.descripcion') };
+}
 
 const RESPONSABLE = {
   razonSocial: LEGAL_CONFIG.razonSocial,
@@ -37,7 +39,9 @@ const RESPONSABLE = {
   contacto: LEGAL_CONFIG.contacto,
 };
 
-export default function AvisoProspectos() {
+// LEGAL: la interfaz en inglés está pendiente de revisión legal; el cuerpo (avisoProspectos) no se traduce aquí.
+export default async function AvisoProspectos() {
+  const { t } = await trPublico();
   const secciones: SeccionLegal[] = avisoProspectos(RESPONSABLE).map((s) => ({
     titulo: s.titulo, fundamento: s.fundamento, parrafos: s.parrafos,
   }));
@@ -45,27 +49,16 @@ export default function AvisoProspectos() {
 
   return (
     <PaginaLegal
-      etiqueta="Aviso de privacidad · contactos comerciales"
-      bajada="Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
+      etiqueta={t('av.prospectos.etiqueta')}
+      bajada={t('av.prospectos.bajada')}
       // LEG-12: fecha del último cambio SUSTANTIVO del texto de este aviso
       // (LEG-4, auditoría 24), no la fecha en que alguien lo abre.
       vigenteDesde="2026-09-01"
       secciones={secciones}
       aviso={faltan ? (
-        <FaltaDato>
-          A este aviso le faltan datos de identidad del responsable (razón social o domicilio
-          de la entidad que opera Likida). La primera sección lo señala en su texto en vez de
-          dejarlo en blanco o inventarlo.
-        </FaltaDato>
+        <FaltaDato>{t('av.prospectos.faltan')}</FaltaDato>
       ) : undefined}
-      pie={
-        <p>
-          ¿Ya eres cliente de Likida? Tu aviso es la política de privacidad en{' '}
-          <strong>/privacidad</strong>. ¿Eres operador de una
-          flota? El tuyo lo publica tu empresa: escribe{' '}
-          <strong>PRIVACIDAD</strong> por el chat de WhatsApp.
-        </p>
-      }
+      pie={<p>{rico(t('av.prospectos.pie'), { strong: (c) => <strong>{c}</strong> })}</p>}
     />
   );
 }

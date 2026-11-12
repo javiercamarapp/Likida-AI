@@ -33,6 +33,18 @@ vi.mock('@/lib/likida/vendedores', async (importOriginal) => {
     listarVendedores: async () => [],
   };
 });
+// w15/perf: la consola de administración lee el ÍNDICE LIGERO (id, empresa, estado…) y pide `notas` solo de las tarjetas visibles; se
+// ejercita la función REAL de punta a punta con la capa de lectura sustituida por estas mismas filas.
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => ({}) }) }));
+vi.mock('@/lib/likida/pg', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/likida/pg')>()),
+  conteo: () => ({}),
+  traerTodoEnParalelo: async (_c: unknown, consulta: string) => (consulta.includes('marcas de duplicado') ? [] : prospectos.map((p) => ({
+    id: p.id, empresa: p.empresa, vacante: p.vacante, ciudad: p.ciudad, estado: p.estado, fuente: p.fuente, vendedor_id: p.vendedorId,
+    created_at: p.createdAt, telefono: p.telefono, contacto_nombre: p.contactoNombre,
+  }))),
+  traerPorIds: async (ids: string[]) => ids.map((id) => ({ id, notas: null })),
+}));
 vi.mock('@/lib/likida/agentes/corridas', () => ({
   ultimasCorridasNegocio: async () => [],
   duracionLegible: () => '',

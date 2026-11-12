@@ -1,15 +1,25 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- lee archivos del propio repo */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENTES, NEGOCIO, CONTROL, SISTEMA, SECCIONES, FUERA_DEL_MENU, TODAS_LAS_RUTAS, entradaDeRuta, pestanaActiva, coincideBusqueda, planoBusqueda } from './rutas';
+import { COPILOTO, AGENTES, NEGOCIO, CONTROL, SISTEMA, SECCIONES, FUERA_DEL_MENU, TODAS_LAS_RUTAS, entradaDeRuta, pestanaActiva, coincideBusqueda, planoBusqueda } from './rutas';
 import { REDIRECCIONES_308 } from './guardas/redirecciones_308';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 
 // El menú de /admin pasó de 43 a 16 entradas SIN perder pantallas: cada página sigue siendo una ruta propia, agrupada como pestaña.
-const ENTRADAS = [...AGENTES, ...NEGOCIO, ...CONTROL, ...SISTEMA];
+const ENTRADAS = [COPILOTO, ...AGENTES, ...NEGOCIO, ...CONTROL, ...SISTEMA];
 const paginaExiste = (href: string) => existsSync(join(__dirname, href.replace('/admin', '') || '', 'page.tsx')) || href === '/admin';
 
 describe('menú de /admin agrupado en pestañas', () => {
+  it('Copiloto es entrada de primer nivel (justo debajo de Resumen): NO está dentro de ninguna sección', () => {
+    expect(COPILOTO.href).toBe('/admin/copiloto');
+    expect(SECCIONES.flatMap((s) => s.items).map((i) => i.href)).not.toContain('/admin/copiloto');
+    expect(AGENTES.map((i) => i.nombre)).toEqual(['Agentes', 'Calidad']);
+    // Sigue en ⌘K, segundo tras Inicio, y es la entrada de su ruta.
+    expect(TODAS_LAS_RUTAS.map((r) => r.href).slice(0, 2)).toEqual(['/admin', '/admin/copiloto']);
+    expect(entradaDeRuta('/admin/copiloto')?.nombre).toBe('Copiloto');
+  });
+
   it('tiene 15 entradas más el Resumen (16 en el sidebar; antes 43)', () => { expect(ENTRADAS).toHaveLength(15); });
 
   it('conserva lo que el dueño pidió que se quede: Copiloto, Cerebro de ventas y los paneles de cada agente', () => {
@@ -118,7 +128,10 @@ describe('menú de /admin agrupado en pestañas', () => {
     expect(entradaDeRuta('/admin/flotas/xyz')?.nombre).toBe('Clientes');
     expect(entradaDeRuta('/admin/mapa-prospectos')?.nombre).toBe('Ventas');
     expect(entradaDeRuta('/admin')).toBeNull();
-    expect(entradaDeRuta('/admin/mi-perfil')).toBeNull();
+    // Las pantallas fuera del menú dan nombre a la cabecera (la miga ya no sale vacía en Avisos), pero no tienen pestañas ni sección.
+    expect(entradaDeRuta('/admin/mi-perfil')?.nombre).toBe('Mi perfil');
+    expect(entradaDeRuta('/admin/notificaciones')?.nombre).toBe('Avisos');
+    expect(entradaDeRuta('/admin/notificaciones')?.pestanas).toBeUndefined();
   });
 
   it('la pestaña activa es la de href más largo que coincide', () => {
@@ -133,5 +146,28 @@ describe('menú de /admin agrupado en pestañas', () => {
       expect(new Set(nombres).size).toBe(nombres.length);
       for (const n of nombres) expect(n.length).toBeLessThanOrEqual(18);
     }
+  });
+});
+
+// Auditoría 11-nov, D17: pestaña, sidebar, miga y h1 dicen lo mismo (en Rovaq siempre coinciden). Se lee el código de cada pantalla.
+describe('nombres unificados (pestaña del navegador = menú = h1)', () => {
+  const fuente = (r: string) => readFileSync(join(__dirname, r, 'page.tsx'), 'utf8');
+  it('Compliance, Cobranza, Ventas y Dev usan el nombre de su entrada del menú', () => {
+    // Los títulos salen del diccionario (admin_sistema): la clave dice «Seguridad y datos» en es y se comprueba abajo.
+    expect(fuente('compliance')).toContain("titulo={t('compliance.seguridad_y_datos')}");
+    expect(fuente('compliance')).toContain("title: t('compliance.seguridad_y_datos')");
+    expect(admin_sistemaEs['compliance.seguridad_y_datos']).toBe('Seguridad y datos');
+    expect(fuente('cobranza')).toContain("title: t('cobranza.facturacion')");
+    expect(fuente('mapa-prospectos')).toContain("title: t('mapa_prospectos.ventas')");
+    expect(admin_sistemaEs['mapa_prospectos.ventas']).toBe('Ventas');
+    expect(fuente('dev')).toContain('titulo="Desarrollo"');
+  });
+  it('Avisos: el menú, la miga y la pantalla se llaman igual y la pantalla lleva rótulo de área', () => {
+    expect(FUERA_DEL_MENU.find((f) => f.href === '/admin/notificaciones')?.nombre).toBe('Avisos');
+    expect(fuente('notificaciones')).toContain('area="Sistema"');
+  });
+  it('ningún título lleva «&» (se leía «&amp;» en la pestaña)', () => {
+    const dic = readFileSync(join(__dirname, '../../lib/i18n/es/admin_agentes.ts'), 'utf8');
+    expect(dic).toMatch(/'calidad_evals\.calidad_evals': 'Calidad'/);
   });
 });

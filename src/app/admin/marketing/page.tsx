@@ -17,6 +17,7 @@ import { SubirHook, type ResultadoFirmaHook, type ResultadoGuardar } from './sub
 import { SubirReferencia, type ResultadoReferencia } from './subir-referencia';
 import { TarjetaPieza, type ResultadoPublicar } from './tarjeta-pieza';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -46,6 +47,7 @@ export const dynamic = 'force-dynamic';
  * `agentes/cola.ts`, el mismo mecanismo de siempre.
  */
 export default async function EstudioMarketingPage() {
+  const { t } = await getT('admin_dinero');
   await requireSuperadmin();
 
   const [hooks, referencias, pendientes, aprobadas] = await Promise.all([
@@ -80,14 +82,15 @@ export default async function EstudioMarketingPage() {
 
   async function accionSubirReferencia(_previo: ResultadoReferencia, fd: FormData): Promise<ResultadoReferencia> {
     'use server';
+  const { t } = await getT('admin_dinero');
     const s = await requireSuperadmin();
     try {
       const tipo = String(fd.get('tipo') ?? '');
-      if (!esTipoReferencia(tipo)) return { error: 'El tipo debe ser personaje o lugar.' };
+      if (!esTipoReferencia(tipo)) return { error: t('marketing.el_tipo_debe_ser') };
       const nombre = String(fd.get('nombre') ?? '');
       const etiqueta = String(fd.get('etiqueta') ?? '') || null;
       const archivo = fd.get('foto');
-      if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige una foto.' };
+      if (!(archivo instanceof File) || archivo.size === 0) return { error: t('marketing.elige_una_foto') };
       validarFotoReferencia(archivo.type, archivo.size);
       exigirConsentimientoReferencia(tipo, fd.get('consentimiento'));
       const ruta = await subirFotoReferencia(archivo, archivo.type);
@@ -105,6 +108,7 @@ export default async function EstudioMarketingPage() {
 
   async function accionBorrarReferencia(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+  const { t } = await getT('admin_dinero');
     const s = await requireSuperadmin();
     try {
       const id = String(fd.get('referencia') ?? '');
@@ -114,7 +118,7 @@ export default async function EstudioMarketingPage() {
         { evento: 'marketing.bitacora' },
       );
       revalidatePath('/admin/marketing');
-      return { ok: 'Referencia borrada: fila y foto.' };
+      return { ok: t('marketing.referencia_borrada_fila_y') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'borrar la referencia') };
     }
@@ -122,11 +126,12 @@ export default async function EstudioMarketingPage() {
 
   async function accionPublicarPieza(_previo: ResultadoPublicar, fd: FormData): Promise<ResultadoPublicar> {
     'use server';
+  const { t } = await getT('admin_dinero');
     const s = await requireSuperadmin();
     try {
       await aprobarPieza(String(fd.get('pieza') ?? ''), s.userId);
       revalidatePath('/admin/marketing');
-      return { ok: 'Publicada: quedó aprobada en la bandeja.' };
+      return { ok: t('marketing.publicada_quedo_aprobada_en') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'publicar la pieza') };
     }
@@ -134,11 +139,12 @@ export default async function EstudioMarketingPage() {
 
   async function accionRechazarPieza(_previo: ResultadoPublicar, fd: FormData): Promise<ResultadoPublicar> {
     'use server';
+  const { t } = await getT('admin_dinero');
     const s = await requireSuperadmin();
     try {
       await rechazarPieza(String(fd.get('pieza') ?? ''), s.userId, String(fd.get('motivo') ?? ''));
       revalidatePath('/admin/marketing');
-      return { ok: 'Rechazada con motivo.' };
+      return { ok: t('marketing.rechazada_con_motivo') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'rechazar la pieza') };
     }
@@ -150,10 +156,11 @@ export default async function EstudioMarketingPage() {
   const diasSinPiezas = masReciente ? Math.floor((Date.parse(`${hoyMx()}T00:00:00Z`) - Date.parse(`${masReciente.slice(0, 10)}T00:00:00Z`)) / 86_400_000) : null;
 
   return (
-    <MarcoPagina titulo="Crecimiento" apoyo="Estudio de marketing: los insumos que subes y las piezas que esperan tu aprobación.">
+    <MarcoPagina titulo={t('marketing.crecimiento')} apoyo={t('marketing.estudio_de_marketing_los')}>
       {diasSinPiezas !== null && diasSinPiezas >= DIAS_ESTANCADA ? (
-        <Aviso tono="warn" titulo={`La pieza pendiente más reciente es de hace ${diasSinPiezas} días`}>
-          No han llegado piezas nuevas a la bandeja. Puede ser que los agentes de contenido no estén entregando; la causa no se conoce desde aquí.
+        <Aviso tono="warn" titulo={t('marketing.la_pieza_pendiente_mas', { diasSinPiezas })}>
+          
+          {t('marketing.no_han_llegado_piezas')}
         </Aviso>
       ) : null}
       <AvisoCompacto
@@ -162,18 +169,18 @@ export default async function EstudioMarketingPage() {
         mas="Sube el video que te gustó o la foto del chofer o del patio, y abajo lees el guion, el carrusel, la promo del día y los encargos de imagen y video. No hay render en el servidor."
       />
 
-      <Tarjeta titulo={`Banco de hooks${hooks !== null ? ` (${hooks.length})` : ''}`}>
-        <p className="adm-din-nota">Sube un video que te gustó y anota el hook que usa. No hay transcripción automática todavía: la anotación es tuya.</p>
+      <Tarjeta titulo={t('marketing.banco_de_hooks', { hooks: hooks !== null ? ` (${hooks.length})` : '' })}>
+        <p className="adm-din-nota">{t('marketing.sube_un_video_que')}</p>
         <SubirHook pedirFirma={accionPedirFirmaHook} guardar={accionGuardarHook} />
         {hooks === null ? (
-          <EstadoError compacto>No se pudo leer el banco de hooks — esto NO significa que esté vacío.</EstadoError>
+          <EstadoError compacto>{t('marketing.no_se_pudo_leer')}</EstadoError>
         ) : hooks.length === 0 ? (
-          <p className="adm-din-nota">Sin hooks guardados todavía.</p>
+          <p className="adm-din-nota">{t('marketing.sin_hooks_guardados_todavia')}</p>
         ) : (
           <div className="adm-din-rejilla">
             {hooks.map((h) => (
               <div key={h.id} className="adm-din-plan">
-                {h.videoUrl ? <video src={h.videoUrl} controls className="adm-din-video" /> : <Aviso tono="error">No se pudo firmar la vista previa del video.</Aviso>}
+                {h.videoUrl ? <video src={h.videoUrl} controls className="adm-din-video" /> : <Aviso tono="error">{t('marketing.no_se_pudo_firmar')}</Aviso>}
                 <p className="adm-din-nota">{h.hookTexto}</p>
                 <span className="adm-din-sub">{fechaHoraMx(h.creadoEn)}</span>
               </div>
@@ -182,13 +189,13 @@ export default async function EstudioMarketingPage() {
         )}
       </Tarjeta>
 
-      <Tarjeta titulo={`Personajes y lugares${referencias !== null ? ` (${referencias.length})` : ''}`}>
-        <p className="adm-din-nota">El pipeline de video usa estas fotos tal cual y produce solo lo que falta.</p>
+      <Tarjeta titulo={t('marketing.personajes_y_lugares', { referencias: referencias !== null ? ` (${referencias.length})` : '' })}>
+        <p className="adm-din-nota">{t('marketing.el_pipeline_de_video')}</p>
         <SubirReferencia accion={accionSubirReferencia} />
         {referencias === null ? (
-          <EstadoError compacto>No se pudo leer el archivo de referencias — esto NO significa que esté vacío.</EstadoError>
+          <EstadoError compacto>{t('marketing.no_se_pudo_leer_2')}</EstadoError>
         ) : referencias.length === 0 ? (
-          <p className="adm-din-nota">Sin personajes ni lugares subidos todavía.</p>
+          <p className="adm-din-nota">{t('marketing.sin_personajes_ni_lugares')}</p>
         ) : (
           <div className="adm-din-rejilla">
             {referencias.map((r) => (
@@ -197,13 +204,13 @@ export default async function EstudioMarketingPage() {
                   // eslint-disable-next-line @next/next/no-img-element -- referencia interna del estudio, no next/image en el resto del repo
                   <img src={r.fotoUrl} alt={r.nombre} className="adm-din-miniatura" />
                 ) : (
-                  <Aviso tono="warn">Sin vista previa de la foto.</Aviso>
+                  <Aviso tono="warn">{t('marketing.sin_vista_previa_de')}</Aviso>
                 )}
                 <div className="adm-din-plan__cab"><span>{r.nombre}</span></div>
                 <span className="adm-din-sub">{r.tipo}</span>
                 <FormaConAviso
                   accion={accionBorrarReferencia} boton="Borrar" columnas="md:grid-cols-1"
-                  confirmar={{ titulo: `Borrar «${r.nombre}»`, descripcion: 'Se borran la fila y la foto, y no se puede deshacer. Es la baja de quien dio su consentimiento para usar su imagen.', etiquetaConfirmar: 'Sí, borrar' }}
+                  confirmar={{ titulo: t('marketing.borrar', { nombre: r.nombre }), descripcion: t('marketing.se_borran_la_fila'), etiquetaConfirmar: t('marketing.si_borrar') }}
                 >
                   <input type="hidden" name="referencia" value={r.id} />
                 </FormaConAviso>
@@ -213,15 +220,15 @@ export default async function EstudioMarketingPage() {
         )}
       </Tarjeta>
 
-      <Tarjeta titulo={`Piezas del día${pendientes !== null ? ` (${pendientes.length})` : ''}`}>
+      <Tarjeta titulo={t('marketing.piezas_del_dia', { pendientes: pendientes !== null ? ` (${pendientes.length})` : '' })}>
         <p className="adm-din-nota">
-          Lo que el agente de crecimiento ya redactó hacia la bandeja: guiones, carrusel del mercado, promo del día y encargos de imagen y video. Publicar es la misma
-          aprobación de siempre, la que también ves en <a href="/admin/aprobaciones">Aprobaciones</a>.
+          
+          {t('marketing.lo_que_el_agente')} <a href="/admin/aprobaciones">Aprobaciones</a>.
         </p>
         {pendientes === null ? (
-          <EstadoError compacto>No se pudieron leer las piezas del día — esto NO significa que no haya.</EstadoError>
+          <EstadoError compacto>{t('marketing.no_se_pudieron_leer')}</EstadoError>
         ) : pendientes.length === 0 ? (
-          <p className="adm-din-nota">Nada pendiente ahora mismo. Las piezas llegan aquí cuando el reloj de crecimiento las redacta.</p>
+          <p className="adm-din-nota">{t('marketing.nada_pendiente_ahora_mismo')}</p>
         ) : (
           <div className="adm-din-rejilla">
             {pendientes.map((p) => <TarjetaPieza key={p.id} pieza={p} publicar={accionPublicarPieza} rechazar={accionRechazarPieza} />)}
@@ -229,7 +236,7 @@ export default async function EstudioMarketingPage() {
         )}
         {aprobadas !== null && aprobadas.length > 0 ? (
           <>
-            <p className="adm-din-nota">Ya publicadas</p>
+            <p className="adm-din-nota">{t('marketing.ya_publicadas')}</p>
             <ul className="adm-din-lista">
               {aprobadas.map((p) => <li key={p.id}>{p.titulo} <span>{p.agente}</span></li>)}
             </ul>
@@ -237,13 +244,17 @@ export default async function EstudioMarketingPage() {
         ) : null}
       </Tarjeta>
 
-      <Disclosure titulo="Qué no hace el estudio todavía" resumen="Generación de imagen y video">
+      <Disclosure titulo={t('marketing.que_no_hace_el')} resumen="Generación de imagen y video">
         <p className="adm-din-nota">
-          La generación real de imagen y video sigue siendo un punto de extensión explícito, no algo activado aquí: el estudio entrega el insumo y la aprobación; el render vive en el flujo local del dueño.
+          
+          {t('marketing.la_generacion_real_de')}
         </p>
       </Disclosure>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Estudio de marketing' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_dinero');
+  return { title: t('marketing.estudio_de_marketing') };
+}

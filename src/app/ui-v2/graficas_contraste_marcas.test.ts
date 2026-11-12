@@ -4,8 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // GUARDA de contraste de MARCAS de las gráficas (WCAG 1.4.11, ≥3:1). El relleno de una marca puede aclararse (estimado, tonos de la dona y de las
-// agrupadas), pero su CONTORNO es el matiz pleno, y el matiz pleno ya se mide contra la tarjeta en `dashboard/contraste_v2.test.ts` (excepción
-// declarada: --chart-4 ocre en claro, Vexa lo trae a 2.2:1; siempre lleva etiqueta de texto). Aquí se vigila que el contorno exista y que el relleno
+// agrupadas), pero su CONTORNO es el matiz pleno, y el matiz pleno ya se mide contra la tarjeta en `dashboard/contraste_v2.test.ts` (las series claras 4, 6 y 8 llevan contorno --chart-borde). Aquí se vigila que el contorno exista y que el relleno
 // «estimado» mezclado con la tarjeta no baje de 2.5:1 (naranja .8 = 2.65) en los 7 matices medibles, en claro y en oscuro.
 const leer = (f: string) => readFileSync(join(__dirname, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const graf = leer('graficas.css');
@@ -34,12 +33,23 @@ describe.each([['claro', CLARO], ['oscuro', OSCURO]] as const)('marcas de gráfi
     expect(graf).toMatch(/data-tipo="estimado"\][^{]*\{[^}]*stroke: var\(--cat/);
     expect(graf).toMatch(/data-tipo="inferido"\][^{]*\{[^}]*stroke-dasharray/);
   });
-  it.each([1, 2, 3, 5, 6, 7, 8])('matiz %i: el relleno «estimado» (.8) mide ≥2.5:1 y, con su contorno pleno, la marca cumple 3:1', (n) => {
+  it.each([1, 2, 3, 5, 7])('matiz %i (serie dura): el relleno «estimado» (.8) mide ≥2.5:1 y, con su contorno pleno, la marca cumple 3:1', (n) => {
     const r = contraste(mezcla(t[`--chart-${n}`], t['--surface'], OPACIDAD_ESTIMADO), t['--surface']);
     expect(r, `matiz ${n} estimado mide ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(2.5); // el 3:1 de la marca lo da el contorno (siguiente prueba)
   });
-  it.each([1, 2, 3, 5, 6, 7, 8])('matiz %i: el contorno pleno (la marca de los tonos claros) mide ≥3:1', (n) => {
+  it.each([1, 2, 3, 5, 7])('matiz %i (serie dura): el contorno pleno (la marca de los tonos claros) mide ≥3:1', (n) => {
     expect(contraste(t[`--chart-${n}`], t['--surface'])).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe.each([['claro', CLARO], ['oscuro', OSCURO]] as const)('series CLARAS (4, 6, 8), modo %s: el contorno --chart-borde las sostiene', (_n, t) => {
+  // Paleta de alto contraste (11-nov-2026): en una escala de grises 8 series no caben sobre el piso de 3:1; las tres tenues llevan contorno ≥3:1.
+  it('--chart-borde mide ≥3:1 contra la tarjeta', () => {
+    expect(contraste(t['--chart-borde'], t['--surface'])).toBeGreaterThanOrEqual(3);
+  });
+  it('la regla de contorno existe para los matices 4, 6 y 8 en barras, dona, líneas y rellenos de HTML', () => {
+    expect(graf).toMatch(/\[data-matiz="4"\], \[data-matiz="6"\], \[data-matiz="8"\]\) :is\(\.rv-colum__barra[^{]*\{[^}]*stroke: var\(--chart-borde\)/);
+    expect(graf).toMatch(/\[data-matiz="8"\]\) :is\(\.rv-embudo__barra[^{]*\{[^}]*box-shadow: inset 0 0 0 1px var\(--chart-borde\)/);
   });
 });
 

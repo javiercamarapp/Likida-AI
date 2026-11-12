@@ -5,6 +5,8 @@ import { ExternalLink } from 'lucide-react';
 import './conocimiento.css';
 import { buscarNormas, PUEDE_AFIRMARSE, JERARQUIA_ROTULO, type Norma } from '@/lib/likida/normas/tipos';
 import { Aviso, BotonEnlace, Chip, CampoTexto, Icono, MarcoPagina, SegmentedControl, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 type FiltroEstado = 'todas' | 'afirmables' | 'sin_verificar';
 
@@ -17,6 +19,7 @@ type FiltroEstado = 'todas' | 'afirmables' | 'sin_verificar';
  * de decidir con ella (por eso el estado va en un `StatusChip` con texto, y el filtro «Sin verificar» existe).
  */
 export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
+  const { t } = useT('resto', restoEs);
   const [q, setQ] = useState('');
   const [estado, setEstado] = useState<FiltroEstado>('todas');
 
@@ -41,38 +44,36 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
     f === 'todas' ? normas.length : normas.filter((n) => (PUEDE_AFIRMARSE[n.estado_verificacion]?.puede === true) === (f === 'afirmables')).length;
 
   return (
-    <MarcoPagina titulo="Conocimiento normativo" apoyo="Las fichas de las que depende una cifra de tu liquidación, cada una con su estado de verificación en la fuente original.">
-      <Aviso tono="info">
-        Esto es de dónde sale el cálculo, no asesoría fiscal. Likida prepara y te señala; la decisión, y su firma, es de tu contador.
-      </Aviso>
+    <MarcoPagina titulo={t('cfg.conocimiento_normativo')} apoyo={t('cfg.las_fichas_de_las_que_depende')}>
+      <Aviso tono="info">{t('cfg.esto_es_de_donde_sale_el')}</Aviso>
 
       <div className="rv-conocimiento__filtros">
         <CampoTexto
           tipo="search"
           id="norma-q"
-          etiqueta="Buscar una norma"
+          etiqueta={t('cfg.buscar_una_norma')}
           etiquetaOculta
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="peaje, 20-A, diésel, carta porte, datos personales…"
+          placeholder={t('cfg.peaje_20_a_diesel_carta_porte')}
         />
         <SegmentedControl<FiltroEstado>
-          etiqueta="Estado de verificación"
+          etiqueta={t('cfg.estado_de_verificacion')}
           valor={estado}
           onChange={setEstado}
           opciones={[
-            { valor: 'todas', etiqueta: 'Todas', conteo: conteo('todas') },
-            { valor: 'afirmables', etiqueta: 'Se puede afirmar', conteo: conteo('afirmables') },
-            { valor: 'sin_verificar', etiqueta: 'Sin verificar', conteo: conteo('sin_verificar') },
+            { valor: 'todas', etiqueta: t('cfg.todas'), conteo: conteo('todas') },
+            { valor: 'afirmables', etiqueta: t('cfg.se_puede_afirmar'), conteo: conteo('afirmables') },
+            { valor: 'sin_verificar', etiqueta: t('cfg.sin_verificar'), conteo: conteo('sin_verificar') },
           ]}
         />
       </div>
 
       {lista.length === 0 ? (
-        <Tarjeta titulo="Fichas" info="conocimiento.ficha" estado="vacio" mensaje={buscando ? 'Ninguna ficha habla de eso' : 'No hay fichas con ese estado'}
+        <Tarjeta titulo={t('cfg.fichas')} info="conocimiento.ficha" estado="vacio" mensaje={buscando ? t('cfg.ninguna_ficha_habla_de_eso') : t('cfg.no_hay_fichas_con_ese_estado')}
           detalle={buscando
-            ? 'No se muestra la más parecida a propósito: en materia fiscal, una respuesta aproximada es peor que ninguna. Si Likida debería saberlo, dínoslo desde el Centro de ayuda.'
-            : 'Prueba con otro estado de verificación.'} />
+            ? t('cfg.no_se_muestra_la_mas_parecida')
+            : t('cfg.prueba_con_otro_estado_de_verificacion')} />
       ) : (
         lista.map((n) => {
           const v = PUEDE_AFIRMARSE[n.estado_verificacion];
@@ -93,14 +94,13 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
                 {n.articulo_o_regla ? ` · Art./regla ${n.articulo_o_regla}` : ''}
               </p>
               {v ? <p className="rv-conocimiento__nota" data-puede={v.puede || undefined}>{v.nota}</p> : null}
-              {n.citasEnCodigo.length > 0 ? <p className="rv-conocimiento__nota">Se aplica como: {n.citasEnCodigo.join(' · ')}</p> : null}
+              {n.citasEnCodigo.length > 0 ? <p className="rv-conocimiento__nota">{t('cfg.se_aplica_como')}{' '}{n.citasEnCodigo.join(' · ')}</p> : null}
               <div className="rv-conocimiento__pie">
                 {n.fuente_url ? (
-                  <BotonEnlace href={n.fuente_url} tamano="sm" variante="secondary" target="_blank" rel="noopener noreferrer">
-                    Leer la fuente <Icono icono={ExternalLink} tam={14} />
+                  <BotonEnlace href={n.fuente_url} tamano="sm" variante="secondary" target="_blank" rel="noopener noreferrer">{t('cfg.leer_la_fuente')}{' '}<Icono icono={ExternalLink} tam={14} />
                   </BotonEnlace>
                 ) : null}
-                {n.verificado_el ? <span className="rv-conocimiento__nota">Revisada el {n.verificado_el}</span> : null}
+                {n.verificado_el ? <span className="rv-conocimiento__nota">{t('cfg.revisada_el')}{' '}{n.verificado_el}</span> : null}
               </div>
             </Tarjeta>
           );

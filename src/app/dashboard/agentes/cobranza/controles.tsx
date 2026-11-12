@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Play, Pause, Send } from 'lucide-react';
 import type { ResultadoCobranza } from '@/lib/likida/agentes/cobranza';
-import { AvisoCompacto, Boton, Icono } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, Icono, Tooltip } from '@/app/ui-v2/componentes';
 import '../agentes.css';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
@@ -57,12 +57,11 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
           <Boton variante="ghost" onClick={() => setConfirmando(false)}>{t('cobranza.controles.cancelar')}</Boton>
         </form>
       ) : (
-        <Boton variante="primary" onClick={() => setConfirmando(true)}
+        <Tooltip texto={!activo ? t('cobranza.controles.el_agente_esta_pausado') : enCola === 0 ? t('cobranza.controles.no_hay_a_quien_contactar') : t('cobranza.controles.correr_la_cobranza_ahora_sin')}><Boton variante="primary" onClick={() => setConfirmando(true)}
           disabled={!activo || enCola === 0}
-          title={!activo ? t('cobranza.controles.el_agente_esta_pausado') : enCola === 0 ? t('cobranza.controles.no_hay_a_quien_contactar') : t('cobranza.controles.correr_la_cobranza_ahora_sin')}
           icono={<Icono icono={Send} tam={14} />}>
           {t('cobranza.controles.ejecutar_ahora')}
-        </Boton>
+        </Boton></Tooltip>
       )}
 
       {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
@@ -119,10 +118,9 @@ function BotonPausaInterno({ activo }: { activo: boolean }) {
   const { t } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="secondary" loading={pending} disabled={pending}
-      title={activo ? t('cobranza.controles.el_agente_deja_de_contactar') : t('cobranza.controles.el_agente_vuelve_a_contactar')}
+    <Tooltip texto={activo ? t('cobranza.controles.el_agente_deja_de_contactar') : t('cobranza.controles.el_agente_vuelve_a_contactar')}><Boton type="submit" variante="secondary" loading={pending} disabled={pending}
       icono={pending ? undefined : <Icono icono={activo ? Pause : Play} tam={14} />}>
       {activo ? (pending ? t('cobranza.controles.pausando') : t('cobranza.controles.pausar_agente')) : (pending ? t('cobranza.controles.reanudando') : t('cobranza.controles.reanudar_agente'))}
-    </Boton>
+    </Boton></Tooltip>
   );
 }

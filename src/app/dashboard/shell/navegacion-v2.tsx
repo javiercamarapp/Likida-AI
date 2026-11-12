@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { ChevronDown, Settings } from 'lucide-react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { ChevronRight, Settings } from 'lucide-react';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
 import { etiquetaNav, etiquetaRol } from '@/lib/i18n/nav';
 import { moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Item } from '../rutas';
 import { useSufijoYRol } from '../sidebar-nav';
-import { menuPorPerfil, hrefActivo, hrefsDelMenu, HREF_NOTIFICACIONES, HREF_PUESTA_EN_MARCHA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
+import { menuPorPerfil, hrefActivo, hrefsDelMenu, HREF_NOTIFICACIONES, HREF_CONFIGURACION, HREF_PUESTA_EN_MARCHA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
 import MenuCuenta from './menu-cuenta';
 import PieSidebar from '../../ui-v2/componentes/pie-sidebar';
 
@@ -25,8 +25,8 @@ import PieSidebar from '../../ui-v2/componentes/pie-sidebar';
 // UNA sola categoría abierta → pie fijo (Puesta en marcha <6/6 · tarjeta de cuenta; el resto, en el menú de la tarjeta).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { iniciales, anclaDe, avanceDe } from './nav-utiles';
-import { iniciales, anclaDe, avanceDe } from './nav-utiles';
+export { iniciales, anclaDe, avanceDe, flotaDelPie } from './nav-utiles';
+import { iniciales, anclaDe, avanceDe, flotaDelPie } from './nav-utiles';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vista';
 
@@ -96,6 +96,7 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
 }) {
   const activo = hrefActivo(pathname, menu);
   const props = { sufijo, activo, perfil, insignias, alNavegar };
+  const sueltos = menu.pie.filter((i) => i.href === HREF_CONFIGURACION);
   const colapsables = menu.grupos.filter((g) => !g.estatico && !plano);
   const grupoDelActivo = menu.grupos.find((g) => !g.estatico && g.items.some((i) => i.href === activo))?.id ?? null;
   // Siempre UNA sola categoría abierta. Navegar a una ruta de otra categoría la abre (y cierra la que estaba abierta): se ajusta
@@ -150,7 +151,7 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
               <button type="button" id={idT} className="rv-grupo__t rv-grupo__tog" aria-expanded={esta} aria-controls={`${idT}-c`}
                 onClick={() => setAbierta(esta ? null : g.id)}>
                 {etiquetaNav(tr, g.titulo)}
-                <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
+                <ChevronRight className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
               </button>
             </h2>
             <div id={`${idT}-c`} className="rv-grupo__cuerpo" role="region" aria-labelledby={idT}>
@@ -159,6 +160,8 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
           </section>
         );
       })}
+      {/* Ítem suelto bajo los grupos (Rovaq): Configuración. Solo existe si el rol la abre (viene del mismo filtro que el resto). */}
+      {sueltos.length > 0 && <Lista items={sueltos} {...props} />}
       {conPie && menu.pie.length > 0 && <Lista items={menu.pie} {...props} />}
     </>
   );
@@ -186,16 +189,20 @@ function FilaPuesta({ avance, sufijo, alNavegar, activo }: { avance: { n: number
  * usuario) y, arriba, «Puesta en marcha» (solo <6/6). Mi perfil, Ayuda, Plan y Configuración siguen en el menú de la tarjeta.
  * «Avisos» lleva la cifra solo si `insignias` la trae (número entero); sin ella no se pinta ninguna: nunca un 0 inventado.
  */
-export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, perfil, alNavegar, pathname, organizacion }: {
+export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, perfil, alNavegar, pathname, organizacion, flotas }: {
   menu: MenuV2; sufijo: string; pathname: string; perfil?: PerfilTenant | null; rol: string; rolEtiqueta: string; nombre: string | null;
   usoIa?: { pct: number } | null; cerrarSesion?: () => Promise<void>; insignias?: Insignias; alNavegar?: () => void;
   /** La flota que se está viendo (nombre leído en el servidor). `null`/ausente = no se pudo saber: el pie lo dice. */
   organizacion?: { id: string; nombre: string } | null;
+  /** Solo el superadmin: las flotas, para que `?tenant=` (que el layout no ve) decida el nombre. `null` = lectura caída. */
+  flotas?: Array<{ id: string; nombre: string }> | null;
 }) {
   const tr = useT('shell', shellEs);
+  const tenantUrl = useSearchParams()?.get('tenant') ?? null;
+  const org = flotaDelPie({ organizacion, flotas, tenantUrl });
   const activo = hrefActivo(pathname, menu);
   // Todo lo que el pie ya no pinta como fila (Mi perfil, Ayuda y, en el menú genérico, Plan y Configuración) va al menú de la tarjeta.
-  const filasMenuCuenta = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES);
+  const filasMenuCuenta = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES && i.href !== HREF_CONFIGURACION);
   const avance = avanceDe(insignias?.[HREF_PUESTA_EN_MARCHA]);
   const enMenu = menu.grupos.some((g) => g.items.some((i) => i.href === HREF_PUESTA_EN_MARCHA));
   const insigniaAvisos = insignias?.[HREF_NOTIFICACIONES];
@@ -206,8 +213,8 @@ export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarS
       alNavegar={alNavegar}
       extra={avance && enMenu ? <FilaPuesta avance={avance} sufijo={sufijo} alNavegar={alNavegar} activo={activo === HREF_PUESTA_EN_MARCHA} /> : undefined}
       organizacion={{
-        opciones: organizacion === undefined ? [] : organizacion ? [{ valor: organizacion.id, nombre: organizacion.nombre }] : null,
-        actual: organizacion?.id ?? null,
+        opciones: org === undefined ? [] : org ? [{ valor: org.id, nombre: org.nombre }] : null,
+        actual: org?.id ?? null,
         hrefIr: () => `/dashboard${sufijo}`,
       }}
       avisos={hayAvisos ? { href: `${HREF_NOTIFICACIONES}${sufijo}`, pendientes } : null}

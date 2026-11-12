@@ -26,19 +26,19 @@ describe('BotonEjecutar — el gateo antes de confirmar', () => {
   it('agente pausado: el botón sale deshabilitado con su título explicando por qué', () => {
     const html = renderToStaticMarkup(<BotonEjecutar ejecutarAhora={accionEjecutar} enCola={5} activo={false} />);
     expect(html).toContain('Ejecutar ahora');
-    expect(html).toContain('title="El agente está pausado"');
+    expect(html).toMatch(/role="tooltip"[^>]*>El agente está pausado<\/span>/);
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>/);
   });
 
   it('cola vacía: deshabilitado con el título "No hay a quién contactar"', () => {
     const html = renderToStaticMarkup(<BotonEjecutar ejecutarAhora={accionEjecutar} enCola={0} activo={true} />);
-    expect(html).toContain('title="No hay a quién contactar"');
+    expect(html).toMatch(/role="tooltip"[^>]*>No hay a quién contactar<\/span>/);
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>/);
   });
 
   it('activo y con cola: habilitado, con el título que explica qué hace', () => {
     const html = renderToStaticMarkup(<BotonEjecutar ejecutarAhora={accionEjecutar} enCola={3} activo={true} />);
-    expect(html).toContain('title="Correr la cobranza ahora, sin esperar la ventana"');
+    expect(html).toMatch(/role="tooltip"[^>]*>Correr la cobranza ahora, sin esperar la ventana<\/span>/);
     expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>/);
   });
 
@@ -64,14 +64,14 @@ describe('BotonPausa — pausar y reanudar', () => {
     const html = renderToStaticMarkup(<BotonPausa alternarPausa={accionSimple} activo={true} />);
     expect(html).toContain('Pausar agente');
     expect(html).not.toContain('Reanudar agente');
-    expect(html).toContain('title="El agente deja de contactar hasta que lo reanudes"');
+    expect(html).toMatch(/role="tooltip"[^>]*>El agente deja de contactar hasta que lo reanudes<\/span>/);
   });
 
   it('pausado: el botón ofrece "Reanudar agente"', () => {
     const html = renderToStaticMarkup(<BotonPausa alternarPausa={accionSimple} activo={false} />);
     expect(html).toContain('Reanudar agente');
     expect(html).not.toContain('Pausar agente');
-    expect(html).toContain('title="El agente vuelve a contactar en su ventana"');
+    expect(html).toMatch(/role="tooltip"[^>]*>El agente vuelve a contactar en su ventana<\/span>/);
   });
 
   it('sin error en el estado inicial: no pinta ningún mensaje de error', () => {

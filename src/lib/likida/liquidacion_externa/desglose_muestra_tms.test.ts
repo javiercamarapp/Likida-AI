@@ -29,7 +29,7 @@ describe('muestra-tms · caso feliz', () => {
 
   it('lo que la muestra no trae queda no disponible y NO se inventa', () => {
     const r = conv({});
-    expect(r.noDisponible).toEqual(NO_DISPONIBLE_MUESTRA);
+    expect(r.noDisponible).toEqual([...NO_DISPONIBLE_MUESTRA, 'numeroEmpleado', 'tipoOperador', 'poliza', 'numeroPago', 'neto', 'folio']);
     expect(r.desglose).not.toHaveProperty('numeroLiquidacion');
     expect(r.desglose).not.toHaveProperty('tipoOperador');
     expect(r.desglose).not.toHaveProperty('terminal');
@@ -59,7 +59,7 @@ describe('muestra-tms · casos límite de la bitácora', () => {
   });
 
   it('BitacoraID 0, negativo, texto o ausente ⇒ revisión', () => {
-    for (const v of [0, -3, 1.5, 'abc', null, undefined]) expect(codigos(conv({ BitacoraID: v }))).toContain('bitacora_invalida');
+    for (const v of [0, -3, 1.5, null, undefined, '', 'con espacio', 'raro/slash', 'x'.repeat(41), 2 ** 60]) expect(codigos(conv({ BitacoraID: v }))).toContain('bitacora_invalida');
     expect(conv({ BitacoraID: 0 }).desglose).toBeNull();
   });
 

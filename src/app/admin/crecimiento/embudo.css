@@ -1,0 +1,22 @@
+/* EL EMBUDO DE ADQUISICIÓN DE PROSPECTOS (/admin/crecimiento): barras proporcionales y de color, solo para las etapas con prospectos.
+   El color de cada etapa sale de los mismos tokens --chart-n que el Cerebro de ventas; cero hex y cero `style=`. */
+.crc-embudo { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.crc-embudo__fila { --etapa: var(--muted); display: grid; gap: 5px; min-width: 0; }
+.crc-embudo__fila[data-etapa="contactado"] { --etapa: var(--chart-4, var(--muted)); }
+.crc-embudo__fila[data-etapa="appointment"] { --etapa: var(--chart-1, var(--muted)); }
+.crc-embudo__fila[data-etapa="rescheduled"] { --etapa: var(--chart-5, var(--muted)); }
+.crc-embudo__fila[data-etapa="cancelled"], .crc-embudo__fila[data-etapa="no-show"] { --etapa: var(--chart-6, var(--muted)); }
+.crc-embudo__fila[data-etapa="demo"] { --etapa: var(--chart-7, var(--muted)); }
+.crc-embudo__fila[data-etapa="proposal"] { --etapa: var(--chart-2, var(--muted)); }
+.crc-embudo__fila[data-etapa="pilot"] { --etapa: var(--chart-5, var(--muted)); }
+.crc-embudo__fila[data-etapa="won"] { --etapa: var(--chart-3, var(--muted)); }
+.crc-embudo__cab { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.crc-embudo__etq { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.crc-embudo__punto { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: var(--etapa); flex: none; }
+.crc-embudo__val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.crc-embudo__pista { display: block; height: 8px; border-radius: 999px; background: var(--chart-rejilla, var(--line)); overflow: hidden; }
+.crc-embudo__relleno { fill: var(--etapa); transform-box: fill-box; transform-origin: left; }
+@media (prefers-reduced-motion: no-preference) {
+  .crc-embudo__relleno { animation: crc-crece .42s cubic-bezier(.22, 1, .36, 1) both; }
+  @keyframes crc-crece { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+}

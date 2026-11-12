@@ -107,9 +107,9 @@ export function FormaEscribirRegla({ accion, ejemplos }: {
 
       <div className="rv-reglas__ejemplos">
         {ejemplos.map((e) => (
-          <button key={e} type="button" onClick={() => setTexto(e)} className="rv-chip">
+          <Boton key={e} type="button" variante="secondary" tamano="sm" onClick={() => setTexto(e)}>
             {e}
-          </button>
+          </Boton>
         ))}
       </div>
 

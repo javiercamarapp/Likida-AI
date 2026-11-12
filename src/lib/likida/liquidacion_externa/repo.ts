@@ -13,7 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
-import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
+import { OperadorAmbiguo, OperadorDeBaja, datoInvalido } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
 import { PATRON_FOLIO } from '../orquestador/escalamiento';
@@ -228,8 +228,6 @@ export async function leerVersionFormato(tenantId: string): Promise<string | nul
   return typeof v === 'string' ? v : null;
 }
 
-const MENSAJE_CONFLICTO_FORMATO = 'Otra persona guardó el formato o los teléfonos mientras tú editabas, y tus cambios no se aplicaron para no pisar los suyos. Recarga la pantalla, revisa lo que quedó y vuelve a hacer tu cambio.';
-
 /**
  * Guarda el formato (y los teléfonos que lo acompañan). `version` es lo que devolvió `leerVersionFormato` antes de editar:
  * con ella el guardado es CONDICIONAL (la fila sigue en esa versión; `null` = seguía sin existir) y, si otra persona la cambió
@@ -249,7 +247,7 @@ export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlot
   if (version === null) {
     const ins = await acotada(supabaseAdmin().from('liquidacion_formato_flota').insert({ tenant_id: tenantId, ...fila }), 'liqext.formato_crear');
     if (ins.error) {
-      if (ins.error.code === '23505') throw new DatoInvalido(MENSAJE_CONFLICTO_FORMATO);
+      if (ins.error.code === '23505') throw datoInvalido('liq_externa.conflicto_formato');
       throw new Error(`liquidacion_formato_flota guardar: ${ins.error.message}`);
     }
     return;
@@ -257,7 +255,7 @@ export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlot
   const upd = await acotada(supabaseAdmin().from('liquidacion_formato_flota').update(fila)
     .eq('tenant_id', tenantId).eq('actualizado_en', version).select('tenant_id'), 'liqext.formato_guardar');
   if (upd.error) throw new Error(`liquidacion_formato_flota guardar: ${upd.error.message}`);
-  if ((upd.data ?? []).length === 0) throw new DatoInvalido(MENSAJE_CONFLICTO_FORMATO);
+  if ((upd.data ?? []).length === 0) throw datoInvalido('liq_externa.conflicto_formato');
 }
 
 /**
@@ -272,7 +270,7 @@ export async function guardarTelefonosFlota(tenantId: string, t: TelefonosFlota,
   const ins = await acotada(supabaseAdmin().from('liquidacion_formato_flota').insert({ tenant_id: tenantId, formato: null, nombre_muestra: null, ...cambios }), 'liqext.telefonos_crear');
   if (ins.error) {
     if (ins.error.code === '23502') {
-      throw new DatoInvalido('Para guardar los teléfonos sin un Excel de muestra hace falta aplicar la migración 0645 en la base. Mientras tanto, sube el Excel de muestra y ahí los capturas.');
+      throw datoInvalido('repo.para_guardar_los_telefonos_sin');
     }
     throw new Error(`liquidacion_formato_flota crear teléfonos: ${ins.error.message}`);
   }
@@ -329,9 +327,7 @@ export async function resolverOperadorDestino(
   tenantId: string,
   ref: LiquidacionExternaNormalizada['operador'],
 ): Promise<OperadorDestino> {
-  const noEncontrado = () => new DatoInvalido(
-    'No encontré a ese operador en tu flota. Manda `operador.id`, `operador.telefono` o `operador.numeroEmpleado` de un chofer dado de alta en Likida.',
-  );
+  const noEncontrado = () => datoInvalido('repo.no_encontre_a_ese_operador');
   const lecturas: Array<Promise<OperadorDestino[]>> = [];
   const leer = async (columna: 'id' | 'telefono' | 'numero_empleado', valor: string): Promise<OperadorDestino[]> => {
     const res = await acotada(supabaseAdmin().from('operador')

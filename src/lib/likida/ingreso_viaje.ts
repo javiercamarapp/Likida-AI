@@ -1,4 +1,4 @@
-import { DatoInvalido } from './errores';
+import { datoInvalido, etiqueta } from './errores';
 // El formato de cifras vive SOLO en formato.ts, y hay una prueba que falla si
 // otro archivo formatea por su cuenta. Este archivo la hizo fallar en su
 // primera versión con un `toLocaleString` en el mensaje de error: el guardia
@@ -81,40 +81,36 @@ function opcional(crudo: string, campo: string, tope: number, esDinero = false):
   // A37-L-05: solo dígitos con punto decimal opcional (y signo, para dar el mensaje de «negativo»).
   // `Number()` pelado aceptaba '1e4' ($10,000), '0x10' ($16) y 'Infinity'.
   // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada por el campo de texto y sin cuantificadores anidados sobre los mismos caracteres
-  if (!/^-?\d+(\.\d+)?$/.test(limpio)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
+  if (!/^-?\d+(\.\d+)?$/.test(limpio)) throw datoInvalido('ingreso_viaje.tiene_que_ser_un_numero', { campo });
   const n = Number(limpio);
 
-  if (!Number.isFinite(n)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
-  if (n < 0) throw new DatoInvalido(`${campo} no puede ser negativo.`);
+  if (!Number.isFinite(n)) throw datoInvalido('ingreso_viaje.tiene_que_ser_un_numero', { campo });
+  if (n < 0) throw datoInvalido('ingreso_viaje.no_puede_ser_negativo', { campo });
   // A37-S64-02: más de dos decimales NO se redondea en silencio. «38.500» (miles con punto, como exporta Excel con configuración
   // es-ES) se guardaba como 38.50 y «1.240» km como 1.24: cifras plausibles que nadie cuestiona. Se pide reescribirla sin ambigüedad.
   if (masDeDosDecimales(limpio)) {
-    throw new DatoInvalido(`${campo} no puede traer más de dos decimales. Si «${t}» lleva el punto como separador de miles, escríbelo sin él (por ejemplo 38500 o 38,500.00).`);
+    throw datoInvalido('ingreso_viaje.no_puede_traer_mas_de', { campo, t });
   }
   if (n > tope) {
-    throw new DatoInvalido(
-      `${campo} pasa de ${numero(tope)} y eso casi siempre es un cero de más. Si es correcto, avísanos.`,
-    );
+    throw datoInvalido('ingreso_viaje.pasa_de_y_eso_casi', { campo, v: numero(tope) });
   }
   // Dinero: los centavos se rechazan, no se redondean (`numeric(12,2)` los redondearía en silencio y el
   // CFDI diría otra cifra). Con tolerancia: 1234.56 * 100 es 123455.99999999999 en binario.
   if (esDinero && Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) {
-    throw new DatoInvalido(`${campo} no puede traer más de dos decimales: la base guarda centavos y redondear en silencio cambiaría la cifra.`);
+    throw datoInvalido('ingreso_viaje.no_puede_traer_mas_de_2', { campo });
   }
   return n;
 }
 
 export function validarIngreso(c: IngresoCrudo): IngresoValido {
-  const ingresoFlete = opcional(c.ingresoFlete, 'El ingreso del flete', TOPES.ingreso, true);
-  const kmRecorridos = opcional(c.kmRecorridos, 'Los kilómetros', TOPES.km);
+  const ingresoFlete = opcional(c.ingresoFlete, etiqueta('etq.el_ingreso_del_flete'), TOPES.ingreso, true);
+  const kmRecorridos = opcional(c.kmRecorridos, etiqueta('etq.los_kilometros'), TOPES.km);
   // A37-P-03: la base exige km > 0 y entero (viaje_km_sanos, 0048) y POST /v1/viajes ya valida 1..19999 entero. Aquí se
   // rechaza con mensaje claro en vez de dejar que la base lo tire con un error genérico que el usuario reintenta sin fin.
   if (kmRecorridos !== null && (!Number.isInteger(kmRecorridos) || kmRecorridos < 1 || kmRecorridos >= TOPES.km)) {
-    throw new DatoInvalido(
-      kmRecorridos >= TOPES.km
-        ? `Los kilómetros pasan de ${numero(TOPES.km - 1)} y eso casi siempre es un cero de más. Si es correcto, avísanos.`
-        : 'Los kilómetros tienen que ser un número entero entre 1 y 19,999 (déjalo vacío si no lo conoces).',
-    );
+    throw kmRecorridos >= TOPES.km
+      ? datoInvalido('ingreso_viaje.km_cero_de_mas', { tope: numero(TOPES.km - 1) })
+      : datoInvalido('ingreso_viaje.km_entero');
   }
   const clienteId = c.clienteId.trim() || null;
 

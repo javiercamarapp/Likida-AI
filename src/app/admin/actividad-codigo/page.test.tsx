@@ -16,13 +16,13 @@ vi.mock('@/lib/admin/actividad-codigo', () => ({ getActividadCodigo: dobles.getA
 import ActividadCodigoPage from './page';
 async function renderizar() { return renderToStaticMarkup(await ActividadCodigoPage()); }
 
-it('sin GITHUB_TOKEN: lo dice explícito, con cómo generarlo — nunca "cero commits"', async () => {
+it('sin acceso a GitHub: lo dice explícito y sin jerga de variables — nunca "cero commits"', async () => {
   dobles.getActividadCodigo.mockResolvedValue({ estado: 'sin_token' });
   const html = await renderizar();
-  expect(html).toContain('GITHUB_TOKEN');
+  expect(html).not.toContain('GITHUB_TOKEN');
   // R9: el aviso pasó de un vacío largo a un aviso compacto accionable (misma verdad: falta la variable, no hay «cero commits»).
   expect(html).toContain('Falta configurar el acceso a GitHub');
-  expect(html).toContain('Vercel');
+  expect(html).toContain('equipo técnico');
   expect(html).not.toContain('Commits — últimas 52 semanas');
 });
 
@@ -38,7 +38,7 @@ it('error de lectura: muestra el detalle real y ACLARA que no significa "sin com
   const html = await renderizar();
   expect(html).toContain('GitHub contestó 500');
   expect(html).toContain('Esto NO significa que no haya commits');
-  expect(html).toContain('GITHUB_TOKEN');
+  expect(html).not.toContain('GITHUB_TOKEN');
 });
 
 it('ok con datos reales: pinta el heatmap y los totales medidos', async () => {

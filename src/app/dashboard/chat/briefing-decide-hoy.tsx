@@ -1,12 +1,15 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 // Imports directos y no el barril de ui-v2: el barril arrastra `BotonReintentar` (next/navigation) al paquete del chat.
 import { StatusChip } from '../../ui-v2/componentes/status-chip';
-import { Boton } from '../../ui-v2/componentes/boton';
+import { Boton, BotonEnlace } from '../../ui-v2/componentes/boton';
 import { Icono } from '../../ui-v2/componentes/icono';
 import { MessageCircleQuestion } from 'lucide-react';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «DECIDE HOY» en la portada del Copiloto (F5, mejora 3). Lee /api/admin/copiloto/briefing (lectores reales, cada fuente por
@@ -27,13 +30,14 @@ interface Tarjeta {
 interface Briefing { tarjetas: Tarjeta[]; fuentesCiegas: string[] }
 
 const TONO = { alta: 'bad', media: 'warn', info: 'ok' } as const;
-const ROTULO = { alta: 'Urgente', media: 'Pendiente', info: 'Al día' } as const;
+const rotulo = (t: TResto = T_RESTO_ES) => ({ alta: t('op.urgente'), media: t('ch.pendiente'), info: t('ch.al_dia') } as const);
 
 export default function BriefingDecideHoy({ onPreguntar, deshabilitado, endpoint = '/api/admin/copiloto' }: {
   onPreguntar: (q: string) => void;
   deshabilitado: boolean;
   endpoint?: string;
 }) {
+  const { t } = useT('resto', restoEs);
   const [b, setB] = useState<Briefing | 'error' | null>(null);
   const [intento, setIntento] = useState(0);
   useEffect(() => {
@@ -46,43 +50,54 @@ export default function BriefingDecideHoy({ onPreguntar, deshabilitado, endpoint
   }, [endpoint, intento]);
   const cargar = () => { setB(null); setIntento((i) => i + 1); };
 
+  const lista = b !== null && b !== 'error' ? b.tarjetas : [];
+  const urgentes = lista.filter((x) => x.severidad === 'alta').length;
+  const pendientes = lista.filter((x) => x.severidad === 'media').length;
+
   return (
-    <section className="rv-chat__briefing" aria-label="Decide hoy" aria-busy={b === null || undefined}>
-      {/* sin-info: portada del Copiloto, no es una cifra del dashboard del cliente */}
-      <h2 className="rv-chat__briefing-titulo">Decide hoy</h2>
-      {b === null && <p className="rv-chat__nota">Leyendo lo que espera tu decisión…</p>}
+    // Tarjeta APARTE, plegada, DEBAJO de la portada (como Rovaq: logo, título, recuadro y temas centrados, sin tarjetas entre el recuadro y los temas).
+    // El resumen sigue diciendo si algo urge sin abrirla; una lectura caída se dice en el resumen, nunca «sin pendientes».
+    <details className="rv-chat__briefing rv-tarjeta" aria-busy={b === null || undefined}>
+      <summary className="rv-chat__briefing-resumen">
+        {/* sin-info: portada del Copiloto, no es una cifra del dashboard del cliente */}
+        <h2 className="rv-chat__briefing-titulo">{t('ch.decide_hoy')}</h2>
+        {urgentes > 0 && <StatusChip tono="bad">{rotulo(t).alta} · {urgentes}</StatusChip>}
+        {pendientes > 0 && <StatusChip tono="warn">{rotulo(t).media} · {pendientes}</StatusChip>}
+        {b === 'error' && <StatusChip tono="bad">{t('ch.no_disponible_ahora_no_es_cero')}</StatusChip>}
+      </summary>
+      <div className="rv-chat__briefing-cuerpo">
+      {b === null && <p className="rv-chat__nota">{t('ch.leyendo_lo_que_espera_tu_decision')}</p>}
       {b === 'error' && (
-        <p className="rv-chat__nota" role="alert">
-          No disponible ahora. No es cero: el briefing no se pudo leer.{' '}
-          <button type="button" className="rv-btn rv-btn--ghost rv-btn--sm" onClick={cargar}>Reintentar</button>
+        <p className="rv-chat__nota" role="alert">{t('ch.no_disponible_ahora_no_es_cero')}{' '}<Boton variante="ghost" tamano="sm" onClick={cargar}>{t('cfg.reintentar')}</Boton>
         </p>
       )}
       {b !== null && b !== 'error' && (
         <>
           <ul className="rv-chat__briefing-lista">
-            {b.tarjetas.map((t) => (
-              <li key={t.id} className="rv-tarjeta rv-chat__briefing-tarjeta" data-severidad={t.severidad}>
+            {b.tarjetas.map((tarjeta) => (
+              <li key={tarjeta.id} className="rv-tarjeta rv-chat__briefing-tarjeta" data-severidad={tarjeta.severidad}>
                 <div className="rv-chat__briefing-cab">
-                  <StatusChip tono={TONO[t.severidad]}>{ROTULO[t.severidad]}</StatusChip>
-                  <strong>{t.titulo}</strong>
+                  <StatusChip tono={TONO[tarjeta.severidad]}>{rotulo(t)[tarjeta.severidad]}</StatusChip>
+                  <strong>{tarjeta.titulo}</strong>
                 </div>
-                <p className="rv-chat__nota">{t.detalle}</p>
-                {t.severidad !== 'info' && <p className="rv-chat__nota"><b>Propuesta:</b> {t.decision}</p>}
+                <p className="rv-chat__nota">{tarjeta.detalle}</p>
+                {tarjeta.severidad !== 'info' && <p className="rv-chat__nota">{rico(t('ch.b_propuesta_b'), { b: (c) => <b>{c}</b> })}{' '}{tarjeta.decision}</p>}
                 <div className="rv-chat__briefing-acciones">
-                  {t.href && <Link href={t.href} className="rv-btn rv-btn--secondary rv-btn--sm">Abrir pantalla</Link>}
-                  <Boton tamano="sm" variante="ghost" disabled={deshabilitado} onClick={() => onPreguntar(t.pregunta)} icono={<Icono icono={MessageCircleQuestion} />}>Preguntar</Boton>
+                  {tarjeta.href && <BotonEnlace href={tarjeta.href} tamano="sm">{t('ch.abrir_pantalla')}</BotonEnlace>}
+                  <Boton tamano="sm" variante="ghost" disabled={deshabilitado} onClick={() => onPreguntar(tarjeta.pregunta)} icono={<Icono icono={MessageCircleQuestion} />}>{t('ch.preguntar')}</Boton>
                 </div>
               </li>
             ))}
           </ul>
           {b.fuentesCiegas.length > 0 && (
-            <p className="rv-chat__nota" role="status">No se pudo leer: {b.fuentesCiegas.join(', ')}. De esas fuentes el briefing no afirma nada.</p>
+            <p className="rv-chat__nota" role="status">{t('ch.no_se_pudo_leer_de_esas', { b: b.fuentesCiegas.join(', ') })}</p>
           )}
         </>
       )}
       <div className="rv-chat__briefing-acciones">
-        <Boton tamano="sm" variante="secondary" disabled={deshabilitado} onClick={() => onPreguntar('¿Qué debo mirar en la pantalla que tengo abierta?')}>Preguntar sobre esta pantalla</Boton>
+        <Boton tamano="sm" variante="secondary" disabled={deshabilitado} onClick={() => onPreguntar(t('ch.que_debo_mirar_en_la_pantalla'))}>{t('ch.preguntar_sobre_esta_pantalla')}</Boton>
       </div>
-    </section>
+      </div>
+    </details>
   );
 }

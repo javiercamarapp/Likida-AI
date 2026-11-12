@@ -14,16 +14,19 @@ import { BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/do
 
 import '../carta-porte.css';
 import { CampoTexto, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 export interface AccionesCcp { fijar: AccionDoc; confirmar: AccionDoc }
 
-const ROTULO: Record<EstadoCcpTimbrado, string> = {
+const rotulo = (tx: TAgentes = TR_ES.t): Record<EstadoCcpTimbrado, string> => ({
   guardado: 'Guardado (la respuesta estaba apagada)',
-  pendiente_confirmacion: 'Espera tu confirmación',
-  respondido: 'Respondido al cliente',
-  error_envio: 'El correo no salió: reintenta',
-};
+  pendiente_confirmacion: tx('rest.espera_tu_confirmacion'),
+  respondido: tx('rest.respondido_al_cliente'),
+  error_envio: tx('rest.el_correo_no_salio_reintenta'),
+});
 
 const TONO: Record<EstadoCcpTimbrado, TonoEstado> = { guardado: 'muted', pendiente_confirmacion: 'warn', respondido: 'ok', error_envio: 'bad' };
 
@@ -33,6 +36,7 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
   ver: VerComo;
   acciones: AccionesCcp;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const oculto = (
     <>
       {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
@@ -42,53 +46,46 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
     </>
   );
   return (
-    <Tarjeta titulo="CCP timbrados recibidos">
+    <Tarjeta titulo={tx('rest.ccp_timbrados_recibidos')}>
       <div className="rv-cp__pila">
-        <p className="rv-cp__nota">
-          Cuando el sistema del cliente timbra la carta porte y avisa a Likida, el PDF y el XML se guardan aquí. Si encendes la respuesta, se le manda el CCP al cliente;
-          la primera vez por cliente (o si el remitente no se reconoce) necesita tu confirmación. El aviso automático desde el sistema del cliente está por conectar.
-        </p>
-        <p className="rv-cp__nota" data-tono="faint">
-          Para que un aviso se asocie a un envío, el envío debe tener la referencia del sistema del cliente: se captura al marcar la plantilla como «subida a mano»
-          o la guardará el envío automático cuando esté conectado (hoy está por conectar). Un aviso sin referencia conocida se rechaza.
-        </p>
+        <p className="rv-cp__nota">{tx('rest.cuando_el_sistema_del_cliente_timbra')}</p>
+        <p className="rv-cp__nota" data-tono="faint">{tx('rest.para_que_un_aviso_se_asocie')}</p>
         {activa === 'sin_migracion' || filas === 'sin_migracion' ? (
-          <p className="rv-cp__nota">Esta función todavía no está disponible en tu entorno.</p>
+          <p className="rv-cp__nota">{tx('rest.esta_funcion_todavia_no_esta_disponible')}</p>
         ) : (
           <>
-            <section className="rv-cp__bloque" aria-label="Respuesta al cliente">
-              <p className="rv-cp__frase">Responder al cliente con el CCP timbrado: {activa === true ? 'ENCENDIDO' : 'APAGADO'}</p>
+            <section className="rv-cp__bloque" aria-label={tx('rest.respuesta_al_cliente')}>
+              <p className="rv-cp__frase">{tx('rest.responder_al_cliente_con_el_ccp')}{' '}{activa === true ? 'ENCENDIDO' : 'APAGADO'}</p>
               <FormaAccion accion={acciones.fijar} className="rv-cp__pila">
                 {oculto}
                 <input type="hidden" name="activo" value={activa === true ? 'no' : 'si'} />
-                <BotonEnvio variante="secundario" etiqueta={activa === true ? 'Apagar la respuesta' : 'Encender la respuesta'} pendiente="Guardando…" />
+                <BotonEnvio variante="secundario" etiqueta={activa === true ? tx('rest.apagar_la_respuesta') : tx('rest.encender_la_respuesta')} pendiente={tx('cobranza.formagasto.guardando')} />
               </FormaAccion>
             </section>
 
-            <section className="rv-cp__pila" aria-label="CCP recibidos">
+            <section className="rv-cp__pila" aria-label={tx('rest.ccp_recibidos')}>
               {filas.length === 0 ? (
-                <p className="rv-cp__nota">Todavía no ha llegado ningún CCP timbrado.</p>
+                <p className="rv-cp__nota">{tx('rest.todavia_no_ha_llegado_ningun_ccp')}</p>
               ) : filas.map((f) => (
                 <article key={f.id} className="rv-cp__bloque" aria-label={`CCP ${f.uuid}`}>
-                  <p className="rv-cp__nota"><strong className="rv-cp__romper">{f.uuid}</strong> · <StatusChip tono={TONO[f.estado]}>{ROTULO[f.estado]}</StatusChip></p>
-                  <p className="rv-cp__nota">
-                    Recibido {fechaHoraMx(f.creadoEn)}{f.documentoNombre ? ` · documento «${f.documentoNombre}»` : ''}
-                    {f.destinoCorreo ? ` · cliente ${f.destinoCorreo}` : ' · sin correo del cliente'}
+                  <p className="rv-cp__nota"><strong className="rv-cp__romper">{f.uuid}</strong> · <StatusChip tono={TONO[f.estado]}>{rotulo(tx)[f.estado]}</StatusChip></p>
+                  <p className="rv-cp__nota">{tx('rest.recibido')}{' '}{fechaHoraMx(f.creadoEn)}{f.documentoNombre ? ` · documento «${f.documentoNombre}»` : ''}
+                    {f.destinoCorreo ? ` · cliente ${f.destinoCorreo}` : tx('rest.sin_correo_del_cliente')}
                     {f.respondidoEn ? ` · respondido ${fechaHoraMx(f.respondidoEn)}` : ''}
                   </p>
                   {/* A37-P-04: el PDF y el XML guardados, por la ruta autenticada y filtrada por flota (nunca una URL pública). */}
                   <p className="rv-cp__acciones">
                     {(['pdf', 'xml'] as const).map((tipo) => (
                       <a key={tipo} className="rv-cp__enlace" href={`/api/export/carta-porte-docs?ccp=${encodeURIComponent(f.id)}&archivo=${tipo}${ver.tenant ? `&tenant=${encodeURIComponent(ver.tenant)}` : ''}`}
-                        download aria-label={`Descargar el ${tipo.toUpperCase()} del CCP ${f.uuid}`}>Descargar {tipo.toUpperCase()}</a>
+                        download aria-label={tx('rest.descargar_el_del_ccp', { tipo: tipo.toUpperCase(), uuid: f.uuid })}>{tx('rest.descargar')}{' '}{tipo.toUpperCase()}</a>
                     ))}
                   </p>
                   {(f.estado === 'pendiente_confirmacion' || f.estado === 'error_envio') && (
                     <FormaAccion accion={acciones.confirmar} className="rv-cp__form">
                       {oculto}
                       <input type="hidden" name="ccpId" value={f.id} />
-                      <CampoTexto id={`d-${f.id}`} etiqueta="Correo del cliente al que se le responde" name="destino" tipo="email" defaultValue={f.destinoCorreo ?? ''} autoComplete="off" />
-                      <BotonEnvio etiqueta="Confirmar y responder al cliente" pendiente="Enviando…" />
+                      <CampoTexto id={`d-${f.id}`} etiqueta={tx('rest.correo_del_cliente_al_que_se')} name="destino" tipo="email" defaultValue={f.destinoCorreo ?? ''} autoComplete="off" />
+                      <BotonEnvio etiqueta={tx('rest.confirmar_y_responder_al_cliente')} pendiente={tx('rest.enviando')} />
                     </FormaAccion>
                   )}
                 </article>

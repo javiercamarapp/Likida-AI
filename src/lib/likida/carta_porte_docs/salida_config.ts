@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { z } from 'zod';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { anotarBitacora } from '../bitacora_escritura';
 import * as repo from './repo';
 import type { SalidaConfigFila } from './repo';
@@ -65,7 +65,8 @@ export function validarConfigSalida(c: unknown): ConfigSalida {
   const r = esquemaConfigSalida.safeParse(c);
   if (r.success) return r.data;
   const clavesDesconocidas = r.error.issues.find((i) => i.code === 'unrecognized_keys');
-  throw new DatoInvalido(clavesDesconocidas ? 'La configuración trae campos que no existen (las credenciales no se guardan aquí).' : r.error.issues[0].message);
+  if (clavesDesconocidas) throw datoInvalido('salida_config.campos_inexistentes');
+  throw new DatoInvalido(r.error.issues[0].message);
 }
 
 /** La configuración de la flota; sin fila, los valores de arranque. Un fallo de lectura SÍ lanza (no se vuelve «arranque»). */

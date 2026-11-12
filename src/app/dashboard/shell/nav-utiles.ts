@@ -32,3 +32,19 @@ export function indiceDeMenu(tecla: string, actual: number, total: number): numb
   if (tecla === 'End') return total - 1;
   return null;
 }
+
+type FlotaPie = { id: string; nombre: string };
+
+/**
+ * La flota que nombra el pie. Un layout no recibe `searchParams`, así que `organizacion` (resuelta en el servidor: sesión o cookie)
+ * puede no ser la que la página muestra cuando el superadmin entra con `?tenant=`. Con la lista de flotas (solo superadmin) el
+ * cliente elige el nombre de la flota de la URL; si no está en la lista o la lista no se pudo leer, `null` = «Sin dato» — nunca el
+ * nombre de otra flota. Sin `?tenant=` (o para quien no es superadmin, sin lista) manda `organizacion`. `undefined` = sin dato aún.
+ */
+export function flotaDelPie({ organizacion, flotas, tenantUrl }: {
+  organizacion?: FlotaPie | null; flotas?: FlotaPie[] | null; tenantUrl: string | null;
+}): FlotaPie | null | undefined {
+  if (!tenantUrl || flotas === undefined) return organizacion;
+  if (organizacion?.id === tenantUrl) return organizacion;
+  return flotas?.find((f) => f.id === tenantUrl) ?? null;
+}

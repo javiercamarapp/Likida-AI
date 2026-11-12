@@ -314,12 +314,12 @@ export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<D
         etiqueta={tx('liquidacion.vista.dinero_observado_por_tipo_de')}
         centro={mxn(totalObservado, tr.idioma)}
         formato="mxn"
-        gajos={porTipo.map((t) => ({ etiqueta: rotuloTipo(t.tipo), valor: t.monto }))}
+        gajos={porTipo.map((t) => ({ etiqueta: rotuloTipo(t.tipo, tx), valor: t.monto }))}
       />
       <ul className="rv-liq-filas">
         {porTipo.map((t) => (
           <li key={t.tipo} className="rv-liq-filas__fila">
-            <span className="rv-liq-filas__rotulo">{rotuloTipo(t.tipo)} · {numero(t.n)}</span>
+            <span className="rv-liq-filas__rotulo">{rotuloTipo(t.tipo, tx)} · {numero(t.n)}</span>
             <span className="cifra-mono">{mxn(t.monto, tr.idioma)}</span>
           </li>
         ))}

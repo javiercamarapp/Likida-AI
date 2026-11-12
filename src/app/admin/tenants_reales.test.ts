@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { admin_inicio } from '@/lib/i18n/es/admin_inicio';
 import { fileURLToPath } from 'node:url';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -61,14 +62,15 @@ describe('admin/consola.tsx: "Flota (solo el demo)" ya no es incondicional', () 
       // Se evalúa la MISMA expresión que el JSX usa para decidir la etiqueta,
       // con r.tenants en 0 — el escenario real del 4/5-ago-2026 — y se
       // comprueba que no cuela "demo" en el resultado.
-      const match = src.match(/etiqueta: (r\.tenants === 0 \?[^{}]*?: 'Flotas'),/);
+      const match = src.match(/etiqueta: (r\.tenants === 0 \?[^{}]*?: t\('consola\.flotas'\)),/);
       expect(match, `no se encontró la etiqueta de Flotas en ${nombre}`).not.toBeNull();
       const expr = match![1];
       // Evaluar la expresión JSX real extraída del archivo, con r.tenants=0
       // y sin tenant demo, es la forma más directa de probar el caso exacto
       // del reporte sin renderizar todo el árbol de la página.
-      const evaluar = new Function('r', 'esSoloDemo', `return (${expr});`);
-      const resultado = evaluar({ tenants: 0, flotas: [] }, false);
+      const evaluar = new Function('r', 'esSoloDemo', 't', `return (${expr});`);
+      // `t` = el diccionario es: el rótulo que vería la persona.
+      const resultado = evaluar({ tenants: 0, flotas: [] }, false, (k: keyof typeof admin_inicio) => admin_inicio[k]);
       expect(resultado).not.toMatch(/demo/i);
     });
   }

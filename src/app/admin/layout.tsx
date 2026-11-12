@@ -6,7 +6,10 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import AdminChrome from './chrome';
 import { ProveedorRequiereAccion } from './cabecera-admin';
-import { obtenerPanoramaAccion } from './requiere-accion';
+import { obtenerPanoramaAccion, SIN_DATO, type RequiereAccion } from './requiere-accion';
+import { resolverBandeja } from '@/lib/avisos/bandeja';
+import { clienteAvisos } from '@/lib/avisos/cliente';
+import { leerAvisosAdmin } from '@/app/ui-v2/avisos/fuente-admin';
 import { conteosDePestanas } from './conteos-pestanas';
 import { ProveedorConteosPestanas } from './conteos-pestanas-contexto';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
@@ -40,10 +43,14 @@ export const metadata: Metadata = { title: { default: 'Admin · Likida', templat
  * chrome = dibujo verificable sin sesión).
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { nombre, avatarUrl } = await requireSuperadmin();
+  const { nombre, avatarUrl, userId } = await requireSuperadmin();
   // UNA lectura (caché de 45 s; nunca lanza, lectura caída = «sin dato») alimenta la campana de la cabecera (cuántas cosas esperan a un
   // humano) y los números de las pestañas (hoy Escalaciones): así campana y pestaña no pueden discrepar ni leer la base dos veces.
-  const { resumen: requiereAccion, bandeja, cola } = await obtenerPanoramaAccion();
+  const { bandeja, cola } = await obtenerPanoramaAccion();
+  // El número de «Avisos» del pie: la MISMA bandeja que pinta /admin/notificaciones (`resolverBandeja`): no leídos de ESTA persona, sin
+  // dato (`null`) si no se pudo leer qué ya leyó. Nunca la suma de conteos de antes (19 en el pie y una lista que no los mostraba).
+  const avisos = await (async () => resolverBandeja(clienteAvisos(), { tipo: 'admin' }, userId, await leerAvisosAdmin()))().catch(() => null);
+  const requiereAccion: RequiereAccion = avisos ? { pendientes: avisos.noLeidos, hayUrgente: avisos.hayCritico } : SIN_DATO;
   const conteosPestanas = conteosDePestanas(bandeja, cola);
 
   // Flotas para el selector del pie. Fallar cerrado y decirlo: si la lectura cae, el pie dice «Sin dato» (no una lista vacía).
@@ -61,8 +68,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/login');
   }
 
-  // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es.
-  const idiomaDatos = await datosParaProveedor(['shell']);
+  // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es. Solo viajan al navegador los namespaces de /admin que usan
+  // componentes de cliente (`useT`); los de servidor leen el suyo con `getT` y no mandan nada.
+  const idiomaDatos = await datosParaProveedor(['shell', 'avisos', 'admin_inicio', 'admin_agentes', 'admin_sistema']);
 
   return (
     <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>

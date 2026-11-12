@@ -5,6 +5,8 @@ import { ROLES_INVITABLES } from '@/lib/auth/invitar';
 import { nombreDeRol } from '@/lib/auth/roles';
 import type { Persona } from '@/lib/admin/personas';
 
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminFlotasEs } from '@/lib/i18n/tr_admin';
 export interface AccionesPersona {
   cambiarRol: AccionDeForma;
   darDeBaja: AccionDeForma;
@@ -22,37 +24,37 @@ const oculto = (id: string) => <input type="hidden" name="id" value={id} />;
  * Las acciones sobre UNA persona. Presentacional: las acciones de servidor llegan por prop (cada una re-gatea con `requireSuperadmin`
  * y deja su asiento en la bitácora). Todo lo que cierra un acceso pide confirmación que dice la consecuencia.
  */
-export function GestionPersona({ p, acciones, yo, bajaLikidaHabilitada }: {
+export function GestionPersona({ p, acciones, yo, bajaLikidaHabilitada, t = trAdminFlotasEs }: {
   p: Persona;
   acciones: AccionesPersona;
   /** El id de quien mira: nadie se da de baja a sí mismo (el servidor también lo rechaza). */
   yo: string;
-  bajaLikidaHabilitada: boolean;
+  bajaLikidaHabilitada: boolean; t?: TrDe<'admin_flotas'>;
 }) {
   const nombre = p.nombre ?? p.email;
-  const titulo = `Gestionar a ${nombre}`;
+  const titulo = t('equipo_gestion_persona.gestionar_a', { nombre });
 
   if (p.esLikida) {
     return (
       <Tarjeta titulo={titulo}>
-        <p>{nombreDeRol(p.rol)}: personal de Likida, no de una flota.</p>
-        {p.id === yo ? <p>Es tu propia cuenta: no puedes darte de baja a ti mismo.</p>
+        <p>{nombreDeRol(p.rol)}{t('equipo_gestion_persona.personal_de_likida_no')}</p>
+        {p.id === yo ? <p>{t('equipo_gestion_persona.es_tu_propia_cuenta')}</p>
           : !bajaLikidaHabilitada ? (
-            <p>Dar de baja o reactivar al personal de Likida todavía no está habilitado: queda pendiente de la revisión del dueño.</p>
+            <p>{t('equipo_gestion_persona.dar_de_baja_o')}</p>
           ) : p.activa ? (
             <FormaConAviso accion={acciones.darDeBajaLikida} boton="Dar de baja" columnas="md:grid-cols-1"
               confirmar={{
-                titulo: `Dar de baja a ${nombre}`,
+                titulo: t('equipo_gestion_persona.dar_de_baja_a', { nombre }),
                 descripcion: p.rol === 'superadmin'
-                  ? 'Pierde el acceso a esta consola y sus sesiones se cierran. No se permite si es el último superadmin activo. Queda en la bitácora.'
-                  : 'Pierde el acceso y sus sesiones se cierran. Queda en la bitácora.',
-                etiquetaConfirmar: 'Sí, dar de baja',
+                  ? t('equipo_gestion_persona.pierde_el_acceso_a')
+                  : t('equipo_gestion_persona.pierde_el_acceso_y'),
+                etiquetaConfirmar: t('equipo_gestion_persona.si_dar_de_baja'),
               }}>
               {oculto(p.id)}
             </FormaConAviso>
           ) : (
             <FormaConAviso accion={acciones.reactivarLikida} boton="Reactivar" columnas="md:grid-cols-1"
-              confirmar={{ titulo: `Reactivar a ${nombre}`, descripcion: 'Vuelve a poder entrar con su correo. Queda en la bitácora.', etiquetaConfirmar: 'Sí, reactivar' }}>
+              confirmar={{ titulo: t('equipo_gestion_persona.reactivar_a', { nombre }), descripcion: t('equipo_gestion_persona.vuelve_a_poder_entrar'), etiquetaConfirmar: t('equipo_gestion_persona.si_reactivar') }}>
               {oculto(p.id)}
             </FormaConAviso>
           )}
@@ -64,8 +66,8 @@ export function GestionPersona({ p, acciones, yo, bajaLikidaHabilitada }: {
     return (
       <Tarjeta titulo={titulo}>
         <p>
-          Esta cuenta existe en el panel pero no tiene usuario de acceso: no puede entrar y no se le puede reenviar el correo. Tampoco
-          se puede volver a dar de alta con el mismo correo. La reparación todavía no existe en esta pantalla; pásalo a quien administra la base.
+          
+          {t('equipo_gestion_persona.esta_cuenta_existe_en')}
         </p>
       </Tarjeta>
     );
@@ -73,12 +75,12 @@ export function GestionPersona({ p, acciones, yo, bajaLikidaHabilitada }: {
 
   return (
     <Tarjeta titulo={titulo}>
-      <p>{nombreDeRol(p.rol)} de {p.tenantNombre ?? 'una flota'}. {p.activa ? 'Cuenta activa.' : 'Cuenta de baja.'}</p>
+      <p>{nombreDeRol(p.rol)} de {p.tenantNombre ?? 'una flota'}. {p.activa ? t('equipo_gestion_persona.cuenta_activa') : t('equipo_gestion_persona.cuenta_de_baja')}</p>
       {p.activa && (
         <FormaConAviso accion={acciones.cambiarRol} boton="Cambiar rol" columnas="md:grid-cols-2">
           {oculto(p.id)}
-          <CampoSelect etiqueta="Rol nuevo" name="rol" defaultValue={ROLES_INVITABLES.some((r) => r.valor === p.rol) ? p.rol : ''} required>
-            <option value="" disabled>Elige un rol</option>
+          <CampoSelect etiqueta={t('equipo_gestion_persona.rol_nuevo')} name="rol" defaultValue={ROLES_INVITABLES.some((r) => r.valor === p.rol) ? p.rol : ''} required>
+            <option value="" disabled>{t('equipo_gestion_persona.elige_un_rol')}</option>
             {ROLES_INVITABLES.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
           </CampoSelect>
         </FormaConAviso>
@@ -89,23 +91,23 @@ export function GestionPersona({ p, acciones, yo, bajaLikidaHabilitada }: {
         )}
         {p.activa && (
           <FormaConAviso accion={acciones.cerrarSesiones} boton="Cerrar sesiones" columnas="md:grid-cols-1"
-            confirmar={{ titulo: `Cerrar las sesiones de ${nombre}`, descripcion: 'Tendrá que volver a entrar con su correo. Queda en la bitácora.', etiquetaConfirmar: 'Sí, cerrar sesiones' }}>
+            confirmar={{ titulo: t('equipo_gestion_persona.cerrar_las_sesiones_de', { nombre }), descripcion: t('equipo_gestion_persona.tendra_que_volver_a'), etiquetaConfirmar: t('equipo_gestion_persona.si_cerrar_sesiones') }}>
             {oculto(p.id)}
           </FormaConAviso>
         )}
         {p.activa && p.id !== yo && (
           <FormaConAviso accion={acciones.darDeBaja} boton="Dar de baja" columnas="md:grid-cols-1"
             confirmar={{
-              titulo: `Dar de baja a ${nombre}`,
-              descripcion: 'Pierde el acceso al panel, sus sesiones se cierran y se revocan sus llaves de API. No se permite si es el único dueño activo de la flota. Queda en la bitácora.',
-              etiquetaConfirmar: 'Sí, dar de baja',
+              titulo: t('equipo_gestion_persona.dar_de_baja_a', { nombre }),
+              descripcion: t('equipo_gestion_persona.pierde_el_acceso_al'),
+              etiquetaConfirmar: t('equipo_gestion_persona.si_dar_de_baja'),
             }}>
             {oculto(p.id)}
           </FormaConAviso>
         )}
         {!p.activa && (
           <FormaConAviso accion={acciones.reactivar} boton="Reactivar" columnas="md:grid-cols-1"
-            confirmar={{ titulo: `Reactivar a ${nombre}`, descripcion: 'Vuelve a entrar con el rol que tenía. Queda en la bitácora.', etiquetaConfirmar: 'Sí, reactivar' }}>
+            confirmar={{ titulo: t('equipo_gestion_persona.reactivar_a', { nombre }), descripcion: t('equipo_gestion_persona.vuelve_a_entrar_con'), etiquetaConfirmar: t('equipo_gestion_persona.si_reactivar') }}>
             {oculto(p.id)}
           </FormaConAviso>
         )}

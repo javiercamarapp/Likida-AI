@@ -14,6 +14,8 @@ import {
 import { reclamarTurnoDePrueba, acuseDeEnvio } from './prueba-correo';
 import { FormaNotificaciones } from './notificaciones-forma';
 import { BotonPrueba, type EstadoPrueba } from './boton-prueba';
+import { getT } from '@/lib/i18n/servidor';
+import { ahoraMs } from '@/lib/saludo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA SECCIÓN «NOTIFICACIONES» — una sola, montada por los seis agentes.
@@ -46,13 +48,14 @@ type Lectura =
   | { ok: false; error: string };
 
 async function leerUsuarios(tenantId: string, agenteId: string): Promise<Lectura> {
+  const { t } = await getT('resto');
   try {
     return { ok: true, usuarios: await usuariosAvisables(tenantId) };
   } catch (err) {
     logger.error('notificaciones.usuarios_ilegibles', {
       tenantId, agente: agenteId, err: err instanceof Error ? err.message : String(err),
     });
-    return { ok: false, error: 'No se pudieron leer las cuentas de la flota, así que no se puede decir a quién le llega. Vuelve a cargar la página.' };
+    return { ok: false, error: t('ch.no_se_pudieron_leer_las_cuentas') };
   }
 }
 
@@ -62,6 +65,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
   sp?: { vista?: string; tenant?: string; rol?: string };
   agenteId: AgenteId;
 }) {
+  const { t } = await getT('resto');
   const agente = agentePorId(agenteId);
   // No debería pasar —el id es un literal del catálogo—, pero un agente que no
   // existe no puede tener config: se calla en vez de renderizar una pantalla
@@ -86,6 +90,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
 
   async function guardar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+    const { t } = await getT('resto');
     const objetivo = agentePorId(agenteId);
     if (!objetivo) return { error: 'Ese agente no existe.' };
 
@@ -105,7 +110,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
       logger.warn('notificaciones.agente_no_coincide', {
         tenantId, esperado: objetivo.id, recibido: String(fd.get('agente') ?? ''),
       });
-      return { error: 'La forma no corresponde a este agente. Vuelve a cargar la página.' };
+      return { error: t('ch.la_forma_no_corresponde_a_este') };
     }
 
     const r = await guardarConfigNotificaciones(tenantId, objetivo, {
@@ -140,6 +145,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
    */
   async function mandarPrueba(_prev: EstadoPrueba, _fd: FormData): Promise<EstadoPrueba> {
     'use server';
+    const { t } = await getT('resto');
     const objetivo = agentePorId(agenteId);
     if (!objetivo) return { error: 'Ese agente no existe.' };
 
@@ -155,9 +161,9 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
     // El turno se reclama ANTES de tocar la base: el freno es del botón
     // entero, no solo del envío, y un envío que luego falle lo consume igual
     // (mismo criterio que `reclamarAviso` en el motor).
-    const turno = reclamarTurnoDePrueba(`${sesion.userId}:${objetivo.id}`, Date.now());
+    const turno = reclamarTurnoDePrueba(`${sesion.userId}:${objetivo.id}`, ahoraMs());
     if (!turno.ok) {
-      return { error: `Acabas de mandarte una prueba. La siguiente sale en ${turno.faltanSegundos} s.` };
+      return { error: t('ch.acabas_de_mandarte_una_prueba_la', { faltanSegundos: turno.faltanSegundos }) };
     }
 
     // El correo del PROPIO usuario. La sesión no lo trae (`SessionTenant` no
@@ -168,11 +174,11 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
       .from('app_user').select('email').eq('id', sesion.userId).maybeSingle();
     if (error) {
       logger.error('notificaciones.prueba_correo_ilegible', { tenantId, agente: objetivo.id, err: error.message });
-      return { error: 'No se pudo leer el correo de tu cuenta, así que la prueba no salió. Inténtalo de nuevo.' };
+      return { error: t('op.no_se_pudo_leer_el_correo') };
     }
     const correo = ((data?.email as string | null) ?? '').trim();
     if (!correo) {
-      return { error: 'Tu cuenta no tiene correo capturado, así que no hay a dónde mandarte la prueba. Captúralo en Usuarios y vuelve a intentar.' };
+      return { error: t('ch.tu_cuenta_no_tiene_correo_capturado') };
     }
 
     // El nombre de la flota es cosmético aquí: si no se puede leer, la
@@ -188,12 +194,12 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
     } else {
       logger.warn('notificaciones.prueba_no_enviada', { tenantId, agente: objetivo.id, motivo: envio.motivo });
     }
-    const acuse = acuseDeEnvio(envio, correo);
+    const acuse = acuseDeEnvio(envio, correo, t);
     return acuse.enviado ? { enviado: acuse.mensaje } : { error: acuse.mensaje };
   }
 
   return (
-    <Disclosure titulo="Notificaciones" resumen="De qué avisa este agente por correo, y a quién de tu equipo le llega">
+    <Disclosure titulo={t('ch.notificaciones')} resumen={t('ch.de_que_avisa_este_agente_por')}>
       <FormaNotificaciones
         guardar={guardar}
         datos={{

@@ -26,9 +26,11 @@ export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid; pes
 // 16 entradas (antes 43 en el sidebar): el dueño pidió menos páginas pero poder hacer lo mismo o más. Nada se pierde: cada pantalla
 // sigue viva como pestaña de su grupo (misma ruta) y todas siguen en ⌘K. Es el árbol final 3.1 del plan maestro del admin: cuatro
 // secciones (Agentes, Negocio, Control, Sistema); «Plataforma» ya no existe (Integraciones pasó a Sistema).
+/** El Copiloto es entrada de PRIMER NIVEL: va justo debajo de «Resumen», fuera de las cuatro secciones (decisión del dueño, 11-nov-2026). Es la puerta que
+ *  sustituye recorrer pantallas. Lo pintan el sidebar y la hoja «Más» del móvil tras el Resumen; ⌘K lo lista en `todasLasRutas`. */
+export const COPILOTO: Item = { href: '/admin/copiloto', nombre: 'Copiloto', Icono: Sparkles };
+
 export const AGENTES: Item[] = [
-  // El copiloto va PRIMERO: es la puerta que sustituye recorrer pantallas.
-  { href: '/admin/copiloto', nombre: 'Copiloto', Icono: Sparkles },
   { href: '/admin/agentes', nombre: 'Agentes', Icono: Bot, pestanas: [
     { href: '/admin/agentes', nombre: 'Panel' },
     { href: '/admin/agente-ocr', nombre: 'OCR' },
@@ -119,19 +121,22 @@ export const SECCIONES: Array<{ titulo: string; items: Item[] }> = [
 /** Pantallas que viven FUERA del menú, lista cerrada: la campana, el avatar y el «ver como». Todo `page.tsx` bajo `/admin` está en
  *  `SECCIONES`, aquí, o es un stub 308 (guarda `admin_paginas_en_menu`). Aparecen en ⌘K. */
 export const FUERA_DEL_MENU: ReadonlyArray<{ href: string; nombre: string; Icono: typeof LayoutGrid; alias?: readonly string[] }> = [
-  { href: '/admin/notificaciones', nombre: 'Notificaciones', Icono: Bell, alias: ['campana', 'pendientes'] },
+  { href: '/admin/notificaciones', nombre: 'Avisos', Icono: Bell, alias: ['notificaciones', 'campana', 'pendientes'] },
   { href: '/admin/mi-perfil', nombre: 'Mi perfil', Icono: UserRound, alias: ['avatar', 'cuenta', 'contraseña'] },
   { href: '/admin/elegir-flota', nombre: 'Ver como una flota', Icono: Eye, alias: ['elegir flota', 'ver como'] },
 ];
 
-const ENTRADAS: Item[] = SECCIONES.flatMap((s) => s.items);
+const ENTRADAS: Item[] = [COPILOTO, ...SECCIONES.flatMap((s) => s.items)];
 const coincide = (pathname: string, href: string): boolean => pathname === href || pathname.startsWith(`${href}/`);
 /** La entrada del sidebar a la que pertenece una ruta (por la ruta de la entrada o la de cualquiera de sus pestañas; las rutas con
- *  parámetro, p. ej. `/admin/flotas/<id>`, cuentan por prefijo). `null` si no es de ninguna (Inicio, Mi perfil, Notificaciones…). */
+ *  parámetro, p. ej. `/admin/flotas/<id>`, cuentan por prefijo). `null` si no es de ninguna (Inicio…); las de `FUERA_DEL_MENU` (Avisos, Mi perfil…) devuelven una entrada sin pestañas. */
 export function entradaDeRuta(pathname: string): Item | null {
   for (const it of ENTRADAS) {
     if (coincide(pathname, it.href) || (it.pestanas ?? []).some((p) => coincide(pathname, p.href))) return it;
   }
+  // Las pantallas fuera del menú (Avisos, Mi perfil, Ver como…) también dan nombre a la cabecera; no son de ninguna sección ni llevan pestañas.
+  const fuera = FUERA_DEL_MENU.find((f) => coincide(pathname, f.href));
+  if (fuera) return { href: fuera.href, nombre: fuera.nombre, Icono: fuera.Icono };
   return null;
 }
 

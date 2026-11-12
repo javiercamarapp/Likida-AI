@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { ComboCatalogo, type BuscarCatalogo } from './combo-catalogo';
 import { mxn } from '@/lib/formato';
-import { CampoFecha, CampoTexto } from '@/app/ui-v2/componentes';
+import { Aviso, Boton, CampoFecha, CampoTexto, Icono } from '@/app/ui-v2/componentes';
 
 /**
  * El formulario de NUEVO VIAJE — pieza REUSABLE a propósito (12-ago-2026):
@@ -34,12 +34,9 @@ export type AccionCrearViaje = (
 function BotonCrear() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Plus width={15} height={15} strokeWidth={2} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Plus} />}>
       {pending ? 'Creando…' : 'Crear viaje'}
-    </button>
+    </Boton>
   );
 }
 
@@ -93,7 +90,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
               Ofrecer una opción que la base rechaza es peor que no ofrecerla. */}
           <ComboCatalogo tipo="operador" name="operadorId" campoId="operadorId" buscar={buscarCatalogo} requerido
             aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
-            total={totalOperadores} className="w-full" estilo={{ background: 'var(--surface)' }} />
+            total={totalOperadores} className="w-full" />
           <span className="rv-campo__ayuda">
             {totalOperadores === 0
               ? 'Necesitas al menos un operador dado de alta: un viaje no puede existir sin quién lo maneje. El alta rápida está a la derecha.'
@@ -108,7 +105,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
             <label htmlFor="unidadId" className="rv-campo__etq">Unidad</label>
             <ComboCatalogo tipo="unidad" name="unidadId" campoId="unidadId" buscar={buscarCatalogo}
               aria-label="Unidad" etiquetaVacia="Sin asignar todavía"
-              total={totalUnidades} className="w-full cifra-mono" estilo={{ background: 'var(--surface)' }} />
+              total={totalUnidades} className="w-full cifra-mono" />
           </div>
         )}
       </div>
@@ -131,7 +128,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
               <label htmlFor="clienteId" className="rv-campo__etq">Cliente</label>
               <ComboCatalogo tipo="cliente" name="clienteId" campoId="clienteId" buscar={buscarCatalogo}
                 aria-label="Cliente" etiquetaVacia="Sin asignar todavía"
-                total={totalClientes} className="w-full" estilo={{ background: 'var(--surface)' }} />
+                total={totalClientes} className="w-full" />
             </div>
           )}
           <CampoTexto id="ingresoFlete" etiqueta="Ingreso del flete (MXN)" name="ingresoFlete" inputMode="decimal" placeholder="38,500" claseControl="cifra-mono"
@@ -150,9 +147,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
       )}
 
       {estado?.error && (
-        <div className="rounded-lg px-3 py-2.5 text-[13px]" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-          {estado.error}
-        </div>
+        <Aviso tono="error">{estado.error}</Aviso>
       )}
 
       <div>

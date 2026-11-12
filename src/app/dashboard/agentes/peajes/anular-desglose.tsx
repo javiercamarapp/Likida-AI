@@ -3,8 +3,10 @@
 import { useState, useActionState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Ban } from 'lucide-react';
-import { AvisoResultado, Boton, CampoTextarea, DialogoConfirmar, Icono, type ResultadoUI } from '@/app/ui-v2/componentes';
+import { AvisoResultado, Boton, CampoTextarea, DialogoConfirmar, Icono, type ResultadoUI, Tooltip } from '@/app/ui-v2/componentes';
 import './peajes.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
 export type EstadoAnular = { ok?: string; error?: string } | null;
 export type AccionAnular = (prev: EstadoAnular, fd: FormData) => Promise<EstadoAnular>;
@@ -16,6 +18,7 @@ export type AccionAnular = (prev: EstadoAnular, fd: FormData) => Promise<EstadoA
  * no borra nada: el desglose queda de constancia con quién y por qué.
  */
 export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desgloseId: string }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion, pendiente] = useActionState(anular, null);
   const [abierto, setAbierto] = useState(false);
   const router = useRouter();
@@ -27,21 +30,15 @@ export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desg
   return (
     <form action={accion} className="rv-pj-control" onSubmit={() => setAbierto(false)}>
       <input type="hidden" name="desglose" value={desgloseId} />
-      <Boton variante="danger" onClick={() => setAbierto(true)} icono={<Icono icono={Ban} />}
-        title="Para un archivo subido por error: deja de contar, no se borra">
-        Anular
-      </Boton>
+      <Tooltip texto={tx('rest.para_un_archivo_subido_por_error')}><Boton variante="danger" onClick={() => setAbierto(true)} icono={<Icono icono={Ban} />}>{tx('rest.anular')}</Boton></Tooltip>
       <DialogoConfirmar
-        abierto={abierto} titulo="¿Anular este desglose?" tono="peligro" cierraConFondo={false}
-        etiquetaConfirmar="Anular desglose" tipoConfirmar="submit" pendiente={pendiente}
+        abierto={abierto} titulo={tx('rest.anular_este_desglose')} tono="peligro" cierraConFondo={false}
+        etiquetaConfirmar={tx('rest.anular_desglose')} tipoConfirmar="submit" pendiente={pendiente}
         onConfirmar={() => setAbierto(false)} onCancelar={() => setAbierto(false)}
         descripcion={(
           <div className="rv-pj-dialogo">
-            <p>
-              Deja de aparecer aquí, de contar en la bitácora RMF 9.1.8, de exportarse y de avisar a la oficina. No se borra:
-              queda de constancia con quién lo anuló y por qué. El archivo correcto (o este mismo, ya arreglado) puede volver a mandarse; si había llegado por consulta automática (pull o SFTP), el sistema no lo vuelve a tomar solo: súbelo a mano para cargarlo otra vez.
-            </p>
-            <CampoTextarea etiqueta="Motivo (obligatorio, hasta 500 caracteres)" name="motivo" required maxLength={500} rows={3} />
+            <p>{tx('rest.deja_de_aparecer_aqui_de_contar')}</p>
+            <CampoTextarea etiqueta={tx('rest.motivo_obligatorio_hasta_500_caracteres')} name="motivo" required maxLength={500} rows={3} />
           </div>
         )}
       />

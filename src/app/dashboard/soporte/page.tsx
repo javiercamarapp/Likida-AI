@@ -25,7 +25,11 @@ import {
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import './soporte.css';
-export const metadata: Metadata = { title: 'Centro de ayuda' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('cfg.centro_de_ayuda') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +73,7 @@ export default async function SoportePage({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; ticket?: string }>;
 }) {
+  const { t, idioma } = await getT('resto');
   const sp = await searchParams;
   // `sp` viaja a la puerta: sin él, `?vista=demo` de un superadmin rebotaba al selector de flota.
   await exigirVerRuta('/dashboard/soporte', sp);
@@ -98,6 +103,7 @@ export default async function SoportePage({
   // un demo de Javier jamás cuenta como queja del cliente.
   async function accionAbrirTicket(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     // A37-S20-06: la convención de la señal (abierto_por NULL = lo abrió Likida) se decide con
     // el rol REAL de la sesión: con `?rol=flota_admin` el rol efectivo es el previsualizado y un
@@ -115,7 +121,7 @@ export default async function SoportePage({
         },
       );
       revalidatePath('/dashboard/soporte');
-      return { ok: 'Ticket abierto — el equipo de Likida lo ve en su bandeja de escalaciones.' };
+      return { ok: t('cfg.ticket_abierto_el_equipo_de_likida') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'abrir el ticket') };
     }
@@ -129,6 +135,7 @@ export default async function SoportePage({
   // que se perdería si este action pudiera hablar como Likida.
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     try {
       await responderTicket(
@@ -138,14 +145,15 @@ export default async function SoportePage({
         { cuerpo: String(fd.get('cuerpo') ?? ''), interna: false },
       );
       revalidatePath('/dashboard/soporte');
-      return { ok: 'Mensaje enviado. Queda en el hilo del ticket y el equipo de Likida lo ve en su cola.' };
+      return { ok: t('cfg.mensaje_enviado_queda_en_el_hilo') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'escribir en el ticket') };
+      return { error: mensajeParaPantalla(e, t('cfg.escribir_en_el_ticket')) };
     }
   }
 
   async function accionEstado(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     try {
       const r = await cambiarEstadoTicket(
@@ -157,11 +165,11 @@ export default async function SoportePage({
       revalidatePath('/dashboard/soporte');
       return {
         ok: r.estado === 'cerrado'
-          ? 'Ticket cerrado. Si vuelve a pasar, ábrelo de nuevo o reabre éste.'
-          : 'Ticket reabierto — vuelve a la cola de Likida y su reloj de SLA sigue siendo el pactado al abrirlo.',
+          ? t('cfg.ticket_cerrado_si_vuelve_a_pasar')
+          : t('cfg.ticket_reabierto_vuelve_a_la_cola'),
       };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'cambiar el estado del ticket') };
+      return { error: mensajeParaPantalla(e, t('cfg.cambiar_el_estado_del_ticket')) };
     }
   }
 
@@ -192,14 +200,14 @@ export default async function SoportePage({
   const cerrado = detalle !== null && (detalle.estado === 'resuelto' || detalle.estado === 'cerrado');
 
   const columnas: ColumnaBase<TicketRow>[] = [
-    { id: 'asunto', titulo: 'Asunto', principal: true, celda: (t) => <Link href={enlaceHilo(t.id)} className="rv-sop__enlace">{t.asunto}</Link> },
-    { id: 'categoria', titulo: 'Categoría', celda: (t) => <span className="rv-sop__tenue">{t.categoria}</span> },
-    { id: 'prioridad', titulo: 'Prioridad', celda: (t) => t.prioridad },
+    { id: 'asunto', titulo: t('cfg.asunto'), principal: true, celda: (t) => <Link href={enlaceHilo(t.id)} className="rv-sop__enlace">{t.asunto}</Link> },
+    { id: 'categoria', titulo: t('cfg.categoria'), celda: (t) => <span className="rv-sop__tenue">{t.categoria}</span> },
+    { id: 'prioridad', titulo: t('cfg.prioridad'), celda: (t) => t.prioridad },
     {
-      id: 'estado', titulo: 'Estado',
+      id: 'estado', titulo: t('llaves.estado'),
       celda: (t) => { const pill = pillTicket(t.estado); return <StatusChip tono={pill.estado}>{pill.etiqueta}</StatusChip>; },
     },
-    { id: 'abierto', titulo: 'Abierto', celda: (t) => <span className="rv-sop__tenue">{fechaMx(t.abiertoEn)}</span> },
+    { id: 'abierto', titulo: t('cfg.abierto'), celda: (t) => <span className="rv-sop__tenue">{fechaMx(t.abiertoEn, idioma)}</span> },
     {
       id: 'sla', titulo: 'SLA', alinear: 'der',
       celda: (t) => (
@@ -215,70 +223,68 @@ export default async function SoportePage({
   ];
 
   return (
-    <MarcoPagina titulo="Centro de ayuda" apoyo="Tickets, prioridad, reloj de SLA y la conversación con Likida.">
+    <MarcoPagina titulo={t('cfg.centro_de_ayuda')} apoyo={t('cfg.tickets_prioridad_reloj_de_sla_y')}>
       {!tickets ? (
-        <EstadoError reintentar>No se pudo leer la cola. La consulta falló — no es que no haya tickets.</EstadoError>
+        <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_cola')}</EstadoError>
       ) : tickets.length === 0 ? (
-        <Tarjeta titulo="Tus solicitudes" estado="vacio" mensaje="No hay tickets abiertos"
-          detalle="La cola registra prioridad, categoría y reloj de SLA. Si necesitas algo de Likida ahora, sigue siendo por WhatsApp, que es donde ya está tu operación." />
+        <Tarjeta titulo={t('cfg.tus_solicitudes')} estado="vacio" mensaje={t('cfg.no_hay_tickets_abiertos')}
+          detalle={t('cfg.la_cola_registra_prioridad_categoria_y')} />
       ) : (
         <>
           <TiraCifras sello={selloHoy('Tickets de soporte')}>
-            <Cifra icono={<LifeBuoy width={16} height={16} strokeWidth={1.75} />} etiqueta="Abiertos" info="soporte.abiertos" valor={abiertos.length} />
-            <Cifra icono={<AlertTriangle width={16} height={16} strokeWidth={1.75} />} etiqueta="SLA vencido" info="soporte.sla_vencido"
+            <Cifra icono={<LifeBuoy width={16} height={16} strokeWidth={1.75} />} etiqueta={t('cfg.abiertos')} info="soporte.abiertos" valor={abiertos.length} />
+            <Cifra icono={<AlertTriangle width={16} height={16} strokeWidth={1.75} />} etiqueta={t('cfg.sla_vencido')} info="soporte.sla_vencido"
               valor={vencidos.length} tono={vencidos.length > 0 ? 'bad' : undefined} />
-            <Cifra icono={<Timer width={16} height={16} strokeWidth={1.75} />} etiqueta="Sin SLA pactado" info="soporte.sin_sla"
-              valor={sinSla.length} nota="No están vencidos: nadie les puso plazo" />
+            <Cifra icono={<Timer width={16} height={16} strokeWidth={1.75} />} etiqueta={t('cfg.sin_sla_pactado')} info="soporte.sin_sla"
+              valor={sinSla.length} nota={t('cfg.no_estan_vencidos_nadie_les_puso')} />
           </TiraCifras>
 
-          <Tarjeta titulo="Tus solicitudes">
-            <TablaBase etiqueta="Solicitudes de soporte" columnas={columnas} filas={tickets} idFila={(t) => t.id} altoMaximo={false} tarjetaMovil />
-            <p className="rv-sop__pie">El asunto abre la conversación con Likida.</p>
+          <Tarjeta titulo={t('cfg.tus_solicitudes')}>
+            <TablaBase etiqueta={t('cfg.solicitudes_de_soporte')} columnas={columnas} filas={tickets} idFila={(t) => t.id} altoMaximo={false} tarjetaMovil />
+            <p className="rv-sop__pie">{t('cfg.el_asunto_abre_la_conversacion_con')}</p>
           </Tarjeta>
         </>
       )}
 
       {/* ── EL HILO ───────────────────────────────────────────────────────── */}
       {pedido !== '' && (
-        <Tarjeta titulo={detalle ? detalle.asunto : 'Conversación'}
-          acciones={<BotonEnlace href={enlaceVolver} variante="ghost" tamano="sm">Volver a mis tickets</BotonEnlace>}>
+        <Tarjeta titulo={detalle ? detalle.asunto : t('cfg.conversacion')}
+          acciones={<BotonEnlace href={enlaceVolver} variante="ghost" tamano="sm">{t('cfg.volver_a_mis_tickets')}</BotonEnlace>}>
           <div className="rv-sop__hilo">
             {hiloFallo ? (
-              <EstadoError reintentar>No se pudo leer la conversación. La consulta falló — no es que no haya respuestas.</EstadoError>
+              <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_conversacion')}</EstadoError>
             ) : detalle === null ? (
-              <p className="rv-sop__nota">Ese ticket no es de tu flota, o ya no existe. La lista de arriba es la de tus tickets.</p>
+              <p className="rv-sop__nota">{t('cfg.ese_ticket_no_es_de_tu')}</p>
             ) : (
               <>
-                <p className="rv-sop__nota">
-                  {detalle.categoria}/{detalle.prioridad} · abierto {fechaHoraMx(detalle.abiertoEn)}
-                  {detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn)}` : ' · sin SLA pactado'}
-                  {detalle.resueltoEn ? ` · resuelto ${fechaHoraMx(detalle.resueltoEn)}` : ''}
+                <p className="rv-sop__nota">{t('cfg.abierto_2', { categoria: detalle.categoria, prioridad: detalle.prioridad, fechaHoraMx: fechaHoraMx(detalle.abiertoEn, idioma) })}{detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn, idioma)}` : ' · sin SLA pactado'}
+                  {detalle.resueltoEn ? ` · resuelto ${fechaHoraMx(detalle.resueltoEn, idioma)}` : ''}
                 </p>
 
                 {detalle.descripcion && <p className="rv-sop__descripcion">{detalle.descripcion}</p>}
 
                 <HiloSoporte
                   mensajes={hilo ?? []}
-                  vacio="Todavía no hay respuesta de Likida en este ticket. Cuando la haya, aparece aquí — no en otro lado."
+                  vacio={t('cfg.todavia_no_hay_respuesta_de_likida')}
                 />
 
                 {cerrado ? (
-                  <FormaConAviso accion={accionEstado} boton="Reabrir el ticket" columnas="md:grid-cols-1">
+                  <FormaConAviso accion={accionEstado} boton={t('cfg.reabrir_el_ticket')} columnas="md:grid-cols-1">
                     <input type="hidden" name="ticket" value={detalle.id} />
                     <input type="hidden" name="estado" value="abierto" />
-                    <p className="rv-sop__nota">Este ticket está cerrado. Si el problema sigue, reábrelo y vuelve a la cola de Likida.</p>
+                    <p className="rv-sop__nota">{t('cfg.este_ticket_esta_cerrado_si_el')}</p>
                   </FormaConAviso>
                 ) : (
                   <div className="rv-sop__acciones">
                     <FormaConAviso accion={accionResponder} boton="Enviar" columnas="md:grid-cols-1">
                       <input type="hidden" name="ticket" value={detalle.id} />
-                      <CampoTextarea etiqueta="Escribir en el ticket" name="cuerpo" required rows={3} maxLength={LARGO_MAX_MENSAJE}
-                        placeholder="Agrega un dato, un folio, o contesta lo que te preguntaron" />
+                      <CampoTextarea etiqueta={t('cfg.escribir_en_el_ticket_2')} name="cuerpo" required rows={3} maxLength={LARGO_MAX_MENSAJE}
+                        placeholder={t('cfg.agrega_un_dato_un_folio_o')} />
                     </FormaConAviso>
-                    <FormaConAviso accion={accionEstado} boton="Cerrar el ticket" columnas="md:grid-cols-1">
+                    <FormaConAviso accion={accionEstado} boton={t('cfg.cerrar_el_ticket')} columnas="md:grid-cols-1">
                       <input type="hidden" name="ticket" value={detalle.id} />
                       <input type="hidden" name="estado" value="cerrado" />
-                      <p className="rv-sop__nota">Si ya quedó, ciérralo. Se puede reabrir después: cerrarlo no borra nada de la conversación.</p>
+                      <p className="rv-sop__nota">{t('cfg.si_ya_quedo_cierralo_se_puede')}</p>
                     </FormaConAviso>
                   </div>
                 )}
@@ -288,16 +294,16 @@ export default async function SoportePage({
         </Tarjeta>
       )}
 
-      <Tarjeta titulo="Abrir un ticket">
-        <FormaConAviso accion={accionAbrirTicket} boton="Abrir ticket">
-          <CampoTexto etiqueta="Asunto" name="asunto" required placeholder="Qué pasó, en una línea" />
-          <CampoSelect etiqueta="Categoría" name="categoria" defaultValue="otro">
+      <Tarjeta titulo={t('cfg.abrir_un_ticket')}>
+        <FormaConAviso accion={accionAbrirTicket} boton={t('cfg.abrir_ticket')}>
+          <CampoTexto etiqueta={t('cfg.asunto')} name="asunto" required placeholder={t('cfg.que_paso_en_una_linea')} />
+          <CampoSelect etiqueta={t('cfg.categoria')} name="categoria" defaultValue="otro">
             {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{c}</option>)}
           </CampoSelect>
-          <CampoSelect etiqueta="Prioridad" name="prioridad" defaultValue="media">
+          <CampoSelect etiqueta={t('cfg.prioridad')} name="prioridad" defaultValue="media">
             {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{p}</option>)}
           </CampoSelect>
-          <CampoTexto etiqueta="Detalle" name="descripcion" placeholder="Opcional — folios, pantalla, qué esperabas" />
+          <CampoTexto etiqueta={t('cfg.detalle')} name="descripcion" placeholder={t('cfg.opcional_folios_pantalla_que_esperabas')} />
         </FormaConAviso>
       </Tarjeta>
     </MarcoPagina>

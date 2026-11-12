@@ -42,11 +42,16 @@ import type { EstadoGuia } from '@/lib/likida/guia/tipos';
 import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { datosParaProveedor } from '@/lib/i18n/servidor';
+import { resolverBandeja } from '@/lib/avisos/bandeja';
+import { clienteAvisos } from '@/lib/avisos/cliente';
+import { leerAvisosFlota } from '@/app/ui-v2/avisos/fuente-flota';
 
 // Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
 export const metadata: Metadata = { title: { default: 'Likida — Liquidación de viajes', template: '%s · Likida' } };
 
 export const dynamic = 'force-dynamic';
+
+const HREF_AVISOS = '/dashboard/notificaciones';
 
 /**
  * La puerta de /dashboard — el panel del CLIENTE (flota_admin). El marco
@@ -100,6 +105,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
     } catch { organizacion = null; }
   }
 
+  // Solo el SUPERADMIN (v2): la lista de flotas para el pie. El layout no ve `?tenant=`; el pie (cliente) elige el nombre con esta lista y la URL.
+  // Lectura acotada, con orden y desempate; caída = `null` y el pie dice «Sin dato» (nunca el nombre de otra flota). Quien es de flota no la recibe.
+  let flotas: Array<{ id: string; nombre: string }> | null | undefined;
+  if (ui === 'v2' && sesion.rol === 'superadmin') {
+    try {
+      const { data, error } = await supabaseAdmin().from('tenant').select('id, nombre').order('nombre').order('id').limit(1000);
+      flotas = !error && data ? data.map((t) => ({ id: String(t.id), nombre: String(t.nombre ?? t.id) })) : null;
+    } catch { flotas = null; }
+  }
+
   async function cerrarSesion() {
     'use server';
     const sb = await supabaseServer();
@@ -129,6 +144,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
       invitacionDeLaFlota = encendida;
     } catch { /* respaldo local */ }
   }
+  // El número de «Avisos» del pie: los no leídos de ESTA persona, de la MISMA bandeja que pinta /dashboard/notificaciones. Solo para roles
+  // reales de una flota: un superadmin «viendo como» puede estar mirando otra flota que la del layout (que no ve `?tenant=`), y un número
+  // de otra flota bajo este encabezado mentiría; ahí el pie no lleva cifra. Lectura caída = sin cifra, nunca 0.
+  let avisosPendientes: string | undefined;
+  if (v2 && sesion.rol !== 'superadmin' && sesion.tenantId && puedeVerRuta(sesion.rol, HREF_AVISOS, perfil)) {
+    try {
+      const b = await resolverBandeja(clienteAvisos(), { tipo: 'flota', tenantId: sesion.tenantId }, sesion.userId, await leerAvisosFlota(sesion.tenantId, sesion.rol));
+      if (b.noLeidos !== null) avisosPendientes = String(b.noLeidos);
+    } catch { /* sin cifra */ }
+  }
+  const insignias: Record<string, string> = {
+    ...(avance ? { '/dashboard/puesta-en-marcha': avance } : {}),
+    ...(avisosPendientes !== undefined ? { [HREF_AVISOS]: avisosPendientes } : {}),
+  };
   const contenido = (
     <>
       {/* El pulso de producto (0251): un POST de fuego-y-olvido por cambio de
@@ -145,8 +174,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const marco = (
     <Chrome
       nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
-      {...(v2 && avance ? { insignias: { '/dashboard/puesta-en-marcha': avance } } : {})}
+      {...(v2 && Object.keys(insignias).length > 0 ? { insignias } : {})}
       {...(v2 && organizacion !== undefined ? { organizacion } : {})}
+      {...(v2 && flotas !== undefined ? { flotas } : {})}
     >
       {contenido}
     </Chrome>
@@ -154,7 +184,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // El motor del recorrido envuelve TODO el chrome (no solo la página): el menú Guía vive en la barra superior y necesita su contexto.
   // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es. El layout RAÍZ no lo lee (públicas estáticas).
-  const idiomaDatos = await datosParaProveedor(['shell', 'operacion']);
+  const idiomaDatos = await datosParaProveedor(['shell', 'operacion', 'avisos', 'resto']);
   const arbol = onb && onb.principal ? (
     <TourProvider
       recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}

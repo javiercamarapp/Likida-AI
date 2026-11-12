@@ -316,7 +316,7 @@
 }
 [data-ui="v2"] .card table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
 [data-ui="v2"] .card table thead th {
-  position: sticky; top: 0; height: 36px; padding: 0 12px; text-align: left; white-space: nowrap;
+  position: sticky; top: 0; height: 36px; padding: 0 12px 0 14px; text-align: left; white-space: nowrap;
   font: 600 12px/1.2 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0;
   color: var(--tabla-cab-ink); background: var(--tabla-cab-bg); border-bottom: 1px solid var(--line);
 }
@@ -547,3 +547,7 @@
 [data-ui="v2"] .rv-errpanel__texto { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
 [data-ui="v2"] .rv-errpanel__acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 [data-ui="v2"] .rv-errpanel__codigo { margin: 0; color: var(--muted); font-size: 12px; user-select: all; }
+
+/* Boton de solo icono (11-nov-2026): el mismo .rv-btn de 28 px, cuadrado; siempre con aria-label y Tooltip del sistema. */
+[data-ui="v2"] .rv-btn.rv-btn--icono { width: var(--ctl-h-sm, 28px); min-width: 0; padding: 0; justify-content: center; }
+@media (max-width: 820px) { [data-ui="v2"] .rv-btn.rv-btn--icono { width: 36px; } }

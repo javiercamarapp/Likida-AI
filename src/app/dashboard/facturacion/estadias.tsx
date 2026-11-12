@@ -2,7 +2,6 @@ import { getT } from '@/lib/i18n/servidor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
-import { Hourglass } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -15,7 +14,10 @@ import {
 } from '@/lib/likida/estadias/lector';
 import type { EpisodioEstadia, FaseEpisodio, MotivoSinMonto } from '@/lib/likida/estadias/motor';
 import { parsearImporteMx, mxn, fechaHoraMx } from '@/lib/formato';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
+import {
+  CampoSelect, CampoTexto, Disclosure, FormaEnCajon, Tarjeta, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import { EstadoError } from '../estados';
 
 /**
  * ESTADÍAS Y DETENCIÓN (0207, ficha §8.3) — la sección del contralor.
@@ -72,20 +74,21 @@ function Evidencia({ e, tr = trEs }: { e: EpisodioEstadia; tr?: Tr }) {
 function Renglon({ e, tr = trEs }: { e: EpisodioEstadia; tr?: Tr }) {
   const d = e.detencion;
   return (
-    <details className="rounded-xl hairline px-3.5 py-2.5">
-      <summary className="cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-        <span className="font-medium">{e.folio ?? `viaje ${e.viajeId.slice(0, 8)}`}</span>
-        <span style={{ color: 'var(--muted)' }}>{e.clienteNombre ?? tr('facturacion.estadias.sinCliente')}</span>
-        {e.unidadEconomico && <span style={{ color: 'var(--muted)' }}>{tr('facturacion.estadias.unidad', { unidadEconomico: e.unidadEconomico })}</span>}
-        <span style={{ color: 'var(--muted)' }}>
-          {e.minutosSitio !== null ? duracion(e.minutosSitio) : rotuloFase(tr)[e.fase]}
-          {e.fase === 'corriendo' && ' ' + tr('facturacion.estadias.corriendo')}
+    <Disclosure
+      titulo={(
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <span>{e.folio ?? tr('facturacion.estadias.viajeCorto', { id: e.viajeId.slice(0, 8) })}</span>
+          <span className="font-normal text-[color:var(--muted)]">{e.clienteNombre ?? tr('facturacion.estadias.sinCliente')}</span>
+          {e.unidadEconomico && <span className="font-normal text-[color:var(--muted)]">{tr('facturacion.estadias.unidad', { unidadEconomico: e.unidadEconomico })}</span>}
+          <span className="font-normal text-[color:var(--muted)]">
+            {e.minutosSitio !== null ? duracion(e.minutosSitio) : rotuloFase(tr)[e.fase]}
+            {e.fase === 'corriendo' && ' ' + tr('facturacion.estadias.corriendo')}
+          </span>
         </span>
-        <span className="ml-auto font-medium">
-          {d.monto !== null ? `${mxn(d.monto)} propuestos` : '—'}
-        </span>
-      </summary>
-      <div className="mt-2.5 flex flex-col gap-1 text-xs" style={{ color: 'var(--muted)' }}>
+      )}
+      resumen={d.monto !== null ? tr('facturacion.estadias.propuestos', { v: mxn(d.monto) }) : '—'}
+    >
+      <div className="flex flex-col gap-1 text-[12px] text-[color:var(--muted)]">
         <span>
           {tr('facturacion.estadias.rutaSitio', { origen: e.origen ?? '—', destino: e.destino ?? '—', sitio: e.sitioNombre ?? tr('facturacion.estadias.sinSitioDibujado') })}
         </span>
@@ -105,7 +108,7 @@ function Renglon({ e, tr = trEs }: { e: EpisodioEstadia; tr?: Tr }) {
           <span>{rotuloSinMonto(tr)[d.motivoSinMonto as MotivoSinMonto]}</span>
         )}
       </div>
-    </details>
+    </Disclosure>
   );
 }
 
@@ -195,106 +198,93 @@ export async function BloqueEstadias({
     return { ok: tr('facturacion.estadias.pactoDelClienteGuardado') };
   }
 
+  // Los pactos viven en dos cajones del sistema (flota y por cliente), en el encabezado de la tarjeta; ningún formulario dentro de un
+  // `<details>`.
+  const pactos = leyoOk && panel !== null ? (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <FormaEnCajon id="pacto-flota" titulo={tr('facturacion.estadias.tituloPactoFlota')} accion={pactarFlota}
+        boton={tr('facturacion.estadias.guardarPactoDeFlota')} disparador={tr('facturacion.estadias.tituloPactoFlota')}
+        descripcion={<>
+          {tr('facturacion.estadias.pactoDeFlotaAplica')}
+          {panel.politicaFlota
+            ? ' ' + tr('facturacion.estadias.vigenteHLibresTarifa', { v: panel.politicaFlota.horasLibres ?? 'sin', v2: panel.politicaFlota.tarifaHora !== null ? mxn(panel.politicaFlota.tarifaHora) : tr('facturacion.estadias.sinPactar') })
+            : ' ' + tr('facturacion.estadias.sinPactoDeFlota')}
+        </>}>
+        <CampoTexto tipo="number" step="any" name="horasLibres" etiqueta={tr('facturacion.estadias.horasLibres')}
+          defaultValue={panel.politicaFlota?.horasLibres?.toString() ?? ''} ayuda={tr('facturacion.estadias.vacioNoPactadoEl')} />
+        <CampoTexto tipo="number" step="any" name="tarifaHora" etiqueta={tr('facturacion.estadias.tarifaMxnPorHora')}
+          defaultValue={panel.politicaFlota?.tarifaHora?.toString() ?? ''} ayuda={tr('facturacion.estadias.vacioSinTarifaEl')} />
+      </FormaEnCajon>
+      {clientes.length > 0 && (
+        <FormaEnCajon id="pacto-cliente" titulo={tr('facturacion.estadias.tituloPactoCliente')} accion={pactarCliente}
+          boton={tr('facturacion.estadias.guardarPactoDelCliente')} disparador={tr('facturacion.estadias.tituloPactoCliente')}
+          descripcion={tr('facturacion.estadias.pactoPorClienteGana')}>
+          <CampoSelect name="clienteId" etiqueta={tr('facturacion.estadias.cliente')} obligatorio defaultValue="">
+            <option value="">{tr('facturacion.estadias.elige')}</option>
+            {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </CampoSelect>
+          <CampoTexto tipo="number" step="any" name="horasLibres" etiqueta={tr('facturacion.estadias.horasLibres')} ayuda={tr('facturacion.estadias.vacioNoPactado')} />
+          <CampoTexto tipo="number" step="any" name="tarifaHora" etiqueta={tr('facturacion.estadias.tarifaMxnPorHora2')} ayuda={tr('facturacion.estadias.vacioSinTarifa')} />
+          <CampoSelect name="geocercaId" etiqueta={tr('facturacion.estadias.sitioDelClienteGeocerca')} ayuda={tr('facturacion.estadias.seDibujanEnEl')} defaultValue="">
+            <option value="">{tr('facturacion.estadias.noCambiar')}</option>
+            <option value="ninguno">{tr('facturacion.estadias.quitarVinculo')}</option>
+            {geocercas.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          </CampoSelect>
+        </FormaEnCajon>
+      )}
+    </div>
+  ) : undefined;
+
   return (
-    <section className="mt-3 rounded-2xl px-5 py-4 flex flex-col gap-3 hairline" style={{ background: 'var(--surface)' }}>
-      <div className="flex items-start gap-2.5">
-        <Hourglass width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-        <div className="min-w-0">
-          <p className="text-sm font-medium">{tr('facturacion.estadias.estadiasYDetencion')}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-            {tr('facturacion.estadias.relojExplica', { dias: VENTANA_ESTADIAS_DIAS, rango: panel ? ` (${panel.ventana.desde} → ${panel.ventana.hasta})` : '' })}
-          </p>
-        </div>
-      </div>
-
-      {!leyoOk || panel === null ? (
-        <p className="text-xs" style={{ color: 'var(--bad)' }}>
-          {tr('facturacion.estadias.noPudeLeerLas')}
+    <Tarjeta titulo={tr('facturacion.estadias.estadiasYDetencion')} acciones={pactos}>
+      <div className="flex flex-col gap-3">
+        <p className="text-[12px] text-[color:var(--muted)]">
+          {tr('facturacion.estadias.relojExplica', { dias: VENTANA_ESTADIAS_DIAS, rango: panel ? ` (${panel.ventana.desde} → ${panel.ventana.hasta})` : '' })}
         </p>
-      ) : (
-        <>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--muted)' }}>
-            <span>{rico(tr('facturacion.estadias.strongStrongEpisodiosEn', { total: panel.resumen.total }), { strong: (c) => <strong>{c}</strong> })}</span>
-            <span>{rico(tr('facturacion.estadias.strongStrongConEl', { corriendo: panel.resumen.corriendo }), { strong: (c) => <strong>{c}</strong> })}</span>
-            <span>
-              {tr('facturacion.estadias.detencionPropuesta')}{' '}
-              <strong>{panel.resumen.montoPropuesto !== null ? mxn(panel.resumen.montoPropuesto) : tr('facturacion.estadias.sinMontosQueProponer')}</strong>
-              {panel.resumen.conMonto > 0 && ' ' + tr('facturacion.estadias.episodios', { conMonto: panel.resumen.conMonto })}
-            </span>
-            {panel.resumen.sinPolitica > 0 && (
-              <span>{tr('facturacion.estadias.sinPactoSeMiden', { sinPolitica: panel.resumen.sinPolitica })}</span>
-            )}
-            {panel.resumen.sinSalidaMedible > 0 && (
-              <span>{tr('facturacion.estadias.sinSalidaMedible', { sinSalidaMedible: panel.resumen.sinSalidaMedible })}</span>
-            )}
-          </div>
 
-          {panel.episodios.length === 0 ? (
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>
-              {tr('facturacion.estadias.ningunViajeSelloLlegada')}
-            </p>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              {panel.episodios.slice(0, 40).map((e) => <Renglon tr={tr} key={e.viajeId} e={e} />)}
-              {panel.episodios.length > 40 && (
-                <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                  {tr('facturacion.estadias.seMuestranLosPrimeros', { length: panel.episodios.length })}
-                </p>
+        {!leyoOk || panel === null ? (
+          <EstadoError mensaje={tr('facturacion.estadias.noPudeLeerLas')} />
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[color:var(--muted)]">
+              <span>{rico(tr('facturacion.estadias.strongStrongEpisodiosEn', { total: panel.resumen.total }), { strong: (c) => <strong>{c}</strong> })}</span>
+              <span>{rico(tr('facturacion.estadias.strongStrongConEl', { corriendo: panel.resumen.corriendo }), { strong: (c) => <strong>{c}</strong> })}</span>
+              <span>
+                {tr('facturacion.estadias.detencionPropuesta')}{' '}
+                <strong>{panel.resumen.montoPropuesto !== null ? mxn(panel.resumen.montoPropuesto) : tr('facturacion.estadias.sinMontosQueProponer')}</strong>
+                {panel.resumen.conMonto > 0 && ' ' + tr('facturacion.estadias.episodios', { conMonto: panel.resumen.conMonto })}
+              </span>
+              {panel.resumen.sinPolitica > 0 && (
+                <span>{tr('facturacion.estadias.sinPactoSeMiden', { sinPolitica: panel.resumen.sinPolitica })}</span>
+              )}
+              {panel.resumen.sinSalidaMedible > 0 && (
+                <span>{tr('facturacion.estadias.sinSalidaMedible', { sinSalidaMedible: panel.resumen.sinSalidaMedible })}</span>
               )}
             </div>
-          )}
 
-          <details className="rounded-xl hairline px-4 py-3">
-            <summary className="text-xs font-medium cursor-pointer">
-              {tr('facturacion.estadias.pactosDeDetencionFlota')}
-            </summary>
-            <div className="mt-3 flex flex-col gap-4">
-              <div>
-                <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-                  {tr('facturacion.estadias.pactoDeFlotaAplica')}
-                  {panel.politicaFlota
-                    ? ' ' + tr('facturacion.estadias.vigenteHLibresTarifa', { v: panel.politicaFlota.horasLibres ?? 'sin', v2: panel.politicaFlota.tarifaHora !== null ? mxn(panel.politicaFlota.tarifaHora) : tr('facturacion.estadias.sinPactar') })
-                    : ' ' + tr('facturacion.estadias.sinPactoDeFlota')}
-                </p>
-                <FormaConAviso accion={pactarFlota} boton="Guardar pacto de flota">
-                  <Campo nombre="horasLibres" etiqueta={tr('facturacion.estadias.horasLibres')} tipo="number"
-                    valorInicial={panel.politicaFlota?.horasLibres?.toString() ?? ''}
-                    ayuda={tr('facturacion.estadias.vacioNoPactadoEl')} />
-                  <Campo nombre="tarifaHora" etiqueta={tr('facturacion.estadias.tarifaMxnPorHora')} tipo="number"
-                    valorInicial={panel.politicaFlota?.tarifaHora?.toString() ?? ''}
-                    ayuda={tr('facturacion.estadias.vacioSinTarifaEl')} />
-                </FormaConAviso>
-              </div>
-              <div>
-                <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-                  {tr('facturacion.estadias.pactoPorClienteGana')}
-                </p>
-                {clientes.length === 0 ? (
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                    {tr('facturacion.estadias.noTienesClientesDados')}
+            {panel.episodios.length === 0 ? (
+              <p className="text-[12px] text-[color:var(--muted)]">
+                {tr('facturacion.estadias.ningunViajeSelloLlegada')}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {panel.episodios.slice(0, 40).map((e) => <Renglon tr={tr} key={e.viajeId} e={e} />)}
+                {panel.episodios.length > 40 && (
+                  <p className="text-[12px] text-[color:var(--muted)]">
+                    {tr('facturacion.estadias.seMuestranLosPrimeros', { length: panel.episodios.length })}
                   </p>
-                ) : (
-                  <FormaConAviso accion={pactarCliente} boton="Guardar pacto del cliente">
-                    <Selector nombre="clienteId" etiqueta={tr('facturacion.estadias.cliente')} requerido
-                      opciones={[{ valor: '', texto: 'Elige…' }, ...clientes.map((c) => ({ valor: c.id, texto: c.nombre }))]} />
-                    <Campo nombre="horasLibres" etiqueta={tr('facturacion.estadias.horasLibres')} tipo="number"
-                      ayuda={tr('facturacion.estadias.vacioNoPactado')} />
-                    <Campo nombre="tarifaHora" etiqueta={tr('facturacion.estadias.tarifaMxnPorHora2')} tipo="number"
-                      ayuda={tr('facturacion.estadias.vacioSinTarifa')} />
-                    <Selector nombre="geocercaId" etiqueta={tr('facturacion.estadias.sitioDelClienteGeocerca')}
-                      opciones={[
-                        { valor: '', texto: tr('facturacion.estadias.noCambiar') },
-                        { valor: 'ninguno', texto: tr('facturacion.estadias.quitarVinculo') },
-                        ...geocercas.map((g) => ({ valor: g.id, texto: g.nombre })),
-                      ]}
-                      ayuda={tr('facturacion.estadias.seDibujanEnEl')} />
-                  </FormaConAviso>
                 )}
               </div>
-            </div>
-          </details>
-        </>
-      )}
-    </section>
+            )}
+
+            {clientes.length === 0 && (
+              <p className="text-[12px] text-[color:var(--muted)]">
+                {tr('facturacion.estadias.noTienesClientesDados')}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </Tarjeta>
   );
 }

@@ -9,6 +9,8 @@ import { paresLegibles } from '../valor-legible';
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
 import '../bandeja.css';
 
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_inicio as admin_inicioEs } from '@/lib/i18n/es/admin_inicio';
 export type ResultadoPieza = { ok?: string; error?: string } | null;
 export type AccionPieza = (previo: ResultadoPieza, fd: FormData) => Promise<ResultadoPieza>;
 
@@ -19,6 +21,7 @@ export type AccionPieza = (previo: ResultadoPieza, fd: FormData) => Promise<Resu
  * aprobar algo que no se leyó entero no es aprobación.
  */
 export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   const [editando, setEditando] = useState(false);
   const [rechazando, setRechazando] = useState(false);
@@ -51,22 +54,23 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
       <form action={enviar} className="bj-item__forma">
         <input type="hidden" name="pieza" value={pieza.id} />
         {editando && (
-          <CampoTextarea etiqueta="Texto que debe salir" etiquetaOculta name="cuerpoEditado" defaultValue={pieza.cuerpo} rows={6} />
+          <CampoTextarea etiqueta={t('aprobaciones_forma_pieza.texto_que_debe_salir')} etiquetaOculta name="cuerpoEditado" defaultValue={pieza.cuerpo} rows={6} />
         )}
         {rechazando && (
-          <CampoTexto etiqueta="Motivo del rechazo" etiquetaOculta obligatorio name="motivo"
-            placeholder="Motivo del rechazo (obligatorio) — sin él, la misma pieza vuelve" />
+          <CampoTexto etiqueta={t('aprobaciones_forma_pieza.motivo_del_rechazo')} etiquetaOculta obligatorio name="motivo"
+            placeholder={t('aprobaciones_forma_pieza.motivo_del_rechazo_obligatorio')} />
         )}
         <div className="bj-item__fila">
           {!rechazando && (
             <Boton type="submit" name="operacion" value="aprobar" variante="primary" tamano="sm" disabled={pendiente}
               icono={<Check width={13} height={13} strokeWidth={1.75} />}>
-              {editando ? 'Aprobar con mi edición' : 'Aprobar tal cual'}
+              {editando ? t('aprobaciones_forma_pieza.aprobar_con_mi_edicion') : t('aprobaciones_forma_pieza.aprobar_tal_cual')}
             </Boton>
           )}
           {!editando && !rechazando && (
             <Boton variante="secondary" tamano="sm" onClick={() => setEditando(true)} icono={<PencilLine width={13} height={13} strokeWidth={1.75} />}>
-              Editar y aprobar
+              
+              {t('aprobaciones_forma_pieza.editar_y_aprobar')}
             </Boton>
           )}
           {rechazando ? (
@@ -116,6 +120,7 @@ const TIPOS_ENVIABLES_UI = new Set(['correo_frio', 'correo_seguimiento']);
  * secas.
  */
 export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   const enviable = TIPOS_ENVIABLES_UI.has(pieza.tipo);
 
@@ -125,7 +130,7 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
   return (
     <div className="bj-item bj-item--envio">
       <span className="bj-item__titulo">{pieza.titulo}</span>
-      {pieza.cuerpoFinal && <StatusChip tono="neutral">con edición</StatusChip>}
+      {pieza.cuerpoFinal && <StatusChip tono="neutral">{t('aprobaciones_forma_pieza.con_edicion')}</StatusChip>}
       <span className="bj-item__meta">
         {pieza.prospectoEmpresa ? `→ ${pieza.prospectoEmpresa}` : 'sin prospecto'}
         {pieza.prospectoCorreo ? ` · ${pieza.prospectoCorreo}` : ''}
@@ -137,21 +142,21 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
       <form action={enviar} className="ml-auto shrink-0">
         <input type="hidden" name="pieza" value={pieza.id} />
         {!enviable ? (
-          <span className="bj-item__meta">pieza interna — no se manda al prospecto</span>
+          <span className="bj-item__meta">{t('aprobaciones_forma_pieza.pieza_interna_no_se')}</span>
         ) : pieza.prospectoCorreo ? (
           <BotonConfirmar
-            etiqueta={pendiente ? 'Enviando…' : 'Enviar por correo'}
+            etiqueta={pendiente ? t('aprobaciones_forma_pieza.enviando') : t('aprobaciones_forma_pieza.enviar_por_correo')}
             tono="peligro"
             deshabilitado={pendiente}
             etiquetaConfirmar="Sí, enviar"
-            titulo="Enviar por correo"
-            descripcion={`Se va a mandar "${pieza.titulo}" a ${pieza.prospectoEmpresa ? `${pieza.prospectoEmpresa} — ` : ''}`
+            titulo={t('aprobaciones_forma_pieza.enviar_por_correo')}
+            descripcion={t('aprobaciones_forma_pieza.se_va_a_mandar', { titulo: pieza.titulo, prospectoEmpresa: pieza.prospectoEmpresa ? `${pieza.prospectoEmpresa} — ` : '' })
               + `${pieza.prospectoCorreo}. Resend lo entrega al instante — es un correo real a un prospecto externo, `
               + 'y no hay botón para deshacerlo.'}
             className={clasesBoton('primary', 'sm')}
           />
         ) : (
-          <span className="bj-item__meta">sin correo capturado — se captura en Vendedores</span>
+          <span className="bj-item__meta">{t('aprobaciones_forma_pieza.sin_correo_capturado_se')}</span>
         )}
       </form>
     </div>
@@ -165,18 +170,19 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
  * correo NO salió; el diálogo lo dice sin rodeos.
  */
 export function FormaLiberarAmbiguo({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   const [estado, liberar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   if (estado?.ok) return <span className="bj-sub" data-tono="ok" role="status">{estado.ok}</span>;
   return (
     <form action={liberar} className="inline-flex items-center gap-2">
       <input type="hidden" name="pieza" value={pieza.id} />
       <BotonConfirmar
-        etiqueta={pendiente ? 'Liberando…' : 'Confirmar que NO salió y reintentar'}
+        etiqueta={pendiente ? t('aprobaciones_forma_pieza.liberando') : t('aprobaciones_forma_pieza.confirmar_que_no_salio')}
         tono="peligro"
         deshabilitado={pendiente}
         etiquetaConfirmar="Sí, verifiqué en Resend que no salió"
-        titulo="Liberar el envío ambiguo"
-        descripcion={`Verifica primero en Resend que "${pieza.titulo}" NO salió. Si lo liberas y sí había salido, el siguiente intento usa la misma llave de idempotencia, pero Resend solo la respeta dentro de su ventana.`}
+        titulo={t('aprobaciones_forma_pieza.liberar_el_envio_ambiguo')}
+        descripcion={t('aprobaciones_forma_pieza.verifica_primero_en_resend', { titulo: pieza.titulo })}
         className={clasesBoton('primary', 'sm')}
       />
       {estado?.error && <span className="bj-sub" data-tono="bad" role="alert">{estado.error}</span>}

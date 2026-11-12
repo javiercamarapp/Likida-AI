@@ -3,8 +3,9 @@ import {
 } from '@/lib/likida/agentes/definiciones';
 import { listarInterruptores } from '@/lib/likida/interruptores';
 import { contarPendientesPorAgente } from '@/lib/likida/agentes/insumos';
-import { estadoRealDeAgente, ROTULO_ESTADO_REAL, TONO_ESTADO_REAL, type EstadoReal } from '@/lib/likida/agentes/estado-real';
-import { autonomiaDe, NOMBRE_NIVEL } from '@/lib/likida/agentes/autonomia';
+import { estadoRealDeAgente, TONO_ESTADO_REAL, type EstadoReal } from '@/lib/likida/agentes/estado-real';
+import { autonomiaDe } from '@/lib/likida/agentes/autonomia';
+import { nombreNivelTr, rotuloEstadoRealTr } from '@/lib/i18n/rotulos_tr';
 import { getAgentesParados } from '@/lib/admin/agentes-parados';
 import { getConsumoPorAgente } from '@/lib/admin/consumo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -12,11 +13,13 @@ import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  Aviso, BotonEnlace, Chip, Disclosure, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
+  Aviso, Chip, Disclosure, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
-import { KillSwitchAgente, ConfigurarAgente } from './acciones-agente';
+import { AccionesAgente } from './acciones-agente';
+import { getT } from '@/lib/i18n/servidor';
+import { corridaDe, haceTiempo, leerCorridas, resultadoCorrida } from './corrida-visual';
 import './agentes.css';
 
 export type AccionAlta = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
@@ -53,14 +56,7 @@ async function ultimaCorridaDe(agente: string): Promise<{ inicio: string; estado
   return f ? { inicio: String(f.inicio), estado: String(f.estado) } : null;
 }
 
-const TONO_CORRIDA: Record<string, TonoEstado> = { ok: 'ok', parcial: 'warn', fallo: 'bad' };
 const HORAS = 3_600_000;
-
-/** Tono por antigüedad: una última corrida vieja NO se pinta como «viva». */
-function tonoPorAntiguedad(inicioIso: string, ahora: number): TonoEstado {
-  const h = (ahora - Date.parse(inicioIso)) / HORAS;
-  return h < 48 ? 'ok' : h < 168 ? 'warn' : 'bad';
-}
 
 type Corrida = { inicio: string; estado: string } | null | 'error';
 interface Fila { a: AgenteDefinido; real: EstadoReal; motivo: string | null; corrida: Corrida; apagado: boolean | null | undefined }
@@ -69,7 +65,10 @@ interface Fila { a: AgenteDefinido; real: EstadoReal; motivo: string | null; cor
 export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionConfig }: {
   accionAlta: AccionAlta; accionPalanca: AccionPalanca; accionConfig: AccionConfig;
 }) {
+  const { t } = await getT('admin_agentes');
+  const { t: ts } = await getT('admin_sistema');
   const ahora = ahoraMs();
+  const { t: tr } = await getT('agentes');
   const [agentes, interruptores, exito, consumo, insumosPendientes, parados] = await Promise.all([
     listarAgentes(),
     safe(() => listarInterruptores()),
@@ -82,13 +81,10 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   const apagadoDe = new Map<string, boolean>((interruptores ?? []).map((i) => [i.id as string, i.apagado]));
   const motivoDe = new Map<string, string | null>((parados?.parados ?? []).map((p) => [p.agente, p.motivo]));
 
-  const corridas = new Map<string, Corrida>();
-  await Promise.all(agentes.map(async (a) => {
-    try { corridas.set(a.id, await ultimaCorridaDe(a.id)); } catch { corridas.set(a.id, 'error'); }
-  }));
+  const corridas = await leerCorridas(agentes.map((a) => a.id), ultimaCorridaDe);
 
   const filas: Fila[] = agentes.map((a) => {
-    const c = corridas.get(a.id) ?? 'error';
+    const c: Corrida = corridaDe(corridas, a.id); // null = sin corridas (neutro); 'error' = la consulta falló
     const apagado = interruptores === null ? null : apagadoDe.get(`agente:${a.id}`);
     const motivo = motivoDe.get(a.id) ?? null;
     const real = estadoRealDeAgente({
@@ -113,12 +109,12 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
 
   const columnas: ColumnaBase<Fila>[] = [
     {
-      id: 'agente', titulo: 'Agente', principal: true,
+      id: 'agente', titulo: t('agentes_contenido.agente'), principal: true,
       celda: ({ a }) => {
         const e = exito?.get(a.id);
-        const pct = e && e.total > 0 ? `${Math.round((e.ok / e.total) * 100)} % de éxito (${e.total})` : exito === null ? 'éxito sin dato' : 'sin corridas en 30 días';
-        const costo = consumo === null ? 'costo sin dato' : (costoDe.get(a.id) ?? 0) > 0 ? `${usd(costoDe.get(a.id) ?? 0)} en 30 días` : 'sin costo medido';
-        const tope = a.presupuestoDiaUsd === null ? 'sin tope declarado' : `${usd(a.presupuestoDiaUsd)}/día`;
+        const pct = e && e.total > 0 ? t('agentes_contenido.de_exito', { Math: Math.round((e.ok / e.total) * 100), total: e.total }) : exito === null ? t('agentes_contenido.exito_sin_dato') : t('agentes_contenido.sin_corridas_en_30');
+        const costo = consumo === null ? 'costo sin dato' : (costoDe.get(a.id) ?? 0) > 0 ? t('agentes_contenido.en_30_dias', { costoDe: usd(costoDe.get(a.id) ?? 0) }) : t('agentes_contenido.sin_costo_medido');
+        const tope = a.presupuestoDiaUsd === null ? t('agentes_contenido.sin_tope_declarado') : t('agentes_contenido.dia', { presupuestoDiaUsd: usd(a.presupuestoDiaUsd) });
         // Una sola línea de apoyo (departamento y éxito); modelo, tope y costo van en el tooltip y en «Configurar», no en cada fila.
         return (
           <span title={`${a.modeloRol ?? 'modelo sin declarar'} · ${tope} · ${costo}`}>
@@ -129,60 +125,68 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
       },
     },
     {
-      id: 'estado', titulo: 'Estado real',
+      id: 'estado', titulo: t('agentes_contenido.estado_real'),
+      // Solo el chip: el motivo (la misma frase larga en 30 filas) se dice UNA vez en el aviso de arriba; aquí queda en el título del chip.
       celda: ({ a, real, motivo }) => (
         <>
-          <StatusChip tono={TONO_ESTADO_REAL[real] as TonoEstado}>{ROTULO_ESTADO_REAL[real]}</StatusChip>
+          <span title={motivo && (real === 'bloqueado_bandeja' || real === 'parado') ? motivo : undefined}>
+            <StatusChip tono={TONO_ESTADO_REAL[real] as TonoEstado}>{rotuloEstadoRealTr(real, ts)}</StatusChip>
+          </span>
           {a.experimental ? <Chip>Experimental</Chip> : null}
-          {motivo && (real === 'bloqueado_bandeja' || real === 'parado') ? <span className="rv-agente-sub">{motivo}</span> : null}
         </>
       ),
     },
     {
-      id: 'corrida', titulo: 'Última corrida',
+      id: 'corrida', titulo: t('agentes_contenido.ultima_corrida'),
       celda: ({ a, corrida }) => corrida === 'error'
-        ? <span className="rv-agente-nowrap">No se pudo leer</span>
+        ? <span className="rv-agente-nowrap">{t('agentes_contenido.no_se_pudo_leer')}</span>
         : corrida === null
-          ? <span className="rv-agente-nowrap">{a.estado === 'vivo' ? 'Sin corridas todavía' : 'No corre en el producto'}</span>
+          ? <span className="rv-agente-nowrap">{a.estado === 'vivo' ? t('agentes_contenido.sin_corridas_todavia') : t('agentes_contenido.no_corre_en_el')}</span>
           : (
             <>
-              <StatusChip tono={tonoPorAntiguedad(corrida.inicio, ahora)}>{fechaHoraMx(corrida.inicio)}</StatusChip>
-              <span className="rv-agente-sub">Terminó: <StatusChip tono={TONO_CORRIDA[corrida.estado] ?? 'neutral'}>{corrida.estado}</StatusChip></span>
+              <span className="rv-agente-fecha">{fechaHoraMx(corrida.inicio)}</span>
+              {(() => {
+                const r = resultadoCorrida(corrida.estado, tr);
+                return (
+                  <span className="rv-agente-sub rv-agente-resultado">
+                    {r.tono ? <StatusChip tono={r.tono}>{r.texto}</StatusChip> : r.texto}
+                    <span> · {haceTiempo(corrida.inicio, ahora, tr)}</span>
+                  </span>
+                );
+              })()}
             </>
           ),
     },
     {
-      id: 'autonomia', titulo: 'Autonomía',
+      id: 'autonomia', titulo: t('agentes_contenido.autonomia'),
       celda: ({ a }) => {
         const n = autonomiaDe(a.id);
-        return <Chip>{`${n.nivel} · ${NOMBRE_NIVEL[n.nivel]}`}</Chip>;
+        return <span className="rv-agente-nowrap">{`${n.nivel} · ${nombreNivelTr(n.nivel, ts)}`}</span>;
       },
     },
     {
-      id: 'palanca', titulo: 'Kill switch',
+      id: 'palanca', titulo: t('agentes_contenido.kill_switch'),
       celda: ({ a, apagado }) => a.estado !== 'vivo'
         ? <span className="rv-agente-nowrap">—</span>
         : apagado === null
-          ? <span className="rv-agente-nowrap">No se pudo leer</span>
+          ? <span className="rv-agente-nowrap">{t('agentes_contenido.no_se_pudo_leer')}</span>
           : apagado === undefined
-            ? <span className="rv-agente-nowrap">Sin palanca propia</span>
-            : <KillSwitchAgente palanca={`agente:${a.id}`} nombre={a.nombre} apagado={apagado} accion={accionPalanca} />,
+            ? <span className="rv-agente-nowrap">{t('agentes_contenido.sin_palanca_propia')}</span>
+            : <StatusChip tono={apagado ? 'bad' : 'ok'}>{apagado ? 'Apagado' : 'Encendido'}</StatusChip>,
     },
     {
-      id: 'acciones', titulo: 'Acciones',
-      celda: ({ a }) => (
-        <div className="rv-agente-acciones">
-          <ConfigurarAgente
-            id={a.id} nombre={a.nombre} accion={accionConfig} estados={estadosRotulo}
-            actual={{
-              estado: a.estado, runnerHabilitado: a.runnerHabilitado,
-              presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
-            }}
-          />
-          <BotonEnlace variante="ghost" tamano="sm" href={`/admin/agentes/${a.id}/insumos`}>
-            {insumosPendientes === null ? 'Insumos' : (insumosPendientes.get(a.id) ?? 0) > 0 ? `Insumos (${insumosPendientes.get(a.id)})` : 'Insumos'}
-          </BotonEnlace>
-        </div>
+      id: 'acciones', titulo: t('agentes_contenido.acciones'),
+      celda: ({ a, apagado }) => (
+        <AccionesAgente
+          id={a.id} nombre={a.nombre} palanca={`agente:${a.id}`}
+          apagado={a.estado === 'vivo' && typeof apagado === 'boolean' ? apagado : null}
+          accionPalanca={accionPalanca} accionConfig={accionConfig} estados={estadosRotulo}
+          actual={{
+            estado: a.estado, runnerHabilitado: a.runnerHabilitado,
+            presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
+          }}
+          etiquetaInsumos={insumosPendientes === null ? t('agentes_contenido.insumos_2') : (insumosPendientes.get(a.id) ?? 0) > 0 ? t('agentes_contenido.insumos', { insumosPendientes: insumosPendientes.get(a.id) ?? 0 }) : t('agentes_contenido.insumos_2')}
+        />
       ),
     },
   ];
@@ -190,73 +194,74 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   return (
     <MarcoPagina
       area="Agentes"
-      titulo="Agentes"
-      apoyo="Qué agentes hay, cuáles corren de verdad y cómo encenderlos, apagarlos o configurarlos."
+      titulo={t('agentes_contenido.agentes')}
+      apoyo={t('agentes_contenido.que_agentes_hay_cuales')}
     >
       {parados === null ? (
-        <Aviso tono="warn">No se pudo leer qué agentes están parados. El estado real se muestra con la información que sí llegó; no equivale a «todos corren».</Aviso>
+        <Aviso tono="warn">{t('agentes_contenido.no_se_pudo_leer_2')}</Aviso>
       ) : bloqueados + parados72 > 0 ? (
         <Aviso tono="warn">
-          {bloqueados + parados72} agentes vivos llevan {parados.umbralHoras} horas o más sin correr
+          {bloqueados + parados72} agentes vivos llevan {parados.umbralHoras}  {t('agentes_contenido.horas_o_mas_sin')}
           {bloqueados > 0 ? `; ${bloqueados} por la bandeja de aprobaciones llena` : ''}. Vaciar la bandeja los destraba; no se reabren por sí solos.
         </Aviso>
       ) : null}
 
       <TiraCifras
-        etiqueta="Estado de los agentes"
+        etiqueta={t('agentes_contenido.estado_de_los_agentes')}
         items={[
-          { etiqueta: 'Agentes vivos', valor: vivos.length, estado: 'ok', nota: `${agentes.length} en el catálogo` },
-          { etiqueta: 'Corriendo de verdad', valor: parados === null || interruptores === null ? null : corriendo, estado: parados === null || interruptores === null ? 'error' : 'ok', nota: 'Con corrida reciente y palanca arriba' },
-          { etiqueta: 'Bloqueados o parados', valor: parados === null ? null : bloqueados + parados72, estado: parados === null ? 'error' : 'ok', tono: parados !== null && bloqueados + parados72 > 0 ? 'warn' : undefined, nota: `${parados?.umbralHoras ?? 72} h sin correr o más` },
-          { etiqueta: 'Apagados', valor: apagados, estado: apagados === null ? 'error' : 'ok', tono: apagados ? 'bad' : undefined, nota: 'Con el kill switch abajo' },
-          { etiqueta: 'Costo de IA, 30 días', valor: costo30 === null ? null : usd(costo30), estado: costo30 === null ? 'error' : 'ok', nota: 'Suma de los agentes con costo medido' },
+          { etiqueta: t('agentes_contenido.agentes_vivos'), valor: vivos.length, estado: 'ok', nota: t('agentes_contenido.en_el_catalogo', { length: agentes.length }) },
+          { etiqueta: t('agentes_contenido.corriendo_de_verdad'), valor: parados === null || interruptores === null ? null : corriendo, estado: parados === null || interruptores === null ? 'error' : 'ok', nota: t('agentes_contenido.con_corrida_reciente_y') },
+          { etiqueta: t('agentes_contenido.bloqueados_o_parados'), valor: parados === null ? null : bloqueados + parados72, estado: parados === null ? 'error' : 'ok', tono: parados !== null && bloqueados + parados72 > 0 ? 'warn' : undefined, nota: t('agentes_contenido.h_sin_correr_o', { umbralHoras: parados?.umbralHoras ?? 72 }) },
+          { etiqueta: t('agentes_contenido.apagados'), valor: apagados, estado: apagados === null ? 'error' : 'ok', tono: apagados ? 'bad' : undefined, nota: t('agentes_contenido.con_el_kill_switch') },
+          { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: costo30 === null ? null : usd(costo30), estado: costo30 === null ? 'error' : 'ok', nota: t('agentes_contenido.suma_de_los_agentes') },
         ]}
       />
 
       <Tarjeta
-        titulo="Catálogo de agentes"
+        titulo={t('agentes_contenido.catalogo_de_agentes')}
         estado={agentes.length === 0 ? 'vacio' : 'ok'}
-        mensaje="El catálogo está vacío"
-        detalle="Da de alta un agente abajo o aplica el sembrado del catálogo."
+        mensaje={t('agentes_contenido.el_catalogo_esta_vacio')}
+        detalle={t('agentes_contenido.da_de_alta_un')}
       >
         <TablaBase
-          etiqueta="Agentes del catálogo"
+          etiqueta={t('agentes_contenido.agentes_del_catalogo')}
           columnas={columnas}
           filas={filas}
           idFila={(f) => f.a.id}
           tarjetaMovil
-          vacio={{ titulo: 'Sin agentes' }}
+          altoMaximo={false}
+          vacio={{ titulo: t('agentes_contenido.sin_agentes') }}
         />
       </Tarjeta>
 
-      <Disclosure titulo="Dar de alta un agente" resumen="Nace diseñado, nunca vivo">
+      <Disclosure titulo={t('agentes_contenido.dar_de_alta_un')} resumen="Nace diseñado, nunca vivo">
         <FormaConAviso accion={accionAlta} boton="Dar de alta" columnas="md:grid-cols-1">
           <div className="rv-agente-alta">
-            <CampoTexto etiqueta="Id técnico" name="id" required obligatorio placeholder="cazador_censo" ayuda="Minúsculas, números y guión bajo. Es el nombre en corridas y bitácoras." />
-            <CampoTexto etiqueta="Nombre" name="nombre" required obligatorio placeholder="Cazador de censo" />
-            <CampoSelect etiqueta="Departamento" name="departamento" defaultValue="leads">
+            <CampoTexto etiqueta={t('agentes_contenido.id_tecnico')} name="id" required obligatorio placeholder="cazador_censo" ayuda={t('agentes_contenido.minusculas_numeros_y_guion')} />
+            <CampoTexto etiqueta={t('agentes_contenido.nombre')} name="nombre" required obligatorio placeholder={t('agentes_contenido.cazador_de_censo')} />
+            <CampoSelect etiqueta={t('agentes_contenido.departamento')} name="departamento" defaultValue="leads">
               {DEPARTAMENTOS.map((d) => <option key={d.valor} value={d.valor}>{d.rotulo}</option>)}
             </CampoSelect>
-            <CampoSelect etiqueta="Disparador" name="disparador" defaultValue="manual">
+            <CampoSelect etiqueta={t('agentes_contenido.disparador')} name="disparador" defaultValue="manual">
               {DISPARADORES.map((d) => <option key={d} value={d}>{d}</option>)}
             </CampoSelect>
-            <CampoTexto etiqueta="Qué hace" name="descripcion" placeholder="Una línea honesta" />
-            <CampoTexto etiqueta="Dónde vive su prompt" name="promptRef" placeholder="13-Agentes-de-AI/…/prompts/x.md" />
-            <CampoTexto etiqueta="Presupuesto por día (USD)" name="presupuestoDiaUsd" placeholder="Vacío = sin tope declarado" ayuda="El tope se declara desde hoy; sin él el runner no lo despacha." />
+            <CampoTexto etiqueta={t('agentes_contenido.que_hace')} name="descripcion" placeholder={t('agentes_contenido.una_linea_honesta')} />
+            <CampoTexto etiqueta={t('agentes_contenido.donde_vive_su_prompt')} name="promptRef" placeholder="13-Agentes-de-AI/…/prompts/x.md" />
+            <CampoTexto etiqueta={t('agentes_contenido.presupuesto_por_dia_usd')} name="presupuestoDiaUsd" placeholder={t('agentes_contenido.vacio_sin_tope_declarado')} ayuda={t('agentes_contenido.el_tope_se_declara')} />
           </div>
         </FormaConAviso>
-        <p className="rv-agente-sub">Un agente nuevo nace sin palanca propia: para poder apagarlo hace falta darla de alta en el catálogo de interruptores, que hoy exige un cambio de código.</p>
+        <p className="rv-agente-sub">{t('agentes_contenido.un_agente_nuevo_nace')}</p>
       </Disclosure>
 
-      <Disclosure titulo="Cómo se lee el estado real" resumen="Qué significa cada rótulo">
+      <Disclosure titulo={t('agentes_contenido.como_se_lee_el')} resumen="Qué significa cada rótulo">
         <ul>
-          <li><strong>Corriendo</strong>: vivo, con palanca arriba, presupuesto declarado y una corrida de las últimas 72 horas.</li>
-          <li><strong>Bloqueado por bandeja</strong>: el runner lo salta porque la bandeja de aprobaciones está llena.</li>
-          <li><strong>Parado</strong>: habilitado, pero sin corrida reciente por otra causa; el motivo sale del último latido del runner.</li>
-          <li><strong>Sin presupuesto</strong>: el runner no despacha un agente sin tope diario declarado.</li>
-          <li><strong>Corre por su cron</strong>: no depende del runner; su última corrida es la medida.</li>
+          <li><strong>Corriendo</strong>{t('agentes_contenido.vivo_con_palanca_arriba')}</li>
+          <li><strong>{t('agentes_contenido.bloqueado_por_bandeja')}</strong>{t('agentes_contenido.el_runner_lo_salta')}</li>
+          <li><strong>Parado</strong>{t('agentes_contenido.habilitado_pero_sin_corrida')}</li>
+          <li><strong>{t('agentes_contenido.sin_presupuesto')}</strong>{t('agentes_contenido.el_runner_no_despacha')}</li>
+          <li><strong>{t('agentes_contenido.corre_por_su_cron')}</strong>{t('agentes_contenido.no_depende_del_runner')}</li>
         </ul>
-        <p className="rv-agente-sub">La autonomía es el nivel L0 a L4 que el código declara para el agente; aquí solo se lee. Subirlo es un cambio de código revisado, nunca de esta pantalla.</p>
+        <p className="rv-agente-sub">{t('agentes_contenido.la_autonomia_es_el')}</p>
       </Disclosure>
     </MarcoPagina>
   );

@@ -10,33 +10,39 @@
 import { useState } from 'react';
 import { Link2, Mail, MessageCircle, Phone, RefreshCw, Sparkles, Undo2 } from 'lucide-react';
 import type { DetalleProspecto } from '@/lib/admin/prospectos-mapa-client';
-import { COLOR_EMBUDO, NOMBRE_GIRO, esProspectoTerminal } from '@/lib/admin/prospectos-mapa-client';
+import { COLOR_EMBUDO, esProspectoTerminal } from '@/lib/admin/prospectos-mapa-client';
 import { leerRespuestaMensaje } from '../respuesta_mensaje';
 import { hrefWa, hrefCorreo, mensajeWa, correoProspecto } from '../mensajes';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { Boton, BotonEnlace, Chip, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, clasesBoton } from '../../../ui-v2/componentes';
 import { BarraPct } from '../cerebro';
 import '../cerebro.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
+import { rico } from '@/lib/i18n/rico';
+import { nombreEtapaTr, nombreGiroTr } from '@/lib/i18n/rotulos_tr';
+import type { TSistema } from '@/lib/i18n/sistema_tr';
 
 const CONFIANZA_TONO = { alta: 'ok', media: 'warn', baja: 'neutral' } as const;
-const CONFIANZA_LABEL: Record<string, string> = { alta: 'Confianza alta', media: 'Confianza media', baja: 'Confianza baja' };
-const ORIGEN_LABEL: Record<string, string> = {
-  sitio_empresa: 'Sitio oficial', linkedin: 'LinkedIn', directorio: 'Directorio corporativo',
-  denue: 'DENUE', prensa: 'Prensa', inferido: 'Inferido (sin verificar)', otro: 'Otra fuente',
-};
+const confianzaLabel = (t: TSistema): Record<string, string> => ({ alta: t('mapa_prospectos_detalle.confianza_alta'), media: t('mapa_prospectos_detalle.confianza_media'), baja: t('mapa_prospectos_detalle.confianza_baja') });
+const origenLabel = (t: TSistema): Record<string, string> => ({
+  sitio_empresa: t('mapa_prospectos_detalle.origen_sitio_oficial'), linkedin: 'LinkedIn', directorio: t('mapa_prospectos_detalle.origen_directorio'),
+  denue: 'DENUE', prensa: t('mapa_prospectos_detalle.origen_prensa'), inferido: t('mapa_prospectos_detalle.origen_inferido'), otro: t('mapa_prospectos_detalle.origen_otra'),
+});
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+  const { t } = useT('admin_sistema', admin_sistemaEs);
   const vacio = children === null || children === undefined || children === '';
   return (
     <div className="cer-dato">
       <dt>{etiqueta}</dt>
-      <dd data-vacio={vacio || undefined}>{vacio ? 'no disponible' : children}</dd>
+      <dd data-vacio={vacio || undefined}>{vacio ? t('mapa_prospectos_detalle.no_disponible') : children}</dd>
     </div>
   );
 }
 
 export function Detalle({ p }: { p: DetalleProspecto }) {
-  const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
+  const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
   const [afinando, setAfinando] = useState(false);
   const [datos, setDatos] = useState(p);
   const [avisoIa, setAvisoIa] = useState<{ texto: string; error: boolean } | null>(null);
@@ -55,7 +61,7 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
       const r = await fetch('/api/admin/mapa-prospectos/mensaje', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: p.id }),
-      }).then(leerRespuestaMensaje, () => ({ ok: false as const, error: 'No se pudo contactar al servidor. Revisa tu conexión.' }));
+      }).then((resp) => leerRespuestaMensaje(resp, t), () => ({ ok: false as const, error: t('mapa_prospectos_detalle.no_se_pudo_contactar_al_servidor') }));
       if (!r.ok) { setAvisoIa({ texto: r.error, error: true }); return; }
       if (r.aviso) setAvisoIa({ texto: r.aviso, error: false });
       setDatos((d) => ({ ...d, ...r.datos }));
@@ -71,36 +77,36 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
   const asuntoCorreo = datos.correoAsuntoIa ?? correoProspecto(datos).asunto;
   const cuerpoCorreo = datos.correoCuerpoIa ?? correoProspecto(datos).cuerpo;
   const etapa = p.estado in COLOR_EMBUDO ? p.estado : 'nuevo';
-  const resumen = [NOMBRE_GIRO[p.giro], p.ciudad ? `${p.ciudad}${p.entidad ? `, ${p.entidad}` : ''}` : null, p.tamano ? `${p.tamano} personas (DENUE)` : null]
+  const resumen = [nombreGiroTr(p.giro, t), p.ciudad ? `${p.ciudad}${p.entidad ? `, ${p.entidad}` : ''}` : null, p.tamano ? t('mapa_prospectos_detalle.personas_denue', { n: p.tamano }) : null]
     .filter(Boolean).join(' · ');
 
   return (
-    <MarcoPagina area="Ventas" titulo={p.empresa} apoyo={p.vacante ? `Vacante publicada: «${p.vacante}»` : resumen}
-      acciones={<BotonEnlace href="/admin/mapa-prospectos" icono={<Icono icono={Undo2} />}>Volver al Cerebro de ventas</BotonEnlace>}>
+    <MarcoPagina area={t('mapa_prospectos.ventas')} titulo={p.empresa} apoyo={p.vacante ? t('mapa_prospectos_detalle.vacante_publicada', { vacante: p.vacante }) : resumen}
+      acciones={<BotonEnlace href="/admin/mapa-prospectos" icono={<Icono icono={Undo2} />}>{t('mapa_prospectos_detalle.volver_al_cerebro_de_ventas')}</BotonEnlace>}>
       <div className="cer-ficha__etapa">
         <i className="cer-punto" data-etapa={etapa} aria-hidden="true" />
-        <Chip>{c.nombre}</Chip>
+        <Chip>{nombreEtapaTr(p.estado in COLOR_EMBUDO ? p.estado : 'nuevo', t)}</Chip>
         {p.vacante && resumen ? <span className="cer-prospecto__tenue">{resumen}</span> : null}
       </div>
 
       {/* ── Los cinco porcentajes ──────────────────────────────────────── */}
       <FilaTarjetas variante="6-6">
-        <Tarjeta titulo="Del mapa (Cerebro)">
-          <BarraPct etiqueta="Urgencia" pct={p.urgencia} serie="urgencia" />
-          <BarraPct etiqueta="Cierre" pct={p.cierre} serie="cierre" />
-          <BarraPct etiqueta="Datos" pct={p.completitud} serie="datos" />
+        <Tarjeta titulo={t('mapa_prospectos_detalle.del_mapa_cerebro')}>
+          <BarraPct etiqueta={t('mapa_prospectos_detalle.urgencia')} pct={p.urgencia} serie="urgencia" />
+          <BarraPct etiqueta={t('mapa_prospectos_detalle.cierre')} pct={p.cierre} serie="cierre" />
+          <BarraPct etiqueta={t('mapa_prospectos_detalle.datos')} pct={p.completitud} serie="datos" />
         </Tarjeta>
-        <Tarjeta titulo="De investigación, calculadas">
+        <Tarjeta titulo={t('mapa_prospectos_detalle.de_investigacion_calculadas')}>
           <BarraPct etiqueta="ICP" pct={p.similitudIcpPct} serie="icp" />
-          <p className="cer-prospecto__tenue">Similitud con el ICP: giro correcto +40 · vacante publicada +25 · flota ≥10 +20 · sitio verificado +15</p>
-          <BarraPct etiqueta="Necesid." pct={p.necesidadPct} serie="necesidad" />
-          <p className="cer-prospecto__tenue">Necesidad: vacante de liquidación/cuadre +50 (otra vacante +25) · flota ≥20 +25. Nadie las escribe a mano.</p>
+          <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.similitud_con_el_icp_giro_correcto')}</p>
+          <BarraPct etiqueta={t('mapa_prospectos_detalle.necesid')} pct={p.necesidadPct} serie="necesidad" />
+          <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.necesidad_vacante_de_liquidacion_cuadre_50')}</p>
         </Tarjeta>
       </FilaTarjetas>
 
       {/* ── Decisores ──────────────────────────────────────────────────── */}
-      <Tarjeta titulo={p.personas.length > 0 ? `Decisor${p.personas.length > 1 ? 'es' : ''} investigado${p.personas.length > 1 ? 's' : ''}` : 'Decisor'}
-        estado={p.personas.length === 0 && !p.contacto ? 'vacio' : 'ok'} mensaje="Sin decisor confirmado" detalle="Ningún agente ha encontrado un decisor público de esta empresa todavía.">
+      <Tarjeta titulo={p.personas.length > 0 ? t(p.personas.length > 1 ? 'mapa_prospectos_detalle.decisores_investigados' : 'mapa_prospectos_detalle.decisor_investigado') : t('mapa_prospectos_detalle.decisor')}
+        estado={p.personas.length === 0 && !p.contacto ? 'vacio' : 'ok'} mensaje={t('mapa_prospectos_detalle.sin_decisor_confirmado')} detalle={t('mapa_prospectos_detalle.ningun_agente_ha_encontrado_un_decisor')}>
         {p.personas.length === 0 && p.contacto && <p className="cer-prospecto__contacto">{p.contacto}</p>}
         {p.personas.length > 0 && (
           <div className="cer-personas">
@@ -108,13 +114,13 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
               <div key={per.id} className="cer-persona">
                 <div className="cer-persona__cab">
                   <strong>{per.nombre}</strong>
-                  <StatusChip tono={CONFIANZA_TONO[per.confianza]}>{CONFIANZA_LABEL[per.confianza]}</StatusChip>
+                  <StatusChip tono={CONFIANZA_TONO[per.confianza]}>{confianzaLabel(t)[per.confianza]}</StatusChip>
                 </div>
                 {per.puesto && <p>{per.puesto}</p>}
                 {per.telefono && <a href={`tel:${per.telefono}`}><Icono icono={Phone} tam={14} />{per.telefono}</a>}
                 {per.correo && <a href={`mailto:${per.correo}`}><Icono icono={Mail} tam={14} />{per.correo}</a>}
-                {per.linkedin && <a href={per.linkedin} target="_blank" rel="noreferrer"><Icono icono={Link2} tam={14} />LinkedIn</a>}
-                <p className="cer-prospecto__tenue">{ORIGEN_LABEL[per.origen] ?? per.origen}{per.evidencia ? `: ${per.evidencia}` : ''}</p>
+                {per.linkedin && <a href={per.linkedin} target="_blank" rel="noreferrer"><Icono icono={Link2} tam={14} />{t('mapa_prospectos_detalle.linkedin')}</a>}
+                <p className="cer-prospecto__tenue">{origenLabel(t)[per.origen] ?? per.origen}{per.evidencia ? `: ${per.evidencia}` : ''}</p>
               </div>
             ))}
           </div>
@@ -122,70 +128,68 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
       </Tarjeta>
 
       {/* ── La ficha ───────────────────────────────────────────────────── */}
-      <Tarjeta titulo="Ficha">
+      <Tarjeta titulo={t('mapa_prospectos_detalle.ficha')}>
         <dl className="cer-ficha__datos">
-          <Dato etiqueta="Teléfono">{p.telefono ? <a href={`tel:${p.telefono}`}>{p.telefono}</a> : null}</Dato>
-          <Dato etiqueta="Correo">{p.correo ? <a href={`mailto:${p.correo}`}>{p.correo}</a> : null}</Dato>
-          <Dato etiqueta="Sitio">
+          <Dato etiqueta={t('mapa_prospectos_detalle.telefono')}>{p.telefono ? <a href={`tel:${p.telefono}`}>{p.telefono}</a> : null}</Dato>
+          <Dato etiqueta={t('mapa_prospectos_detalle.correo')}>{p.correo ? <a href={`mailto:${p.correo}`}>{p.correo}</a> : null}</Dato>
+          <Dato etiqueta={t('mapa_prospectos_detalle.sitio')}>
             {p.sitio ? (
               <span>
                 <a href={p.sitio.startsWith('http') ? p.sitio : `https://${p.sitio}`} target="_blank" rel="noreferrer">{p.sitio}</a>{' '}
-                <StatusChip tono={p.sitioVerificado ? 'ok' : 'neutral'}>{p.sitioVerificado ? 'verificado' : 'sin verificar'}</StatusChip>
+                <StatusChip tono={p.sitioVerificado ? 'ok' : 'neutral'}>{p.sitioVerificado ? 'verificado' : t('mapa_prospectos_detalle.sin_verificar')}</StatusChip>
               </span>
             ) : null}
           </Dato>
-          <Dato etiqueta="Flota">{p.numUnidades !== null ? `${numero(p.numUnidades)} unidades` : null}</Dato>
-          <Dato etiqueta="Viajes/mes (estimado)">{p.viajesMesEstimado !== null ? `≈ ${numero(p.viajesMesEstimado)}` : null}</Dato>
-          <Dato etiqueta="Fuente">{p.fuenteCruda}</Dato>
-          <Dato etiqueta="Registrado">{fechaHoraMx(p.creadoEn)}</Dato>
-          <Dato etiqueta="Último toque">{p.ultimoToque ? fechaHoraMx(p.ultimoToque) : null}</Dato>
+          <Dato etiqueta={t('observabilidad.flota')}>{p.numUnidades !== null ? `${numero(p.numUnidades, idioma)} unidades` : null}</Dato>
+          <Dato etiqueta={t('mapa_prospectos_detalle.viajes_mes_estimado')}>{p.viajesMesEstimado !== null ? `≈ ${numero(p.viajesMesEstimado, idioma)}` : null}</Dato>
+          <Dato etiqueta={t('trust_safety.fuente')}>{p.fuenteCruda}</Dato>
+          <Dato etiqueta={t('mapa_prospectos_detalle.registrado')}>{fechaHoraMx(p.creadoEn, idioma)}</Dato>
+          <Dato etiqueta={t('mapa_prospectos_detalle.ultimo_toque')}>{p.ultimoToque ? fechaHoraMx(p.ultimoToque, idioma) : null}</Dato>
         </dl>
         {p.viajesMesEstimado !== null && (
-          <p className="cer-prospecto__tenue">
-            Estimado, no medido: {numero(p.numUnidades ?? 0)} unidades × 18 viajes/unidad/mes (supuesto de sector).
-          </p>
+          <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.estimado_no_medido_unidades_18_viajes', { numero: numero(p.numUnidades ?? 0, idioma) })}</p>
         )}
       </Tarjeta>
 
       {p.historia && (
-        <Tarjeta titulo="Historia"><p className="cer-mensaje__texto">{p.historia}</p></Tarjeta>
+        <Tarjeta titulo={t('mapa_prospectos_detalle.historia')}><p className="cer-mensaje__texto">{p.historia}</p></Tarjeta>
       )}
 
       {p.notas && (
-        <Tarjeta titulo="Notas de investigación"><pre className="cer-notas">{p.notas}</pre></Tarjeta>
+        <Tarjeta titulo={t('mapa_prospectos_detalle.notas_de_investigacion')}><pre className="cer-notas">{p.notas}</pre></Tarjeta>
       )}
 
       {/* ── Mensajes ───────────────────────────────────────────────────── */}
-      <Tarjeta titulo="Mensajes"
+      <Tarjeta titulo={t('mapa_prospectos_detalle.mensajes')}
         acciones={!esProspectoTerminal(p.estado) ? (
           <Boton tamano="sm" onClick={() => void afinar()} disabled={afinando} icono={<Icono icono={datos.mensajesGeneradosEn ? RefreshCw : Sparkles} />}>
-            {afinando ? 'Redactando…' : datos.mensajesGeneradosEn ? 'Redactar de nuevo con IA' : 'Redactar con IA'}
+            {afinando ? t('mapa_prospectos_detalle.redactando') : datos.mensajesGeneradosEn ? t('mapa_prospectos_detalle.redactar_de_nuevo_con_ia') : t('mapa_prospectos_detalle.redactar_con_ia')}
           </Boton>
         ) : undefined}>
         {avisoIa && (
           <p role="alert" className={avisoIa.error ? 'cer-prospecto__error' : 'cer-prospecto__aviso'}>{avisoIa.texto}</p>
         )}
         {datos.mensajesGeneradosEn && (
-          <p className="cer-prospecto__tenue">Última redacción del agente experto: {fechaHoraMx(datos.mensajesGeneradosEn)}</p>
+          <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.ultima_redaccion_del_agente_experto')}{' '}{fechaHoraMx(datos.mensajesGeneradosEn, idioma)}</p>
         )}
         <div className="cer-mensajes">
           <div className="cer-mensaje">
             <p className="cer-mensaje__asunto"><strong>WhatsApp</strong>{p.telefono ? ` · ${p.telefono}` : ''}</p>
             <p className="cer-mensaje__texto">{textoWa}</p>
             {linkWa
-              ? <a href={linkWa} target="_blank" rel="noreferrer" onClick={() => tocar('whatsapp')} className={clasesBoton('primary')}><Icono icono={MessageCircle} />Enviar WhatsApp</a>
-              : <p className="cer-prospecto__tenue">Sin teléfono: no se puede mandar.</p>}
+              ? <a href={linkWa} target="_blank" rel="noreferrer" onClick={() => tocar('whatsapp')} className={clasesBoton('primary')}><Icono icono={MessageCircle} />{t('mapa_prospectos_detalle.enviar_whatsapp')}</a>
+              : <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.sin_telefono_no_se_puede_mandar')}</p>}
           </div>
           <div className="cer-mensaje">
-            <p className="cer-mensaje__asunto"><strong>Correo</strong>{p.correo ? ` · ${p.correo}` : ''}</p>
-            <p className="cer-mensaje__asunto"><strong>Asunto:</strong> {asuntoCorreo}</p>
+            <p className="cer-mensaje__asunto">{rico(t('mapa_prospectos_detalle.strong_correo_strong'), { strong: (c) => <strong>{c}</strong> })}{p.correo ? ` · ${p.correo}` : ''}</p>
+            <p className="cer-mensaje__asunto">{rico(t('mapa_prospectos_detalle.strong_asunto_strong'), { strong: (c) => <strong>{c}</strong> })}{' '}{asuntoCorreo}</p>
             <p className="cer-mensaje__texto">{cuerpoCorreo}</p>
             {linkCorreo
-              ? <a href={linkCorreo} onClick={() => tocar('correo')} className={clasesBoton('primary')}><Icono icono={Mail} />Enviar correo</a>
-              : <p className="cer-prospecto__tenue">Sin correo: no se puede mandar.</p>}
+              ? <a href={linkCorreo} onClick={() => tocar('correo')} className={clasesBoton('primary')}><Icono icono={Mail} />{t('mapa_prospectos_detalle.enviar_correo')}</a>
+              : <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.sin_correo_no_se_puede_mandar')}</p>}
           </div>
         </div>
-        <p className="cer-prospecto__tenue">Nada se manda solo: los botones abren tu WhatsApp o correo con el texto cargado y tú decides.</p>
+        <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.nada_se_manda_solo_los_botones')}</p>
       </Tarjeta>
     </MarcoPagina>
   );

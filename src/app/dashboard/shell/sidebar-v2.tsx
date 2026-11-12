@@ -20,10 +20,12 @@ import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
  *
  * Conserva el contrato de siempre: `<aside>` con `<nav>` y `<a href>` reales.
  */
-export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cerrarSesion, insignias, organizacion }: {
+export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cerrarSesion, insignias, organizacion, flotas }: {
   rol: string; rolEtiqueta: string; nombre: string | null; perfil?: PerfilTenant | null; usoIa?: { pct: number } | null;
   cerrarSesion?: () => Promise<void>; insignias?: Record<string, string>;
   organizacion?: { id: string; nombre: string } | null;
+  /** Solo el superadmin: las flotas (para resolver `?tenant=` en el pie). `null` = lectura caída; ausente = no aplica. */
+  flotas?: Array<{ id: string; nombre: string }> | null;
 }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
   const { riel, alternar } = useRiel();
@@ -38,8 +40,8 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
           <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
           <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
         </Link>
-        <Tooltip texto={t('cab.plegar')}>
-          <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={t('cab.plegar')} aria-expanded={!riel}>
+        <Tooltip texto={riel ? t('cab.expandir') : t('cab.plegar')}>
+          <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={riel ? t('cab.expandir') : t('cab.plegar')} aria-expanded={!riel}>
             <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
           </button>
         </Tooltip>
@@ -49,7 +51,7 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
       </nav>
       <div className="rv-sb__pie">
         <PieMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre}
-          usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} />
+          usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} flotas={flotas} />
       </div>
     </aside>
   );

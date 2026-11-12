@@ -29,6 +29,7 @@ import {
 import { reintentarLiquidacionExterna, reenviarCopiaAJefe, reavisarDiscrepancia, canalDeEntregaPorOmision } from '@/lib/likida/liquidacion_externa/servicio';
 import { reenviarDesglose, type DestinoReenvio, type MotivoReenvio } from '@/lib/likida/liquidacion_externa/reenvio_correo';
 import { liberarEnvio } from '@/lib/likida/liquidacion_externa/liberar_envio';
+import { bitacoraVisible } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import { leerFormatoFlota, leerTelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa/importar_archivo';
 import { leerArchivoCarga, cargarDesglosesDePanel, cargarContactosDePanel } from '@/lib/likida/liquidacion_externa/cargas_panel';
@@ -173,7 +174,7 @@ async function cargarDesgloses(
         const [liq, ent] = await Promise.all([leerPorId(tenantId, d.liquidacionExternaId).catch(() => null), entregasDe(tenantId, d.liquidacionExternaId)]);
         if (!ent.ok) throw new Error('entregas no disponibles');
         const fila: FilaDesglose = {
-          liquidacionId: d.liquidacionExternaId, bitacora: d.bitacora, operador: liq?.operadorNombre ?? null,
+          liquidacionId: d.liquidacionExternaId, bitacora: bitacoraVisible(d), operador: liq?.operadorNombre ?? null,
           periodoDesde: liq?.periodoDesde ?? null, periodoHasta: liq?.periodoHasta ?? null, neto: liq?.total ?? null,
           moneda: liq?.moneda ?? 'MXN', terminal: d.terminal || null, destinos: destinosDe(ent.valor, d.retenidaMotivo),
         };
@@ -239,6 +240,7 @@ export default async function PaginaAgenteLiquidacion({
     des_det?: string; des_msg?: string;
   }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
@@ -356,34 +358,34 @@ export default async function PaginaAgenteLiquidacion({
       ...(hastaDes ? [['des_hasta', hastaDes] as [string, string]] : []),
     ];
     return (
-      <VistaDesgloses
+      <VistaDesgloses tr={tr}
         desgloses={
-          <Bloque mensaje="No se pudieron leer los desgloses." esqueleto={<EsqTabla filas={5} />}>
+          <Bloque mensaje={tx('rest.no_se_pudieron_leer_los_desgloses_2')} esqueleto={<EsqTabla filas={5} />}>
             <SeccionDesgloses lectura={lectura} filtro={filtroDes} desde={desdeDes} hasta={hastaDes} contexto={contexto} />
           </Bloque>
         }
         cargas={
-          <SeccionCargas
+          <SeccionCargas tr={tr}
             acciones={{ desgloses: subirDesglosesExportados, contactos: subirContactosOperadores }}
             aviso={flash.aviso ?? null} error={flash.error ?? null} detalle={flash.detalle ?? null}
             puedeCargar={puedeVerArea(rol, 'administracion')}
           />
         }
         detalle={idDetalle && (
-          <Bloque mensaje="No se pudo leer el detalle del desglose." esqueleto={<EsqTabla filas={5} />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_el_detalle')} esqueleto={<EsqTabla filas={5} />}>
             <PanelDetalleDesglose
               lectura={cargarDetalle(tenantId, idDetalle)} acciones={{ reenviar: reenviarDesgloseExterno, liberar: liberarEnvioExterno }}
-              mensaje={leerMensajeDesglose(sp.des_msg)} contexto={contexto} params={paramsLista}
+              mensaje={leerMensajeDesglose(sp.des_msg, tx)} contexto={contexto} params={paramsLista}
             />
           </Bloque>
         )}
         excepciones={
-          <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTabla filas={3} />}>
+          <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_las')} esqueleto={<EsqTabla filas={3} />}>
             <SeccionExcepciones excepciones={cargarExcepciones(tenantId)} contexto={contexto} />
           </Bloque>
         }
         notificaciones={
-          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_la_configuracion_2')} esqueleto={<EsqTabla filas={4} />}>
             <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="liquidacion" />
           </Bloque>
         }
@@ -492,6 +494,7 @@ export default async function PaginaAgenteLiquidacion({
   /** Sube el CSV/Excel de liquidaciones que la oficina ya tiene: entra por el mismo camino que POST /v1/liquidaciones-externas. */
   async function subirLiquidacionesExternas(fd: FormData): Promise<void> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube liquidaciones.');
@@ -500,9 +503,9 @@ export default async function PaginaAgenteLiquidacion({
     // A37-S14-07: el detalle (texto) viaja en una cookie de servidor, no en la URL; en la URL solo quedan códigos validados.
     let detalleImportacion: string | undefined;
     if (!(a instanceof File) || a.size === 0) {
-      params.push(['ext_msg', 'importacion_error']); detalleImportacion = 'Elige el archivo de liquidaciones (CSV o Excel).';
+      params.push(['ext_msg', 'importacion_error']); detalleImportacion = tx('rest.elige_el_archivo_de_liquidaciones_csv');
     } else if (a.size > 4_000_000) {
-      params.push(['ext_msg', 'importacion_error']); detalleImportacion = 'El archivo pesa demasiado (máximo 4 MB). Pártelo en varios.';
+      params.push(['ext_msg', 'importacion_error']); detalleImportacion = tx('rest.el_archivo_pesa_demasiado_maximo_4');
     } else {
       try {
         const r = await importarLiquidacionesDeArchivo(s.tenantId, a.name, new Uint8Array(await a.arrayBuffer()));
@@ -510,7 +513,7 @@ export default async function PaginaAgenteLiquidacion({
         params.push(['ext_msg', r.error ? 'importacion_error' : 'importada'], ['ext_imp', `${r.recibidas}.${r.repetidas}.${r.problemas.length}`]);
         if (detalle) detalleImportacion = detalle;
       } catch {
-        params.push(['ext_msg', 'importacion_error']); detalleImportacion = 'No se pudo procesar el archivo. Vuelve a intentarlo: repetirlo es seguro.';
+        params.push(['ext_msg', 'importacion_error']); detalleImportacion = tx('rest.no_se_pudo_procesar_el_archivo');
       }
     }
     await dejarFlash('/dashboard/agentes/liquidacion', { detalle: detalleImportacion });
@@ -594,16 +597,17 @@ export default async function PaginaAgenteLiquidacion({
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota cambia la estrategia del agente.' };
+      return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_6') };
     }
     try {
       const umbral = validarUmbralConfianza(String(fd.get('umbralConfianza') ?? ''));
       await guardarEstrategiaAgente(s.tenantId, { liquidacion: { umbralConfianza: umbral } }, { id: s.userId });
       revalidatePath('/dashboard/agentes/liquidacion');
-      return { ok: true, mensaje: `Listo: las lecturas por debajo de ${umbral} salen a revisar, desde el próximo cuadre.` };
+      return { ok: true, mensaje: tx('rest.listo_las_lecturas_por_debajo_de', { umbral }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar la estrategia') };
     }
@@ -616,7 +620,7 @@ export default async function PaginaAgenteLiquidacion({
       liquidaciones={pLiqs}
       cola={{ cola: pCola, filtros, terminales: pTerminales, buscar: buscarFiltro, contexto, sufijo }}
       externas={
-        <Bloque mensaje="No se pudieron leer las liquidaciones externas." esqueleto={<EsqTabla filas={4} />}>
+        <Bloque mensaje={tx('rest.no_se_pudieron_leer_las_liquidaciones')} esqueleto={<EsqTabla filas={4} />}>
           <SeccionExternas
             fichas={pFichasExternas} pagina={pPaginaExterna} filtroEstado={filtroExterno}
             contexto={contexto} mensaje={leerMensajeExterno(sp.ext_msg)}
@@ -634,16 +638,16 @@ export default async function PaginaAgenteLiquidacion({
           {/* La estrategia (B4): solo el dueño, y solo con la config actual
               legible — sin ella, la forma guardaría a ciegas. */}
           {puedeAdministrar(rol) && (
-            <Bloque mensaje="No se pudo leer la estrategia del agente." esqueleto={null}>
+            <Bloque mensaje={tx('rest.no_se_pudo_leer_la_estrategia')} esqueleto={null}>
               <BloqueEstrategia pConfig={pConfig} accion={guardarEstrategia} />
             </Bloque>
           )}
-          <Bloque mensaje="No se pudo leer la bitácora de corridas." esqueleto={<EsqTabla filas={3} />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_la_bitacora')} esqueleto={<EsqTabla filas={3} />}>
             <BloqueCorridas pCorridas={pCorridas} />
           </Bloque>
           {/* Notificaciones hace SUS propias lecturas (config del canal,
               usuarios avisables): en su propio boundary no retiene a nadie. */}
-          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_la_configuracion_2')} esqueleto={<EsqTabla filas={4} />}>
             <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="liquidacion" />
           </Bloque>
         </>

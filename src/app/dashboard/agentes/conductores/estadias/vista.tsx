@@ -7,6 +7,8 @@ import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
 import { Aviso, BarraPeriodo, BotonEnlace, clasesBoton, EstadoError, hrefConParams, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ESTADÍAS EN ANDÉN (0385) — cuánto tiempo estuvo cada unidad en cada parada. CERO pesos en
@@ -16,11 +18,11 @@ import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 export interface FiltrosEstadias { desde: string; hasta: string; terminalId: string; clienteId: string; operadorId: string }
 
-const FASE: Record<string, string> = {
-  cerrada: 'Cerrada', en_curso: 'En curso (sigue en el andén)', sin_salida: 'Sin salida registrada', incoherente: 'Horas incoherentes', sin_llegada: 'Sin llegada registrada',
-};
+const faseTr = (tx: TAgentes = TR_ES.t): Record<string, string> => ({
+  cerrada: tx('rest.cerrada'), en_curso: tx('rest.en_curso_sigue_en_el_anden'), sin_salida: tx('rest.sin_salida_registrada'), incoherente: tx('rest.horas_incoherentes'), sin_llegada: tx('rest.sin_llegada_registrada'),
+});
 const FUENTE = { chofer: 'mensaje del chofer', oficina: 'captura de oficina', sistema: 'sistema' } as const;
-const VALIDACION = { validado: 'validada con ubicación', sin_coincidencia: 'ubicación sin coincidencia', sin_dato: 'sin dato de ubicación' } as const;
+const validacionTr = (tx: TAgentes = TR_ES.t) => ({ validado: tx('rest.validada_con_ubicacion'), sin_coincidencia: tx('rest.ubicacion_sin_coincidencia'), sin_dato: tx('rest.sin_dato_de_ubicacion') } as const);
 
 const minutos = (m: number | null): string => (m === null ? '—' : m < 60 ? `${numero(m)} min` : textoTiempo(m));
 
@@ -30,20 +32,21 @@ export function promedioCerradas(filas: readonly FilaEstadia[], lugar: 'carga' |
   return xs.length === 0 ? null : { promedio: Math.round(xs.reduce((a, b) => a + b, 0) / xs.length), n: xs.length };
 }
 
-export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, truncada, error, csvUrl, ocultos, zonaHoraria }: {
+export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, truncada, error, csvUrl, ocultos, zonaHoraria, tr = TR_ES }: {
   /** Zona de la flota para las horas exactas (México por omisión). */
   zonaHoraria?: string;
   sufijo: string; filtros: FiltrosEstadias; catalogos: CatalogosFiltro | null;
   filas: FilaEstadia[]; resumen: ResumenEstadias; truncada: boolean; error: string | null;
   /** Solo si el rol ve dinero: el CSV de cobro (con horas libres, tarifa y monto propuesto). */
-  csvUrl: string | null; ocultos: Record<string, string>;
+  csvUrl: string | null; ocultos: Record<string, string>; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const RUTA = '/dashboard/agentes/conductores/estadias';
-  const todos = { valor: '', rotulo: 'Todos' };
+  const todos = { valor: '', rotulo: tx('rest.todos') };
   const criterios = [
-    { nombre: 'terminal', etiqueta: 'Patio', valor: filtros.terminalId, opciones: [todos, ...(catalogos?.terminales ?? []).map((t) => ({ valor: t.id, rotulo: t.nombre }))] },
-    { nombre: 'cliente', etiqueta: 'Cliente', valor: filtros.clienteId, opciones: [todos, ...(catalogos?.clientes ?? []).map((c) => ({ valor: c.id, rotulo: c.nombre }))] },
-    { nombre: 'chofer', etiqueta: 'Chofer', valor: filtros.operadorId, opciones: [todos, ...(catalogos?.operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))] },
+    { nombre: 'terminal', etiqueta: tx('rest.patio'), valor: filtros.terminalId, opciones: [todos, ...(catalogos?.terminales ?? []).map((t) => ({ valor: t.id, rotulo: t.nombre }))] },
+    { nombre: 'cliente', etiqueta: tx('vigia.vista.cliente'), valor: filtros.clienteId, opciones: [todos, ...(catalogos?.clientes ?? []).map((c) => ({ valor: c.id, rotulo: c.nombre }))] },
+    { nombre: 'chofer', etiqueta: tx('cobranza.gasto.chofer'), valor: filtros.operadorId, opciones: [todos, ...(catalogos?.operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))] },
   ];
   // Parámetros vigentes (contexto + periodo + criterios) para armar el enlace de cada «x».
   const base: Record<string, string> = { ...ocultos, desde: filtros.desde, hasta: filtros.hasta };
@@ -52,18 +55,18 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
   const carga = promedioCerradas(filas, 'carga');
   const descarga = promedioCerradas(filas, 'descarga');
   const COLUMNAS: readonly ColumnaBase<FilaEstadia>[] = [
-    { id: 'viaje', titulo: 'Viaje', principal: true, celda: (f) => <><span className="rv-cd__medio">{f.viaje.folio ?? 'sin folio'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.viaje.clienteNombre ?? ''}</span></> },
-    { id: 'chofer', titulo: 'Chofer', celda: (f) => <>{f.viaje.operadorNombre ?? '—'}<span className="rv-cd__micro rv-cd__bloquear">{f.viaje.terminalNombre ?? ''}</span></> },
-    { id: 'parada', titulo: 'Parada', celda: (f) => <>{f.estancia.lugar === 'carga' ? 'Carga' : 'Descarga'}<span className="rv-cd__micro rv-cd__bloquear">{f.sitio ?? ''}</span></> },
-    { id: 'llegada', titulo: 'Llegada (hora del mensaje)', celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</span></> },
-    { id: 'salida', titulo: 'Salida', celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</span></> },
-    { id: 'tiempo', titulo: 'Tiempo', alinear: 'der', celda: (f) => <span className="cifra-mono">{minutos(f.estancia.minutos)}</span> },
-    { id: 'estado', titulo: 'Estado', celda: (f) => <StatusChip tono={f.estancia.fase === 'cerrada' ? 'ok' : f.estancia.fase === 'en_curso' ? 'warn' : 'muted'}>{FASE[f.estancia.fase]}</StatusChip> },
+    { id: 'viaje', titulo: tx('liquidacion.vista.viaje'), principal: true, celda: (f) => <><span className="rv-cd__medio">{f.viaje.folio ?? tx('cobranza.vista.sin_folio_2')}</span><span className="rv-cd__micro rv-cd__bloquear">{f.viaje.clienteNombre ?? ''}</span></> },
+    { id: 'chofer', titulo: tx('cobranza.gasto.chofer'), celda: (f) => <>{f.viaje.operadorNombre ?? '—'}<span className="rv-cd__micro rv-cd__bloquear">{f.viaje.terminalNombre ?? ''}</span></> },
+    { id: 'parada', titulo: tx('rest.parada'), celda: (f) => <>{f.estancia.lugar === 'carga' ? tx('rest.carga') : tx('rest.descarga')}<span className="rv-cd__micro rv-cd__bloquear">{f.sitio ?? ''}</span></> },
+    { id: 'llegada', titulo: tx('rest.llegada_hora_del_mensaje'), celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</span></> },
+    { id: 'salida', titulo: tx('rest.salida'), celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</span></> },
+    { id: 'tiempo', titulo: tx('rest.tiempo'), alinear: 'der', celda: (f) => <span className="cifra-mono">{minutos(f.estancia.minutos)}</span> },
+    { id: 'estado', titulo: tx('proveedores.vista.estado'), celda: (f) => <StatusChip tono={f.estancia.fase === 'cerrada' ? 'ok' : f.estancia.fase === 'en_curso' ? 'warn' : 'muted'}>{faseTr(tx)[f.estancia.fase]}</StatusChip> },
     {
-      id: 'respaldo', titulo: 'Respaldo',
+      id: 'respaldo', titulo: tx('rest.respaldo'),
       celda: (f) => (
         <span className="rv-cd__micro" data-tono="muted">
-          {f.estancia.llegada ? (f.estancia.llegada.validacion ? VALIDACION[f.estancia.llegada.validacion] : 'sin veredicto') : '—'}
+          {f.estancia.llegada ? (f.estancia.llegada.validacion ? validacionTr(tx)[f.estancia.llegada.validacion] : tx('rest.sin_veredicto')) : '—'}
           <span className="rv-cd__bloquear">{(f.estancia.llegada?.evidencias ?? 0) + (f.estancia.salida?.evidencias ?? 0)} foto(s)</span>
         </span>
       ),
@@ -80,33 +83,30 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
     .map(([nombre, xs]) => ({ nombre, n: xs.length, promedio: Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) }))
     .sort((x, y) => y.promedio - x.promedio).slice(0, 8);
   return (
-    <MarcoPagina titulo="Estadías en andén" apoyo="El tiempo entre la llegada y la salida de cada carga y descarga, con la hora exacta del mensaje del chofer." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>Volver al tablero</BotonEnlace>}>
-      <Aviso tono="info">
-        La hora es la <strong>hora exacta del mensaje del chofer</strong> (no telemetría del evento físico). Cada fila dice de dónde salió la hora, si la ubicación la validó y cuántas fotos la respaldan.
-      </Aviso>
+    <MarcoPagina titulo={tx('rest.estadias_en_anden')} apoyo={tx('rest.el_tiempo_entre_la_llegada_y')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
+      <Aviso tono="info">{ricoT(tx('rest.la_hora_es_la_strong_hora'), { strong: (c) => <strong>{c}</strong> })}</Aviso>
 
-      <Tarjeta titulo="Periodo y filtros">
+      <Tarjeta titulo={tx('rest.periodo_y_filtros')}>
         <div className="rv-cd__pila">
-          <BarraPeriodo etiqueta="Periodo y filtros de estadías"
+          <BarraPeriodo etiqueta={tx('rest.periodo_y_filtros_de_estadias')}
             chips={[
-              { id: 'rango', etiqueta: `Del ${fechaMx(filtros.desde)} al ${fechaMx(filtros.hasta)}` },
+              { id: 'rango', etiqueta: tx('rest.del_al', { fechaMx: fechaMx(filtros.desde), fechaMx2: fechaMx(filtros.hasta) }) },
               ...criterios.filter((c) => c.valor).map((c) => ({ id: c.nombre, etiqueta: `${c.etiqueta}: ${c.opciones.find((o) => o.valor === c.valor)?.rotulo ?? 'elegido'}`, hrefQuitar: hrefConParams(RUTA, base, { [c.nombre]: null }) })),
             ]}
             cajon={{
               accion: RUTA, ocultos: Object.entries(ocultos), limpiarHref: hrefLimpio, nActivos: criterios.filter((c) => c.valor).length,
-              resumen: `Del ${fechaMx(filtros.desde)} al ${fechaMx(filtros.hasta)}`,
+              resumen: tx('rest.del_al', { fechaMx: fechaMx(filtros.desde), fechaMx2: fechaMx(filtros.hasta) }),
               periodo: { desde: filtros.desde, hasta: filtros.hasta },
               campos: { items: criterios.map((c) => ({ tipo: 'select' as const, ...c })) },
             }}
             accion={csvUrl ? (
               <a href={csvUrl} className={clasesBoton('primary', 'sm')}>
-                <Icono icono={Download} tam={14} />CSV para cobro de estadías
-              </a>
+                <Icono icono={Download} tam={14} />{tx('rest.csv_para_cobro_de_estadias')}</a>
             ) : undefined} />
           {!csvUrl && (
-            <p className="rv-cd__micro">El CSV de cobro (horas libres, tarifa y monto propuesto) lo descargan el dueño de la flota y el contador.</p>
+            <p className="rv-cd__micro">{tx('rest.el_csv_de_cobro_horas_libres')}</p>
           )}
-          <p className="rv-cd__micro">Periodo por la hora del aviso de LLEGADA, en días de México, ambos inclusive.</p>
+          <p className="rv-cd__micro">{tx('rest.periodo_por_la_hora_del_aviso')}</p>
         </div>
       </Tarjeta>
 
@@ -114,26 +114,24 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
         <EstadoError compacto>{error}</EstadoError>
       ) : (
         <>
-          <TiraCifras sello={selloHoy('Estadías en andén')}>
-            <Cifra etiqueta="Paradas del periodo" info="conductores_estadias.paradas" valor={numero(resumen.paradas)} nota={`${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso`} />
-            <Cifra etiqueta="Tiempo medio en carga" info="conductores_estadias.medio_carga" valor={carga ? minutos(carga.promedio) : null} nota={carga ? `sobre ${numero(carga.n)} paradas cerradas` : 'ninguna carga cerrada'} />
-            <Cifra etiqueta="Tiempo medio en descarga" info="conductores_estadias.medio_descarga" valor={descarga ? minutos(descarga.promedio) : null} nota={descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : 'ninguna descarga cerrada'} />
-            <Cifra etiqueta="En el andén ahora" info="conductores_estadias.en_anden" valor={numero(resumen.enCurso)} tono={resumen.enCurso > 0 ? 'warn' : undefined} nota="llegaron y aún no avisan su salida" />
+          <TiraCifras sello={selloHoy(tx('rest.estadias_en_anden'))}>
+            <Cifra etiqueta={tx('rest.paradas_del_periodo')} info="conductores_estadias.paradas" valor={numero(resumen.paradas)} nota={`${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso`} />
+            <Cifra etiqueta={tx('rest.tiempo_medio_en_carga')} info="conductores_estadias.medio_carga" valor={carga ? minutos(carga.promedio) : null} nota={carga ? `sobre ${numero(carga.n)} paradas cerradas` : tx('rest.ninguna_carga_cerrada')} />
+            <Cifra etiqueta={tx('rest.tiempo_medio_en_descarga')} info="conductores_estadias.medio_descarga" valor={descarga ? minutos(descarga.promedio) : null} nota={descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : tx('rest.ninguna_descarga_cerrada')} />
+            <Cifra etiqueta={tx('rest.en_el_anden_ahora')} info="conductores_estadias.en_anden" valor={numero(resumen.enCurso)} tono={resumen.enCurso > 0 ? 'warn' : undefined} nota={tx('rest.llegaron_y_aun_no_avisan_su')} />
           </TiraCifras>
           {truncada && (
-            <p className="rv-cd__nota" data-tono="warn">
-              Hay más viajes con llegada en este periodo de los que una lectura trae: acorta el periodo o filtra por patio, cliente o chofer. Lo que ves NO es el total.
-            </p>
+            <p className="rv-cd__nota" data-tono="warn">{tx('rest.hay_mas_viajes_con_llegada_en')}</p>
           )}
           {porCliente.length > 0 && (
-            <Tarjeta titulo="Tiempo medio por cliente (paradas cerradas)">
-              <BarList etiqueta="Minutos medios de estadía por cliente" formato={minutos}
+            <Tarjeta titulo={tx('rest.tiempo_medio_por_cliente_paradas_cerradas')}>
+              <BarList etiqueta={tx('rest.minutos_medios_de_estadia_por_cliente')} formato={minutos}
                 items={porCliente.map((c) => ({ clave: c.nombre, etiqueta: c.nombre, valor: c.promedio, texto: minutos(c.promedio), nota: `sobre ${numero(c.n)} paradas cerradas` }))} />
             </Tarjeta>
           )}
-          <Tarjeta titulo="Paradas" estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje="Sin paradas en el periodo"
-            detalle="Ninguna parada con llegada registrada en ese periodo y con esos filtros.">
-            <TablaBase etiqueta="Estadías por viaje y chofer" columnas={COLUMNAS} filas={filas} idFila={(f) => `${f.viaje.id}-${f.estancia.lugar}`} densa tarjetaMovil />
+          <Tarjeta titulo={tx('rest.paradas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={tx('rest.sin_paradas_en_el_periodo')}
+            detalle={tx('rest.ninguna_parada_con_llegada_registrada_en')}>
+            <TablaBase etiqueta={tx('rest.estadias_por_viaje_y_chofer')} columnas={COLUMNAS} filas={filas} idFila={(f) => `${f.viaje.id}-${f.estancia.lugar}`} densa tarjetaMovil />
           </Tarjeta>
         </>
       )}

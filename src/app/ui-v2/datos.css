@@ -12,7 +12,7 @@
 .rv-tl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
 .rv-tl__th, .rv-tl__td { box-sizing: border-box; }
 .rv-tl__th {
-  position: sticky; top: 0; z-index: 1; height: 36px; padding: 0 12px; text-align: left; white-space: nowrap;
+  position: sticky; top: 0; z-index: 1; height: 36px; padding: 0 12px 0 14px; text-align: left; white-space: nowrap;
   font-size: 12px; font-weight: 600; line-height: 1.2; color: var(--tabla-cab-ink, var(--muted)); background: var(--tabla-cab-bg, var(--canvas));
   border-bottom: 1px solid var(--line);
 }

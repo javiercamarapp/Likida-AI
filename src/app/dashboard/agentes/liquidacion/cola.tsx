@@ -12,6 +12,8 @@ import { EnlacePagina, NavPaginas } from '../../paginador';
 import { SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx } from '@/lib/formato';
+import { getT } from '@/lib/i18n/servidor';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «ESPERAN TU REVISIÓN» — LA COLA DE VERDAD (auditoría 24, FE-5 · BLOQ-6).
@@ -51,11 +53,11 @@ const ROTULO_VACIO: Record<RevisionLiquidacion, string> = {
 };
 
 // `fg`/`bg` los lee `etiquetas_sincronizadas.test.ts` (las tres copias del estatus coinciden en severidad); la pastilla se pinta con `tono` por clase.
-const ROTULO_ESTADO: Record<string, { rotulo: string; fg: string; bg: string; tono: 'ok' | 'warn' | 'bad' }> = {
-  cuadrada: { rotulo: 'Cuadrada', fg: 'var(--ok)', bg: 'var(--okbg)', tono: 'ok' },
-  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--warn)', bg: 'var(--warnbg)', tono: 'warn' },
-  revisar: { rotulo: 'Revisar', fg: 'var(--bad)', bg: 'var(--badbg)', tono: 'bad' },
-};
+const rotuloEstado = (tx: TAgentes = TR_ES.t): Record<string, { rotulo: string; fg: string; bg: string; tono: 'ok' | 'warn' | 'bad' }> => ({
+  cuadrada: { rotulo: tx('rest.cuadrada'), fg: 'var(--ok)', bg: 'var(--okbg)', tono: 'ok' },
+  con_diferencias: { rotulo: tx('liquidacion.vista.con_diferencias'), fg: 'var(--warn)', bg: 'var(--warnbg)', tono: 'warn' },
+  revisar: { rotulo: tx('rest.revisar'), fg: 'var(--bad)', bg: 'var(--badbg)', tono: 'bad' },
+});
 
 export interface ColaProps {
   cola: Promise<PaginaCola>;
@@ -73,38 +75,39 @@ export interface ColaProps {
 
 /** El texto que explica QUÉ ventana se está viendo. Nunca «N liquidaciones» a
  *  secas: siempre cuántas de cuántas, y bajo qué filtro. */
-export function rotuloCola(p: PaginaCola, f: FiltrosCola): string {
+export function rotuloCola(p: PaginaCola, f: FiltrosCola, tx: TAgentes = TR_ES.t): string {
   // El `??` no es adorno: si un día se agrega un estado de revisión y falta su
   // rótulo, la cola tiene que seguir diciendo la verdad en crudo, no reventar
   // la pantalla donde se firma.
   const que = (ROTULO_REVISION[f.revision] ?? f.revision).toLowerCase();
   if (p.total === 0) return ROTULO_VACIO[f.revision] ?? `Ninguna en «${que}»`;
   if (p.filas.length >= p.total) {
-    return `${numero(p.total)} ${p.total === 1 ? 'liquidación' : 'liquidaciones'} — ${que}`;
+    return `${numero(p.total)} ${p.total === 1 ? tx('rest.liquidacion') : 'liquidaciones'} — ${que}`;
   }
-  return `${numero(p.filas.length)} de ${numero(p.total)} — ${que}, las que más llevan esperando primero`;
+  return tx('rest.de_las_que_mas_llevan_esperando', { numero: numero(p.filas.length), numero2: numero(p.total), que });
 }
 
 export async function SeccionCola({ cola, filtros, terminales, buscar, contexto, sufijo }: ColaProps) {
+  const { t: tx } = await getT('agentes');
   const [pagina, terms] = await Promise.all([cola, terminales]);
   const conFiltros = hayFiltrosCola(filtros);
 
   return (
-    <Tarjeta titulo="Esperan tu revisión" acciones={<span className="rv-liq-sub">{rotuloCola(pagina, filtros)}</span>}>
+    <Tarjeta titulo={tx('rest.esperan_tu_revision')} acciones={<span className="rv-liq-sub">{rotuloCola(pagina, filtros)}</span>}>
 
       <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} conFiltros={conFiltros}
         nombres={Object.fromEntries(chipsDeCola(pagina, filtros, terms, contexto).map((c) => [c.id, c.valor]))} />
 
 
       {pagina.filas.length === 0 ? (
-        <EstadoVacio icono={Inbox} titulo={conFiltros ? 'Ningún resultado con ese filtro' : 'Nada espera tu firma'}>
+        <EstadoVacio icono={Inbox} titulo={conFiltros ? tx('rest.ningun_resultado_con_ese_filtro') : tx('rest.nada_espera_tu_firma')}>
           {conFiltros
-            ? 'Ninguna liquidación cae en ese filtro. Quita alguno para ver el resto de la cola.'
-            : 'No hay liquidaciones esperando a un humano — cuando el agente no pueda cuadrar una solo, la vas a ver aquí.'}
+            ? tx('rest.ninguna_liquidacion_cae_en_ese_filtro')
+            : tx('rest.no_hay_liquidaciones_esperando_a_un')}
         </EstadoVacio>
       ) : (
         <TablaLista<FilaCola>
-          etiqueta="Cola de revisión de liquidaciones"
+          etiqueta={tx('rest.cola_de_revision_de_liquidaciones')}
           columnas={columnasCola(sufijo)}
           filas={pagina.filas}
           idFila={(l) => l.id}
@@ -112,11 +115,7 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
           params={{}}
           pie={(
             <div className="rv-tl__sellos">
-              <p className="rv-tl__nota">
-                {/* La ventana, DECLARADA. No hay «se muestran las más recientes»
-                    que esconda a las viejas: esta cola empieza por las viejas. */}
-                Por antigüedad. La firma se pone en el detalle de cada una.
-              </p>
+              <p className="rv-tl__nota">{tx('rest.por_antiguedad_la_firma_se_pone')}</p>
               {pagina.siguiente && (
                 <NavPaginas>
                   <EnlacePagina
@@ -150,74 +149,74 @@ export function paramsDeFiltros(f: FiltrosCola): Array<[string, string]> {
   return p;
 }
 
-function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros, nombres }: {
+function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros, nombres, tr = TR_ES }: {
   filtros: FiltrosCola;
   terminales: { opciones: Array<{ id: string; nombre: string }>; recortadas: boolean } | null;
   buscar: BuscarCatalogo;
   contexto: Array<[string, string]>;
   conFiltros: boolean;
   /** Nombres legibles de los filtros vigentes (operador, unidad): el combo los muestra, no el id. */
-  nombres: Record<string, string>;
+  nombres: Record<string, string>; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   return (
     /* GET y no server action: un filtro tiene que poder compartirse por chat y
        sobrevivir al botón de atrás. `cursor` NO se conserva — cambiar el filtro
        empieza la cola desde arriba, o la página 3 de otro filtro no significa
        nada. Una sola barra (LF): elegir envía, sin botón «Filtrar». */
-    <BarraFiltros accion="?" ocultos={contexto} etiqueta="Filtros de la cola" nActivos={conFiltros ? 1 : 0}
+    <BarraFiltros accion="?" ocultos={contexto} etiqueta={tx('rest.filtros_de_la_cola')} nActivos={conFiltros ? 1 : 0}
       limpiarHref={`?${new URLSearchParams(contexto).toString()}`} className="mb-3">
-      <FiltroOpciones nombre="rev" etiqueta="Revisión" valor={filtros.revision} porDefecto="pendiente"
+      <FiltroOpciones nombre="rev" etiqueta={tx('rest.revision')} valor={filtros.revision} porDefecto="pendiente"
         opciones={REVISIONES.map((r) => ({ valor: r, rotulo: ROTULO_REVISION[r] }))} />
-      <FiltroOpciones nombre="estado" etiqueta="Cuadre" valor={filtros.estado ?? ''}
-        opciones={[{ valor: '', rotulo: 'Cualquiera' }, ...ESTADOS_CUADRE.map((e) => ({ valor: e, rotulo: ROTULO_ESTADO[e]?.rotulo ?? e }))]} />
+      <FiltroOpciones nombre="estado" etiqueta={tx('rest.cuadre')} valor={filtros.estado ?? ''}
+        opciones={[{ valor: '', rotulo: tx('rest.cualquiera') }, ...ESTADOS_CUADRE.map((e) => ({ valor: e, rotulo: rotuloEstado(tx)[e]?.rotulo ?? e }))]} />
 
       {/* El catálogo NO viaja: el combo pide 20 al escribir (FE-2). */}
-      <FiltroCampo etiqueta="Operador">
+      <FiltroCampo etiqueta={tx('conductores.forma.operador')}>
         <ComboCatalogo tipo="operador" name="operador" buscar={buscar} etiquetaVacia="Cualquiera" enBarra
-          valorInicial={filtros.operadorId} textoInicial={filtros.operadorId && nombres.operador !== 'elegido' ? nombres.operador : ''} aria-label="Filtrar por operador" />
+          valorInicial={filtros.operadorId} textoInicial={filtros.operadorId && nombres.operador !== 'elegido' ? nombres.operador : ''} aria-label={tx('rest.filtrar_por_operador')} />
       </FiltroCampo>
-      <FiltroCampo etiqueta="Unidad">
+      <FiltroCampo etiqueta={tx('rest.unidad')}>
         <ComboCatalogo tipo="unidad" name="unidad" buscar={buscar} etiquetaVacia="Cualquiera" enBarra
-          valorInicial={filtros.unidadId} textoInicial={filtros.unidadId && nombres.unidad !== 'elegida' ? nombres.unidad : ''} aria-label="Filtrar por unidad" />
+          valorInicial={filtros.unidadId} textoInicial={filtros.unidadId && nombres.unidad !== 'elegida' ? nombres.unidad : ''} aria-label={tx('rest.filtrar_por_unidad')} />
       </FiltroCampo>
 
       {/* Sin terminales legibles NO se pinta el selector: un selector con
           solo «Cualquiera» afirmaría que la flota no tiene sucursales. */}
       {terminales && terminales.opciones.length > 0 && (
         <FiltroOpciones nombre="terminal" valor={filtros.terminalId ?? ''}
-          etiqueta={terminales.recortadas ? `Terminal (primeras ${numero(terminales.opciones.length)}; hay más)` : 'Terminal'}
-          opciones={[{ valor: '', rotulo: 'Cualquiera' }, ...terminales.opciones.map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
+          etiqueta={terminales.recortadas ? tx('rest.terminal_primeras_hay_mas', { numero: numero(terminales.opciones.length) }) : tx('rest.terminal')}
+          opciones={[{ valor: '', rotulo: tx('rest.cualquiera') }, ...terminales.opciones.map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
       )}
 
-      <FiltroFecha nombre="desde" etiqueta="Desde" valor={filtros.desde} />
-      <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={filtros.hasta} />
+      <FiltroFecha nombre="desde" etiqueta={tx('cobranza.estrategia.desde')} valor={filtros.desde} />
+      <FiltroFecha nombre="hasta" etiqueta={tx('cobranza.estrategia.hasta')} valor={filtros.hasta} />
     </BarraFiltros>
   );
 }
 
 /** Las columnas de la cola. El orden es el del servidor (por antigüedad, la que más lleva esperando primero) y NO se ofrece ordenar:
  *  la cola se pagina por cursor, y ordenar solo la página visible escondería a las que más llevan esperando firma. */
-function columnasCola(sufijo: string): ColumnaTabla<FilaCola>[] {
+function columnasCola(sufijo: string, tx: TAgentes = TR_ES.t): ColumnaTabla<FilaCola>[] {
   return [
-    { id: 'viaje', titulo: 'Viaje', principal: true, celda: (l) => l.folio },
-    { id: 'cerrada', titulo: 'Cerrada', corta: true, celda: (l) => <span className="rv-tl__apagado">{fechaCorta(l.creadoEn)}</span> },
+    { id: 'viaje', titulo: tx('liquidacion.vista.viaje'), principal: true, celda: (l) => l.folio },
+    { id: 'cerrada', titulo: tx('rest.cerrada'), corta: true, celda: (l) => <span className="rv-tl__apagado">{fechaCorta(l.creadoEn)}</span> },
     // Sin nombre no se inventa uno: la ficha del chofer puede estar incompleta y «—» es la verdad.
-    { id: 'operador', titulo: 'Operador', celda: (l) => <span className="rv-tl__apagado">{l.operadorNombre ?? '—'}</span> },
-    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (l) => <span className="rv-tl__apagado">{l.unidadEco ?? '—'}</span> },
-    { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado)}</span> },
-    { id: 'diferencia', titulo: 'Diferencia', alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-tl__bad' : 'cifra-mono'}>{mxn(l.diferencia)}</span> },
+    { id: 'operador', titulo: tx('conductores.forma.operador'), celda: (l) => <span className="rv-tl__apagado">{l.operadorNombre ?? '—'}</span> },
+    { id: 'unidad', titulo: tx('rest.unidad'), corta: true, celda: (l) => <span className="rv-tl__apagado">{l.unidadEco ?? '—'}</span> },
+    { id: 'comprobado', titulo: tx('liquidacion.vista.comprobado'), alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado)}</span> },
+    { id: 'diferencia', titulo: tx('liquidacion.vista.diferencia'), alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-tl__bad' : 'cifra-mono'}>{mxn(l.diferencia)}</span> },
     {
-      id: 'cuadre', titulo: 'Cuadre', corta: true,
+      id: 'cuadre', titulo: tx('rest.cuadre'), corta: true,
       celda: (l) => {
-        const e = ROTULO_ESTADO[l.estatus] ?? { rotulo: l.estatus, tono: 'muted' as const };
+        const e = rotuloEstado(tx)[l.estatus] ?? { rotulo: l.estatus, tono: 'muted' as const };
         return <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>;
       },
     },
     {
-      id: 'accion', titulo: 'Revisar', tituloOculto: true, alinear: 'der',
+      id: 'accion', titulo: tx('rest.revisar'), tituloOculto: true, alinear: 'der',
       celda: (l) => (
-        <Link href={`/dashboard/${l.id}${sufijo}`} className="rv-liq-enlace rv-tl__enlace">
-          Revisar <Icono icono={ArrowRight} tam={14} />
+        <Link href={`/dashboard/${l.id}${sufijo}`} className="rv-liq-enlace rv-tl__enlace">{tx('rest.revisar')}{' '}<Icono icono={ArrowRight} tam={14} />
         </Link>
       ),
     },
@@ -236,16 +235,16 @@ function unico(nombres: ReadonlyArray<string | null>): string | null {
 export function chipsDeCola(
   pagina: PaginaCola, f: FiltrosCola,
   terminales: { opciones: Array<{ id: string; nombre: string }> } | null,
-  contexto: Array<[string, string]>,
+  contexto: Array<[string, string]>, tx: TAgentes = TR_ES.t,
 ) {
   const vigentes = Object.fromEntries([...contexto, ...paramsDeFiltros(f)]);
   return chipsActivos('', vigentes, [
-    { param: 'rev', etiqueta: 'Revisión', rotuloValor: (v) => ROTULO_REVISION[v as RevisionLiquidacion] ?? v },
-    { param: 'estado', etiqueta: 'Cuadre', rotuloValor: (v) => ROTULO_ESTADO[v]?.rotulo ?? v },
-    { param: 'operador', etiqueta: 'Operador', rotuloValor: () => unico(pagina.filas.map((x) => x.operadorNombre)) ?? 'elegido' },
-    { param: 'unidad', etiqueta: 'Unidad', rotuloValor: () => unico(pagina.filas.map((x) => x.unidadEco)) ?? 'elegida' },
-    { param: 'terminal', etiqueta: 'Terminal', rotuloValor: (v) => terminales?.opciones.find((t) => t.id === v)?.nombre ?? 'elegida' },
-    { param: 'desde', etiqueta: 'Desde', rotuloValor: (v) => fechaMx(v) },
-    { param: 'hasta', etiqueta: 'Hasta', rotuloValor: (v) => fechaMx(v) },
+    { param: 'rev', etiqueta: tx('rest.revision'), rotuloValor: (v) => ROTULO_REVISION[v as RevisionLiquidacion] ?? v },
+    { param: 'estado', etiqueta: tx('rest.cuadre'), rotuloValor: (v) => rotuloEstado(tx)[v]?.rotulo ?? v },
+    { param: 'operador', etiqueta: tx('conductores.forma.operador'), rotuloValor: () => unico(pagina.filas.map((x) => x.operadorNombre)) ?? 'elegido' },
+    { param: 'unidad', etiqueta: tx('rest.unidad'), rotuloValor: () => unico(pagina.filas.map((x) => x.unidadEco)) ?? 'elegida' },
+    { param: 'terminal', etiqueta: tx('rest.terminal'), rotuloValor: (v) => terminales?.opciones.find((t) => t.id === v)?.nombre ?? 'elegida' },
+    { param: 'desde', etiqueta: tx('cobranza.estrategia.desde'), rotuloValor: (v) => fechaMx(v) },
+    { param: 'hasta', etiqueta: tx('cobranza.estrategia.hasta'), rotuloValor: (v) => fechaMx(v) },
   ], ['cursor', 'c', 'pag']);
 }

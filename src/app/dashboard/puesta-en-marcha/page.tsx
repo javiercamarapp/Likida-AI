@@ -4,7 +4,10 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import { sufijoTenant } from '../sufijo';
 import type { IdPaso } from '@/lib/likida/asistente/pasos_cinco_agentes';
-import { VistaPuestaEnMarcha } from './vista';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { TourLanzador } from '@/app/ui-v2/movimiento/tour';
+import { getT } from '@/lib/i18n/servidor';
+import { SoloV2, VistaPuestaEnMarcha } from './vista';
 import { SeccionListo } from './seccion_listo';
 import { leerLecturasListo } from './listo_lecturas';
 import type { Metadata } from 'next';
@@ -29,6 +32,7 @@ export default async function PaginaPuestaEnMarcha({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; paso?: string }>;
 }) {
+  const { t } = await getT('resto');
   const sp = await searchParams;
   const s = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(s.rol, RUTA)) redirect('/dashboard');
@@ -38,7 +42,12 @@ export default async function PaginaPuestaEnMarcha({
   const soloLectura = Boolean(sp.tenant || sp.vista || sp.rol || s.tenantNombre);
 
   return (
-    <main className="rv-marco" aria-labelledby="puesta-titulo">
+    <MarcoPagina
+      titulo={t('cfg.puesta_en_marcha')}
+      idTitulo="puesta-titulo"
+      apoyo={t('op.deja_lista_tu_operacion_seis_pasos')}
+      acciones={<SoloV2><TourLanzador recorridoId="dueno.completo" etiqueta={t('op.ver_recorrido')} /></SoloV2>}
+    >
       <VistaPuestaEnMarcha
         senales={senales}
         ambito={`${s.tenantId}:${s.userId}`}
@@ -50,6 +59,6 @@ export default async function PaginaPuestaEnMarcha({
       <div className="rv-pem rv-pem--listo">
         <SeccionListo lecturas={lecturasListo} sufijo={sufijoTenant(sp)} />
       </div>
-    </main>
+    </MarcoPagina>
   );
 }

@@ -52,7 +52,7 @@ const CON = 't-con';
 const cronesDeVercel: string[] = (JSON.parse(readFileSync(resolve(process.cwd(), 'vercel.json'), 'utf8')).crons as { path: string }[])
   .map((c) => m.nombreDeCron(c.path));
 const API_EJEMPLO = [
-  '/api/dashboard/chat', '/api/v1/clientes', '/api/export/poliza', '/api/v1/peajes/desgloses',
+  '/api/dashboard/archivo', '/api/v1/clientes', '/api/export/poliza', '/api/v1/peajes/desgloses',
   '/api/mcp', '/api/dashboard/cualquiera/nueva',
 ];
 
@@ -64,7 +64,7 @@ describe('(1) sin fila y lectura exitosa: TODAS las puertas permiten', () => {
   });
 
   it('exigirRutaDePerfil no redirige en NINGUNA ruta conocida ni en una nueva sin clasificar', async () => {
-    const rutas = [...v.rutasConocidas(), '/dashboard/chat', '/dashboard/suscripcion', '/dashboard/modulo-nuevo-sin-clasificar'];
+    const rutas = [...v.rutasConocidas(), '/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/modulo-nuevo-sin-clasificar'];
     expect(rutas.length).toBeGreaterThan(10);
     for (const r of rutas) await m.exigirRutaDePerfil(SIN, r);
     expect(redirect).not.toHaveBeenCalled();
@@ -98,7 +98,7 @@ describe('(1) sin fila y lectura exitosa: TODAS las puertas permiten', () => {
     porTenant.set(CON, { data: { perfil: 'cinco_agentes' }, error: null });
     expect(await m.perfilDeTenant(CON)).toBe('cinco_agentes');
     expect(await m.perfilDeTenant(SIN)).toBeNull();
-    await m.exigirRutaDePerfil(SIN, '/dashboard/chat');
+    await m.exigirRutaDePerfil(SIN, '/dashboard/facturacion');
     expect(redirect).not.toHaveBeenCalled();
   });
 
@@ -114,8 +114,8 @@ describe('(2) tabla ausente: es "sin perfil"', () => {
     expect(await m.perfilDeTenant(SIN, 0)).toBeNull();
     expect(await m.perfilDeTenant(SIN, 1)).toBeNull();
     expect(lecturas).toBe(1);
-    await m.exigirRutaDePerfil(SIN, '/dashboard/chat');
-    expect(await m.apiDenegadaPorPerfil(SIN, '/api/dashboard/chat')).toBe(false);
+    await m.exigirRutaDePerfil(SIN, '/dashboard/facturacion');
+    expect(await m.apiDenegadaPorPerfil(SIN, '/api/dashboard/archivo')).toBe(false);
   });
 
   it('en la lista de flotas, tabla ausente = ninguna flota con perfil (los crons corren)', async () => {
@@ -131,7 +131,7 @@ describe('(3) error transitorio CON valor previo: se conserva el último conocid
     expect(await m.perfilDeTenant(SIN, 0)).toBeNull();
     porTenant.set(SIN, { data: null, error: { message: 'caída' } });
     expect(await m.perfilDeTenant(SIN, m.TTL_PERFIL_MS + 1)).toBeNull();
-    await m.exigirRutaDePerfil(SIN, '/dashboard/chat');
+    await m.exigirRutaDePerfil(SIN, '/dashboard/facturacion');
     expect(redirect).not.toHaveBeenCalled();
   });
 
@@ -140,7 +140,7 @@ describe('(3) error transitorio CON valor previo: se conserva el último conocid
     expect(await m.perfilDeTenant(CON, 0)).toBe('cinco_agentes');
     porTenant.set(CON, { data: null, error: { message: 'caída' } });
     expect(await m.perfilDeTenant(CON, m.TTL_PERFIL_MS + 1)).toBe('cinco_agentes');
-    expect(await m.apiDenegadaPorPerfil(CON, '/api/dashboard/chat')).toBe(true);
+    expect(await m.apiDenegadaPorPerfil(CON, '/api/dashboard/archivo')).toBe(true);
   });
 
   it('el error no se cachea: al volver la base se lee el valor nuevo', async () => {
@@ -156,8 +156,8 @@ describe('(4) error transitorio SIN valor previo: DECISIÓN DE JAVIER PENDIENTE 
   it('DOCUMENTA el efecto: una flota SIN perfil, en un cold start con la base caída, se ve restringida', async () => {
     porTenant.set(SIN, { data: null, error: { message: 'caída' } });
     expect(await m.perfilDeTenant(SIN, 0)).toBe('cinco_agentes'); // viola «sin perfil nada cambia» durante el bache
-    await expect(m.exigirRutaDePerfil(SIN, '/dashboard/chat')).rejects.toThrow('NEXT_REDIRECT');
-    expect(await m.apiDenegadaPorPerfil(SIN, '/api/dashboard/chat')).toBe(true);
+    await expect(m.exigirRutaDePerfil(SIN, '/dashboard/facturacion')).rejects.toThrow('NEXT_REDIRECT');
+    expect(await m.apiDenegadaPorPerfil(SIN, '/api/dashboard/archivo')).toBe(true);
     expect(await m.perfilRestringido(SIN)).toBe(true);
   });
 
@@ -166,7 +166,7 @@ describe('(4) error transitorio SIN valor previo: DECISIÓN DE JAVIER PENDIENTE 
     expect(await m.perfilDeTenant(SIN, 0)).toBe('cinco_agentes');
     porTenant.set(SIN, { data: null, error: null });
     expect(await m.perfilDeTenant(SIN, 1)).toBeNull();
-    await m.exigirRutaDePerfil(SIN, '/dashboard/chat');
+    await m.exigirRutaDePerfil(SIN, '/dashboard/facturacion');
   });
 
   it('el bache afecta a CUALQUIER flota sin lectura previa, no solo a las que tuvieron perfil', async () => {

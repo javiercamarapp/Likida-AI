@@ -22,7 +22,12 @@ import { sufijoTenant } from '../../../sufijo';
 import { VistaAvisosVigia, type ResultadoAviso } from './vista';
 import { VistaConfiguracionAviso, type ConfigPantalla, type OpcionesConfigPantalla, type ResultadoConfig } from './configuracion';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Avisos de viaje' };
+import { getT } from '@/lib/i18n/servidor';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('vigia.vista.sello_avisos_de_viaje') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +43,7 @@ type Busqueda = { vista?: string; config?: string; tenant?: string; rol?: string
 const texto = (fd: FormData, k: string): string => String(fd.get(k) ?? '');
 const fallo = (error: string): ResultadoAviso => ({ ok: false, error });
 const bien = (mensaje: string): ResultadoAviso => ({ ok: true, mensaje });
-const CARRERA = 'Otra persona ya cambió este aviso. Recarga la pantalla para ver cómo quedó.';
+const carrera = (tx: TAgentes = TR_ES.t) => (tx('rest.otra_persona_ya_cambio_este_aviso'));
 
 /**
  * Vuelve a resolver la sesión (cookie) y devuelve el actor si su rol decide por los clientes.
@@ -54,66 +59,67 @@ async function actor(sp: Busqueda, tenantId: string) {
 
 /** Lo que cada botón hace. Cada rama vuelve a leer el aviso DE ESTA FLOTA y comprueba que su estado lo permita. */
 async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): Promise<ResultadoAviso> {
+  const { t: tx } = await getT('agentes');
   const id = texto(fd, 'id');
-  if (!UUID.test(id)) return fallo('Aviso no válido.');
+  if (!UUID.test(id)) return fallo(tx('rest.aviso_no_valido'));
   const que = texto(fd, 'accion');
   const repo = crearRepoBandeja();
   const av = await repo.obtener(a.tenantId, id);
-  if (!av) return fallo('No encuentro ese aviso en tu flota.');
+  if (!av) return fallo(tx('rest.no_encuentro_ese_aviso_en_tu'));
   const ahora = new Date();
   const interno = av.datos.interno === true;
 
   if (que === 'confirmar') {
-    if (interno || av.canal !== 'cliente_1a1' || av.estado !== 'pendiente_confirmacion') return fallo('Este aviso ya no espera tu confirmación.');
+    if (interno || av.canal !== 'cliente_1a1' || av.estado !== 'pendiente_confirmacion') return fallo(tx('rest.este_aviso_ya_no_espera_tu'));
     const cfg = await crearRepoAviso().leerConfig(a.tenantId);
-    if (!cfg || !cfg.habilitado) return fallo('El aviso de viaje está apagado: enciéndelo antes de confirmar.');
-    if (!(await repo.aprobar(a.tenantId, id, 'pendiente_confirmacion', a.userId, ahora.toISOString()))) return fallo(CARRERA);
+    if (!cfg || !cfg.habilitado) return fallo(tx('rest.el_aviso_de_viaje_esta_apagado'));
+    if (!(await repo.aprobar(a.tenantId, id, 'pendiente_confirmacion', a.userId, ahora.toISOString()))) return fallo(carrera(tx));
     if (!AVISO_AUTOMATICO_CONECTADO) {
-      return bien('Confirmado, pero el envío automático está por conectar: este aviso NO sale solo. Para mandarlo, ábrelo, cópialo y usa «Copiar y marcar enviado».');
+      return bien(tx('rest.confirmado_pero_el_envio_automatico_esta'));
     }
-    return bien('Confirmado. Sale en la siguiente revisión automática (máximo 5 minutos), dentro del horario de envío y solo si el cliente autorizó mensajes por WhatsApp.');
+    return bien(tx('rest.confirmado_sale_en_la_siguiente_revision'));
   }
 
   if (que === 'copiar') {
-    if (interno) return fallo('Esta es una alerta interna: no se manda al cliente.');
-    if (av.estado === 'aprobado' && av.canal !== 'ejecutivo_copia') return fallo('Este aviso ya está aprobado para salir por WhatsApp directo.');
-    if (!['pendiente_confirmacion', 'aprobado', 'fallido', 'sin_destinatario'].includes(av.estado)) return fallo('Este aviso ya no se puede marcar como enviado.');
+    if (interno) return fallo(tx('rest.esta_es_una_alerta_interna_no'));
+    if (av.estado === 'aprobado' && av.canal !== 'ejecutivo_copia') return fallo(tx('rest.este_aviso_ya_esta_aprobado_para'));
+    if (!['pendiente_confirmacion', 'aprobado', 'fallido', 'sin_destinatario'].includes(av.estado)) return fallo(tx('rest.este_aviso_ya_no_se_puede'));
     const cfg = await crearRepoAviso().leerConfig(a.tenantId);
-    if (!cfg || !cfg.habilitado) return fallo('El aviso de viaje está apagado: enciéndelo antes de marcar avisos.');
+    if (!cfg || !cfg.habilitado) return fallo(tx('rest.el_aviso_de_viaje_esta_apagado_2'));
     let estado = av.estado;
     if (estado === 'sin_destinatario') {
-      if (!(await repo.reabrir(a.tenantId, id))) return fallo(CARRERA);
+      if (!(await repo.reabrir(a.tenantId, id))) return fallo(carrera(tx));
       estado = 'pendiente_confirmacion';
     }
-    if (estado !== 'aprobado' && !(await repo.aprobar(a.tenantId, id, estado, a.userId, ahora.toISOString(), 'ejecutivo_copia'))) return fallo(CARRERA);
+    if (estado !== 'aprobado' && !(await repo.aprobar(a.tenantId, id, estado, a.userId, ahora.toISOString(), 'ejecutivo_copia'))) return fallo(carrera(tx));
     const listo = await repo.obtener(a.tenantId, id);
-    if (!listo) return fallo(CARRERA);
+    if (!listo) return fallo(carrera(tx));
     const r = await entregarAviso(paraEntrega(a.tenantId, listo), crearDepsCopia(a.tenantId, cfg.habilitado, cfg.zona), 'copiar');
-    if (r.estado === 'enviado') return bien('Listo: quedó marcado como enviado.');
-    if (r.estado === 'omitido' && r.motivo === 'aviso_apagado') return fallo('El aviso de viaje está apagado.');
-    return fallo('Otra persona está procesando este aviso. Recarga la pantalla.');
+    if (r.estado === 'enviado') return bien(tx('rest.listo_quedo_marcado_como_enviado'));
+    if (r.estado === 'omitido' && r.motivo === 'aviso_apagado') return fallo(tx('rest.el_aviso_de_viaje_esta_apagado_3'));
+    return fallo(tx('rest.otra_persona_esta_procesando_este_aviso'));
   }
 
   if (que === 'editar') {
-    if (interno || !EDITABLES.includes(av.estado)) return fallo('Este aviso ya no se puede editar.');
+    if (interno || !EDITABLES.includes(av.estado)) return fallo(tx('rest.este_aviso_ya_no_se_puede_2'));
     const nuevo = texto(fd, 'texto').replace(/\r\n/g, '\n').trim();
-    if (nuevo === '') return fallo('El texto no puede quedar vacío.');
-    if (nuevo.length > MAX_TEXTO_AVISO) return fallo(`El texto pasa de ${MAX_TEXTO_AVISO} letras: acórtalo.`);
-    if (nuevo === av.texto) return fallo('No cambiaste nada del texto.');
-    if (!(await repo.editarTexto(a.tenantId, av, nuevo, a.userId, ahora.toISOString()))) return fallo(CARRERA);
-    return bien('Texto guardado. Revísalo y confirma cuando esté bien.');
+    if (nuevo === '') return fallo(tx('rest.el_texto_no_puede_quedar_vacio'));
+    if (nuevo.length > MAX_TEXTO_AVISO) return fallo(tx('rest.el_texto_pasa_de_letras_acortalo', { maxTextoAviso: MAX_TEXTO_AVISO }));
+    if (nuevo === av.texto) return fallo(tx('rest.no_cambiaste_nada_del_texto'));
+    if (!(await repo.editarTexto(a.tenantId, av, nuevo, a.userId, ahora.toISOString()))) return fallo(carrera(tx));
+    return bien(tx('rest.texto_guardado_revisalo_y_confirma_cuando'));
   }
 
   if (que === 'descartar') {
-    if (!EDITABLES.includes(av.estado) && av.estado !== 'aprobado') return fallo('Este aviso ya no se puede descartar.');
-    const ok = await crearRepoCambios().cambiarEstado(a.tenantId, id, av.estado, 'descartado', 'descartado por una persona');
-    if (ok) return bien('Descartado: no se enviará.');
+    if (!EDITABLES.includes(av.estado) && av.estado !== 'aprobado') return fallo(tx('rest.este_aviso_ya_no_se_puede_3'));
+    const ok = await crearRepoCambios().cambiarEstado(a.tenantId, id, av.estado, 'descartado', tx('rest.descartado_por_una_persona'));
+    if (ok) return bien(tx('rest.descartado_no_se_enviara'));
     // A37-S58-01: un aprobado que no se pudo cerrar suele ser porque el envío ya está en curso.
-    return fallo(av.estado === 'aprobado' ? 'Este aviso se está enviando en este momento y ya no se puede descartar. Recarga la pantalla.' : CARRERA);
+    return fallo(av.estado === 'aprobado' ? tx('rest.este_aviso_se_esta_enviando_en') : carrera(tx));
   }
 
   if (que === 'capturar') {
-    if (interno || !EDITABLES.includes(av.estado)) return fallo('Este aviso ya no admite datos nuevos.');
+    if (interno || !EDITABLES.includes(av.estado)) return fallo(tx('rest.este_aviso_ya_no_admite_datos'));
     const v = validarDatoManual({
       operadorNombre: texto(fd, 'operadorNombre'), licencia: texto(fd, 'licencia'), licenciaVence: texto(fd, 'licenciaVence'),
       telefono: texto(fd, 'telefono'), placasUnidad: texto(fd, 'placasUnidad'), placasCaja: texto(fd, 'placasCaja'), estadoCaja: texto(fd, 'estadoCaja'),
@@ -121,12 +127,12 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
     });
     if (!v.ok) return fallo(v.error);
     const r = await repo.guardarDatoManual(a.tenantId, av.filaId, a.userId, v.valor);
-    if (r === 'fila_ajena') return fallo('No encuentro ese servicio en tu flota.');
-    if (!AVISO_AUTOMATICO_CONECTADO) return bien('Datos guardados. Se usarán cuando el armado automático de avisos esté conectado; hoy no se rehace ningún aviso solo.');
-    return bien('Datos guardados. El aviso se rehace con ellos en la siguiente revisión automática; revísalo entonces antes de confirmar.');
+    if (r === 'fila_ajena') return fallo(tx('rest.no_encuentro_ese_servicio_en_tu'));
+    if (!AVISO_AUTOMATICO_CONECTADO) return bien(tx('rest.datos_guardados_se_usaran_cuando_el'));
+    return bien(tx('rest.datos_guardados_el_aviso_se_rehace'));
   }
 
-  return fallo('Acción no válida.');
+  return fallo(tx('rest.accion_no_valida'));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -138,24 +144,24 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
 // el rol y el antes/después de cada campo. Dueño y encargado cambian la configuración; SOLO la dueña (`flota_admin`)
 // habilita datos personales del operador (E6).
 // ═══════════════════════════════════════════════════════════════════════════
-const CCP_OPCIONES = [
-  { valor: 'listo', rotulo: 'Listo' }, { valor: 'despachado', rotulo: 'Despachado' }, { valor: 'pend_reque', rotulo: 'Pendiente de requerimiento' },
-  { valor: 'pend_ccp', rotulo: 'Pendiente de carta porte' }, { valor: 'falta_complemento', rotulo: 'Falta complemento' },
-];
+const ccpOpciones = (tx: TAgentes = TR_ES.t) => ([
+  { valor: 'listo', rotulo: tx('rest.listo') }, { valor: 'despachado', rotulo: tx('rest.despachado') }, { valor: 'pend_reque', rotulo: tx('rest.pendiente_de_requerimiento') },
+  { valor: 'pend_ccp', rotulo: tx('rest.pendiente_de_carta_porte') }, { valor: 'falta_complemento', rotulo: tx('rest.falta_complemento') },
+]);
 // CANCELACIONES nunca genera este aviso (lo hace cumplir el evaluador «listo»): no se ofrece.
-const SECCIONES_OPCIONES = [
-  { valor: 'IMPORTACION', rotulo: 'Importación' }, { valor: 'EXPORTACION', rotulo: 'Exportación' },
-  { valor: 'DOMESTICO', rotulo: 'Doméstico' }, { valor: 'MOV_VACIO', rotulo: 'Movimiento en vacío' },
-];
-const OPERADOR_CAMPOS = [
-  { campo: 'licencia', control: 'op_licencia', rotulo: 'Licencia' },
-  { campo: 'vigencia', control: 'op_vigencia', rotulo: 'Vigencia de la licencia' },
-  { campo: 'telefono', control: 'op_telefono', rotulo: 'Teléfono del operador' },
-] as const;
+const seccionesOpciones = (tx: TAgentes = TR_ES.t) => ([
+  { valor: tx('rest.importacion'), rotulo: tx('rest.importacion_2') }, { valor: tx('rest.exportacion'), rotulo: tx('rest.exportacion_2') },
+  { valor: tx('rest.domestico'), rotulo: tx('rest.domestico_2') }, { valor: 'MOV_VACIO', rotulo: tx('rest.movimiento_en_vacio') },
+]);
+const operadorCampos = (tx: TAgentes = TR_ES.t) => ([
+  { campo: 'licencia', control: 'op_licencia', rotulo: tx('rest.licencia') },
+  { campo: 'vigencia', control: 'op_vigencia', rotulo: tx('rest.vigencia_de_la_licencia') },
+  { campo: 'telefono', control: 'op_telefono', rotulo: tx('rest.telefono_del_operador') },
+] as const);
 const LIMITES = { horasAntes: { min: 0, max: 48 }, debounce: { min: 1, max: 120 }, reenvios: { min: 0, max: 10 } } as const;
-const OPCIONES_CONFIG: OpcionesConfigPantalla = {
-  ccp: CCP_OPCIONES, secciones: SECCIONES_OPCIONES, operador: OPERADOR_CAMPOS.map((o) => ({ ...o })), limites: LIMITES,
-};
+const opcionesConfig = (tx: TAgentes = TR_ES.t): OpcionesConfigPantalla => ({
+  ccp: ccpOpciones(tx), secciones: seccionesOpciones(tx), operador: operadorCampos(tx).map((o) => ({ ...o })), limites: LIMITES,
+});
 const CCP_DEFECTO = ['listo', 'despachado'];
 const SECCIONES_DEFECTO = ['IMPORTACION', 'EXPORTACION'];
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -225,17 +231,17 @@ async function leerConfiguracion(tenantId: string): Promise<{ config: ConfigPant
 type Validado = { ok: true; valor: Omit<ConfigPantalla, 'operador'>; operador: ConfigPantalla['operador'] | null } | { ok: false; error: string };
 
 /** Valida el formulario COMPLETO en el servidor. `operador` = null si el formulario no traía la sección (no la puede cambiar). */
-function validarConfiguracion(fd: FormData): Validado {
+function validarConfiguracion(fd: FormData, tx: TAgentes = TR_ES.t): Validado {
   const uno = (k: string) => texto(fd, k).trim();
   const modo = uno('modo');
-  if (modo !== 'confirmar' && modo !== 'autonomo') return { ok: false, error: 'Elige un modo de envío válido.' };
+  if (modo !== 'confirmar' && modo !== 'autonomo') return { ok: false, error: tx('rest.elige_un_modo_de_envio_valido') };
   const canal = uno('canal');
-  if (canal !== 'ejecutivo_copia' && canal !== 'cliente_1a1') return { ok: false, error: 'Elige un canal válido.' };
+  if (canal !== 'ejecutivo_copia' && canal !== 'cliente_1a1') return { ok: false, error: tx('rest.elige_un_canal_valido') };
 
   const ccp = ordenada(fd.getAll('ccp').map(String));
-  if (ccp.length === 0 || ccp.some((x) => !CCP_OPCIONES.some((o) => o.valor === x))) return { ok: false, error: 'Marca al menos un estatus de carta porte que cuente como listo.' };
+  if (ccp.length === 0 || ccp.some((x) => !ccpOpciones(tx).some((o) => o.valor === x))) return { ok: false, error: tx('rest.marca_al_menos_un_estatus_de') };
   const secciones = ordenada(fd.getAll('seccion').map(String));
-  if (secciones.length === 0 || secciones.some((x) => !SECCIONES_OPCIONES.some((o) => o.valor === x))) return { ok: false, error: 'Marca al menos una sección del programa.' };
+  if (secciones.length === 0 || secciones.some((x) => !seccionesOpciones(tx).some((o) => o.valor === x))) return { ok: false, error: tx('rest.marca_al_menos_una_seccion_del') };
 
   const entero = (k: string, min: number, max: number): number | null | 'mal' => {
     const t = uno(k);
@@ -245,18 +251,18 @@ function validarConfiguracion(fd: FormData): Validado {
     return n >= min && n <= max ? n : 'mal';
   };
   const horas = entero('horas_antes', LIMITES.horasAntes.min, LIMITES.horasAntes.max);
-  if (horas === 'mal') return { ok: false, error: `Las horas antes de la cita van de ${LIMITES.horasAntes.min} a ${LIMITES.horasAntes.max}, o déjalo vacío.` };
+  if (horas === 'mal') return { ok: false, error: tx('rest.las_horas_antes_de_la_cita', { min: LIMITES.horasAntes.min, max: LIMITES.horasAntes.max }) };
   const debounce = entero('debounce_min', LIMITES.debounce.min, LIMITES.debounce.max);
-  if (debounce === null || debounce === 'mal') return { ok: false, error: `Los minutos de calma van de ${LIMITES.debounce.min} a ${LIMITES.debounce.max}.` };
+  if (debounce === null || debounce === 'mal') return { ok: false, error: tx('rest.los_minutos_de_calma_van_de', { min: LIMITES.debounce.min, max: LIMITES.debounce.max }) };
   const reenvios = entero('max_reenvios', LIMITES.reenvios.min, LIMITES.reenvios.max);
-  if (reenvios === null || reenvios === 'mal') return { ok: false, error: `Los reenvíos por servicio van de ${LIMITES.reenvios.min} a ${LIMITES.reenvios.max}.` };
+  if (reenvios === null || reenvios === 'mal') return { ok: false, error: tx('rest.los_reenvios_por_servicio_van_de', { min: LIMITES.reenvios.min, max: LIMITES.reenvios.max }) };
 
   const desde = uno('ventana_desde');
   const hasta = uno('ventana_hasta');
   let ventana: ConfigPantalla['ventana'] = null;
   if (desde !== '' || hasta !== '') {
-    if (!HORA.test(desde) || !HORA.test(hasta)) return { ok: false, error: 'El horario de envío necesita hora de inicio y de fin (HH:MM), o déjalos los dos vacíos.' };
-    if (desde === hasta) return { ok: false, error: 'La hora de inicio y la de fin no pueden ser la misma.' };
+    if (!HORA.test(desde) || !HORA.test(hasta)) return { ok: false, error: tx('rest.el_horario_de_envio_necesita_hora') };
+    if (desde === hasta) return { ok: false, error: tx('rest.la_hora_de_inicio_y_la') };
     ventana = { desde, hasta };
   }
 
@@ -274,10 +280,10 @@ function validarConfiguracion(fd: FormData): Validado {
 
 interface CambioConfig { campo: string; antes: string; despues: string }
 const sino = (b: boolean) => (b ? 'sí' : 'no');
-const rotuloVentana = (v: ConfigPantalla['ventana'], ilegible = false) => (ilegible ? 'ilegible' : v ? `${v.desde}-${v.hasta}` : 'sin restricción');
+const rotuloVentana = (v: ConfigPantalla['ventana'], ilegible = false, tx: TAgentes = TR_ES.t) => (ilegible ? 'ilegible' : v ? `${v.desde}-${v.hasta}` : tx('rest.sin_restriccion_2'));
 
 /** Qué cambió, campo por campo (solo nombres de campo y valores de configuración: nada de datos personales). */
-function cambiosDeConfig(antes: ConfigPantalla, ventanaIlegible: boolean, nuevo: ConfigPantalla): { config: CambioConfig[]; operador: CambioConfig[] } {
+function cambiosDeConfig(antes: ConfigPantalla, ventanaIlegible: boolean, nuevo: ConfigPantalla, tx: TAgentes = TR_ES.t): { config: CambioConfig[]; operador: CambioConfig[] } {
   const cfg: CambioConfig[] = [];
   const poner = (campo: string, a: string, d: string) => { if (a !== d) cfg.push({ campo, antes: a, despues: d }); };
   poner('habilitado', sino(antes.habilitado), sino(nuevo.habilitado));
@@ -286,12 +292,12 @@ function cambiosDeConfig(antes: ConfigPantalla, ventanaIlegible: boolean, nuevo:
   poner('ccp_listos', ordenada(antes.ccpListos).join(','), ordenada(nuevo.ccpListos).join(','));
   poner('exigir_transito', sino(antes.exigirTransito), sino(nuevo.exigirTransito));
   poner('secciones', ordenada(antes.secciones).join(','), ordenada(nuevo.secciones).join(','));
-  poner('horas_antes_cita', String(antes.horasAntesCita ?? 'vacío'), String(nuevo.horasAntesCita ?? 'vacío'));
-  poner('ventana_envio', rotuloVentana(antes.ventana, ventanaIlegible), rotuloVentana(nuevo.ventana));
+  poner('horas_antes_cita', String(antes.horasAntesCita ?? tx('rest.vacio')), String(nuevo.horasAntesCita ?? tx('rest.vacio')));
+  poner('ventana_envio', rotuloVentana(antes.ventana, ventanaIlegible, tx), rotuloVentana(nuevo.ventana, undefined, tx));
   poner('max_reenvios', String(antes.maxReenvios), String(nuevo.maxReenvios));
   poner('debounce_min', String(antes.debounceMin), String(nuevo.debounceMin));
   const op: CambioConfig[] = [];
-  for (const o of OPERADOR_CAMPOS) {
+  for (const o of operadorCampos(tx)) {
     if (antes.operador[o.campo] !== nuevo.operador[o.campo]) op.push({ campo: `operador_${o.campo}`, antes: sino(antes.operador[o.campo]), despues: sino(nuevo.operador[o.campo]) });
   }
   return { config: cfg, operador: op };
@@ -333,17 +339,18 @@ async function actorConfig(sp: Busqueda, tenantId: string) {
 }
 
 async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string }, fd: FormData): Promise<ResultadoConfig> {
+  const { t: tx } = await getT('agentes');
   const v = validarConfiguracion(fd);
   if (!v.ok) return fallo(v.error);
   const esDuena = a.rol === DUENA;
   // Los controles de privacidad solo viajan en el formulario de la dueña; si llegan de otro rol alguien armó la petición a mano.
-  const traePrivacidad = [...fd.keys()].some((k) => k === 'op_presente' || OPERADOR_CAMPOS.some((o) => o.control === k));
-  if (traePrivacidad && !esDuena) return fallo('Solo la dueña de la flota puede cambiar qué datos del operador se mandan al cliente.');
+  const traePrivacidad = [...fd.keys()].some((k) => k === 'op_presente' || operadorCampos(tx).some((o) => o.control === k));
+  if (traePrivacidad && !esDuena) return fallo(tx('rest.solo_la_duena_de_la_flota_3'));
 
   const previo = await leerConfiguracion(a.tenantId);
   const nuevo: ConfigPantalla = { ...v.valor, operador: v.operador && esDuena ? v.operador : previo.config.operador };
   const cambios = cambiosDeConfig(previo.config, previo.ventanaIlegible, nuevo);
-  if (cambios.config.length === 0 && cambios.operador.length === 0) return bien('No hay cambios que guardar: la configuración ya estaba así.');
+  if (cambios.config.length === 0 && cambios.operador.length === 0) return bien(tx('rest.no_hay_cambios_que_guardar_la'));
 
   // ── A37-S15-05: ENCENDER, MODO Y CANAL SON DE LA DUEÑA ─────────────────────
   // La configuración del Vigía (../page.tsx, `actor(sp, tenantId, 'administra')`) exige `flota_admin` y le cierra el autoenvío al
@@ -351,10 +358,10 @@ async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string
   // Se relee el rol de la SESIÓN (nunca del formulario) y se compara contra lo ya guardado: el encargado sigue ajustando
   // horarios, secciones y reenvíos, pero no estos tres. Autónomo, además, se cierra bajo el perfil restringido.
   if (!esDuena && (nuevo.habilitado !== previo.config.habilitado || nuevo.modo !== previo.config.modo || nuevo.canalDefault !== previo.config.canalDefault)) {
-    return falloCfg('Solo la dueña de la flota enciende o apaga el aviso y cambia el modo o el canal de envío.');
+    return falloCfg(tx('rest.solo_la_duena_de_la_flota_4'));
   }
   if (nuevo.modo === 'autonomo' && previo.config.modo !== 'autonomo' && (await perfilDeTenant(a.tenantId)) === 'cinco_agentes') {
-    return falloCfg('El modo autónomo no está disponible en tu plan.');
+    return falloCfg(tx('rest.el_modo_autonomo_no_esta_disponible'));
   }
 
   const hechos: CambioConfig[] = [];
@@ -375,8 +382,8 @@ async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string
       );
     }
   }
-  if (!AVISO_AUTOMATICO_CONECTADO) return bien('Configuración guardada. Los avisos la usarán cuando el armado automático esté conectado; hoy no se arma ningún aviso solo.');
-  return bien('Configuración guardada. Los avisos nuevos la usan desde la siguiente revisión automática (máximo 5 minutos).');
+  if (!AVISO_AUTOMATICO_CONECTADO) return bien(tx('rest.configuracion_guardada_los_avisos_la_usaran'));
+  return bien(tx('rest.configuracion_guardada_los_avisos_nuevos_la'));
 }
 
 /**
@@ -385,6 +392,7 @@ async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string
  * Por defecto nada sale sin una persona (E5). Cero pesos. Quien solo mira no ve botones ni teléfonos completos.
  */
 export default async function PaginaAvisosVigia({ searchParams }: { searchParams: Promise<Busqueda> }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -393,16 +401,17 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
 
   async function guardarConfiguracion(_p: ResultadoConfig, fd: FormData): Promise<ResultadoConfig> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actorConfig(sp, tenantId);
-    if (!a) return falloCfg('Solo el dueño o el encargado de la flota cambia la configuración del aviso.');
+    if (!a) return falloCfg(tx('rest.solo_el_dueno_o_el_encargado_2'));
     try {
       const r = await ejecutarConfig(a, fd);
       if (r?.ok) revalidatePath(RUTA);
       return r;
     } catch (e) {
-      if (e instanceof AvisoSinMigrar) return falloCfg('La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.');
+      if (e instanceof AvisoSinMigrar) return falloCfg(tx('rest.la_base_de_datos_todavia_no'));
       logger.error('vigia.aviso_config_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
-      return falloCfg(mensajeParaPantalla(e, 'guardar la configuración'));
+      return falloCfg(mensajeParaPantalla(e, tx('rest.guardar_la_configuracion')));
     }
   }
 
@@ -416,14 +425,14 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
       if (e instanceof AvisoSinMigrar) sinMigrarCfg = true;
       else {
         logger.error('vigia.aviso_config_lectura_fallo', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
-        errorCfg = 'No pude leer la configuración. Intenta de nuevo en un momento.';
+        errorCfg = tx('rest.no_pude_leer_la_configuracion_intenta');
       }
     }
     return (
       <VistaConfiguracionAviso
         sufijo={sufijoTenant(sp)}
         config={leida?.config ?? null}
-        opciones={OPCIONES_CONFIG}
+        opciones={opcionesConfig(tx)}
         puedeEditar={puedeDecidir}
         puedeEditarPrivacidad={rol === DUENA}
         puedeEditarEnvio={rol === DUENA}
@@ -451,7 +460,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
     if (e instanceof AvisoSinMigrar) sinMigrar = true;
     else {
       logger.error('vigia.avisos_lectura_fallo', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
-      errorLectura = 'No pude leer los avisos. Intenta de nuevo en un momento.';
+      errorLectura = tx('rest.no_pude_leer_los_avisos_intenta');
     }
   }
 
@@ -459,14 +468,15 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
 
   async function decidir(_p: ResultadoAviso, fd: FormData): Promise<ResultadoAviso> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId);
-    if (!a) return fallo('Solo el dueño o el encargado de la flota decide sobre los avisos.');
+    if (!a) return fallo(tx('rest.solo_el_dueno_o_el_encargado_3'));
     try {
       const r = await ejecutar(a, fd);
       if (r?.ok) revalidatePath(RUTA);
       return r;
     } catch (e) {
-      if (e instanceof AvisoSinMigrar) return fallo('La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.');
+      if (e instanceof AvisoSinMigrar) return fallo(tx('rest.la_base_de_datos_todavia_no'));
       // Nunca el texto del aviso ni datos del operador en el log: solo el mensaje técnico.
       logger.error('vigia.aviso_accion_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
       return fallo(mensajeParaPantalla(e, 'actualizar el aviso'));

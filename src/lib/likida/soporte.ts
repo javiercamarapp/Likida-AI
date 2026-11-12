@@ -49,7 +49,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 
 /** El dominio de `ticket_soporte.estado` (0051), en el mismo orden del CHECK. */
@@ -166,9 +166,9 @@ export async function getTicketDelTenant(ticketId: string, tenantId: string): Pr
 /** El ticket resuelto o el error de captura que se le enseña a quien lo pidió. */
 async function exigirTicket(ticketId: string, tenantId: string): Promise<TicketDetalle> {
   const id = ticketId.trim();
-  if (!id) throw new DatoInvalido('Falta decir de qué ticket se trata.');
+  if (!id) throw datoInvalido('soporte.falta_decir_de_que_ticket');
   const t = await getTicketDelTenant(id, tenantId);
-  if (!t) throw new DatoInvalido('Ese ticket no existe en esta flota.');
+  if (!t) throw datoInvalido('soporte.ese_ticket_no_existe_en');
   return t;
 }
 
@@ -263,18 +263,18 @@ export async function responderTicket(
   const ticket = await exigirTicket(ticketId, tenantId);
 
   const cuerpo = mensaje.cuerpo.trim();
-  if (!cuerpo) throw new DatoInvalido('El mensaje viene vacío: escribe qué le vas a decir.');
+  if (!cuerpo) throw datoInvalido('soporte.el_mensaje_viene_vacio_escribe');
   if (cuerpo.length > LARGO_MAX_MENSAJE) {
-    throw new DatoInvalido(`El mensaje no puede pasar de ${LARGO_MAX_MENSAJE} caracteres.`);
+    throw datoInvalido('soporte.el_mensaje_no_puede_pasar', { LARGO_MAX_MENSAJE });
   }
   // La flota no fabrica notas "del equipo" en su propio hilo. Es la misma
   // regla que la policy de la 0268, dicha del lado que de verdad corre (el
   // producto consulta con service_role, que salta RLS).
   if (mensaje.interna && actor.tipo !== 'likida') {
-    throw new DatoInvalido('Una nota interna solo la escribe el equipo de Likida.');
+    throw datoInvalido('soporte.una_nota_interna_solo_la');
   }
   if (ESTADOS_TERMINALES.has(ticket.estado)) {
-    throw new DatoInvalido('Ese ticket ya está cerrado. Reábrelo si hace falta seguir la conversación.');
+    throw datoInvalido('soporte.ese_ticket_ya_esta_cerrado');
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('ticket_mensaje').insert({
@@ -338,11 +338,11 @@ export async function tomarTicket(
   actor: ActorSoporte,
 ): Promise<{ estado: string; asignadoA: string; anotado: boolean }> {
   if (actor.tipo !== 'likida') {
-    throw new DatoInvalido('Tomar un ticket es del equipo de Likida: para tu flota el ticket ya es tuyo.');
+    throw datoInvalido('soporte.tomar_un_ticket_es_del');
   }
   const ticket = await exigirTicket(ticketId, tenantId);
   if (ESTADOS_TERMINALES.has(ticket.estado)) {
-    throw new DatoInvalido('Ese ticket ya está cerrado: reábrelo antes de tomarlo.');
+    throw datoInvalido('soporte.ese_ticket_ya_esta_cerrado_2');
   }
 
   // 'abierto' significa "nadie lo ha tocado". Tomarlo lo vuelve falso.
@@ -373,7 +373,7 @@ export async function tomarTicket(
     // acción no aplicó.
     const actual = await getTicketDelTenant(ticket.id, tenantId);
     const quien = actual?.asignadoNombre ?? (actual?.asignadoA ? 'otra persona del equipo' : 'alguien más');
-    throw new DatoInvalido(`No se pudo tomar: ya lo tiene ${quien}.`);
+    throw datoInvalido('soporte.no_se_pudo_tomar_ya', { quien });
   }
 
   // `anotarBitacora` NUNCA lanza: la acción ya ocurrió y tirarla por no poder
@@ -414,16 +414,16 @@ export async function cambiarEstadoTicket(
   nuevo: string,
 ): Promise<{ estado: EstadoTicket; estadoPrevio: string; anotado: boolean }> {
   if (!(ESTADOS_TICKET as readonly string[]).includes(nuevo)) {
-    throw new DatoInvalido('Ese estado no existe para un ticket.');
+    throw datoInvalido('soporte.ese_estado_no_existe_para');
   }
   const estado = nuevo as EstadoTicket;
   if (actor.tipo === 'flota' && estado !== 'cerrado' && estado !== 'abierto') {
-    throw new DatoInvalido('Desde tu panel puedes cerrar el ticket o volver a abrirlo; el resto lo mueve Likida.');
+    throw datoInvalido('soporte.desde_tu_panel_puedes_cerrar');
   }
 
   const ticket = await exigirTicket(ticketId, tenantId);
   if (ticket.estado === estado) {
-    throw new DatoInvalido(`El ticket ya estaba en «${estado}»: no hay nada que cambiar.`);
+    throw datoInvalido('soporte.el_ticket_ya_estaba_en', { estado });
   }
 
   const entraATerminal = ESTADOS_TERMINALES.has(estado);

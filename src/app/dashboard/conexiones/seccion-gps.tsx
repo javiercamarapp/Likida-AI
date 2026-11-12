@@ -7,6 +7,10 @@ import { AvisoResultado, Boton, BotonConfirmar, Icono, TablaBase, Tarjeta, clase
 import './conexiones.css';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import { fechaHoraMx, numero } from '@/lib/formato';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GPS: SALUD POR INTEGRACIÓN, PUSH PROPIO, DISPOSITIVOS HUÉRFANOS Y MAPEO.
@@ -36,18 +40,15 @@ function BotonImportarGeocercas() {
 
 /** Lee las geocercas de su tabla/CSV y las deja como sitios (todo-o-nada; un polígono se aproxima y se avisa). */
 function ImportadorGeocercas({ accion }: { accion: AccionImportGeocercas }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <Tarjeta titulo="Geocercas de tu sistema">
-      <p className="rv-cx__apoyo">
-        Si conectaste «Mis propias tablas de GPS» con una vista o archivo de geocercas, aquí las traes al catálogo de sitios
-        (el que usan el Conductor, los peajes y el mapa). Volver a importar actualiza por código, no duplica, y se repite solo una vez al día. Un polígono
-        se guarda con su forma real; el que no se pueda guardar así entra como el círculo que lo contiene y se te dice cuáles.
-      </p>
+    <Tarjeta titulo={t('cfg.geocercas_de_tu_sistema')}>
+      <p className="rv-cx__apoyo">{t('cfg.si_conectaste_mis_propias_tablas_de')}</p>
       <form action={despachar}><BotonImportarGeocercas /></form>
       {estado?.ok === true && (
         <p role="status" className="rv-cx__ok-texto">
-          {estado.mensaje}{(estado.poligonos ?? 0) > 0 ? ` ${estado.poligonos} polígono(s) se guardaron con su forma real.` : ''}{estado.aproximadas > 0 ? ` ${estado.aproximadas} polígono(s) no se pudieron guardar con su forma y entran como el círculo que los contiene (las reclamaciones con ellos bajan a confianza media).` : ''}
+          {estado.mensaje}{(estado.poligonos ?? 0) > 0 ? t('cfg.poligono_s_se_guardaron_con_su', { poligonos: estado.poligonos ?? 0 }) : ''}{estado.aproximadas > 0 ? t('cfg.poligono_s_no_se_pudieron_guardar', { aproximadas: estado.aproximadas }) : ''}
         </p>
       )}
       {estado?.ok === false && (
@@ -84,6 +85,7 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
   /** Solo si la flota tiene conectada su tabla propia. */
   importarGeocercas?: AccionImportGeocercas;
 }) {
+  const { t, idioma } = useT('resto', restoEs);
   const [estadoSecreto, despachar] = useActionState(generarSecreto, null);
   const [copiado, setCopiado] = useState(false);
 
@@ -93,15 +95,11 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
 
   return (
     <div id="gps" className="rv-cx__stack">
-      <Tarjeta titulo="GPS: salud de cada integración">
-        <p className="rv-cx__apoyo">
-          Cada renglón sale de la última sincronización real. «Sana» solo significa que el último poll terminó completo.
-        </p>
+      <Tarjeta titulo={t('cfg.gps_salud_de_cada_integracion')}>
+        <p className="rv-cx__apoyo">{t('cfg.cada_renglon_sale_de_la_ultima')}</p>
 
         {salud.length === 0 ? (
-          <p className="rv-cx__texto">
-            Ningún proveedor de GPS tiene credencial activa todavía. Captúrala abajo, en «Credenciales de tus sistemas».
-          </p>
+          <p className="rv-cx__texto">{t('cfg.ningun_proveedor_de_gps_tiene_credencial')}</p>
         ) : (
           <ul className="rv-cx__salud">
             {salud.map((f) => (
@@ -115,27 +113,22 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
 
         {conteos && (
           <p className="rv-cx__texto">
-            <span className="rv-cx__icono-linea"><Icono icono={Truck} tam={14} /></span>
-            {numero(conteos.conDispositivo)} de {numero(conteos.activas)} unidades activas tienen dispositivo GPS ligado
-            {conteos.sinDispositivo > 0 ? `; ${numero(conteos.sinDispositivo)} no tienen (no aparecen en el mapa con GPS)` : ''}
-            {conteos.sinSenalNunca > 0 ? `; ${numero(conteos.sinSenalNunca)} lo tienen ligado y nunca han reportado` : ''}.
+            <span className="rv-cx__icono-linea"><Icono icono={Truck} tam={14} /></span>{t('cfg.de_unidades_activas_tienen_dispositivo_gps', { numero: numero(conteos.conDispositivo, idioma), numero2: numero(conteos.activas, idioma) })}{conteos.sinDispositivo > 0 ? t('cfg.no_tienen_no_aparecen_en_el', { numero: numero(conteos.sinDispositivo, idioma) }) : ''}
+            {conteos.sinSenalNunca > 0 ? t('cfg.lo_tienen_ligado_y_nunca_han', { numero: numero(conteos.sinSenalNunca, idioma) }) : ''}.
           </p>
         )}
       </Tarjeta>
 
       {/* ── PUSH PROPIO ─────────────────────────────────────────────── */}
-      <Tarjeta titulo="GPS propio (envío firmado a Likida)">
-        <p className="rv-cx__apoyo">
-          Si tu sistema de GPS puede enviar las posiciones a una dirección web, mándalas a la dirección de abajo. Cada envío lleva una firma
-          de seguridad: pídele al equipo de Likida la guía para tu proveedor y la clave. Hasta 500 lecturas por envío; reenviar es seguro (no duplica).
-        </p>
+      <Tarjeta titulo={t('cfg.gps_propio_envio_firmado_a_likida')}>
+        <p className="rv-cx__apoyo">{t('cfg.si_tu_sistema_de_gps_puede')}</p>
         <p className="rv-cx__endpoint cifra-mono">{endpoint}</p>
         <div className="rv-cx__salud-fila" data-tono={push.fila.tono}>
           <span className="rv-cx__salud-titulo">{push.fila.estado}</span>
           <span className="rv-cx__salud-texto">
             {push.fila.texto}
-            {push.configurado ? ` Recepciones: ${numero(push.recepciones)} · rechazos: ${numero(push.rechazos)} · versión del secreto: ${push.version ?? 1}.` : ''}
-            {push.previoHasta ? ` El secreto anterior sigue valiendo hasta ${fechaHoraMx(push.previoHasta)}.` : ''}
+            {push.configurado ? t('cfg.recepciones_rechazos_version_del_secreto', { numero: numero(push.recepciones, idioma), numero2: numero(push.rechazos, idioma), v: push.version ?? 1 }) : ''}
+            {push.previoHasta ? ` El secreto anterior sigue valiendo hasta ${fechaHoraMx(push.previoHasta, idioma)}.` : ''}
           </span>
         </div>
 
@@ -143,25 +136,23 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
           <form action={despachar} className="rv-cx__fila-botones">
             {push.configurado ? (
               <BotonConfirmar
-                tono="peligro" etiqueta="Rotar secreto"
-                titulo="Rotar el secreto del GPS propio"
-                descripcion="Se genera un secreto nuevo y se muestra una sola vez. El anterior sigue valiendo 24 horas para que tus dispositivos se actualicen sin perder lecturas."
-                etiquetaConfirmar="Sí, rotar"
+                tono="peligro" etiqueta={t('cfg.rotar_secreto')}
+                titulo={t('cfg.rotar_el_secreto_del_gps_propio')}
+                descripcion={t('cfg.se_genera_un_secreto_nuevo_y')}
+                etiquetaConfirmar={t('cfg.si_rotar')}
                 className={clasesBoton('danger', 'md')}
               />
             ) : (
-              <BotonGenerar rotulo="Generar secreto" />
+              <BotonGenerar rotulo={t('cfg.generar_secreto')} />
             )}
           </form>
         ) : (
-          <p className="rv-cx__texto" data-tono="faint">Solo el dueño de la flota genera o rota el secreto.</p>
+          <p className="rv-cx__texto" data-tono="faint">{t('cfg.solo_el_dueno_de_la_flota_7')}</p>
         )}
 
         {estadoSecreto && !estadoSecreto.ok && <div className="rv-cx__ok-texto"><AvisoResultado estado={{ ok: false, error: estadoSecreto.error }} /></div>}
         {estadoSecreto?.ok && (
-          <div role="status" className="rv-cx__secreto">
-            <strong>Guárdalo ahora: no se vuelve a mostrar.</strong>
-            <code className="cifra-mono">{estadoSecreto.secreto}</code>
+          <div role="status" className="rv-cx__secreto">{rico(t('cfg.strong_guardalo_ahora_no_se_vuelve'), { strong: (c) => <strong>{c}</strong> })}<code className="cifra-mono">{estadoSecreto.secreto}</code>
             <div>
               <Boton tamano="sm" icono={<Icono icono={Copy} />} onClick={() => copiar(estadoSecreto.secreto)}>
                 {copiado ? 'Copiado' : 'Copiar secreto'}
@@ -172,18 +163,15 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
       </Tarjeta>
 
       {/* ── HUÉRFANOS ───────────────────────────────────────────────── */}
-      <Tarjeta titulo="Dispositivos sin unidad">
-        <p className="rv-cx__apoyo">
-          Dispositivos que tu proveedor reporta y ninguna unidad reclama. Likida no crea unidades a partir de datos de un tercero:
-          no se dibujan en el mapa hasta que los ligues a una unidad que ya existe (archivo de abajo).
-        </p>
+      <Tarjeta titulo={t('cfg.dispositivos_sin_unidad')}>
+        <p className="rv-cx__apoyo">{t('cfg.dispositivos_que_tu_proveedor_reporta_y')}</p>
         {huerfanos.length === 0 ? (
-          <p className="rv-cx__texto">Ningún dispositivo sin unidad.</p>
+          <p className="rv-cx__texto">{t('cfg.ningun_dispositivo_sin_unidad')}</p>
         ) : (
-          <TablaBase etiqueta="Dispositivos GPS que ninguna unidad reclama" columnas={COLUMNAS_HUERFANOS} filas={huerfanos}
+          <TablaBase etiqueta={t('cfg.dispositivos_gps_que_ninguna_unidad_reclama')} columnas={columnasHuerfanos(t)} filas={huerfanos}
             idFila={(h) => `${h.proveedor}|${h.deviceId}`} densa />
         )}
-        {hayMasHuerfanos && <p className="rv-cx__nota">Se muestran los más recientes; liga estos y vuelve a mirar para ver el resto.</p>}
+        {hayMasHuerfanos && <p className="rv-cx__nota">{t('cfg.se_muestran_los_mas_recientes_liga')}</p>}
       </Tarjeta>
 
       {puedeAdministrarGps && importarGeocercas && <ImportadorGeocercas accion={importarGeocercas} />}
@@ -192,7 +180,7 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
         <ImportadorMasivo
           entidad="dispositivos_gps" accion={mapear} plantillaCsv={plantillaCsv}
           archivoPlantilla="plantilla-dispositivos-gps.csv"
-          columnas="Tres columnas: numero_economico (de una unidad que ya existe), proveedor (samsara, wialon, geotab, navixy, generico o push) y dispositivo (el id del dispositivo en el sistema del proveedor)."
+          columnas={t('cfg.tres_columnas_numero_economico_de_una')}
           hrefPatios={hrefPatios} tope={2_000}
         />
       )}
@@ -200,8 +188,8 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
   );
 }
 
-const COLUMNAS_HUERFANOS: ColumnaBase<HuerfanoPantalla>[] = [
-  { id: 'proveedor', titulo: 'Proveedor', celda: (h) => h.proveedor },
-  { id: 'dispositivo', titulo: 'Dispositivo', principal: true, celda: (h) => <span className="cifra-mono">{h.deviceId}</span> },
-  { id: 'visto', titulo: 'Visto', celda: (h) => fechaHoraMx(h.ultimoVistoEn) },
-];
+const columnasHuerfanos = (t: TResto = T_RESTO_ES): ColumnaBase<HuerfanoPantalla>[] => ([
+  { id: 'proveedor', titulo: t('cfg.proveedor'), celda: (h) => h.proveedor },
+  { id: 'dispositivo', titulo: t('cfg.dispositivo'), principal: true, celda: (h) => <span className="cifra-mono">{h.deviceId}</span> },
+  { id: 'visto', titulo: t('cfg.visto'), celda: (h) => fechaHoraMx(h.ultimoVistoEn) },
+]);

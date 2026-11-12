@@ -6,6 +6,9 @@ import { Inbox } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import { Boton, Drawer } from '../../ui-v2/componentes';
 import './tablero.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
+import { estadoProspectoTr, nombreEtapaTr } from '@/lib/i18n/rotulos_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO KANBAN DEL PIPELINE — compartido entre /admin/vendedores (todo
@@ -94,6 +97,7 @@ function Tarjeta({
   redactar?: (id: string) => Promise<ResultadoAccion>;
   conVendedor: boolean;
 }) {
+  const { t: tr } = useT('admin_sistema', admin_sistemaEs);
   const [pendiente, empezar] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [hecho, setHecho] = useState<string | null>(null);
@@ -113,28 +117,28 @@ function Tarjeta({
   const idx = orden.indexOf(t.estado);
   const [abierto, setAbierto] = useState(false);
   const etiquetaDe = (a: string): string => {
-    if (a === 'lost' || a === 'perdido') return 'Perdido';
-    if (a === 'won' || a === 'cerrado') return 'Ganado';
-    const r = rotulos[a] ?? a;
+    if (a === 'lost' || a === 'perdido') return nombreEtapaTr('perdido', tr);
+    if (a === 'won' || a === 'cerrado') return nombreEtapaTr('won', tr);
+    const r = estadoProspectoTr(a, tr, rotulos[a]);
     return orden.indexOf(a) < idx ? `← ${r}` : `${r} →`;
   };
 
   return (
     <div className="ven-tarjeta" data-pendiente={pendiente || undefined}>
       {/* La tarjeta es un botón: el detalle (mover, asignar, nota, redactar) vive en el cajón, como en Rovaq. */}
-      <button type="button" className="ven-tarjeta__abrir" onClick={() => setAbierto(true)} aria-haspopup="dialog">
+      <Boton variante="ghost" className="ven-tarjeta__abrir" onClick={() => setAbierto(true)} aria-haspopup="dialog">
         <span className="ven-tarjeta__empresa">{t.empresa}</span>
         {/* La vacante es LA señal del censo: si existe, se enseña siempre. */}
-        {t.vacante && <span className="ven-tarjeta__tenue">Vacante: {t.vacante}</span>}
+        {t.vacante && <span className="ven-tarjeta__tenue">{tr('mapa_prospectos_cerebro.vacante')}{' '}{t.vacante}</span>}
         {(t.ciudad || conVendedor) && (
           <span className="ven-tarjeta__linea">
             {t.ciudad && <span>{t.ciudad}</span>}
             {t.ciudad && conVendedor && <span aria-hidden>·</span>}
-            {conVendedor && <span>{t.vendedorNombre ?? 'Sin asignar'}</span>}
+            {conVendedor && <span>{t.vendedorNombre ?? tr('vendedores_consola_vendedores.sin_asignar')}</span>}
           </span>
         )}
         {t.notas && <span className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t.notas}</span>}
-      </button>
+      </Boton>
 
       <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={t.empresa}
         descripcion={[t.vacante ? `Vacante: ${t.vacante}` : null, t.ciudad].filter(Boolean).join(' · ') || undefined}>
@@ -154,16 +158,16 @@ function Tarjeta({
           {/* El Redactor solo para etapas vivas: el servidor lo re-valida (un botón escondido no es una regla, misma nota del encabezado). */}
           {redactar && !['won', 'lost', 'cerrado', 'perdido'].includes(t.estado) && (
             <Boton tamano="sm" disabled={pendiente} className="ven-btn--ancho" onClick={() => correr(() => redactar(t.id))}>
-              {pendiente ? 'Redactando…' : 'Redactar correo → cola de aprobación'}
+              {pendiente ? tr('mapa_prospectos_detalle.redactando') : tr('vendedores_tablero.redactar_correo_cola_de_aprobacion')}
             </Boton>
           )}
 
           {hecho && <p className="ven-tarjeta__ok">{hecho}</p>}
 
           {asignar && (
-            <select aria-label={`Vendedor de ${t.empresa}`} value={t.vendedorId ?? ''} disabled={pendiente} className="ven-select"
+            <select aria-label={tr('vendedores_tablero.vendedor_de', { empresa: t.empresa })} value={t.vendedorId ?? ''} disabled={pendiente} className="ven-select"
               onChange={(e) => correr(() => asignar(t.id, e.target.value))}>
-              <option value="">Sin asignar</option>
+              <option value="">{tr('vendedores_consola_vendedores.sin_asignar')}</option>
               {vendedores.map((v) => (
                 <option key={v.id} value={v.id}>{v.nombre}</option>
               ))}
@@ -172,10 +176,8 @@ function Tarjeta({
 
           {guardarNota && (
             <div className="ven-nota">
-              <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={4} maxLength={2000} aria-label={`Nota de ${t.empresa}`} />
-              <Boton tamano="sm" disabled={pendiente} onClick={() => correr(() => guardarNota(t.id, nota))}>
-                Guardar nota
-              </Boton>
+              <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={4} maxLength={2000} aria-label={tr('vendedores_tablero.nota_de', { empresa: t.empresa })} />
+              <Boton tamano="sm" disabled={pendiente} onClick={() => correr(() => guardarNota(t.id, nota))}>{tr('vendedores_tablero.guardar_nota')}</Boton>
             </div>
           )}
 
@@ -210,13 +212,14 @@ export function TableroProspectos({
    *  sería mentirle sobre su propia cartera. */
   conVendedor?: boolean;
 }) {
+  const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
   // Todas las etapas vacías: UNA sola pista honesta en vez de once columnas repitiendo lo mismo.
   if (columnas.every((c) => c.tarjetas.length === 0 && c.total === 0)) {
     return (
       <p className="ven-vacio">
         {hayFiltro
-          ? 'Ningún prospecto coincide con el filtro actual en ninguna etapa. Quita los filtros para ver todo el pipeline.'
-          : 'Ninguna etapa tiene prospectos todavía.'}
+          ? t('vendedores_tablero.ningun_prospecto_coincide_con_el_filtro')
+          : t('vendedores_tablero.ninguna_etapa_tiene_prospectos_todavia')}
       </p>
     );
   }
@@ -228,8 +231,8 @@ export function TableroProspectos({
         {columnas.map((col) => (
           <div key={col.estado} className="ven-col">
             <div className="ven-col__cab">
-              <span className="ven-pill" data-tono={PILL_COLUMNA[col.estado] ?? 'neutral'}>{col.rotulo}</span>
-              <span className="ven-col__total">{numero(col.total)}</span>
+              <span className="ven-pill" data-tono={PILL_COLUMNA[col.estado] ?? 'neutral'}>{estadoProspectoTr(col.estado, t, col.rotulo)}</span>
+              <span className="ven-col__total">{numero(col.total, idioma)}</span>
             </div>
             <div className="ven-col__cuerpo">
               {col.tarjetas.length === 0 ? (
@@ -237,8 +240,8 @@ export function TableroProspectos({
                 <p className="ven-col__vacia">
                   <Inbox width={13} height={13} strokeWidth={1.75} aria-hidden="true" />
                   {hayFiltro
-                    ? 'Ninguno en esta etapa con el filtro actual.'
-                    : 'Sin prospectos en esta etapa.'}
+                    ? t('vendedores_tablero.ninguno_en_esta_etapa_con_el')
+                    : t('vendedores_tablero.sin_prospectos_en_esta_etapa')}
                 </p>
               ) : (
                 col.tarjetas.map((t) => (
@@ -250,10 +253,7 @@ export function TableroProspectos({
               {col.mas ? (
                 <Link href={col.mas.href} className="ven-col__mas">{col.mas.etiqueta}</Link>
               ) : col.total > col.tarjetas.length ? (
-                <p className="ven-col__recorte">
-                  {/* Sin link, se DECLARA el recorte y nada más. Antes decía «filtra para verlos» también donde no hay filtro. */}
-                  y {col.total - col.tarjetas.length} más
-                  {hayFiltro ? ' — acota el filtro para verlos' : ''}
+                <p className="ven-col__recorte">{t('vendedores_tablero.y_mas', { v: col.total - col.tarjetas.length })}{hayFiltro ? t('vendedores_tablero.acota_el_filtro_para_verlos') : ''}
                 </p>
               ) : null}
               {col.menos && (

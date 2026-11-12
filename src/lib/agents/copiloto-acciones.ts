@@ -18,7 +18,7 @@
 
 import { INTERRUPTORES, apagar, encender, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { correrRunner } from '@/lib/likida/agentes/runner';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 
@@ -172,15 +172,15 @@ export async function ejecutarAccionCopiloto(
   userId: string,
 ): Promise<ResultadoAccionCopiloto> {
   const accion = accionDelCatalogo(accionId);
-  if (!accion) throw new DatoInvalido(`"${accionId}" no es una acción del catálogo del copiloto.`);
+  if (!accion) throw datoInvalido('copiloto_accio.no_es_una_accion_del', { accionId });
   if (!accion.implementada) {
-    throw new DatoInvalido(`"${accionId}" está en el catálogo pero todavía no está implementada — se construye en una fase posterior.`);
+    throw datoInvalido('copiloto_accio.esta_en_el_catalogo_pero', { accionId });
   }
 
   if (accionId === 'apagar_agente') {
     const id = (params.id ?? '').trim();
     if (!(INTERRUPTORES as readonly string[]).includes(id)) {
-      throw new DatoInvalido(`"${id}" no es un interruptor del catálogo.`);
+      throw datoInvalido('copiloto_accio.no_es_un_interruptor_del', { id });
     }
     // `apagar` valida el motivo no-vacío (lo rebota con su propio texto) y
     // anota interruptor.apagado en bitacora_auditoria — una sola bitácora,
@@ -199,12 +199,12 @@ export async function ejecutarAccionCopiloto(
   if (accionId === 'encender_agente') {
     const id = (params.id ?? '').trim();
     if (!(INTERRUPTORES as readonly string[]).includes(id)) {
-      throw new DatoInvalido(`"${id}" no es un interruptor del catálogo.`);
+      throw datoInvalido('copiloto_accio.no_es_un_interruptor_del', { id });
     }
     // Simétrica a apagar: el motivo es obligatorio (en tres semanas nadie recuerda por qué se soltó) y viaja a la bitácora desde
     // `encender` — la MISMA función de Observabilidad y el ⌘K, no una vía paralela.
     const motivo = (params.motivo ?? '').trim();
-    if (!motivo) throw new DatoInvalido('Encender exige un motivo: sin nota, en tres semanas nadie sabe por qué se soltó.');
+    if (!motivo) throw datoInvalido('copiloto_accio.encender_exige_un_motivo_sin');
     await encender(id as NombreInterruptor, userId, motivo);
     return { ok: true, mensaje: `Listo: ${id} quedó encendido y el motivo en la bitácora. Se apaga de nuevo desde el Copiloto, Observabilidad o el ⌘K.` };
   }
@@ -214,7 +214,7 @@ export async function ejecutarAccionCopiloto(
     // (la escribe `anotarCorridaEnBitacora`, abajo; exigir el motivo sin
     // anotarlo era un contrato declarado que no se cumplía).
     const motivo = (params.motivo ?? '').trim();
-    if (!motivo) throw new DatoInvalido('El motivo es obligatorio: por qué se adelanta la vuelta del runner.');
+    if (!motivo) throw datoInvalido('copiloto_accio.el_motivo_es_obligatorio_por');
     // M30 (auditoría 18): el objetivo que la tarjeta ENSEÑÓ es el que corre.
     // La previsualización decía "Voy a ejecutar `redactor`" y esta rama
     // ignoraba `params.id` y despachaba a TODOS los habilitados: Javier
@@ -252,7 +252,7 @@ export async function ejecutarAccionCopiloto(
 
   // Inalcanzable mientras el catálogo y las ramas coincidan. Queda como red
   // por si el catálogo marca implementada una acción sin rama.
-  throw new DatoInvalido(`"${accionId}" no tiene ejecutor todavía.`);
+  throw datoInvalido('copiloto_accio.no_tiene_ejecutor_todavia', { accionId });
 }
 
 /**
