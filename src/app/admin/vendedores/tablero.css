@@ -88,3 +88,10 @@
 [data-ui="v2"] .ven-asignador .ven-tarjeta__tenue--fino { font-size: 12px; }
 [data-ui="v2"] .ven-asignador .ven-forma { gap: 8px; }
 [data-ui="v2"] .ven-asignador .ven-corridas { margin-top: 0; }
+
+/* Ronda 8 · móvil: los campos de la barra de filtros ocupan todo el ancho disponible (36 px de alto), sin ancho fijo que corte la ayuda. */
+@media (max-width: 767px) {
+  [data-ui="v2"] .ven-filtros form, [data-ui="v2"] .ven-filtros .rv-filtros { width: 100%; }
+  [data-ui="v2"] .ven-filtros .rv-campo, [data-ui="v2"] .ven-filtros .rv-ctl, [data-ui="v2"] .ven-filtros input, [data-ui="v2"] .ven-filtros select { width: 100%; min-width: 0; max-width: none; flex: 1 1 100%; }
+  [data-ui="v2"] .ven-filtros .rv-ctl, [data-ui="v2"] .ven-filtros input, [data-ui="v2"] .ven-filtros select { min-height: 36px; }
+}

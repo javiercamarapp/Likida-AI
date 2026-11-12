@@ -175,3 +175,20 @@
   [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control > * { flex: 1 1 100%; width: 100%; min-width: 0; }
 }
 
+
+/* Ronda 8 · Notificaciones: segmentado, selects y «Marcar todo» en una sola línea centrada. El rótulo de cada select va a su izquierda
+   (en línea) y no encima, así la línea base coincide y no hay renglón alto con un hueco bajo el segmentado. */
+[data-ui="v2"] .adm-notif .av-barra,
+[data-ui="v2"] .adm-notif .av-filtros { align-items: center; gap: 8px; }
+[data-ui="v2"] .adm-notif .av-filtros .rv-campo { flex-direction: row; align-items: center; gap: 6px; }
+[data-ui="v2"] .adm-notif .av-filtros .rv-campo__etq { margin: 0; white-space: nowrap; }
+[data-ui="v2"] .adm-notif .av-filtros .rv-ctl { min-width: 0; width: auto; }
+
+/* Ronda 8 · Mi perfil: la columna de configuración ocupa todo su ancho útil (≤780 px, Rovaq CF) y no se encoge al contenido (~460 px). */
+[data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) { width: 100%; max-width: 780px; }
+
+/* Ronda 8 · Consola: los paneles de una fila miden lo que dice su contenido (el panel corto de «Requieren atención» no se estira a la altura
+   de «Costos» con ~85 px de vacío). Especificidad 0,3,0 para ganar a cualquier regla genérica de la fila y a un envoltorio de entrada. */
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > *,
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > * > .rv-tarjeta { align-self: start; height: auto; }
