@@ -141,7 +141,7 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
       titulo={t('mapa.titulo')}
       apoyo={t('mapa.apoyo')}
       // Barra de alcance entre las pestañas y la tira (cabecera → filtros → mapa): chips con lo que el mapa dibuja, medido, sin filtros inventados.
-      filtros={<BarraPeriodo etiqueta={t('mapa.filtros')} chips={[{ id: 'estado', etiqueta: t('mapa.filtros.encurso') }, { id: 'dibujo', etiqueta: recortado ? t('mapa.filtros.recorte', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) }) : t('mapa.filtros.todos') }]} />}
+      filtros={<BarraPeriodo etiqueta={t('mapa.filtros')} periodo={{ etiqueta: t('mapa.filtros'), valor: 'encurso', opciones: [{ valor: 'encurso', etiqueta: `${t('mapa.filtros.encurso')}${totalVivos === null ? '' : ` · ${numero(totalVivos, idioma)}`}`, href: '#' }] }} chips={[{ id: 'dibujo', etiqueta: recortado ? t('mapa.filtros.recorte', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) }) : t('mapa.filtros.todos') }]} />}
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Viajes en curso')}
       variante="12"

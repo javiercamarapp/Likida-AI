@@ -132,6 +132,23 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
   const vx = Math.min(Math.max(cx - ancho / 2, 0), VIEWBOX.w - ancho);
   const vy = Math.min(Math.max(cy - alto / 2, 0), VIEWBOX.h - alto);
 
+  const vacioPanel = sinUbicar > 0
+    ? <EstadoVacio contenido titulo={t('mapa.panel.sin_ubicar', { n: numero(sinUbicar) })}>{t('mapa.panel.sin_ubicar.nota')}</EstadoVacio>
+    : sinSeguimiento > 0
+      ? <EstadoVacio contenido titulo={t('mapa.panel.sin_seguimiento', { n: numero(sinSeguimiento) })}>{t('mapa.panel.sin_seguimiento.nota')}</EstadoVacio>
+      : <EstadoVacio contenido titulo={t('mapa.panel.vacio')}>{t('mapa.panel.vacio.nota')}</EstadoVacio>;
+
+  // Ronda 8 (Rovaq 09: el estado sin dato se dibuja compacto): sin un solo viaje dibujable ni una posición medida NO se pinta un mapa de 470 px vacío con un panel
+  // de 160 px al lado; la tarjeta dice lo que falta, en una sola caja, y conserva su nota de método.
+  if (viajes.length === 0 && pines.length === 0) {
+    return (
+      <Tarjeta titulo={t('mapa.card.titulo')} info="mapa.en_el_mapa" className="rv-mp__tarjeta" acciones={<KindBadge tipo="observado" />}>
+        {vacioPanel}
+        {nota ? <p className="rv-mp__nota rv-mp__nota--pie">{nota}</p> : null}
+      </Tarjeta>
+    );
+  }
+
   return (
     <Tarjeta titulo={t('mapa.card.titulo')} info="mapa.en_el_mapa" className="rv-mp__tarjeta"
       acciones={(
@@ -266,11 +283,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
           {ranking.length > 0 ? <p className="rv-mp__eyebrow">{lugar ? t('mapa.panel.viajes_en', { lugar }) : t('mapa.panel.viajes')}</p> : null}
           <div className="rv-mp__cards">
           {viajes.length === 0 ? (
-            sinUbicar > 0
-              ? <EstadoVacio contenido titulo={t('mapa.panel.sin_ubicar', { n: numero(sinUbicar) })}>{t('mapa.panel.sin_ubicar.nota')}</EstadoVacio>
-              : sinSeguimiento > 0
-                ? <EstadoVacio contenido titulo={t('mapa.panel.sin_seguimiento', { n: numero(sinSeguimiento) })}>{t('mapa.panel.sin_seguimiento.nota')}</EstadoVacio>
-                : <EstadoVacio contenido titulo={t('mapa.panel.vacio')}>{t('mapa.panel.vacio.nota')}</EstadoVacio>
+            vacioPanel
           ) : visibles.map((v) => {
             const esActivo = v.id === activoId;
             return (
