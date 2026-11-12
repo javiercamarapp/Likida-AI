@@ -136,6 +136,60 @@ export const INFO_OPERACION = {
     'Operadores y unidades de tu flota, leídos al abrir la pantalla. Solo aparece si hay al menos un patio y algo sin patio; solo lo ven los roles que administran la flota.',
     'Si tu flota opera desde un solo patio, asígnalos todos aquí; con varios, usa la columna «patio» de la carga masiva.',
   ),
+  'patios.kpi_patios': V(
+    'Patios',
+    'Cuántos patios (terminales) tiene dada de alta tu flota.',
+    'Cuenta los patios de tu flota; no incluye nada que no esté dado de alta aquí.',
+    'Patios de tu flota, leídos al abrir la pantalla. Si no se pudieron leer, la pantalla lo dice en vez de mostrar una cifra.',
+  ),
+  'patios.kpi_operadores': V(
+    'Operadores con patio',
+    'Operadores activos que ya tienen un patio asignado.',
+    'Suma, por patio, los operadores activos asignados a él. Los dados de baja y los que no tienen patio no cuentan.',
+    'Patios y operadores de tu flota, leídos al abrir la pantalla.',
+    'Asigna el patio desde la ficha del operador o con la columna «patio» de la carga masiva.',
+  ),
+  'patios.kpi_unidades': V(
+    'Unidades con patio',
+    'Unidades activas que ya tienen un patio asignado.',
+    'Suma, por patio, las unidades activas asignadas a él. Las dadas de baja y las que no tienen patio no cuentan.',
+    'Patios y unidades de tu flota, leídos al abrir la pantalla.',
+    'Asigna el patio desde la ficha de la unidad o con la columna «patio» de la carga masiva.',
+  ),
+  'patios.kpi_jefes': V(
+    'Jefes de tráfico con patio',
+    'Jefes de tráfico (encargados) que tienen un patio asignado.',
+    'Suma, por patio, los jefes de tráfico asignados a él. Un jefe sin patio ve toda la flota y no se cuenta aquí.',
+    'Patios y usuarios encargados de tu flota, leídos al abrir la pantalla.',
+    'Asigna o cambia el patio de cada jefe en la tarjeta «Jefes de tráfico por patio».',
+  ),
+  // ── carta porte ──
+  'carta_porte.kpi_evaluados': V(
+    'Viajes evaluados',
+    'Los viajes de tu flota a los que se les evaluó si requieren el complemento Carta Porte.',
+    'Cuenta los viajes leídos y evaluados con la regla del complemento. Si hay más viajes que los leídos, la nota de la cifra lo dice.',
+    'Viajes de tu flota, leídos al abrir la pantalla. Sin lectura no se muestra la tira, nunca ceros de relleno.',
+  ),
+  'carta_porte.kpi_necesitan': V(
+    'Necesitan complemento',
+    'Viajes evaluados para los que la regla indica que el complemento Carta Porte sí aplica.',
+    'Cuenta los viajes evaluados cuya decisión es «necesita complemento», según lo declarado en el viaje y en el perfil de la flota.',
+    'Viajes y perfil de tu flota, leídos al abrir la pantalla.',
+    'Abre el viaje desde la tabla para ver su borrador imprimible.',
+  ),
+  'carta_porte.kpi_faltan': V(
+    'Falta declarar',
+    'Viajes evaluados en los que falta un dato declarado para poder decidir.',
+    'Cuenta los viajes evaluados cuya decisión es «falta declarar»: no se afirma ni un sí ni un no hasta que se captura el dato.',
+    'Viajes y perfil de tu flota, leídos al abrir la pantalla.',
+    'Abre el viaje desde la tabla para ver qué dato falta.',
+  ),
+  'carta_porte.kpi_sin_complemento': V(
+    'Sin complemento',
+    'Viajes evaluados para los que la regla indica que el complemento Carta Porte no aplica.',
+    'Cuenta los viajes evaluados cuya decisión es «sin complemento» según lo declarado.',
+    'Viajes y perfil de tu flota, leídos al abrir la pantalla.',
+  ),
   // ── convenios ──
   'convenios.activos': V(
     'Convenios activos',

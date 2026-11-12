@@ -57,10 +57,10 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
   const evaluados = datos?.viajes ?? [];
   const cuenta = (k: string) => evaluados.filter((v) => v.decision.necesita === k).length;
   const cifras: PropsCifra[] | undefined = datos === null ? undefined : [
-    { etiqueta: tr('cartaPorte.vista.cifra.evaluados'), valor: numero(evaluados.length), nota: datos.viajes.length < datos.total ? tr('cartaPorte.vista.cifra.nota', { v: numero(datos.total) }) : undefined },
-    { etiqueta: tr('cartaPorte.vista.cifra.necesitan'), valor: numero(cuenta('si')), tono: cuenta('si') > 0 ? 'warn' : undefined },
-    { etiqueta: tr('cartaPorte.vista.cifra.faltan'), valor: numero(cuenta('falta_declarar')), tono: cuenta('falta_declarar') > 0 ? 'bad' : undefined },
-    { etiqueta: tr('cartaPorte.vista.cifra.sinComplemento'), valor: numero(cuenta('no')) },
+    { etiqueta: tr('cartaPorte.vista.cifra.evaluados'), valor: numero(evaluados.length), info: 'carta_porte.kpi_evaluados', nota: datos.viajes.length < datos.total ? tr('cartaPorte.vista.cifra.nota', { v: numero(datos.total) }) : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.necesitan'), valor: numero(cuenta('si')), info: 'carta_porte.kpi_necesitan', tono: cuenta('si') > 0 ? 'warn' : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.faltan'), valor: numero(cuenta('falta_declarar')), info: 'carta_porte.kpi_faltan', tono: cuenta('falta_declarar') > 0 ? 'bad' : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.sinComplemento'), valor: numero(cuenta('no')), info: 'carta_porte.kpi_sin_complemento' },
   ];
   const sel = ver && datos ? datos.viajes.find((v) => v.viajeId === ver) ?? null : null;
   const hrefVer = (id: string | null): string => {

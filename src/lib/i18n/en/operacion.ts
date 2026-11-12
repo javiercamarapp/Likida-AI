@@ -875,6 +875,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'emg.poliza.vencida': 'Expired',
   'emg.poliza.vigente': 'Valid',
   'emg.poliza.sin': 'No policy',
+  'emg.protocolo': 'Directory protocol: a provider counts as confirmed only once someone on your team verifies it; until then it shows as “unconfirmed”. Check every phone number before you need it.',
   'emg.cifra.proveedores': 'Providers',
   'emg.cifra.sinconfirmar': 'Unconfirmed',
   'emg.cifra.contactos': 'Contacts',

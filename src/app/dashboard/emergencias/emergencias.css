@@ -11,7 +11,7 @@
 .rv-em__pila .rv-tarjeta__cuerpo { display: grid; gap: 10px; }
 
 /* Vacío dentro de tarjeta (Rovaq `ac-vacio`): 1 px punteado, radio 8, padding 20/14, texto de 13 px centrado en una columna de ~350 px. Sin icono: el título y la nota bastan. */
-[data-ui="v2"] .rv-em__pila .rv-vacio[data-contenido] { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 0; max-height: none; padding: 20px 14px; border: 1px dotted var(--line); border-radius: 8px; background: transparent; text-align: center; }
+[data-ui="v2"] .rv-em__pila .rv-vacio[data-contenido] { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 0; max-height: none; padding: 20px 14px; border: 1px dashed var(--line2); border-radius: 8px; background: transparent; text-align: center; }
 [data-ui="v2"] .rv-em__pila .rv-vacio[data-contenido] .rv-vacio__icono { display: none; }
 [data-ui="v2"] .rv-em__pila .rv-vacio[data-contenido] .rv-vacio__titulo { margin: 0; font-size: 13px; font-weight: 600; }
 [data-ui="v2"] .rv-em__pila .rv-vacio[data-contenido] .rv-vacio__texto { margin: 0; max-width: 350px; font-size: 13px; color: var(--muted); }

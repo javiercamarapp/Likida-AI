@@ -875,6 +875,7 @@ export const operacion = {
   'emg.poliza.vencida': 'Vencida',
   'emg.poliza.vigente': 'Vigente',
   'emg.poliza.sin': 'Sin póliza',
+  'emg.protocolo': 'Protocolo del directorio: un proveedor cuenta como confirmado solo cuando alguien de tu equipo lo verifica; mientras tanto aparece «sin confirmar». Verifica cada teléfono antes de necesitarlo.',
   'emg.cifra.proveedores': 'Proveedores',
   'emg.cifra.sinconfirmar': 'Sin confirmar',
   'emg.cifra.contactos': 'Contactos',
