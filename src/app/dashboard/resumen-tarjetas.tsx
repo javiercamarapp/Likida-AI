@@ -45,7 +45,9 @@ export function itemsKpi(d: DatosResumen, sufijo: string, puede: PuedeRuta = sie
     ];
   }
   return [
-    { etiqueta: t('op.liquidaciones_cerradas'), metrica: 'volumen_viajes', info: 'resumen.liquidaciones_cerradas', href: hrefLiq, valor: k ? k.viajesLiquidados : null, sello: selloLiq, conteo: true },
+    { etiqueta: t('op.liquidaciones_cerradas'), metrica: 'volumen_viajes', info: 'resumen.liquidaciones_cerradas', href: hrefLiq, valor: k ? k.viajesLiquidados : null, sello: selloLiq, conteo: true,
+      // Sparkline REAL: los cierres de las últimas semanas (la misma lectura de «Liquidaciones cerradas por semana»); sin lectura no hay línea.
+      serie: d.cierres && d.cierres.some((c) => c.valor > 0) ? d.cierres.map((c) => c.valor) : undefined },
     porRevisar,
     // Es un CONTEO de liquidaciones ya cerradas (observado), no una proyección: el sello «Estimado» queda para lo que se estima.
     { etiqueta: t('op.con_diferencias'), metrica: 'diferencias_por_cuadrar', tipo: 'observado', info: 'resumen.con_diferencias', href: hrefLiq, valor: k ? k.conDiferencias : null, sello: selloLiq, conteo: true },
@@ -63,6 +65,21 @@ export function TarjetaCierres({ d, t = T_RESTO_ES }: { d: DatosResumen; t?: TRe
       acciones={c && total > 0 ? <span className="rv-res__nota">{numero(total)}{' '}{t('op.en_semanas_la_ultima_en_curso', { length: c.length })}</span> : undefined}
     >
       {c ? <Columnas datos={c.map((x) => ({ etiqueta: x.etiqueta, valor: x.valor, parcial: x.parcial, largo: `Semana del ${x.etiqueta}` }))} unidad="cierres" matiz={1} etiqueta={t('op.liquidaciones_cerradas_por_semana_ultimas_ocho')} formato="numero" vacio={t('op.sin_liquidaciones_cerradas_en_las_ultimas')} /> : null}
+    </Tarjeta>
+  );
+}
+
+/** Columnas mensuales a todo el ancho (plantilla Portada de Rovaq): la misma serie diaria de cierres, por mes calendario. null = no se pudo leer. */
+export function TarjetaCierresMensuales({ d, t = T_RESTO_ES }: { d: DatosResumen; t?: TResto }) {
+  const m = d.mensuales ?? null;
+  const total = m ? m.reduce((s, x) => s + x.valor, 0) : 0;
+  return (
+    <Tarjeta
+      titulo={t('op.res.cierres_mes')} info="resumen.cierres_semana" className="rv-res__cierres"
+      estado={m === null ? 'error' : 'ok'} reintentar
+      acciones={m && total > 0 ? <span className="rv-res__nota">{t('op.res.cierres_mes_nota', { total: numero(total), n: m.length })}</span> : undefined}
+    >
+      {m ? <Columnas datos={m.map((x) => ({ etiqueta: x.etiqueta, valor: x.valor, parcial: x.parcial, largo: `Mes de ${x.etiqueta}` }))} unidad="cierres" matiz={1} etiqueta={t('op.res.cierres_mes')} formato="numero" vacio={t('op.res.cierres_mes_vacio')} /> : null}
     </Tarjeta>
   );
 }
@@ -147,7 +164,7 @@ export function TarjetaViajesRecientes({ d, sufijo, puede = siempre, t = T_RESTO
     >
       {filas && filas.length > 0 ? (
         <TablaBase<ViajeReciente>
-          etiqueta={t('op.res.viajes_recientes')} densa altoMaximo={false} tarjetaMovil
+          etiqueta={t('op.res.viajes_recientes')} altoMaximo={false} tarjetaMovil
           filas={filas} idFila={(v) => v.id}
           columnas={[
             { id: 'folio', titulo: t('op.res.col_folio'), principal: true, celda: (v) => <b className="rv-id">{v.folio}</b> },

@@ -4,7 +4,10 @@
 /* Filas de tarjetas del Resumen (ronda 3): sin aire muerto. Las tarjetas miden lo que miden sus datos (la fila las iguala a la más alta,
    pero ningún cuerpo se estira por encima de su contenido), el subtítulo de «Diferencias» no deja un hueco bajo sí y el vacío es una caja
    punteada de lo que mide su texto (padding 20x14), no un bloque de 235 px con una sola línea. */
-[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas[data-variante] { flex: 0 0 auto; align-items: stretch; }
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas[data-variante] { flex: 0 0 auto; align-items: start; }
+/* Ronda 7: ninguna tarjeta se estira a la altura de su vecina (la regla base fija height:100%): cada una mide lo que mide su contenido,
+   sin 100-130 px vacíos bajo «Requiere tu atención» ni 85 px bajo la tabla de «Viajes recientes». */
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas[data-variante] > .rv-tarjeta { height: auto; align-self: start; }
 [data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio,
 [data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-error { flex: 0 0 auto; min-height: 0; }
 [data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-vacio { padding: 14px 20px; min-height: 0; }
@@ -20,7 +23,6 @@
 [data-ui="v2"] .rv-esq--portada .rv-esq__procedencia { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); gap: 4px 16px; }
 /* «Ver todas» pegado a la lista (sin el hueco de la altura de su pareja) y, en la segunda fila, cada tarjeta mide lo que mide su contenido. */
 [data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-at__pie { margin-top: 4px; }
-[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas[data-variante="6-6"] { align-items: start; }
 
 /* Píldoras de método bajo el último bloque (Rovaq: «Cómo se calculó», «Fuentes y publicaciones»): chips de 24 px que abren su nota. */
 [data-ui="v2"] .rv-res__metodo { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
