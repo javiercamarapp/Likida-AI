@@ -51,8 +51,24 @@ describe('MotorFiscalPeriodo', () => {
   });
 
   it('sin causas no pinta la lista (ni una barra en cero)', () => {
-    const html = renderToStaticMarkup(<MotorFiscalPeriodo series={SERIE} />);
+    const html = renderToStaticMarkup(<MotorFiscalPeriodo series={SERIE} causas={[]} />);
     expect(html).not.toContain('rv-barlist');
+  });
+
+  // A50-FIS-04: las causas y las series son DOS lecturas independientes. Con
+  // `?? []` una lectura caída de las causas se pintaba igual que «no hay
+  // causas»: el panel afirmaba que el ejercicio no tiene pérdidas por causa
+  // estando ciego. Es la regla del producto («no se pudo leer» nunca se
+  // escribe como cero), y el propio texto de ayuda de la tarjeta la promete.
+  it('A50-FIS-04: causas que no se pudieron leer se DICEN, no se pintan como «no hay causas»', () => {
+    const caido = renderToStaticMarkup(<MotorFiscalPeriodo series={SERIE} causas={null} />);
+    expect(caido).toContain('No se pudieron leer las causas');
+    expect(caido).not.toContain('rv-barlist');
+    // y las dos cifras del periodo, que SÍ se leyeron, se siguen pintando
+    expect(caido).toContain('$3,000');
+
+    const vacio = renderToStaticMarkup(<MotorFiscalPeriodo series={SERIE} causas={[]} />);
+    expect(vacio).not.toContain('No se pudieron leer las causas');
   });
 
   it('cada vista declara su ventana en el diccionario: nunca un número mudo (semanal, mensual, histórico)', () => {

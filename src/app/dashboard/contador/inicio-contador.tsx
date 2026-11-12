@@ -440,7 +440,10 @@ async function BloqueFiscal({ pResumenPerdidas, pResumenPerdidasSeries, periodoF
   const [resumenPerdidas, resumenPerdidasSeries] = await Promise.all([pResumenPerdidas, pResumenPerdidasSeries]);
   return (
     <Tarjeta titulo={`Tu motor fiscal — ${periodoFiscal.etiqueta}`}>
-      <MotorFiscalPeriodo series={resumenPerdidasSeries} causas={resumenPerdidas?.porCausa.map(({ titulo, n, monto }) => ({ titulo, n, monto })) ?? []} />
+      {/* `null` (lectura caída) NO se colapsa a `[]` («no hay causas»): son dos
+          lecturas independientes de esta tarjeta y la de causas puede caerse sola (A50-FIS-04). */}
+      <MotorFiscalPeriodo series={resumenPerdidasSeries}
+        causas={resumenPerdidas === null ? null : resumenPerdidas.porCausa.map(({ titulo, n, monto }) => ({ titulo, n, monto }))} />
     </Tarjeta>
   );
 }

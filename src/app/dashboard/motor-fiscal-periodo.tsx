@@ -23,8 +23,11 @@ export interface CausaMotor { titulo: string; n: number; monto: number }
  * `resumirPerdidas` vive en `fiscal.ts`, que importa `supabaseAdmin` a nivel de módulo: un Client Component no puede importar ese
  * archivo en tiempo de ejecución (arrastraría el service-role al bundle del navegador), así que el cálculo llega ya hecho, como
  * datos planos. Las causas son las del ejercicio (no ciclan con el periodo) y se rotulan así.
+ *
+ * `causas === null` significa «la lectura de las causas falló», y NO es lo mismo que `[]` («no hay causas»): las causas y las series
+ * son dos lecturas independientes, así que una puede caerse sin la otra, y entonces se dice (A50-FIS-04).
  */
-export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Modo, ResumenSimple> | null; causas?: readonly CausaMotor[] }) {
+export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Modo, ResumenSimple> | null; causas?: readonly CausaMotor[] | null }) {
   const { t } = useT('resto', restoEs);
   const [modo, setModo] = useState<Modo>('semanal');
 
@@ -40,7 +43,7 @@ export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Mod
     { valor: 'mensual', etiqueta: t('op.mf_opcion_mensual') },
     { valor: 'historico', etiqueta: t('op.mf_opcion_historico') },
   ] as const;
-  const top = causas.slice(0, 3);
+  const top = (causas ?? []).slice(0, 3);
 
   return (
     <div className="rv-cont__motor">
@@ -51,6 +54,7 @@ export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Mod
         <Cifra icono={<Icono icono={ReceiptText} />} tono="ok" info="contador.recuperable"
           etiqueta={t('op.mf_recuperable', { ventana: ventana[modo] })} valor={r.montoRecuperable} formato="mxn" />
       </TiraCifras>
+      {causas === null && <p className="rv-cont__nota">{t('op.mf_causas_no_leidas')}</p>}
       {top.length > 0 && (
         <BarList
           etiqueta={t('op.mf_causas')}
