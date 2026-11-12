@@ -85,7 +85,7 @@
 [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 28px; font-size: 13px; font-weight: 500; }
 [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn[aria-checked="true"] { font-weight: 600; }
 [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__conteo { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); color: var(--ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-@media (max-width: 819px) { [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 44px; } }
+@media (max-width: 819px) { [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 36px; } }
 
 /* Botones de fila: una línea y 28 px; un rótulo largo no parte el botón en dos (antes 39 px). */
 .bj-nowrap { white-space: nowrap; flex: none; }
