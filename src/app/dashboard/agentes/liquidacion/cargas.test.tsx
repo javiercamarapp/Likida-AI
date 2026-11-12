@@ -39,4 +39,11 @@ describe('SeccionCargas (Ola 1 · A1)', () => {
     expect(html).not.toContain('<b>x</b>');
     expect(html).toContain('BIT-2: otro');
   });
+
+  it('ronda 7: la importación es el botón «Importar datos» de la cabecera que abre un cajón; sin resultado nace cerrado y con resultado nace abierto', () => {
+    const cerrado = pintar();
+    expect(cerrado).toContain('Importar datos');
+    expect(cerrado).toContain('rv-ov--drawer');
+    expect(cerrado).not.toContain('<h2 class="rv-tarjeta__titulo">');
+  });
 });

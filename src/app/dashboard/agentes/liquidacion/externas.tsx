@@ -12,7 +12,9 @@ import { motivoDeFallo } from '@/lib/likida/liquidacion_externa/api';
 import {
   ESTADOS, type EstadoLiquidacionExterna, type LiquidacionExterna, type EstadoAvisoDiscrepancia,
 } from '@/lib/likida/liquidacion_externa/repo';
+import { ZonaSoltar } from '../zona-soltar';
 import { EnlacePagina, NavPaginas } from '../../paginador';
+import { CajonCarga } from './cajon-carga';
 import { getT } from '@/lib/i18n/servidor';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
@@ -160,20 +162,26 @@ export async function SeccionExternas(p: ExternasProps) {
     <div id="liquidaciones-externas">
     <Tarjeta
       titulo={tx('rest.liquidaciones_externas')}
-      acciones={<span className="rv-liq-sub">{pagina.total !== null ? `${numero(pagina.total)} en total` : tx('rest.total_no_disponible')}</span>}
+      acciones={(
+        <>
+          <span className="rv-liq-sub">{pagina.total !== null ? `${numero(pagina.total)} en total` : tx('rest.total_no_disponible')}</span>
+          {/* La importación es una acción de la cabecera que abre un cajón (como «Importar datos» de Rovaq), no una forma suelta pegada a la tira. */}
+          {p.subirArchivo && (
+            <CajonCarga id="subir-liquidaciones" titulo={tx('rest.subir_liquidaciones_csv_o_excel_de')} disparador={tx('rest.subir_y_entregar')}>
+              <form action={p.subirArchivo} className="rv-liq-forma">
+                <ZonaSoltar><CampoArchivo etiqueta={tx('rest.subir_liquidaciones_csv_o_excel_de')} name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required /></ZonaSoltar>
+                <div className="rv-ag-acciones"><Boton type="submit" variante="primary" tamano="sm">{tx('rest.subir_y_entregar')}</Boton></div>
+              </form>
+            </CajonCarga>
+          )}
+        </>
+      )}
     >
       <p className="rv-liq-sub">
         <Link href={`/dashboard/agentes/liquidacion/formato${query(p.contexto)}`} className="rv-liq-enlace">
           <Icono icono={Settings2} tam={14} />{' '}{tx('rest.formato_de_las_liquidaciones')}</Link>{' '}{tx('rest.calculadas_por_el_sistema_de_tu')}</p>
 
       {textoMensaje && p.mensaje && <AvisoCompacto tono={mensajes(tx)[p.mensaje].tono === 'ok' ? 'ok' : 'error'} resumen={textoMensaje} />}
-
-      {p.subirArchivo && (
-        <form action={p.subirArchivo} className="rv-liq-acciones rv-liq-acciones--forma">
-          <CampoArchivo etiqueta={tx('rest.subir_liquidaciones_csv_o_excel_de')} name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required />
-          <Boton type="submit" variante="primary" tamano="sm">{tx('rest.subir_y_entregar')}</Boton>
-        </form>
-      )}
 
       {/* ── Las fichas: lo que pide a una persona, primero ── */}
       <BloqueCifras etiqueta={tx('rest.liquidaciones_externas')} cifras={[
