@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo, contarConversacionesActivas } from '@/lib/admin/negocio';
@@ -34,11 +35,11 @@ export default async function AgenteWhatsappPage() {
       acciones={<BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm">{t('agente_whatsapp.ver_conversaciones')}</BotonEnlace>}
       avisos={<Aviso tono="info">{t('agente_whatsapp.el_whatsapp_del_producto_sigue_en')}</Aviso>}
       etiquetaCifras="WhatsApp"
-      cifras={uniformes([
+      cifras={observadas(uniformes([
           { etiqueta: t('agente_whatsapp.gastado_en_whatsapp'), valor: whatsapp ? whatsapp.costoUsd : 0, formato: 'usd', nota: t('agente_cuadre.costo_medido_en_llm_costo') },
           { etiqueta: t('agente_whatsapp.llamadas_de_whatsapp'), valor: whatsapp ? whatsapp.n : 0, formato: 'entero' },
           { etiqueta: t('whatsapp_infra.conversaciones_activas'), valor: activas, estado: activas === null ? 'error' : 'ok', formato: 'entero', href: '/admin/conversaciones' },
-      ])}
+      ]), t('a1r4.observado'))}
       graficas={[
         <Tarjeta key="serie" titulo={t('agente_fase.serie_costo_dia')} contenida>
           {r.porDia.length > 0

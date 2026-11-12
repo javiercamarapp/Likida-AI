@@ -82,8 +82,12 @@ export function FormaInvitar({ accion, roles }: {
 // action lo vuelve a leer ANCLADO al tenant de la sesión.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function BotonChico({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
+function BotonChico({ etiqueta, ocupado, enMenu = false }: { etiqueta: string; ocupado: string; enMenu?: boolean }) {
   const { pending } = useFormStatus();
+  // Dentro del menú de la fila es una FILA DE MENÚ (ghost, hover suave), no un botón con contorno.
+  if (enMenu) {
+    return <button type="submit" role="menuitem" className="rv-menu__item" disabled={pending}>{pending ? ocupado : etiqueta}</button>;
+  }
   return (
     <Boton type="submit" tamano="sm" loading={pending}>
       {pending ? ocupado : etiqueta}
@@ -142,7 +146,7 @@ export function FormaDarDeBaja({ accion, id, nombre }: {
         etiqueta={t('cfg.dar_de_baja')} tono="peligro" etiquetaConfirmar={t('cfg.si_dar_de_baja')}
         titulo={`Dar de baja a ${nombre}`}
         descripcion={t('cfg.deja_de_entrar_al_panel_en')}
-        className={clasesBoton('danger', 'sm')}
+        className="rv-menu__item"
       />
       <Aviso estado={estado} />
     </form>
@@ -167,7 +171,7 @@ export function FormaReenviarAcceso({ accion, id }: { accion: AccionForma; id: s
   return (
     <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
-      <BotonChico etiqueta={t('cfg.reenviar_acceso')} ocupado={t('cfg.enviando')} />
+      <BotonChico enMenu etiqueta={t('cfg.reenviar_acceso')} ocupado={t('cfg.enviando')} />
       <Aviso estado={estado} />
     </form>
   );
@@ -186,7 +190,7 @@ export function FormaCerrarSesiones({ accion, id }: { accion: AccionForma; id: s
   return (
     <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
-      <BotonChico etiqueta={t('cfg.cerrar_sus_sesiones')} ocupado={t('cfg.cerrando')} />
+      <BotonChico enMenu etiqueta={t('cfg.cerrar_sus_sesiones')} ocupado={t('cfg.cerrando')} />
       <Aviso estado={estado} />
     </form>
   );

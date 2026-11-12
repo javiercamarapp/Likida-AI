@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw } from 'lucide-react';
+import { Pause, Play, RefreshCw } from 'lucide-react';
 import { Boton, Icono } from '@/app/ui-v2/componentes';
 import './en-vivo.css';
 import { CADA_SEG_POR_OMISION, puedeRefrescar } from './refresco';
@@ -45,8 +45,10 @@ export function ActualizarSolo({ cadaSeg = CADA_SEG_POR_OMISION }: { cadaSeg?: n
   return (
     <div className="rv-vv__estado" aria-live="off">
       <span>{pausado ? t('vv.act.pausa') : t('vv.act.cada', { n: cadaSeg })}{ultima ? t('vv.act.ultima', { hora: ultima.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }) : ''}</span>
-      <Boton icono={<Icono icono={RefreshCw} tam={16} />} onClick={() => refrescar(true)}>{t('vv.act.ahora')}</Boton>
-      <Boton onClick={() => setPausado((p) => !p)}>{pausado ? t('vv.act.reanudar') : t('vv.act.pausar')}</Boton>
+      {/* Ronda 7: un secundario de 28 px («Actualizar ahora») y la pausa como ícono fantasma con su nombre accesible, no tres botones del mismo peso. */}
+      <Boton tamano="sm" icono={<Icono icono={RefreshCw} tam={14} />} onClick={() => refrescar(true)}>{t('vv.act.ahora')}</Boton>
+      <Boton tamano="sm" variante="ghost" aria-label={pausado ? t('vv.act.reanudar') : t('vv.act.pausar')} title={pausado ? t('vv.act.reanudar') : t('vv.act.pausar')}
+        aria-pressed={pausado} onClick={() => setPausado((p) => !p)}><Icono icono={pausado ? Play : Pause} tam={14} /></Boton>
     </div>
   );
 }

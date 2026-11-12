@@ -71,7 +71,7 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
             <AvisoCompacto tono="warn" resumen={t('cobranza.controles.el_agente_no_corrio', { omitido: r.omitido })} />
           ) : (
             <p className="rv-ag-notif__nota">
-              {rico(t('cobranza.controles.contacto_a_de'), { contactados: <strong>{r.contactados}</strong>, revisados: <span className="cifra-mono">{r.revisados}</span>, sinTelefono: r.sinTelefono > 0 && <> {t('cobranza.controles.sin_telefono', { n: r.sinTelefono })}</>, fallos: r.fallos.length > 0 && <> <span className="rv-ag-malo">{t('cobranza.controles.fallos', { n: r.fallos.length })}</span></> })}
+              {rico(t('cobranza.controles.contacto_a_de'), { contactados: <strong>{r.contactados}</strong>, revisados: <span className="rv-cifra">{r.revisados}</span>, sinTelefono: r.sinTelefono > 0 && <> {t('cobranza.controles.sin_telefono', { n: r.sinTelefono })}</>, fallos: r.fallos.length > 0 && <> <span className="rv-ag-malo">{t('cobranza.controles.fallos', { n: r.fallos.length })}</span></> })}
             </p>
           )}
           {/* FE-14: el reloj de corte (25 s) puede dejar folios sin tocar en una cola grande: se dice, para que el humano sepa que hay

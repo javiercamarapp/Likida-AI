@@ -22,6 +22,7 @@ import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { LineasPorConciliar, NINGUNO_VALOR } from './vista-consolidado';
 import { calcularSinCfdi } from './sin-cfdi';
 import type { Metadata } from 'next';
+import '../estados.css';
 import { BarraPeriodo, EstadoError, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { BarList, Columnas, DonaMini, type ColumnaDato, type PropsCifra } from '@/app/ui-v2/graficas';

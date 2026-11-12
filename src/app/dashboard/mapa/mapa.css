@@ -54,7 +54,7 @@
 
 /* Ronda 3 — panel lateral como Rovaq: borde y radio 12, ranking 1-8 con barras, desglose de viajes debajo y leyenda bajo el mapa. */
 .rv-mp__cab { display: inline-flex; align-items: center; gap: 8px; }
-.rv-mp__rejilla { grid-template-columns: minmax(0, 1fr) 320px; align-items: stretch; }
+.rv-mp__rejilla { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
 @media (max-width: 1023.98px) { .rv-mp__rejilla { grid-template-columns: minmax(0, 1fr); } }
 .rv-mp__panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .rv-mp__eyebrow { margin: 0; font-size: var(--t-micro); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
@@ -89,3 +89,12 @@
   .rv-mp__panel .rv-mp__cards { display: flex; flex-direction: column; gap: 8px; }
   .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: auto 0; }
 }
+
+/* Ronda 7: el panel lateral acompaña su contenido (Rovaq 09), no el alto del mapa: sin 450 px en blanco bajo una fila de ranking y una tarjeta.
+   El vacío del panel es UNA caja punteada compacta (se retiró el mensaje duplicado que flotaba sobre el mapa). */
+@media (min-width: 1024px) {
+  .rv-mp__panel .rv-mp__cards { flex: 0 1 auto; max-height: 520px; }
+  .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: 0; }
+  .rv-mp__panel > .rv-mp__nota { margin-top: 4px; }
+}
+.rv-mp__panel .rv-vacio { padding: 14px 20px; min-height: 0; border: 1px dashed var(--line2); border-radius: 8px; box-shadow: none; }

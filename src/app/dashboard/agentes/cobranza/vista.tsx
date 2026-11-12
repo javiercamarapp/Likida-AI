@@ -11,6 +11,7 @@ import '../proveedores/proveedores.css';
 import { BarraPeriodo, EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, selloHoyTr, rotuloDiasTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
+import '../../estados.css';
 import './cobranza.css';
 
 export interface ExtraAgenteCobranza {
@@ -138,6 +139,7 @@ export function VistaAgenteCobranza({
 
       {/* Bitácora — lo que ya hizo, con sus fallos a la vista */}
       <Tarjeta
+        className="rv-tarjeta--tabla"
         titulo={tx('cobranza.vista.bitacora_de_contactos')}
         info="cobranza.bitacora"
         estado={bitacora === null ? 'error' : bitacora.length === 0 ? 'vacio' : 'ok'}

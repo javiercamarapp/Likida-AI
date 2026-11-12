@@ -19,6 +19,7 @@ import {
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import '../caja-vacia.css';
+import '../estados.css';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import './clientes.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -66,7 +67,11 @@ export function VistaClientes({
   const cifras = panel === null ? undefined : panel.clientes.length === 0
     ? [t('op.ingreso_de_fletes_capturado'), t('op.clientes_activos'), t('op.por_cobrar_a_clientes'), t('op.cl.k.sin_cliente')]
       // El porqué se dice UNA vez (en la primera celda): repetirlo en las cuatro alarga la tira a 141 px.
-      .map((etiqueta, i): PropsCifra => ({ etiqueta, valor: null, estado: 'vacio', ...(i === 0 ? { mensaje: t('op.sin_clientes_todavia') } : {}), matiz: 8 }))
+      .map((etiqueta, i): PropsCifra => (i === 3 && panel.viajesSinCliente > 0
+        // «Viajes sin cliente» es un conteo real de `viaje.cliente_id IS NULL`: no depende de que haya clientes, y la tabla de abajo lo lista.
+        // «Sin dato» solo cuando la lectura falta, nunca cuando la tabla ya conoce el conteo.
+        ? { etiqueta, valor: panel.viajesSinCliente, formato: 'entero', nota: t('op.cl.k.sin_cliente.nota'), tono: 'warn', matiz: 8 }
+        : { etiqueta, valor: null, estado: 'vacio', ...(i === 0 ? { mensaje: t('op.sin_clientes_todavia') } : {}), matiz: 8 }))
     : cifrasDeCartera(t, panel).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
   const avisos = panel === null ? undefined : avisosDeCartera(t, panel);
   return (

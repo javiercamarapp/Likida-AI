@@ -301,8 +301,7 @@ export default async function SoportePage({
     <EsqueletoTablaMaestra
       titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')} etiquetaCifras={ta('soporte.tickets_de_soporte')} cifras={cifras ? observadas(cifras, ta('a1r4.observado')) : undefined}
       filtros={tickets === null ? undefined : (
-        // La guarda `una_barra_de_pestanas` reserva las pestañas subrayadas a la barra automática del grupo: la vista de la cola es un segmentado con
-        // contador (no un select ni una segunda barra de pestañas).
+        // Rovaq «Soporte»: pestañas subrayadas de estado (Abiertos / Esperando / Cerrados) con contador, antes de la tabla; no es la barra del grupo.
         <VistaCola
           etiqueta={ta('soporte.vistas_de_la_cola')} valor={vista}
           opciones={[

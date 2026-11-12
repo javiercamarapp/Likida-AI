@@ -188,7 +188,7 @@ export default async function EstudioMarketingPage() {
       )}
     >
       {/* Plantilla PC (Rovaq): cifras → bloques de trabajo en 6-6 → el formulario ancho a todo el ancho de su tarjeta → lo que no se hace. */}
-      <FilaTarjetas variante="6-6">
+<FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
       <Tarjeta titulo={t('marketing.piezas_del_dia', { pendientes: pendientes !== null ? ` (${pendientes.length})` : '' })}>
         <p className="adm-din-nota">
           
@@ -197,7 +197,7 @@ export default async function EstudioMarketingPage() {
         {pendientes === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudieron_leer')}</EstadoError>
         ) : pendientes.length === 0 ? (
-          <p className="adm-din-nota">{t('marketing.nada_pendiente_ahora_mismo')}</p>
+          <p className="adm-vacio-linea">{t('marketing.nada_pendiente_ahora_mismo')}</p>
         ) : (
           <div className="adm-din-rejilla adm-din-rejilla--compacta">
             {pendientes.map((p) => <TarjetaPieza key={p.id} pieza={p} publicar={accionPublicarPieza} rechazar={accionRechazarPieza} />)}
@@ -219,7 +219,7 @@ export default async function EstudioMarketingPage() {
         {hooks === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudo_leer')}</EstadoError>
         ) : hooks.length === 0 ? (
-          <p className="adm-din-nota">{t('marketing.sin_hooks_guardados_todavia')}</p>
+          <p className="adm-vacio-linea">{t('marketing.sin_hooks_guardados_todavia')}</p>
         ) : (
           <div className="adm-din-rejilla adm-din-rejilla--compacta">
             {hooks.map((h) => (
@@ -241,7 +241,7 @@ export default async function EstudioMarketingPage() {
         {referencias === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudo_leer_2')}</EstadoError>
         ) : referencias.length === 0 ? (
-          <p className="adm-din-nota">{t('marketing.sin_personajes_ni_lugares')}</p>
+          <p className="adm-vacio-linea">{t('marketing.sin_personajes_ni_lugares')}</p>
         ) : (
           <div className="adm-din-rejilla adm-din-rejilla--compacta">
             {referencias.map((r) => (

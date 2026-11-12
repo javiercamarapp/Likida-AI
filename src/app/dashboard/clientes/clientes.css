@@ -25,7 +25,7 @@
 .rv-cl__pie-cajon .rv-cl__guardar { height: 32px; }
 
 /* Viajes sin ingreso: las celdas Viaje y Ruta llevan DOS líneas (folio + fecha, ruta + km); la fila de 40 px las pegaba al divisor. Rovaq: filas de dos líneas de 52 a 64 px. */
-[data-ui="v2"] .card .rv-cl__sin-ingreso table tbody :is(td, th) { height: 52px; padding-block: 8px; }
+[data-ui="v2"] .rv-cl__sin-ingreso tbody :is(td, th) { height: 52px; padding-block: 8px; }
 .rv-cl__sin-ingreso + .rv-cl__pie { margin-top: 4px; padding-top: 4px; }
 .rv-cl__sin-ingreso { margin-bottom: 8px; }
 
