@@ -15,3 +15,8 @@
 [data-ui="v2"] .rv-em__pila .rv-vacio[data-contenido] .rv-vacio__icono { display: none; }
 [data-ui="v2"] .rv-em__pila .rv-vacio[data-contenido] .rv-vacio__titulo { margin: 0; font-size: 13px; font-weight: 600; }
 [data-ui="v2"] .rv-em__pila .rv-vacio[data-contenido] .rv-vacio__texto { margin: 0; max-width: 350px; font-size: 13px; color: var(--muted); }
+
+/* Ronda 8 (plantilla TM de Rovaq): proveedores y contactos son TABLAS con chip de estado (no tres tarjetas de lista, cada una con su vacío alto); póliza y contactos van parejos en una fila 6-6. */
+.rv-em__acciones { justify-content: flex-end; }
+[data-ui="v2"] .rv-em__pila > .rv-fila-tarjetas > .rv-tarjeta { height: 100%; }
+[data-ui="v2"] .rv-em__pila .rv-tarjeta--tabla .rv-em__acciones { flex-wrap: nowrap; }
