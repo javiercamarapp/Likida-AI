@@ -24,8 +24,8 @@ test.describe('con la UI v2 forzada', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/dashboard/viajes');
     // Una sola navegación de SHELL visible (la móvil se oculta por breakpoint); la pantalla puede traer además sus pestañas
-    // «Secciones de …», que son navegación de la página y no del shell.
-    await expect(page.getByRole('navigation', { name: /^(?!Secciones de)/ })).toHaveCount(1);
+    // «Secciones de …» y el segmentado de estado del registro («Estado», F26), que son navegación de la página y no del shell.
+    await expect(page.getByRole('navigation', { name: /^(?!Secciones de|Estado$)/ })).toHaveCount(1);
     await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Secciones de Viajes' })).toBeVisible();
     // «Viajes» del menú es hoy el grupo Despacho: el registro vive como pestaña dentro de él y el ítem activo es el del grupo.
@@ -45,8 +45,12 @@ test.describe('con la UI v2 forzada', () => {
     await page.goto('/dashboard/viajes');
     const caja = await page.locator('aside').boundingBox();
     expect(caja?.width).toBe(72);
-    await expect(page.getByRole('navigation').locator('a[href="/dashboard/viajes"]')).toHaveCount(1);
-    await expect(page.getByRole('navigation').getByRole('link', { name: 'Viajes', exact: true })).toBeVisible();
+    // El segmentado de estado y las pestañas de sección enlazan a /dashboard/viajes por dentro: el riel se acota a la navegación del shell,
+    // donde «Viajes» es hoy el grupo Despacho (un solo enlace, con su nombre accesible aunque el texto se oculte).
+    const viajes = page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Viajes', exact: true });
+    await expect(viajes).toHaveCount(1);
+    await expect(viajes).toBeVisible();
+    await expect(viajes).toHaveAttribute('href', /^\/dashboard\/(viajes|despacho)/);
   });
 
   test('escritorio (≥1024 px): sidebar de 232 px', async ({ page }) => {
