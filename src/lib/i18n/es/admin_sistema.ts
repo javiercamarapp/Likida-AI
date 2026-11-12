@@ -427,6 +427,7 @@ export const admin_sistema = {
   'whatsapp_infra.sin_integrar': 'Sin integrar',
   'whatsapp_infra.ninguno_de_estos_existe_todavia_en': 'Ninguno de estos existe todavía en este panel — requieren integrar más a fondo la Meta WhatsApp Business API de lo que Likida usa hoy:',
   'capacidad_forecast.capacidad_forecast': 'Capacidad & Forecast',
+  'capacidad_forecast.apoyo': 'Cuánto costará la IA si el ritmo actual sigue y cuántos viajes aguanta la plataforma, con los supuestos a la vista.',
   'capacidad_forecast.sin_lectura': 'Sin lectura',
   'capacidad_forecast.no_se_pudo_leer_el_costo': 'No se pudo leer el costo de la ventana de 30 días — esto NO significa que no haya gasto.',
   'capacidad_forecast.sin_datos': 'Sin datos',

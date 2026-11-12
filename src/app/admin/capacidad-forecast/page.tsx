@@ -64,6 +64,7 @@ export default async function CapacidadForecastPage({ searchParams }: { searchPa
   return (
     <EsqueletoPanelCifras
       titulo={t('capacidad_forecast.capacidad_forecast')}
+      apoyo={t('capacidad_forecast.apoyo')}
       cifras={observadas(cifras, t('a1r4.observado'))}
       variante="12"
       filtros={(

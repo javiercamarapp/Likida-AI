@@ -94,13 +94,13 @@ async function BloqueNorte() {
         },
     r === null
       ? { etiqueta: t('consola.flotas'), valor: null, ...ERROR_CIFRA }
-      : { etiqueta: r.tenants === 0 ? t('consola.flotas_ninguna_dada_de') : esSoloDemo ? t('consola.flota_solo_el_demo') : t('consola.flotas'), valor: r.tenants, formato: 'entero', href: '/admin/flotas' },
+      : { etiqueta: r.tenants === 0 ? t('consola.flotas_ninguna_dada_de') : esSoloDemo ? t('consola.flota_solo_el_demo') : t('consola.flotas'), valor: r.tenants, formato: 'entero', nota: t('consola.flotas_nota'), href: '/admin/flotas' },
     r === null
       ? { etiqueta: t('consola.viajes_procesados'), valor: null, ...ERROR_CIFRA }
       : { etiqueta: t('consola.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero', nota: liqTotal === null ? undefined : `${numero(liqTotal)} ${liqTotal === 1 ? t('consola.liquidacion_generada') : t('consola.liquidaciones_generadas')}` },
     r === null
       ? { etiqueta: t('consola.facturas_procesadas_historico'), valor: null, ...ERROR_CIFRA }
-      : { etiqueta: t('consola.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero' },
+      : { etiqueta: t('consola.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero', nota: t('consola.facturas_procesadas_nota') },
     mes === null
       ? { etiqueta: t('consola.gasto_ia_mes'), valor: null, ...ERROR_CIFRA }
       : { etiqueta: t('consola.gasto_ia_mes_de', { etiquetaMes: mes.etiquetaMes }), valor: mes.mesUsd, formato: 'usd', href: '/admin/consumo' },

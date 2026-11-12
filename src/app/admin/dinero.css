@@ -72,3 +72,7 @@
 
 /* Vacío de una línea (Rovaq ac-vacio): caja punteada, radio 8, relleno 20×14; la tarjeta ya no se estira a la altura de su vecina. */
 [data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }
+
+/* Ronda 8: periodo (segmentado) y filtros del cajón en UNA sola fila con gap 8, como el FilterBar de Rovaq. */
+[data-ui="v2"] .adm-filtros-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+[data-ui="v2"] .adm-filtros-fila > * { margin: 0; }

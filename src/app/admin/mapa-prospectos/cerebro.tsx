@@ -758,11 +758,11 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             </Tooltip>
           )}
           {/* Los dos atajos más pedidos: un clic, sin abrir el cajón. Mismo estado que los criterios de adentro. */}
-          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.soloDecisor} icono={<Icono icono={UserCheck} />} disabled={!listo}
+          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.soloDecisor} icono={<Icono icono={UserCheck} />}
             onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>{tx('mapa_prospectos_cerebro.con_decisor')}</Boton>
-          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.minUrgencia === 70} icono={<Icono icono={Flame} />} disabled={!listo}
+          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.minUrgencia === 70} icono={<Icono icono={Flame} />}
             onClick={() => setFiltros((f) => ({ ...f, minUrgencia: f.minUrgencia === 70 ? 0 : 70 }))}>{tx('mapa_prospectos_cerebro.urgentes')}</Boton>
-          <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} disabled={!listo} onClick={() => setFiltrosAbiertos(true)}>
+          <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} onClick={() => setFiltrosAbiertos(true)}>
             {tx('mapa_prospectos_cerebro.filtros')}{filtrosActivos ? ` · ${filtrosActivos}` : ''}
           </Boton>
         </div>
