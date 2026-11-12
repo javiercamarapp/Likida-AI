@@ -139,3 +139,12 @@ describe('Inicio rediseñado: jerarquía, iconos animados y estados honestos', (
     expect(t).toContain('Abrir panel Carta Porte');
   });
 });
+
+describe('ronda 7: la portada no se desplaza de lado ni deja huecos', () => {
+  it('la tarjeta de cada agente es el ancestro posicionado de su texto solo-lectores (.rv-sr absoluto)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync(new URL('./inicio-cinco.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.rv-ic__agentes > \.rv-ic__agente \{[^}]*position: relative/);
+    expect(css).toMatch(/\.rv-ic__fila > \.rv-tarjeta\[data-contenida\] \{[^}]*height: auto/);
+  });
+});

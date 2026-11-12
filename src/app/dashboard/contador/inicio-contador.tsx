@@ -207,11 +207,10 @@ export async function InicioContador({
       )}
       titular={titular}
       filtros={(
-        // Rovaq: el segmentado de periodo y los chips de alcance en UNA fila de filtros, arriba de las cifras (no dentro de una tarjeta).
-        // El segmentado de 7 días / 30 días / Histórico solo mueve «Dónde pierdo» (lo demás se corta al ejercicio): vive DENTRO de esa tarjeta,
-        // con su propio rótulo, y la barra de arriba dice solo el alcance común de la pantalla (ejercicio y fuente). Dos periodos en una misma
-        // barra hacían creer que el filtro movía todo.
-        <BarraPeriodo etiqueta={tr('contador.panel.alcance')}
+        // Rovaq: el segmentado de periodo va en la barra de filtros, junto a los chips de alcance, en UNA fila arriba de las cifras.
+        // Mueve la ventana de «Dónde pierdo» (cuyos renglones nombran la ventana: «últimos 7 días», «últimos 30 días», «histórico»);
+        // el resto de la pantalla se corta al ejercicio y el chip de alcance lo dice.
+        <BarraPeriodo etiqueta={tr('contador.panel.alcance')} selector={<SelectorPeriodoMotor />}
           chips={[{ id: 'ejercicio', etiqueta: tr('contador.panel.alcanceEjercicio', { etiqueta: etq }) }, { id: 'fuente', etiqueta: tr('contador.panel.alcanceFuente') }]} />
       )}
       avisos={(
@@ -311,23 +310,8 @@ async function BloqueTablas({ pAcred, pResumenPerdidas, pSeries, pFacturacion, s
 
   return (
     <>
-      <FilaTarjetas variante="6-6">
-      <Tarjeta titulo={tr('contador.panel.puenteTitulo')} acciones={<KindBadge tipo="inferido" />}
-        estado={cartera === null ? 'error' : cartera.facturasTotal === 0 ? 'vacio' : 'ok'}
-        mensaje={cartera === null ? tr('contador.panel.puenteNoLeido') : tr('contador.panel.puenteVacio')} detalle={tr('contador.panel.puenteVacioDetalle')} reintentar>
-        {cartera ? (
-          <>
-            <BarList etiqueta={tr('contador.panel.puenteTitulo')} maximo={Math.max(1, cartera.facturado)} items={[
-              { clave: 'facturado', etiqueta: tr('contador.panel.puenteFacturado'), valor: cartera.facturado, texto: mxn(cartera.facturado) },
-              { clave: 'cobrado', etiqueta: tr('contador.panel.puenteCobrado'), valor: cartera.cobrado, texto: mxn(cartera.cobrado) },
-              { clave: 'porCobrar', etiqueta: tr('contador.panel.puentePorCobrar'), valor: cartera.porCobrar, texto: mxn(cartera.porCobrar) },
-              { clave: 'vencido', etiqueta: tr('contador.panel.puenteVencido'), valor: cartera.vencido, texto: mxn(cartera.vencido) },
-            ]} />
-            <p className="rv-cont__nota">{tr('contador.panel.puenteNota')}</p>
-          </>
-        ) : null}
-      </Tarjeta>
-        <Tarjeta titulo={tr('contador.panel.tablaGano')} estado={acred === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCargar3')} reintentar
+      <FilaTarjetas variante="4-4-4">
+        <Tarjeta className="rv-cont__pierdo" titulo={tr('contador.panel.tablaGano')} estado={acred === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCargar3')} reintentar
           acciones={(
             <>
               <KindBadge tipo="observado" />
@@ -341,11 +325,24 @@ async function BloqueTablas({ pAcred, pResumenPerdidas, pSeries, pFacturacion, s
           <BarList etiqueta={tr('contador.panel.tablaGano')} items={gano} />
           {acred ? <p className="rv-cont__nota">{tr('contador.panel.ganoDieselNota', { litros: litros(acred.litrosDiesel) })}</p> : null}
         </Tarjeta>
-      </FilaTarjetas>
-      <FilaTarjetas variante="12">
-        <Tarjeta className="rv-cont__pierdo" titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" acciones={<><SelectorPeriodoMotor /><KindBadge tipo="calculado" /></>}
+        <Tarjeta className="rv-cont__pierdo" titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" acciones={<KindBadge tipo="calculado" />}
           estado={resumenPerdidas === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCalcular')} reintentar>
           <MotorFiscalPeriodo series={series} causas={causas.map(({ titulo, n, monto }) => ({ titulo, n, monto }))} />
+        </Tarjeta>
+        <Tarjeta className="rv-cont__vacio-llena" titulo={tr('contador.panel.puenteTitulo')} acciones={<KindBadge tipo="inferido" />}
+          estado={cartera === null ? 'error' : cartera.facturasTotal === 0 ? 'vacio' : 'ok'}
+          mensaje={cartera === null ? tr('contador.panel.puenteNoLeido') : tr('contador.panel.puenteVacio')} detalle={tr('contador.panel.puenteVacioDetalle')} reintentar>
+          {cartera ? (
+            <>
+              <BarList etiqueta={tr('contador.panel.puenteTitulo')} maximo={Math.max(1, cartera.facturado)} items={[
+                { clave: 'facturado', etiqueta: tr('contador.panel.puenteFacturado'), valor: cartera.facturado, texto: mxn(cartera.facturado) },
+                { clave: 'cobrado', etiqueta: tr('contador.panel.puenteCobrado'), valor: cartera.cobrado, texto: mxn(cartera.cobrado) },
+                { clave: 'porCobrar', etiqueta: tr('contador.panel.puentePorCobrar'), valor: cartera.porCobrar, texto: mxn(cartera.porCobrar) },
+                { clave: 'vencido', etiqueta: tr('contador.panel.puenteVencido'), valor: cartera.vencido, texto: mxn(cartera.vencido) },
+              ]} />
+              <p className="rv-cont__nota">{tr('contador.panel.puenteNota')}</p>
+            </>
+          ) : null}
         </Tarjeta>
       </FilaTarjetas>
     </>

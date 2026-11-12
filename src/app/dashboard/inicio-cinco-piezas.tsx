@@ -105,7 +105,7 @@ export function TarjetaHizoSolo24({ hechos, ahora, hrefLiquidacion, t = T_RESTO_
   const acciones = hrefLiquidacion ? <BotonEnlace tamano="sm" variante="ghost" href={hrefLiquidacion}>{t('op.ver_actividad')}</BotonEnlace> : undefined;
   if (hechos === null) return <Tarjeta titulo={t('op.lo_que_hizo_solo')} info="inicio.hizo_solo" estado="error" reintentar acciones={acciones} />;
   if (hechos.length === 0) {
-    return <Tarjeta titulo={t('op.lo_que_hizo_solo')} info="inicio.hizo_solo" estado="vacio" mensaje={t('op.nada_en_las_ultimas_24_h')} detalle={t('op.el_agente_no_escalo_ni_recordo')} acciones={acciones} />;
+    return <Tarjeta titulo={t('op.lo_que_hizo_solo')} info="inicio.hizo_solo" estado="vacio" contenida mensaje={t('op.nada_en_las_ultimas_24_h')} detalle={t('op.el_agente_no_escalo_ni_recordo')} acciones={acciones} />;
   }
   return (
     <Tarjeta titulo={t('op.lo_que_hizo_solo')} info="inicio.hizo_solo" acciones={acciones}>

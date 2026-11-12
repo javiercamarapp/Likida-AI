@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
@@ -30,11 +31,11 @@ export default async function AgenteCuadrePage() {
       titulo={t('model_ops.cuadre')}
       apoyo={t('agente_cuadre.cuadre_concilia_gastos_comprobados_contra_anticipo')}
       etiquetaCifras={t('model_ops.cuadre')}
-      cifras={uniformes([
+      cifras={observadas(uniformes([
         { etiqueta: t('agente_cuadre.gastado_en_cuadre'), valor: cuadre ? cuadre.costoUsd : 0, formato: 'usd', nota: t('agente_cuadre.costo_medido_en_llm_costo') },
         { etiqueta: t('agente_cuadre.llamadas_de_cuadre'), valor: cuadre ? cuadre.n : 0, formato: 'entero' },
         { etiqueta: t('agente_cuadre.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero' },
-      ])}
+      ]), t('a1r4.observado'))}
       graficas={[
         <Tarjeta key="serie" titulo={t('agente_fase.serie_costo_dia')} contenida>
           {r.porDia.length > 0

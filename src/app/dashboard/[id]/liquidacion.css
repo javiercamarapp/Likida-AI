@@ -92,3 +92,16 @@
 .rv-liq__reabrir-pie { display: flex; }
 .rv-liq__reabrir-msg { margin: 0; font-size: var(--t-small, 13px); color: var(--muted); }
 .rv-liq__reabrir-msg[data-tono="bad"] { color: var(--bad); }
+
+/* Ficha del viaje: la tarjeta se estira al alto de la línea de tiempo vecina y las filas reparten ese alto por igual (filete a filete), así no queda un
+   vacío bajo la última fila. */
+[data-ui="v2"] .rv-liq__ficha > .rv-tarjeta__cuerpo { display: flex; flex-direction: column; gap: 8px; }
+[data-ui="v2"] .rv-liq__ficha .rv-sis.rv-liq__datos { flex: 1 1 auto; grid-auto-rows: minmax(0, 1fr); }
+[data-ui="v2"] .rv-liq__ficha .rv-liq__datos .rv-sis__campo { align-items: center; }
+
+/* Formularios de revisión (Rovaq FM): columna de a lo más 780 px con filas rótulo-control, no un campo de 1350 px. */
+.rv-liq__firma { max-width: 780px; }
+
+/* «Qué se sabe / Qué no se sabe»: las listas llevan sus marcas (viñetas), no solo sangría. */
+[data-ui="v2"] .rv-esq__saber ul { list-style: disc; }
+[data-ui="v2"] .rv-esq__saber li::marker { color: var(--muted); }

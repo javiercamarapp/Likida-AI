@@ -5,8 +5,23 @@
 .rv-cob__seccion { margin: 0; font: 600 var(--t-card, 14px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
 
 /* Resumen por gasto: filas rótulo-valor dentro de una tarjeta (Rovaq HB), sin segunda tira de KPI. */
-.rv-cob__resumen { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); column-gap: 24px; }
+.rv-cob__resumen { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+/* Con ancho de escritorio, las cinco medidas van en UNA fila de cinco celdas (rótulo, cifra y nota), sin celdas huérfanas en una segunda fila. */
+@media (min-width: 1100px) {
+  .rv-cob__resumen { grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 0; }
+  .rv-cob__resumen > .rv-cob__resumen-fila { flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 4px; padding: 4px 16px; border-bottom: 0; border-left: 1px solid var(--line); }
+  .rv-cob__resumen > .rv-cob__resumen-fila:first-child { border-left: 0; padding-left: 0; }
+  .rv-cob__resumen-fila dd { font-size: 20px; line-height: 1.2; }
+}
 .rv-cob__resumen-fila { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); min-height: 41px; }
 .rv-cob__resumen-fila dt { margin: 0; font-size: var(--t-body, 14px); font-weight: 600; color: var(--ink); display: grid; gap: 2px; }
 .rv-cob__resumen-fila dt small { font-size: var(--t-small, 12px); font-weight: 400; color: var(--muted); }
 .rv-cob__resumen-fila dd { margin: 0; font-size: var(--t-body, 14px); font-weight: 600; color: var(--ink); }
+
+/* Cifras en la fuente del sistema con dígitos tabulares (Rovaq: Hanken Grotesk), no en monoespaciada. */
+.rv-cifra { font-variant-numeric: tabular-nums; }
+
+/* Tablas dentro de tarjeta (bitácora, «qué falta gasto por gasto»): a sangre, sin segundo marco; las notas y los vacíos conservan su respiro de 14 px. */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb__region { border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-ag-notif__nota { margin: 0; padding: 8px 14px; }

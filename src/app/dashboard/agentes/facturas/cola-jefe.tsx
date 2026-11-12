@@ -64,7 +64,7 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
                 <span className="rv-fact__sub">{f.portal}</span>
               </span>
               <span className="rv-fact__corta">{f.concepto}</span>
-              <span className="cifra-mono rv-fact__der">{mxn(f.monto)}</span>
+              <span className="rv-cifra rv-fact__der">{mxn(f.monto)}</span>
               <PillPlazo c={f.caducidad} />
               {f.motivo === 'requiere_cuenta' ? (
                 <StatusChip tono="muted">{tx('rest.tu_cuenta')}</StatusChip>
@@ -142,7 +142,7 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
             <div key={c.etiqueta} className="rv-fact__campo">
               <span className="rv-fact__tenue">{c.etiqueta}</span>
               <span className="rv-fact__valor">
-                <span className="cifra-mono rv-fact__corta">{c.valor}</span>
+                <span className="rv-cifra rv-fact__corta">{c.valor}</span>
                 <Boton variante="ghost" tamano="sm" aria-label={`Copiar ${c.etiqueta}`} onClick={() => copiar(c.etiqueta, c.valor as string)} data-copiado={copiado === c.etiqueta || undefined}>
                   <Icono icono={copiado === c.etiqueta ? Check : Copy} tam={14} />
                 </Boton>

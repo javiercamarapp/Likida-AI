@@ -116,7 +116,7 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
       id: 'acciones', titulo: t('flotas.acciones'), tituloOculto: true, alinear: 'der',
       celda: (f) => (
         <span className="adm-flota-acciones">
-          <BotonEnlace href={hrefConParams('/admin/flotas', sp, { ver: f.id })} tamano="sm" variante="ghost">{t('flotas.vista_rapida')}</BotonEnlace>
+          <BotonEnlace href={hrefConParams('/admin/flotas', sp, { ver: f.id })} tamano="sm" variante="ghost">{t('flotas.detalle')}</BotonEnlace>
           <BotonEnlace href={`/admin/flotas/${f.id}`} tamano="sm" variante="secondary">{t('flotas.abrir_ficha')}</BotonEnlace>
         </span>
       ),

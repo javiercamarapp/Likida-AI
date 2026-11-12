@@ -59,3 +59,10 @@
 .rv-dsp__carga { gap: 0; margin-top: 6px; }
 .rv-dsp__carga li { padding: 8px 0; border-top: 1px solid var(--line); }
 .rv-dsp__carga li:first-child { border-top: 0; }
+
+/* Ronda 7: el vacío dentro de una tarjeta es UNA caja punteada de 1 px con padding 20x14 y sin alto forzado (Rovaq ac-vacio), no un bloque de
+   170 px con una línea; las notas de «En curso» arrancan en el mismo eje que el título de la tarjeta y la tabla va a sangre. */
+[data-ui="v2"] .rv-dsp__tarjeta .rv-vacio { min-height: 0; padding: 14px 20px; border: 1px dashed var(--line2); border-radius: 8px; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo { padding: 0; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-dsp__nota { padding: 8px 14px 10px; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-vacio { margin: 12px 14px; }

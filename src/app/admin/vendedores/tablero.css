@@ -80,3 +80,11 @@
 
 /* Ronda 6: «Invitar vendedor» mide lo que dice su contenido (la fila de altas no estira la tarjeta corta hasta el alto de la larga). */
 [data-ui="v2"] .ven-forma { gap: 12px; }
+
+/* Ronda 7 — Agente asignador: el cuerpo de la tarjeta es una pila con gap 12 (el gap de .rv-tarjeta no alcanzaba al cuerpo), la descripción
+   se lee completa (13 px, sin «…») y el botón queda en su propia fila separado de «Últimas corridas» (Rovaq: título 14/600, cuerpo 13, acción con gap 12). */
+[data-ui="v2"] .ven-asignador .rv-tarjeta__cuerpo { display: flex; flex-direction: column; gap: 12px; }
+[data-ui="v2"] .ven-asignador .ven-tarjeta__tenue { font-size: 13px; line-height: 1.5; white-space: normal; overflow: visible; text-overflow: clip; }
+[data-ui="v2"] .ven-asignador .ven-tarjeta__tenue--fino { font-size: 12px; }
+[data-ui="v2"] .ven-asignador .ven-forma { gap: 8px; }
+[data-ui="v2"] .ven-asignador .ven-corridas { margin-top: 0; }

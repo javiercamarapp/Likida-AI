@@ -9,7 +9,7 @@ import { AvisoSinFlota } from './sin-flota';
 import { ATAJOS_RESUMEN, coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from './resumen-datos';
 import { FiltrosResumen, ListaAtencion, SiguienteAccion } from './resumen-cliente';
 import { PildorasMetodo } from './resumen-metodo';
-import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo, TarjetaTopTipos, TarjetaViajesRecientes } from './resumen-tarjetas';
+import { itemsKpi, TarjetaCierres, TarjetaCierresMensuales, TarjetaDiferencias, TarjetaHizoSolo, TarjetaTopTipos, TarjetaViajesRecientes } from './resumen-tarjetas';
 import { getT } from '@/lib/i18n/servidor';
 import { PERIODO_RANGO } from './resumen-modelo';
 import { cifrasUniformes } from './formato';
@@ -105,6 +105,11 @@ export async function ResumenV2({
       <FilaTarjetas variante="6-6">
         <TarjetaCierres t={t} d={d} />
         <TarjetaViajesRecientes t={t} d={d} sufijo={sufijo} puede={puede} />
+      </FilaTarjetas>
+
+      {/* Plantilla Portada (Rovaq): columnas mensuales a todo el ancho antes de «Top» y «Lo más importante». */}
+      <FilaTarjetas variante="12">
+        <TarjetaCierresMensuales t={t} d={d} />
       </FilaTarjetas>
 
       {/* Con dinero: «Top» por tipo de diferencia + lo que hizo solo, parejos. Sin dinero no hay «Top» que mostrar y lo que hizo solo no se estira. */}

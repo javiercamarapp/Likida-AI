@@ -179,6 +179,11 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
   ];
   const cifras: PropsCifra[] = cifrasBase.map((x) => ({ ...x, matiz: 8 as const, ...(x.valor === null ? { estado: 'vacio' as const, mensaje: tr('descargaSat.vista.noSePudoLeer') } : {}) }));
 
+  // Precondición de «Pedir al SAT»: sin proveedor, sin buzón declarado o con la descarga pausada no hay nada que pedir (y se dice por qué).
+  const motivoBloqueo: string | null = !proveedor.configurado ? tr('descargaSat.panel.proveedorPendiente')
+    : cfg === null ? tr('descargaSat.vista.buzonSinDeclarar')
+      : cfg.activa === false ? tr('descargaSat.vista.pausadaNoSePide') : null;
+
   // Los avisos de arriba (a lo sumo dos, Rovaq): el proveedor sin configurar y la lectura incompleta. El texto largo de «qué es esto» va en la tarjeta de conexión.
   const avisos = (
     <>
@@ -188,54 +193,10 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         <AvisoCompacto tono="warn" resumen={tr('descargaSat.vista.faltanDatosPorCargar')}
           mas={tr('descargaSat.vista.unaOMasLecturas')} />
       )}
-    </>
-  );
-
-  return (
-    <EsqueletoPanelCifras
-      titulo="SAT"
-      apoyo={tr('descargaSat.vista.losCfdiQueTus')}
-      avisos={avisos}
-      cifras={cifras}
-      etiquetaCifras={tr('descargaSat.vista.buzonDelSat')}
-      selloCifras={selloHoy(tr('descargaSat.vista.buzonDelSat'))}
-    >
-      {/* ── LA PUERTA A LAS FILAS (0243): los cuatro cubos que SÍ son colas de trabajo llevan a su lista, filtrada — el conteo deja de ser una cifra huérfana. */}
-      <div className="rv-sat__filas">
-        <span className="rv-sat__tenue">{tr('descargaSat.vista.verLasFilas')}</span>
-        {([
-          ['ambiguo', tr('descargaSat.vista.losQueEsperanTu'), c?.ambiguos ?? null],
-          ['disponible', tr('descargaSat.vista.losQueNingunGasto'), c?.disponibles ?? null],
-          ['casado', tr('descargaSat.vista.losQueYaCuadraron'), c?.casados ?? null],
-          ['ignorado', tr('descargaSat.vista.losArchivados'), c?.ignorados ?? null],
-        ] as const).map(([e, texto, n]) => (
-          <Link key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}${sufijoBandeja}`} className="rv-sat__chip">
-            <Icono icono={Scale3d} tam={14} />{texto}{n === null ? '' : ` · ${n}`}
-          </Link>
-        ))}
-      </div>
-
-      <FilaTarjetas variante="6-6">
-      {/* ── 1. QUÉ FALTA Y QUIÉN LO DESTRABA. Antes que ninguna cifra. */}
-      <Tarjeta titulo={tr('descargaSat.vista.losComprobantesQueEl')} info="descarga_sat.intro">
-        <div className="rv-sat__bloque">
-          <p className="rv-sat__texto">
-            {tr('descargaSat.vista.todoCfdiQueUn')}
-          </p>
-          {/* La pregunta que un contador hace antes de subir nada. */}
-          <p className="rv-sat__texto">
-            {rico(tr('descargaSat.vista.strongTuEFirma'), { strong: (c) => <strong>{c}</strong> })}
-          </p>
-          {proveedor.configurado && (
-            <p className="rv-sat__texto">
-              {tr('descargaSat.vista.proveedorConectadoNoHay', { v: proveedor.proveedor?.toUpperCase() ?? '' })}
-            </p>
-          )}
-        </div>
-      </Tarjeta>
-
+      {/* Rovaq FL: cabecera, aviso, conexión y la acción de pedir (la «zona de soltar»), y DESPUÉS la tira de cifras y las tablas. */}
+      <FilaTarjetas variante="6-6" className="rv-sat__arriba">
       {/* ── 2. EL ESTADO ─────────────────────────────────────────── */}
-      <Tarjeta titulo={tr('descargaSat.vista.tuConexion')} contenida
+      <Tarjeta titulo={tr('descargaSat.vista.tuConexion')}
         acciones={cfg === null ? undefined : (
         <CajonConfigFiscal id="buzon" titulo={tr('descargaSat.vista.declaraTuBuzon')} descripcion={tr('descargaSat.vista.elRfcDelQue')} disparador={tr('descargaSat.vista.configurarBuzon')}>
           <FormaConAviso accion={guardar} boton="Guardar" columnas="md:grid-cols-1">
@@ -301,20 +262,75 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         )}
       </Tarjeta>
 
-      </FilaTarjetas>
-      {/* ── 3. PEDIR UN RANGO A MANO — la única acción primaria visible; declarar el buzón vive en el cajón de «Tu conexión». ── */}
+      {/* ── 3. PEDIR UN RANGO A MANO — la única acción primaria visible; declarar el buzón vive en el cajón de «Tu conexión». ──
+          Si la precondición falla (proveedor sin configurar, buzón sin declarar o descarga pausada) la acción NO se pinta como primario activo:
+          se dice «No disponible ahora» (Rovaq: blanco, 1 px discontinuo) y por qué. La acción de servidor sigue cerrada por su cuenta. */}
       <Tarjeta titulo={tr('descargaSat.vista.pedirUnPeriodoA')}>
+        <div className="rv-sat__forma">
         <p className="rv-sat__texto">
           {tr('descargaSat.vista.paraUnPeriodoViejo', { VENTANA_MAX_DIAS })}
         </p>
-        <FormaConAviso accion={pedir} boton="Pedir al SAT" columnas="md:grid-cols-3">
-          <CampoFecha id="desde" name="desde" etiqueta={tr('descargaSat.vista.desde')} defaultValue={`${hoy.slice(0, 8)}01`} obligatorio />
-          <CampoFecha id="hasta" name="hasta" etiqueta={tr('descargaSat.vista.hasta')} defaultValue={hoy} obligatorio />
-          <CampoSelect id="tipo" name="tipo" etiqueta={tr('descargaSat.vista.queBuzon')} defaultValue="recibidos">
-            <option value="recibidos">{tr('descargaSat.vista.recibidosLoQueTe')}</option>
-            <option value="emitidos">{tr('descargaSat.vista.emitidosLoQueTu')}</option>
-          </CampoSelect>
-        </FormaConAviso>
+        {motivoBloqueo === null ? (
+          <FormaConAviso accion={pedir} boton="Pedir al SAT" columnas="md:grid-cols-1">
+            <CampoFecha id="desde" name="desde" etiqueta={tr('descargaSat.vista.desde')} defaultValue={`${hoy.slice(0, 8)}01`} obligatorio />
+            <CampoFecha id="hasta" name="hasta" etiqueta={tr('descargaSat.vista.hasta')} defaultValue={hoy} obligatorio />
+            <CampoSelect id="tipo" name="tipo" etiqueta={tr('descargaSat.vista.queBuzon')} defaultValue="recibidos">
+              <option value="recibidos">{tr('descargaSat.vista.recibidosLoQueTe')}</option>
+              <option value="emitidos">{tr('descargaSat.vista.emitidosLoQueTu')}</option>
+            </CampoSelect>
+          </FormaConAviso>
+        ) : (
+          <>
+            <p className="rv-sat__texto" role="status">{motivoBloqueo}</p>
+            <div><button type="button" disabled className="rv-sat__no-disponible">{tr('descargaSat.vista.noDisponibleAhora')}</button></div>
+          </>
+        )}
+        </div>
+      </Tarjeta>
+      </FilaTarjetas>
+    </>
+  );
+
+  return (
+    <EsqueletoPanelCifras
+      titulo="SAT"
+      apoyo={tr('descargaSat.vista.losCfdiQueTus')}
+      avisos={avisos}
+      cifras={cifras}
+      etiquetaCifras={tr('descargaSat.vista.buzonDelSat')}
+      selloCifras={selloHoy(tr('descargaSat.vista.buzonDelSat'))}
+    >
+      {/* ── LA PUERTA A LAS FILAS (0243): los cuatro cubos que SÍ son colas de trabajo llevan a su lista, filtrada — el conteo deja de ser una cifra huérfana. */}
+      <div className="rv-sat__filas">
+        <span className="rv-sat__tenue">{tr('descargaSat.vista.verLasFilas')}</span>
+        {([
+          ['ambiguo', tr('descargaSat.vista.losQueEsperanTu'), c?.ambiguos ?? null],
+          ['disponible', tr('descargaSat.vista.losQueNingunGasto'), c?.disponibles ?? null],
+          ['casado', tr('descargaSat.vista.losQueYaCuadraron'), c?.casados ?? null],
+          ['ignorado', tr('descargaSat.vista.losArchivados'), c?.ignorados ?? null],
+        ] as const).map(([e, texto, n]) => (
+          <Link key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}${sufijoBandeja}`} className="rv-sat__chip">
+            <Icono icono={Scale3d} tam={14} />{texto}{n === null ? '' : ` · ${n}`}
+          </Link>
+        ))}
+      </div>
+
+      {/* ── 1. QUÉ FALTA Y QUIÉN LO DESTRABA. Antes que ninguna cifra. */}
+      <Tarjeta titulo={tr('descargaSat.vista.losComprobantesQueEl')} info="descarga_sat.intro">
+        <div className="rv-sat__bloque">
+          <p className="rv-sat__texto">
+            {tr('descargaSat.vista.todoCfdiQueUn')}
+          </p>
+          {/* La pregunta que un contador hace antes de subir nada. */}
+          <p className="rv-sat__texto">
+            {rico(tr('descargaSat.vista.strongTuEFirma'), { strong: (c) => <strong>{c}</strong> })}
+          </p>
+          {proveedor.configurado && (
+            <p className="rv-sat__texto">
+              {tr('descargaSat.vista.proveedorConectadoNoHay', { v: proveedor.proveedor?.toUpperCase() ?? '' })}
+            </p>
+          )}
+        </div>
       </Tarjeta>
 
       {/* ── 5. LAS SOLICITUDES ────────────────────────────────────── */}

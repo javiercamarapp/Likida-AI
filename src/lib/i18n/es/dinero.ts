@@ -1018,6 +1018,7 @@ export const dinero = {
   'descargaSat.vista.avisoDeCierreDe': 'Aviso de cierre de peaje (días antes)',
   'descargaSat.vista.buzon': 'Buzón',
   'descargaSat.vista.buzonDelSat': 'Buzón del SAT',
+  'descargaSat.vista.noDisponibleAhora': 'No disponible ahora',
   'descargaSat.vista.buzonSinDeclarar': 'Buzón sin declarar',
   'descargaSat.vista.caeSolo': 'Cae solo',
   'descargaSat.vista.cargadaEnLaBoveda': 'cargada en la bóveda del proveedor (ref. {certificadoNumero}{v})',

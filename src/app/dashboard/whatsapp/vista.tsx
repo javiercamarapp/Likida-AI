@@ -108,7 +108,7 @@ export function VistaArranqueWhatsApp({ tr = TR_OPERACION_ES, datos, hrefOperado
       <p className="rv-wa__nota">
         {t('wa.avance.tienes')} <strong>{numero(datos.operadores.activos)}</strong> {t('wa.avance.activos')}
         {datos.operadores.pendientesDeInvitar > 0
-          ? <> {t('comun.y')} <strong>{numero(datos.operadores.pendientesDeInvitar)}</strong> {t('wa.avance.pendientes')} <Link href={hrefOperadores} className="rv-wa__enlace">{t('wa.avance.invita')}</Link>{t('wa.avance.invita.post')}</>
+          ? <> {t('comun.y')} <strong>{numero(datos.operadores.pendientesDeInvitar)}</strong> {t('wa.avance.pendientes')} <Link href={hrefOperadores} className="rv-wa__enlace">{t('wa.avance.invita')}</Link>{n.estado === 'configurado' && datos.enlace ? t('wa.avance.invita.post') : t('wa.avance.invita.post.sinenlace')}</>
           : t('wa.avance.todos')}
       </p>
     ),

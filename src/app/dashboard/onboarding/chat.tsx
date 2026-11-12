@@ -427,9 +427,9 @@ export function ChatEntrevista({
   if (!vacio) {
     return (
       <div className="rv-ob__lienzo">
-        {pillListo}
         <div className="rv-ob__conversacion">
           <div className="rv-ob__hilo-col">
+            {pillListo}
             <div className="rv-ob__hilo">
               {historial.map((h, i) => (
                 <div key={i}>
@@ -478,7 +478,6 @@ export function ChatEntrevista({
   return (
     <div className="rv-ob__lienzo">
       <CampoPixeles />
-      {pillListo}
       <div className="rv-ob__portada">
         <div className="rv-ob__columna">
           <Logo alto="h-7" className="rv-ob__marca" />
@@ -488,6 +487,7 @@ export function ChatEntrevista({
                 ? t('op.puedes_corregir_lo_declarado_el_motor')
                 : t('op.fiscal_sistemas_y_operacion_adjunta_la'))}
           </p>
+          {pillListo}
 
           {caja}
 

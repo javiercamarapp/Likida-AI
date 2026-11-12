@@ -30,6 +30,16 @@ export function FiltrosResumen({ rango, fuentes, periodoTexto }: { rango: RangoR
     <BarraPeriodo
       etiqueta={t('op.periodo_del_resumen')}
       periodo={{ etiqueta: t('op.periodo_de_las_cifras'), valor: rango, opciones: RANGOS.map((r) => ({ valor: r, etiqueta: ROTULO_RANGO[r], href: hrefConParams(ruta ?? '', actuales, { rango: r }) })) }}
+      cajon={{
+        accion: ruta ?? '/dashboard',
+        ocultos: Object.entries(actuales).filter(([k]) => k !== 'rango'),
+        limpiarHref: hrefConParams(ruta ?? '', actuales, { rango: null }),
+        nActivos: rango === '30' ? 0 : 1,
+        resumen: periodoTexto,
+        titulo: t('op.res.filtros_titulo'),
+        descripcion: t('op.res.filtros_descripcion'),
+        campos: { titulo: t('op.periodo_de_las_cifras'), items: [{ tipo: 'select', nombre: 'rango', etiqueta: t('op.periodo_de_las_cifras'), valor: rango, opciones: RANGOS.map((r) => ({ valor: r, rotulo: ROTULO_RANGO[r] })) }] },
+      }}
       chips={[...(periodoTexto ? [{ id: 'periodo', etiqueta: periodoTexto }] : []), { id: 'fuentes', etiqueta: fuentes }]}
     />
   );
