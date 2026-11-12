@@ -397,7 +397,7 @@ function TablaFacturas({ facturas, captura, tr = trEs }: { facturas: RenglonCart
       id: 'folio', titulo: tr('facturacion.vista.folio'), principal: true,
       celda: (f) => (
         <>
-          <span className="cifra-mono">{f.folio ?? '—'}</span>
+          <span className="rv-cifra">{f.folio ?? '—'}</span>
           {rotuloPill[f.estatus] && <StatusChip tono="muted" className="ml-2 align-middle">{rotuloPill[f.estatus]}</StatusChip>}
         </>
       ),
@@ -440,7 +440,7 @@ function BloqueEnLaMesa({ datos, conTitulo = true, tr = trEs, sufijo = '' }: { d
       id: 'viaje', titulo: tr('facturacion.vista.viaje'), principal: true,
       celda: (v) => (
         <>
-          <span className="cifra-mono">{v.folio}</span>
+          <span className="rv-cifra">{v.folio}</span>
           {v.soloBorrador && (
             <span className={`flex items-center gap-1 text-[11px] font-normal ${AVISO}`}>
               <TriangleAlert width={11} height={11} strokeWidth={1.75} className="shrink-0" />
@@ -549,7 +549,7 @@ function BloqueAuditor({ auditoria, conTitulo = true, tr = trEs }: { auditoria: 
       id: 'viaje', titulo: tr('facturacion.vista.viaje'), principal: true,
       celda: (h) => (
         <>
-          <span className="cifra-mono">{h.folio}</span>
+          <span className="rv-cifra">{h.folio}</span>
           {h.ruta && <span className={`block text-[11px] font-normal ${TENUE}`}>{h.ruta}</span>}
         </>
       ),

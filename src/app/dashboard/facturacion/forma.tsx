@@ -105,7 +105,7 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
         <Fieldset leyenda={tr('facturacion.forma.viajesQueAmparaEsta')} ayuda={tr('facturacion.forma.marcarViajesEsLo')}>
           {viajesSinFacturar.map((v) => (
             <Casilla key={v.viajeId} name="viajeIds" value={v.viajeId}
-              etiqueta={<><span className={MONO}>{v.folio}</span> <span className="text-[color:var(--muted)]">{v.ruta ?? tr('facturacion.forma.sinRuta')} · {v.cliente ?? tr('facturacion.forma.sinClienteAsignado')}</span></>} />
+              etiqueta={<><span className="rv-cifra">{v.folio}</span> <span className="text-[color:var(--muted)]">{v.ruta ?? tr('facturacion.forma.sinRuta')} · {v.cliente ?? tr('facturacion.forma.sinClienteAsignado')}</span></>} />
           ))}
         </Fieldset>
       )}
