@@ -17,3 +17,8 @@
 /* Ronda 7: la tabla va a sangre dentro de la tarjeta (sin borde propio: ya no hay doble filete en los lados). */
 [data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-pt__tabla { border: 0; border-radius: 0; box-shadow: none; background: transparent; margin: 0; }
 [data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-pt__tabla .rv-tb__region { border-top: 1px solid var(--line); }
+
+/* Ronda 8 (Rovaq `overlay-foot`): el primario del cajón de alta va en un pie pegado al fondo (padding 12x16, acciones a la derecha), no suelto bajo los campos. */
+.rv-pt__pie { position: sticky; bottom: -16px; z-index: 1; display: flex; justify-content: flex-end; gap: 8px; margin: 8px -16px -16px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-pt__pie) { display: flex; flex-direction: column; min-height: 100%; }
+[data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-pt__pie) > .rv-pt__pie { margin-top: auto; }
