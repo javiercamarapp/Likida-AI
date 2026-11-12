@@ -112,6 +112,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'wa.avance.pendientes': 'still without a WhatsApp invitation.',
   'wa.avance.invita': 'Invite them from Drivers',
   'wa.avance.invita.post': ', or send them the link above.',
+  'wa.avance.invita.post.sinenlace': '.',
   'wa.paso.alta.t': 'You register them with their own WhatsApp number',
   'wa.paso.alta.d': 'In Drivers, one by one or with the Excel upload. The bot recognizes them by that number: if they write from another one, it does not recognize them as a driver of your fleet.',
   'wa.paso.guarda.t': 'They save Likida’s number and write to it',

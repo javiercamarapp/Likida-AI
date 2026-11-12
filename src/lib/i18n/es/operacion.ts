@@ -112,6 +112,7 @@ export const operacion = {
   'wa.avance.pendientes': 'todavía sin invitación por WhatsApp.',
   'wa.avance.invita': 'Invítalos desde Operadores',
   'wa.avance.invita.post': ', o mándales el enlace de arriba.',
+  'wa.avance.invita.post.sinenlace': '.',
   'wa.paso.alta.t': 'Lo das de alta con su propio número de WhatsApp',
   'wa.paso.alta.d': 'En Operadores, uno por uno o con la carga desde Excel. El bot lo reconoce por ese número: si escribe desde otro, no lo reconoce como chofer de tu flota.',
   'wa.paso.guarda.t': 'Guarda el número de Likida y le escribe',
