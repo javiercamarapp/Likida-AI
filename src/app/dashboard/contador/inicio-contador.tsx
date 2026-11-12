@@ -168,6 +168,8 @@ export async function InicioContador({
     pAcred, pResumenPerdidas, pResumenFiscal, pBarrasMes,
   ]);
   const etq = periodoFiscal.etiqueta;
+  const barrasVacias = barrasMes !== null && barrasMes.length === 0;
+  const ivaVacio = resumenFiscal !== null && resumenFiscal.n === 0;
 
   // ── Cifras (4, todas con filete): lo que las liquidaciones cerradas certificaron + lo recuperable. Sin dato = «—», nunca 0. ──
   const falla = (etiqueta: string): PropsCifra => ({ etiqueta, valor: null, estado: 'error', mensaje: tr('contador.inicioContador.noSePudoCargar3'), reintentar: true, matiz: 1 });
@@ -232,12 +234,14 @@ export async function InicioContador({
       etiquetaCifras={tr('contador.inicioContador.contador')}
       selloCifras={selloHoy(tr('contador.inicioContador.selloCertificadas'))}
       variante="8-4"
+      // Un vacío no se estira a la altura de su vecina: «Brechas por mes» sin datos queda compacto (alto de su contenido) junto a una dona alta, y solo
+      // cuando AMBAS gráficas están vacías las dos van compactas y parejas.
       graficas={[
         <Tarjeta key="barras" titulo={tr('contador.panel.barrasTitulo', { etiqueta: etq })} info="contador.en_riesgo"
           estado={barrasMes === null ? 'error' : barrasMes.length === 0 ? 'vacio' : 'ok'}
           mensaje={barrasMes === null ? tr('contador.inicioContador.noSePudoCalcular') : tr('contador.panel.barrasVacio')}
           detalle={tr('contador.panel.barrasVacioDetalle')} reintentar acciones={<KindBadge tipo="calculado" />}
-          iconoVacio={ChartNoAxesColumn} className="rv-cont__vacio-llena">
+          iconoVacio={ChartNoAxesColumn} contenida={barrasVacias} className={barrasVacias ? 'rv-cont__vacio-compacto' : 'rv-cont__vacio-llena'}>
           {barrasMes && barrasMes.length > 0 ? (
             <ColumnasApiladas etiqueta={tr('contador.panel.barrasTitulo', { etiqueta: etq })} formato="mxn" matiz={8} alto={168}
               series={[tr('contador.panel.barrasPerdido'), tr('contador.panel.barrasEnRiesgo'), tr('contador.panel.barrasRecuperable')]}
@@ -247,7 +251,8 @@ export async function InicioContador({
         <Tarjeta key="iva" titulo={tr('contador.panel.ivaTitulo')} info="contador.iva_documentado" acciones={<KindBadge tipo="observado" />}
           estado={resumenFiscal === null ? 'error' : resumenFiscal.n === 0 ? 'vacio' : 'ok'}
           mensaje={resumenFiscal === null ? tr('contador.inicioContador.noSePudoLeer2') : tr('contador.inicioContador.sinComprobantesLeidos')}
-          detalle={tr('contador.inicioContador.todaviaNoHayComprobantes')} reintentar className="rv-cont__vacio-llena">
+          detalle={tr('contador.inicioContador.todaviaNoHayComprobantes')} reintentar
+          contenida={barrasVacias && ivaVacio} className={barrasVacias && ivaVacio ? 'rv-cont__vacio-compacto' : 'rv-cont__vacio-llena'}>
           {resumenFiscal && resumenFiscal.n > 0 ? (
             <>
               <div className="rv-cont__dona">

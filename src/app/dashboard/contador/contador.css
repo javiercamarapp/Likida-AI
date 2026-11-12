@@ -30,6 +30,10 @@
    texto centrado. Lo desconocido se dibuja igual en toda la página. */
 [data-ui="v2"] .rv-cont__vacio-llena > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; }
 [data-ui="v2"] .rv-cont__vacio-llena .rv-vacio, [data-ui="v2"] .rv-cont__vacio-llena .rv-vacio[data-compacto] { flex: 1 1 auto; min-height: 168px; justify-content: center; padding: 20px 14px; border: 1px dashed var(--line); border-radius: 8px; }
+/* Vacío compacto (Rovaq no deja tarjetas altas medio vacías): la tarjeta no se estira a la de su vecina; la caja punteada mide lo que su texto. */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-cont__vacio-compacto { height: auto; align-self: start; }
+[data-ui="v2"] .rv-cont__vacio-compacto > .rv-tarjeta__cuerpo { flex: 0 0 auto; }
+[data-ui="v2"] .rv-cont__vacio-compacto .rv-vacio, [data-ui="v2"] .rv-cont__vacio-compacto .rv-vacio[data-compacto] { flex: 0 0 auto; min-height: 0; max-height: none; padding: 20px 14px; border: 1px dashed var(--line); border-radius: 8px; }
 /* Dona legible en la paleta monocroma: segundo gajo en gris medio a plena opacidad. */
 [data-ui="v2"] .rv-cont__dona .rv-dona__gajo.rv-tono-1 { stroke-opacity: 1; }
 [data-ui="v2"] .rv-cont__dona .rv-tono-1 { --tono: color-mix(in srgb, var(--ink) 38%, var(--surface)); }
