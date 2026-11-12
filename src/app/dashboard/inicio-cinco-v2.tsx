@@ -24,7 +24,7 @@ import type { ClaveIconoAgente } from '@/app/ui-v2/componentes/icono-agente';
 import type { SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { PrimerosPasos, TarjetaPuestaEnMarcha } from './inicio-cinco-cliente';
 import { coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from './resumen-datos';
-import { conSufijo, RUTA_LIQUIDACION, type DatosResumen } from './resumen-modelo';
+import { conSufijo, PERIODO_RANGO, RUTA_LIQUIDACION, type DatosResumen } from './resumen-modelo';
 import { FiltrosResumen, ListaAtencion } from './resumen-cliente';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 import './inicio-cinco.css';
@@ -99,7 +99,7 @@ export async function InicioCincoV2({
       apoyo={t('op.tus_cinco_agentes_de_un_vistazo_2', { saludo: saludo(), v: nombre ?? 'equipo' })}
       acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}
       avisos={!tenantExiste ? <AvisoSinFlota tenantId={tenantId} /> : undefined}
-      filtros={<FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />}
+      filtros={<FiltrosResumen rango={rango} periodoTexto={PERIODO_RANGO[rango]} />}
       procedencia={procedencia}
       etiquetaProcedencia={t('f26d2.inicio.procedencia')}
       cifras={cifras}
