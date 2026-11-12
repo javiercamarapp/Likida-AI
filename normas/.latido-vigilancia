@@ -1,36 +1,53 @@
----
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-12 (jueves)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-11-11 (62 días sin barrer, incluye 9
+  viernes de cuota de diésel y al menos un trimestre de deriva de ley
+  sin checar: 01-oct-2026 cayó dentro de este hueco).
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable — bloqueado para los 9 viernes del rango
+  pendiente, incluidos los dos más recientes (06 y 13-nov aún no
+  cubiertos, pero tampoco los anteriores desde el 11-sep).
+etag_sat: no_evaluable — hoy es jueves (no aplica semanal), pero el
+  bloqueo cubre igual al minisitio del SAT si se hubiera evaluado.
+deriva_ley_check: no_evaluable_retro — el corte trimestral del
+  01-oct-2026 cayó dentro del hueco sin barrer y nunca se checó.
+  Próximo corte programado: 01-ene-2027.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — CUARTA corrida consecutiva (al menos) bloqueada por política
+  de egreso, sin cambio desde el latido del 2026-09-20 que ya reportaba
+  la misma falla. Reconfirmado hoy por DOS rutas independientes:
+  (1) curl directo por HTTPS_PROXY contra
+  sidofqa.segob.gob.mx/dof/sidof/notas/11-11-2026 y .../diarios/porFecha/
+  11-11-2026 → "CONNECT tunnel failed, response 403" en ambos, y
+  www.google.com como control → también 403 (confirma bloqueo de
+  política general, no caída específica del SIDOF);
+  (2) WebFetch (infraestructura de Anthropic, no el proxy de la sesión)
+  contra el mismo endpoint de notas → "getaddrinfo ENOTFOUND
+  sidofqa.segob.gob.mx", es decir ni siquiera resuelve DNS desde esa
+  ruta. No se intentó el minisitio del SAT ni diputados.gob.mx por
+  separado: el control con google.com ya demuestra que el bloqueo es
+  de red general para este entorno programado, no por dominio.
+  HALLAZGO ADICIONAL (forense de git, no de red): entre el latido del
+  2026-09-20 y hoy no hay evidencia de que la rutina se haya ejecutado
+  o persistido ningún latido — `git log --all -- normas/.latido-vigilancia`
+  solo tiene UN commit en toda la historia (dc6d36cf, 2026-10-28), y
+  llegó como efecto secundario del merge de la PR #753
+  ("feat/ola1-integracion"), una PR de otra feature que arrastró este
+  archivo de alguna rama, no un commit dedicado del heartbeat. Si runs
+  anteriores a esta corrida escribieron el archivo localmente sin
+  comitearlo (el contenedor es efímero y el repo se clona fresco cada
+  vez), el mecanismo de "escribe siempre el latido" no está persistiendo
+  entre corridas — cada run nuevo no puede leer el último estado real,
+  solo el de la última vez que algo tocó este archivo por accidente.
+  Esta corrida SÍ comitea y pushea este archivo directamente a master
+  (sin PR, por instrucción de la skill para el caso sin hallazgos) para
+  romper ese patrón.
+  Requiere intervención humana: permitir sidofqa.segob.gob.mx (y el resto
+  de references/fuentes.md: sat.gob.mx, diputados.gob.mx) en la política
+  de egreso del entorno donde corre esta rutina programada. Mientras no
+  se resuelva, NINGÚN barrido, NINGÚN ETag y NINGUNA deriva de ley se
+  está verificando — las 39 fichas de normas/*.yaml llevan al menos
+  62 días sin cruzarse contra publicación real.
