@@ -57,7 +57,7 @@ export function TablaModelosFase({ titulo, modelos, textos }: {
     { id: 'costo', titulo: textos.costo, alinear: 'der', celda: (m) => usd(m.costoUsd) },
   ];
   return (
-    <Tarjeta titulo={titulo} contenida className="adm-fase-tabla">
+    <Tarjeta titulo={titulo} contenida className={modelos.length > 0 ? 'adm-fase-tabla' : 'adm-fase-tabla adm-fase-tabla--vacia'}>
       {modelos.length > 0
         ? <TablaBase etiqueta={titulo} columnas={columnas} filas={[...modelos]} idFila={(m) => m.modelo} densa altoMaximo={false} tarjetaMovil />
         // Vacío de UNA línea (1.5 px punteado), no una tarjeta alta medio vacía.

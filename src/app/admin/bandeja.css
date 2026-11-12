@@ -85,7 +85,7 @@
 [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 28px; font-size: 13px; font-weight: 500; }
 [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn[aria-checked="true"] { font-weight: 600; }
 [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__conteo { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); color: var(--ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-@media (max-width: 819px) { [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 44px; } }
+@media (max-width: 819px) { [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 36px; } }
 
 /* Botones de fila: una línea y 28 px; un rótulo largo no parte el botón en dos (antes 39 px). */
 .bj-nowrap { white-space: nowrap; flex: none; }
@@ -123,3 +123,9 @@
 [data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.bj-sig { align-self: stretch; }
 [data-ui="v2"] .rv-tarjeta.bj-sig > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; }
 .bj-sig__resumen { margin-top: auto; padding-top: 12px; }
+
+/* F26 ronda 8: segmentado móvil de 36 px visibles con zona táctil de 44 px por ::after invisible (Rovaq CATALOGO §4). */
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn { position: relative; min-height: 36px; }
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
+}

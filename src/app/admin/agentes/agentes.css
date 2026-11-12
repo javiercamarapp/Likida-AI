@@ -46,3 +46,9 @@
 /* F26 ronda 5 · zona de soltar de Insumos (Rovaq): 1.5 px punteado, fondo hundido, radio 12, padding 20×16. */
 [data-ui="v2"] .rv-insumos-zona { gap: 6px; padding: 20px 16px; border: 1.5px dashed var(--line2); border-radius: 12px; background: var(--canvas); text-align: center; }
 [data-ui="v2"] .rv-insumos-zona:hover, [data-ui="v2"] .rv-insumos-zona--sobre { border-color: var(--ink); }
+
+/* F26 ronda 8: segmentado móvil de 36 px visibles con zona táctil de 44 px por ::after invisible (Rovaq CATALOGO §4). */
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn { position: relative; min-height: 36px; }
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
+}
