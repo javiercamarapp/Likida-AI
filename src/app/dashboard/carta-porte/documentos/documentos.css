@@ -35,6 +35,6 @@ form:has(.rv-doc__zona input[type="file"]:required:invalid) button[type="submit"
 .rv-doc__canales .rv-doc__nota ~ form { margin-top: 12px; }
 
 /* «No disponible ahora»: botón punteado (precondición sin cumplir). */
-.rv-nd { display: inline-flex; flex-direction: column; gap: 0; justify-content: center; min-height: 28px; padding: 3px 12px; border: 1px dashed var(--input); border-radius: 8px; color: var(--muted); font-size: var(--t-small); line-height: 1.25; cursor: not-allowed; }
-.rv-nd__rotulo { font-weight: 500; }
-.rv-nd__motivo { font-size: var(--t-micro); color: var(--faint); }
+.rv-nd { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; cursor: not-allowed; }
+.rv-nd__rotulo { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px dashed #bfbfc2; border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.rv-nd__motivo { font-size: 12px; color: var(--muted); line-height: 1.3; }

@@ -491,7 +491,7 @@ function BloqueSinIngreso({ panel, t = T_RESTO_ES }: { panel: PanelClientes; t?:
   ];
 
   return (
-    <Tarjeta titulo={t('op.viajes_sin_ingreso_capturado')} info="clientes.sin_ingreso">
+    <Tarjeta className="rv-tarjeta--tabla" titulo={t('op.viajes_sin_ingreso_capturado')} info="clientes.sin_ingreso">
       <p className="rv-cl__nota">
         {panel.sinIngresoTotal === 1
           ? t('op.1_viaje_no_tiene_el_ingreso')

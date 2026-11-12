@@ -209,14 +209,14 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
               <dl className="rv-reg__vr-dinero">
                 <div><dt>{t('viajes.col.anticipo')}</dt><dd>{sel.anticipo === null ? '—' : mxn(sel.anticipo, idioma)}</dd></div>
                 <div><dt>{t('viajes.col.comprobado')}</dt><dd>{sel.comprobado === null ? '—' : mxn(sel.comprobado, idioma)}</dd></div>
-                <div><dt>{t('viajes.col.diferencia')}</dt><dd>{sel.diferencia === null ? '—' : sel.diferencia === 0 ? t('viajes.exacta') : mxn(Math.abs(sel.diferencia), idioma)}</dd></div>
+                <div><dt>{t('viajes.col.diferencia')}</dt><dd>{sel.diferencia === null ? '—' : <span className={sel.diferencia === 0 ? 'rv-tl__ok' : sel.diferencia > 0 ? 'rv-tl__warn' : 'rv-tl__bad'}>{sel.diferencia === 0 ? t('viajes.exacta') : mxn(Math.abs(sel.diferencia), idioma)}</span>}</dd></div>
               </dl>
             ) : null}
           </div>
         </CajonVistaRapida>
       ) : null}
     >
-      <TarjetaTabla titulo={t('viajes.tabla.etiqueta')} contador={pie}>
+      <TarjetaTabla titulo={t('viajes.tabla.etiqueta')}>
         {filas.length === 0 ? (
           <EstadoVacio contenido icono={Inbox} titulo={q || filtro !== 'todos' ? t('viajes.vacio.sincoincidencias') : t('viajes.vacio.sinviajes')}>
             {q
@@ -235,6 +235,8 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
             params={{}}
             pie={(
               <>
+                {/* «25 de N» en el pie de la tabla (Rovaq), una sola vez: antes salía también en la cabecera de la tarjeta. */}
+                <p className="rv-tl__nota">{pie}</p>
                 <div className="rv-tl__sellos"><SelloDato tipo="observado" fuente={t('viajes.sello')} leidoEn={ahoraMs()} edad={false} /></div>
                 {verDinero ? <p className="rv-tl__nota">{t('viajes.nota.diferencia')}</p> : null}
                 {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de `porPagina` filas por render. No se dice "página N de M": el

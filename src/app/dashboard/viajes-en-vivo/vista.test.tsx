@@ -46,7 +46,7 @@ describe('la pantalla de viajes en vivo', () => {
     expect(html).toContain('Sin señal de vida');
     expect(html).toContain('Obsoleta');
     expect(html.indexOf('F-2')).toBeLessThan(html.indexOf('F-1')); // el urgente antes que el sano
-    expect(html).toContain('Ver el mapa');
+    expect(html).not.toContain('Ver el mapa'); // la pestaña Mapa ya es ese enlace
   });
 
   it('trae los filtros por terminal y cliente y conserva el tenant en los campos ocultos', () => {

@@ -320,7 +320,7 @@ export default async function SoportePage({
           <Tarjeta titulo={t('cfg.solicitudes_de_soporte')} estado="vacio" mensaje={verCerrados ? t('e26.sop_sin_cerrados') : t('cfg.no_hay_tickets_abiertos')} detalle={verCerrados ? undefined : t('cfg.la_cola_registra_prioridad_categoria_y')} contenida />
         ) : (
           <TablaBase
-            etiqueta={t('cfg.solicitudes_de_soporte')} columnas={columnas} filas={visibles} idFila={(x) => x.id} densa altoMaximo={false} tarjetaMovil
+            etiqueta={t('cfg.solicitudes_de_soporte')} columnas={columnas} filas={visibles} idFila={(x) => x.id} densa altoMaximo={false} tarjetaMovil className="rv-sop__tabla"
           />
         )
       )}

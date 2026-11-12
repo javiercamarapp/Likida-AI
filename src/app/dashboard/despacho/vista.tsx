@@ -302,9 +302,10 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
               )}
             </>
           )}
+          {/* La procedencia va DENTRO del bloque (Rovaq), no flotando bajo la tarjeta. */}
+          <p className="rv-dsp__nota rv-dsp__proc">{selloHoy('Tablero de despacho')}</p>
         </Tarjeta>
       </FilaTarjetas>
-      <p className="rv-dsp__nota">{selloHoy('Tablero de despacho')}</p>
     </EsqueletoTablaMaestra>
   );
 }

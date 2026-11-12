@@ -36,7 +36,7 @@ export function EsqueletoPortada({ titular, filtros, procedencia, avisos, cifras
       <BloqueAvisos>{avisos}</BloqueAvisos>
       <BloqueCifras cifras={cifras} forma={formaCifras} etiqueta={etiquetaCifras} sello={selloCifras} />
       {children}
-      {metodo ? <p className="rv-esq__metodo">{metodo}</p> : null}
+      {metodo ? <div className="rv-esq__metodo">{metodo}</div> : null}
     </MarcoPagina>
   );
 }

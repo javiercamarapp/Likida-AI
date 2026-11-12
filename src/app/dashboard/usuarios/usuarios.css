@@ -39,3 +39,7 @@
 .rv-usu__roles-lista span { font-size: var(--t-small, 12px); line-height: 1.4; color: var(--muted); }
 /* El peligro de la fila («Dar de baja») lleva el borde de peligro de Rovaq, no el de tinta de todo envío de 32 px. */
 [data-ui="v2"] form button[type="submit"].rv-btn--danger.inline-flex.h-8 { border-color: color-mix(in srgb, var(--bad) 24%, transparent); }
+
+/* Fila como la de Rovaq «Integrantes y accesos»: el select de rol de 28 px con radio 8 (lo fija con más peso que el `.rv-ctl` de 32 del sistema) y a la vista solo «Dar de baja» en peligro; reenviar acceso y cerrar sesiones viven tras un «···» fantasma de 28 px sin texto. */
+[data-ui="v2"] .rv-usu__tabla select.rv-usu__rol { height: 28px; min-height: 28px; padding-block: 0; border-radius: 8px; font-size: var(--t-small, 12px); min-width: 160px; width: auto; }
+[data-ui="v2"] .rv-usu__celda-acciones .rv-usu__mas { width: 28px; min-width: 28px; padding: 0; }

@@ -77,8 +77,28 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
   const hayResultado = lista.some((x) => x.l.ultimoEstado !== null);
   const columnas = columnasTr(t, idioma).filter((c) => hayResultado || c.id !== 'resultado');
 
+  // El aviso va ANTES de las cifras (plantilla TM de Rovaq: filtros → avisos → cifras → tabla); por eso viaja en `avisos`, no en `children`.
+  // El rótulo cuenta lo MEDIDO, no una meta. `CRONS.length` sale de la misma constante que vercel.json cruza en `salud.test.ts`.
+  const avisoGeneral = latidos === null ? undefined : (
+    <>
+          {malos.length === 0 ? (
+            <Aviso tono={parciales.length > 0 ? 'warn' : 'ok'} titulo={t('crons_vista.los_relojes_latieron_dentro_de_su', { length: CRONS.length })}>{t('crons_vista.ninguno_reporto_fallo_en_su_ultima')}{parciales.length > 0 ? ` ${t(parciales.length === 1 ? 'crons_vista.reporto_corrida_parcial_uno' : 'crons_vista.reporto_corrida_parcial_varios', { nombres: nombres(parciales) })}` : ''}
+            </Aviso>
+          ) : (
+            <Aviso tono="error" titulo={t('crons_vista.hay_relojes_que_necesitan_atencion')}>
+              {t('crons_vista.n_necesitan_revision', { n: new Set(malos).size, length: CRONS.length })}
+              <Disclosure titulo={t('crons_vista.ver_cuales_son')} variante="linea">
+              {sinLatir.length > 0 ? <><strong>{sinLatir.length}</strong>{' '}{t('crons_vista.de_relojes_no_estan_latiendo_como', { length: CRONS.length, nombres: nombres(sinLatir) })}</> : null}
+              {conFallo.length > 0 ? <>{conFallo.length === 1 ? t('crons_vista.un_reloj_late') : t('crons_vista.relojes_laten', { n: conFallo.length })}{' '}{rico(t('crons_vista.a_tiempo_pero_su_ultima_corrida', { nombres: nombres(conFallo) }), { strong: (c) => <strong>{c}</strong> })}</> : null}
+              </Disclosure>
+            </Aviso>
+          )}
+    </>
+  );
+
   return (
     <EsqueletoTablaMaestra
+      avisos={avisoGeneral}
       titulo={t('crons_vista.relojes')}
       apoyo={t('crons_vista.los_procesos_programados_del_sistema_cuando')}
       cifras={latidos === null ? undefined : uniformes([
@@ -93,20 +113,6 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
         <EstadoError reintentar>{t('crons_vista.no_se_pudo_leer_el_pulso')}</EstadoError>
       ) : (
         <>
-          {/* El rótulo cuenta lo MEDIDO, no una meta. `CRONS.length` sale de la misma constante que vercel.json cruza en `salud.test.ts`. */}
-          {malos.length === 0 ? (
-            <Aviso tono={parciales.length > 0 ? 'warn' : 'ok'} titulo={t('crons_vista.los_relojes_latieron_dentro_de_su', { length: CRONS.length })}>{t('crons_vista.ninguno_reporto_fallo_en_su_ultima')}{parciales.length > 0 ? ` ${t(parciales.length === 1 ? 'crons_vista.reporto_corrida_parcial_uno' : 'crons_vista.reporto_corrida_parcial_varios', { nombres: nombres(parciales) })}` : ''}
-            </Aviso>
-          ) : (
-            <Aviso tono="error" titulo={t('crons_vista.hay_relojes_que_necesitan_atencion')}>
-              {t('crons_vista.n_necesitan_revision', { n: new Set(malos).size, length: CRONS.length })}
-              <Disclosure titulo={t('crons_vista.ver_cuales_son')} variante="linea">
-              {sinLatir.length > 0 ? <><strong>{sinLatir.length}</strong>{' '}{t('crons_vista.de_relojes_no_estan_latiendo_como', { length: CRONS.length, nombres: nombres(sinLatir) })}</> : null}
-              {conFallo.length > 0 ? <>{conFallo.length === 1 ? t('crons_vista.un_reloj_late') : t('crons_vista.relojes_laten', { n: conFallo.length })}{' '}{rico(t('crons_vista.a_tiempo_pero_su_ultima_corrida', { nombres: nombres(conFallo) }), { strong: (c) => <strong>{c}</strong> })}</> : null}
-              </Disclosure>
-            </Aviso>
-          )}
-
           {guias.length > 0 ? (
             <section className="adm-sis-bloque adm-sis-caja" aria-labelledby="que-falta">
               <h2 className="adm-sis-titulo" id="que-falta">{t('crons_vista.que_falta_para_que_corran_completos')}</h2>

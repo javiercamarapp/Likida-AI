@@ -127,10 +127,10 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
           <TablaBase<FilaPatio> etiqueta={t('patios.tabla.etiqueta')} columnas={columnas} filas={lista}
             idFila={(p) => p.id} tarjetaMovil />
         )}
-      </TarjetaTabla>
-      <p className="rv-pt__nota">
+        <p className="rv-pt__nota">
         {t('patios.nota.pre')} <Link href={hrefOperadores} className="rv-pt__enlace">{t('patios.nota.operadores')}</Link> {t('comun.y')} <Link href={hrefUnidades} className="rv-pt__enlace">{t('patios.nota.unidades')}</Link>{t('patios.nota.post')}
       </p>
+      </TarjetaTabla>
 
       {puedeAdministrar && lista.length > 0 && (
         <Tarjeta titulo={t('patios.jefes.titulo')} info="patios.jefes">

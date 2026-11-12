@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireSessionTenant } from '@/lib/auth/guard';
+import { getSessionTenant } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sufijoTenant } from '@/app/dashboard/sufijo';
@@ -25,10 +26,15 @@ export default async function Cuenta({
   searchParams?: Promise<{ tenant?: string; vista?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const s = await requireSessionTenant('/cuenta', sp);
+  // El vendedor no tiene flota ni pantalla en /dashboard (su casa es /vendedor): el tarjeta de usuario de su sidebar apunta aquí, así que /cuenta
+  // lo recibe en vez de rebotarlo a /vendedor (ese salto de ida y vuelta era también el recorrido donde la consola daba el error de hidratación #418).
+  const previa = await getSessionTenant();
+  const esVendedor = previa?.rol === 'vendedor';
+  const s = esVendedor && previa ? previa : await requireSessionTenant('/cuenta', sp);
   const sufijo = sufijoTenant(sp);
-  const { data: tenant } = await supabaseAdmin()
-    .from('tenant').select('nombre').eq('id', s.tenantId).maybeSingle();
+  const { data: tenant } = s.tenantId
+    ? await supabaseAdmin().from('tenant').select('nombre').eq('id', s.tenantId).maybeSingle()
+    : { data: null };
 
   async function cerrarSesion() {
     'use server';
@@ -51,7 +57,7 @@ export default async function Cuenta({
         <Monograma id={s.userId} nombre={nombre} tamano={28} />
         <div className="rv-cuenta__quien">
           <strong>{s.nombre ?? s.userId}</strong>
-          <span>{nombreDeRol(s.rol)} · {(tenant?.nombre as string) ?? '—'}</span>
+          <span>{esVendedor ? nombreDeRol(s.rol) : `${nombreDeRol(s.rol)} · ${(tenant?.nombre as string) ?? '—'}`}</span>
         </div>
       </div>
       <PreferenciasCuenta idiomaActivo={idioma} textos={{
@@ -59,7 +65,7 @@ export default async function Cuenta({
         es: 'Español', en: 'English', enProximamente: t('cta.en_pronto'), fallo: t('cta.idioma.fallo'),
       }} />
       <div className="rv-cuenta__pie">
-        <Link href={`/dashboard${sufijo}`} className="rv-pub__enlace">{t('cta.volver')}</Link>
+        <Link href={esVendedor ? '/vendedor' : `/dashboard${sufijo}`} className="rv-pub__enlace">{t('cta.volver')}</Link>
         <form action={cerrarSesion}>
           <Boton type="submit" variante="secondary" tamano="sm">{t('cta.cerrar')}</Boton>
         </form>
