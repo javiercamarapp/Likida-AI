@@ -25,7 +25,14 @@
 /* Todo a ancho completo (Rovaq CF: no se alternan anchos) y SIN huecos: «Tu plan» (si solo trae su vacío) va arriba a todo el ancho; datos fiscales y planes se apilan a ancho completo, y los siete campos fiscales
    van en dos columnas para que la tarjeta no sea una torre de 880 px con 690 px de lienzo vacío al lado. */
 .rv-sus__dos { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
-.rv-sus__fiscales form > div.grid { gap: 0 24px; }
+.rv-sus__fiscales { margin-top: 12px; max-width: 780px; }
+/* Una sola columna de filas rótulo-control con divisor (Rovaq: ~780 px): todas las filas arrancan a la misma altura y el control largo (domicilio) va a lo ancho debajo de su rótulo. */
+.rv-sus__fiscales form > div.grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+[data-ui="v2"] .rv-sus__fiscales .rv-fila-c { grid-template-columns: minmax(0, 1fr) minmax(200px, 320px); }
+[data-ui="v2"] .rv-sus__fiscales .rv-fila-c--larga { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
+[data-ui="v2"] .rv-sus__fiscales .rv-fila-c--larga > .rv-ctl { grid-column: 1; grid-row: 3; }
+[data-ui="v2"] .rv-sus__fiscales .rv-fila-c--larga > .rv-campo__ayuda { grid-row: 2; }
+.rv-sus__nota--tarjeta { margin: 0 0 4px; }
 .rv-sus__rejilla { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 
 /* Tira de cifras como la `pc-kpis` de Rovaq (igual que /vendedor y Avisos): sin filete superior y con la PISTA punteada de 6 px. La pista es solo forma (no mide nada) y se omite con la celda en error o sin dato. */
@@ -37,4 +44,5 @@
   background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
 }
 [data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__nota { order: 4; }
-[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; min-height: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__pie:not(:has(*)) { display: none; }

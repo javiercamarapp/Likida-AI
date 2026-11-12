@@ -1,15 +1,15 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
-import { fechaMx, mxn, numero } from '@/lib/formato';
+import { fechaMx, hoyMx, mxn, numero } from '@/lib/formato';
 import { listarFacturasSaas, type FacturaSaasFila } from '@/lib/saas/transferencia';
-import { Aviso, BarraFiltros, BotonEnlace, Disclosure, EstadoError, FiltroFecha, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Aviso, BarraFiltros, BarraPeriodo, BotonEnlace, Disclosure, EstadoError, FiltroFecha, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { uniformes } from '../cifras-uniformes';
 import { observadas } from '../sello-observado';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { BotonExportarFacturas } from './boton-exportar';
-import { leerFiltros, rangoAlReves } from './filtros';
+import { desdeDePeriodo, leerFiltros, periodoVigente, rangoAlReves, type ClavePeriodo } from './filtros';
 import { hrefConParams } from '@/app/ui-v2/datos';
 import '../dinero.css';
 
@@ -42,7 +42,7 @@ function celdaCfdi(f: FacturaSaasFila) {
   return '—';
 }
 
-export default async function FacturasPage({ searchParams }: { searchParams: Promise<{ estado?: string; desde?: string; hasta?: string; ver?: string }> }) {
+export default async function FacturasPage({ searchParams }: { searchParams: Promise<{ estado?: string; desde?: string; hasta?: string; ver?: string; personalizado?: string }> }) {
   const { t } = await getT('admin_dinero');
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
@@ -50,6 +50,10 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
   const filtros = leerFiltros(sp);
   const ver = typeof sp.ver === 'string' ? sp.ver : '';
   const alReves = rangoAlReves(filtros);
+  const hoy = hoyMx();
+  const vigente = periodoVigente(filtros, hoy);
+  // «Personalizado» se ve al elegirlo y cuando el rango vigente no es un atajo (hay un `hasta` o un `desde` propio).
+  const personalizado = sp.personalizado === '1' || vigente === 'personalizado';
   let lectura: Awaited<ReturnType<typeof listarFacturasSaas>> | null = null;
   if (!alReves) {
     try { lectura = await listarFacturasSaas({ ...filtros, limite: FILAS_EN_PANTALLA }); } catch (e) { logger.error('admin.facturas', { err: e instanceof Error ? e.message : String(e) }); }
@@ -64,7 +68,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
   const completa = lectura !== null && !recortada;
   const errorCifra = (etiqueta: string) => ({ etiqueta, valor: null, estado: 'error' as const, mensaje: recortada ? t('facturas.la_lista_esta_recortada') : t('facturas.no_se_pudo_leer'), reintentar: true });
 
-  const paramsFiltros: Record<string, string | undefined> = { ...filtros };
+  const paramsFiltros: Record<string, string | undefined> = { ...filtros, ...(personalizado ? { personalizado: '1' } : {}) };
   const hrefVer = (id: string) => hrefConParams('/admin/facturas', paramsFiltros, { ver: id });
   const hrefCerrar = hrefConParams('/admin/facturas', paramsFiltros, {});
   const posicion = ver ? filas.findIndex((f) => f.id === ver) : -1;
@@ -91,14 +95,36 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
       apoyo={t('facturas.las_mensualidades_que_likida')}
       acciones={<BotonExportarFacturas estado={filtros.estado} desde={filtros.desde} hasta={filtros.hasta} deshabilitado={alReves || lectura === null || (completa && filas.length === 0)} />}
       filtros={(
-        <BarraFiltros accion="/admin/facturas" enLinea etiqueta={t('facturas.filtrar_facturas')} nActivos={nFiltros} limpiarHref="/admin/facturas">
-          <FiltroOpciones
-            etiqueta={t('facturas.estado')} nombre="estado" valor={filtros.estado ?? ''}
-            opciones={[{ valor: 'pendiente', rotulo: 'Pendiente' }, { valor: 'pagada', rotulo: 'Pagada' }, { valor: 'fallida', rotulo: 'Fallida' }, { valor: 'cancelada', rotulo: 'Cancelada' }]}
+        <>
+          {/* Periodo como en Rovaq (FilterBar): segmentado de 30/24 px y chip con el rango vigente; las fechas sueltas solo aparecen en «Personalizado». */}
+          <BarraPeriodo
+            etiqueta={t('facturas.periodo')}
+            periodo={{
+              etiqueta: t('facturas.periodo'), valor: personalizado ? 'personalizado' : vigente,
+              opciones: [
+                ...(['mes', '30', '90', '12m', 'todo'] as const).map((c: ClavePeriodo) => ({
+                  valor: c, etiqueta: t(`facturas.periodo_${c}` as 'facturas.periodo_mes'),
+                  href: hrefConParams('/admin/facturas', paramsFiltros, { desde: desdeDePeriodo(c, hoy) ?? null, hasta: null, personalizado: null, ver: null }),
+                })),
+                { valor: 'personalizado', etiqueta: t('facturas.periodo_personalizado'), href: hrefConParams('/admin/facturas', paramsFiltros, { personalizado: '1', ver: null }) },
+              ],
+            }}
+            chips={filtros.desde || filtros.hasta ? [{
+              id: 'rango',
+              etiqueta: `${filtros.desde ? fechaMx(filtros.desde) : '…'} – ${filtros.hasta ? fechaMx(filtros.hasta) : t('facturas.periodo_hoy')}`,
+              hrefQuitar: hrefConParams('/admin/facturas', paramsFiltros, { desde: null, hasta: null, personalizado: null, ver: null }),
+            }] : []}
           />
-          <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} className="adm-fecha-es" />
-          <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} className="adm-fecha-es" />
-        </BarraFiltros>
+          <BarraFiltros accion="/admin/facturas" enLinea etiqueta={t('facturas.filtrar_facturas')} nActivos={nFiltros} limpiarHref="/admin/facturas"
+            ocultos={personalizado ? [['personalizado', '1']] : []}>
+            <FiltroOpciones
+              etiqueta={t('facturas.estado')} nombre="estado" valor={filtros.estado ?? ''}
+              opciones={[{ valor: 'pendiente', rotulo: 'Pendiente' }, { valor: 'pagada', rotulo: 'Pagada' }, { valor: 'fallida', rotulo: 'Fallida' }, { valor: 'cancelada', rotulo: 'Cancelada' }]}
+            />
+            {personalizado ? <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} className="adm-fecha-es" /> : null}
+            {personalizado ? <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} className="adm-fecha-es" /> : null}
+          </BarraFiltros>
+        </>
       )}
       avisos={(
         <>

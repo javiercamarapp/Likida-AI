@@ -45,7 +45,7 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
 
       {/* Un solo aviso FIJO arriba (el administrativo, en la cabecera). El semáforo de salud ya no es un segundo aviso entre las cifras
           y los paneles: vive dentro de «Operación», el panel que habla de la salud de los agentes. */}
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
       </FilaTarjetas>

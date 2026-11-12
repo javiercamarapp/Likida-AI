@@ -168,6 +168,15 @@ describe('Agente de Carta Porte: «Viajes salidos sin Carta Porte» (T-A3-66)', 
     expect(html).not.toMatch(/· 0</);
   });
 
+  it('ronda 7: sin viajes del TMS la tira dice «—» con «Sin dato», nunca «0» ni «leído …»; con importación vieja conserva sus cifras', () => {
+    const datos = { total: 0, viajes: [] } as unknown as Parameters<typeof VistaAgenteCartaPorte>[0]['datos'];
+    const sin = renderToStaticMarkup(<VistaAgenteCartaPorte datos={datos} sinCcp={{ vacio: true, total: 0, grupos: [], sinDatosTms: { motivo: 'sin_viajes', ultimoImportadoEn: null, horasDesdeImportacion: null } }} />);
+    expect(sin).not.toMatch(/rv-kpi__valor">0</);
+    expect(sin.match(/rv-kpi__valor"[^>]*>—</g)?.length).toBe(4);
+    const vieja = renderToStaticMarkup(<VistaAgenteCartaPorte datos={datos} sinCcp={{ vacio: true, total: 0, grupos: [], sinDatosTms: { motivo: 'importacion_vieja', ultimoImportadoEn: '2026-03-01T00:00:00Z', horasDesdeImportacion: 200 } }} />);
+    expect(vieja).toMatch(/rv-kpi__valor"[^>]*>0</);
+  });
+
   it('A3-01: con la importación vieja avisa que la lista puede estar atrasada y no pinta el estado vacío verde', () => {
     const html = pintarSin({ vacio: true, total: 0, grupos: [], sinDatosTms: { motivo: 'importacion_vieja', ultimoImportadoEn: '2026-03-01T00:00:00Z', horasDesdeImportacion: 200 } });
     expect(html).toContain('puede estar atrasada');

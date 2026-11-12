@@ -91,10 +91,10 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
   }
   // Cifras sobre los patios que SÍ se leyeron; si la lista no se pudo leer no hay tira (nunca ceros de relleno).
   const cifras: PropsCifra[] | undefined = ilegible ? undefined : [
-    { etiqueta: t('patios.kpi'), valor: lista.length },
-    { etiqueta: t('patios.col.operadores'), valor: lista.reduce((n, p) => n + p.operadores, 0) },
-    { etiqueta: t('patios.col.unidades'), valor: lista.reduce((n, p) => n + p.unidades, 0) },
-    { etiqueta: t('patios.cifra.jefes'), valor: lista.reduce((n, p) => n + p.jefes, 0) },
+    { etiqueta: t('patios.kpi'), valor: lista.length, info: 'patios.lista' },
+    { etiqueta: t('patios.col.operadores'), valor: lista.reduce((n, p) => n + p.operadores, 0), info: 'patios.lista' },
+    { etiqueta: t('patios.col.unidades'), valor: lista.reduce((n, p) => n + p.unidades, 0), info: 'patios.lista' },
+    { etiqueta: t('patios.cifra.jefes'), valor: lista.reduce((n, p) => n + p.jefes, 0), info: 'patios.jefes' },
   ];
   return (
     <EsqueletoTablaMaestra
@@ -125,7 +125,7 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
           </EstadoVacio>
         ) : (
           <TablaBase<FilaPatio> etiqueta={t('patios.tabla.etiqueta')} columnas={columnas} filas={lista}
-            idFila={(p) => p.id} tarjetaMovil />
+            idFila={(p) => p.id} tarjetaMovil className="rv-pt__tabla" />
         )}
         <p className="rv-pt__nota">
         {t('patios.nota.pre')} <Link href={hrefOperadores} className="rv-pt__enlace">{t('patios.nota.operadores')}</Link> {t('comun.y')} <Link href={hrefUnidades} className="rv-pt__enlace">{t('patios.nota.unidades')}</Link>{t('patios.nota.post')}

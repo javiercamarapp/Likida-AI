@@ -210,7 +210,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
         <>
           <ActualizarSolo />
           {/* El chat vive en «Pregunta a tus datos» (un solo compositor); aquí solo se enlaza, sin una caja propia. «Ver el mapa» se retiró: ya es la pestaña Mapa. */}
-          {pregunta ? <BotonEnlace href={`/dashboard/chat${ocultos.tenant ? `?tenant=${encodeURIComponent(ocultos.tenant)}` : ''}`}>{t('op.preguntale_al_asistente')}</BotonEnlace> : null}
+          {pregunta ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/chat${ocultos.tenant ? `?tenant=${encodeURIComponent(ocultos.tenant)}` : ''}`}>{t('op.preguntale_al_asistente')}</BotonEnlace> : null}
         </>
       )}
       filtros={<Filtros t={t} f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />}

@@ -21,4 +21,5 @@
   background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
 }
 [data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi > .rv-kpi__nota { order: 4; }
-[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; min-height: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi > .rv-kpi__pie:not(:has(*)) { display: none; }

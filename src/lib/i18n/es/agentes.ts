@@ -537,6 +537,7 @@ export const agentes = {
   'facturas.vista.vencidos': 'Vencidos',
   'facturas.vista.y_mas_el_total_de': 'y {n} más — el total de arriba los suma todos.',
   'liquidacion.page.titulo': 'Liquidación automática',
+  'liquidacion.importar_datos': 'Importar datos',
   'liquidacion.vista.abiertos': 'Abiertos',
   'liquidacion.vista.amarro_solo_comprobantes_que_llegaro': 'Amarró solo {strong} comprobantes que llegaron sin viaje asignado.',
   'liquidacion.vista.aun_nada_que_presumir': 'Aún nada que presumir',

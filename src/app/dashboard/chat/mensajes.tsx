@@ -102,6 +102,11 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
   async function copiar() {
     try { await navigator.clipboard.writeText(textoParaCopiar(r)); setCopiado(true); } catch { setCopiado(false); }
   }
+  // Ronda 7: «Reintentar» (respuesta de reserva) va en la MISMA fila que Copiar y Datos CSV, no sola en una segunda fila.
+  const botonReintentar = (
+    <Boton disabled={ocupado} onClick={() => onRepetir(turno.id)}>
+      <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_reintentar_e0'), { e0: (c) => <span>{c}</span> })}</Boton>
+  );
   return (
     <div className="rv-chat__respuesta" data-nuevo={turno.nuevo} data-fallo={r.fallo || undefined}>
       <div className="rv-chat__respuesta-texto">
@@ -154,13 +159,13 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
             <Boton className="rv-chat__solo" disabled={ocupado} onClick={() => onRepetir(turno.id)}>
               <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_regenerar_e0'), { e0: (c) => <span>{c}</span> })}</Boton>
           )}
+          {r.fallo && ultimo && botonReintentar}
           {errorArchivo && <span role="alert" className="rv-chat__error-linea">{tx('ch.no_se_pudo_crear_el_archivo')}</span>}
         </div>
       )}
-      {r.fallo && ultimo && (
-        <div>
-          <Boton disabled={ocupado} onClick={() => onRepetir(turno.id)}>
-            <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_reintentar_e0'), { e0: (c) => <span>{c}</span> })}</Boton>
+      {r.fallo && ultimo && !(terminado && r.texto.trim()) && (
+        <div className="rv-chat__acciones">
+          {botonReintentar}
         </div>
       )}
     </div>
