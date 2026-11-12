@@ -110,7 +110,9 @@
 /* Móvil: botones de 44 px de alto (zona táctil). */
 @media (max-width: 819px) {
   [data-ui="v2"] .rv-seg { padding: 1px; }
-  [data-ui="v2"] .rv-seg__btn { min-height: 44px; }
+  [data-ui="v2"] .rv-seg__btn { min-height: 36px; position: relative; }
+  /* Zona táctil de 44 px sin agrandar el botón visual. */
+  [data-ui="v2"] .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-ui="v2"] .rv-seg__btn { transition: background-color var(--ui-fast) ease, color var(--ui-fast) ease; }
