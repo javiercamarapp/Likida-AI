@@ -95,7 +95,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
       apoyo={t('facturas.las_mensualidades_que_likida')}
       acciones={<BotonExportarFacturas estado={filtros.estado} desde={filtros.desde} hasta={filtros.hasta} deshabilitado={alReves || lectura === null || (completa && filas.length === 0)} />}
       filtros={(
-        <>
+        <div className="adm-filtros-fila">
           {/* Periodo como en Rovaq (FilterBar): segmentado de 30/24 px y chip con el rango vigente; las fechas sueltas solo aparecen en «Personalizado». */}
           <BarraPeriodo
             etiqueta={t('facturas.periodo')}
@@ -124,7 +124,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
             {personalizado ? <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} className="adm-fecha-es" /> : null}
             {personalizado ? <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} className="adm-fecha-es" /> : null}
           </BarraFiltros>
-        </>
+        </div>
       )}
       avisos={(
         <>
