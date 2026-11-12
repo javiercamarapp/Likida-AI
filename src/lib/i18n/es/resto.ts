@@ -1331,4 +1331,12 @@ export const resto = {
   'r4.vend_area': 'Ventas',
   'r4.vend_apoyo': 'Tu cartera de prospectos por etapa, lo que cuenta de tu comisión y lo que sigue.',
   'r6.con_mas': 'Ver más',
+  'r7.usu_invitar_sub': 'Entra con su correo; tú eliges qué puede hacer.',
+  'r7.usu_roles_sub': 'Lo que ve y puede hacer cada persona según su rol.',
+  'r7.prox_titulo': 'Esta pantalla no está disponible',
+  'r7.prox_apoyo': 'No hay un módulo con ese nombre pendiente de encenderse para tu cuenta.',
+  'r7.prox_vacio': 'No hay nada que ver aquí',
+  'r7.prox_nota': 'Los módulos que se encienden por fases aparecen en el menú en cuanto están listos.',
+  'r7.prox_volver': 'Volver al Resumen',
+  'r7.prox_area': 'Próximamente',
 } as const;

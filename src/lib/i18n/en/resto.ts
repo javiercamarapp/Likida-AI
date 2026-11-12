@@ -1333,4 +1333,12 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'r4.vend_area': 'Sales',
   'r4.vend_apoyo': 'Your prospect pipeline by stage, what counts toward your commission and what comes next.',
   'r6.con_mas': 'Show more',
+  'r7.usu_invitar_sub': 'They sign in with their email; you choose what they can do.',
+  'r7.usu_roles_sub': 'What each person can see and do, by role.',
+  'r7.prox_titulo': 'This screen is not available',
+  'r7.prox_apoyo': 'There is no module with that name waiting to be switched on for your account.',
+  'r7.prox_vacio': 'Nothing to see here',
+  'r7.prox_nota': 'Modules that roll out in phases show up in the menu as soon as they are ready.',
+  'r7.prox_volver': 'Back to Overview',
+  'r7.prox_area': 'Coming soon',
 };
