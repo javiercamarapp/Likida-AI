@@ -29,3 +29,6 @@
   [data-ui="v2"] .rv-filtros .rv-fl--buscar { flex: 1 1 100%; width: 100%; min-width: 0; }
   [data-ui="v2"] .rv-filtros .rv-fl--buscar input[type="search"] { width: 100%; min-width: 0; }
 }
+
+/* Ronda 8 (Rovaq tabla 2.7: 40-41 px con una línea, 49-64 px con dos): la celda con segunda línea (folio + ruta) respira 8 px arriba y abajo; el alto de 40 es mínimo, no tope. */
+[data-ui="v2"] .rv-tl__td:has(> .rv-tl__sub) { padding-block: 8px; }
