@@ -51,3 +51,11 @@
 /* Ronda 5: el pie con «Crear viaje» va pegado al fondo del cajón aunque el formulario sea corto (Rovaq `overlay-foot`), sin dejar el hueco antes de la marca. */
 [data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-fv__pie) { display: flex; flex-direction: column; min-height: calc(100% + 0px); }
 [data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-fv__pie) > .rv-fv__pie { margin-top: auto; }
+
+/* Ronda 6: tabla «En curso» a sangre (sin margen ni relleno propios), procedencia dentro de la tarjeta con su filete, y filas de «Carga por operador»
+   con divisor de 1 px (Rovaq: las filas de lista llevan filete). */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-dsp__tabla { margin: 0; padding: 0; width: 100%; max-width: none; }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__proc { border-top: 1px solid var(--line); padding: 8px 14px; font-size: 12px; }
+.rv-dsp__carga { gap: 0; margin-top: 6px; }
+.rv-dsp__carga li { padding: 8px 0; border-top: 1px solid var(--line); }
+.rv-dsp__carga li:first-child { border-top: 0; }

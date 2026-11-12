@@ -100,9 +100,9 @@ export default async function PaginaSesionesMcp({
   // Las cifras salen de las mismas filas que la tabla; si la lectura cayó no hay cifras (nunca un 0 que parezca «nadie conectado»).
   const ultimoUso = sesiones === null ? null : sesiones.reduce<string | null>((m, s) => (s.ultimoUsoEn !== null && (m === null || s.ultimoUsoEn > m) ? s.ultimoUsoEn : m), null);
   const cifras = sesiones === null ? undefined : [
-    { etiqueta: t('e26.mcp_personas'), matiz: 1 as const, valor: sesiones.length, nota: t('e26b.mcp_personas_nota') },
-    { etiqueta: t('e26.mcp_clientes'), matiz: 1 as const, valor: sesiones.reduce((n, s) => n + s.clientes.length, 0), nota: t('e26b.mcp_clientes_nota') },
-    { etiqueta: t('e26.mcp_ultimo_uso'), matiz: 1 as const, valor: ultimoUso === null ? null : fechaMx(ultimoUso), nota: ultimoUso === null ? t('e26b.mcp_sin_uso_nota') : t('e26b.mcp_ultimo_uso_nota') },
+    { etiqueta: t('e26.mcp_personas'), valor: sesiones.length, nota: t('e26b.mcp_personas_nota') },
+    { etiqueta: t('e26.mcp_clientes'), valor: sesiones.reduce((n, s) => n + s.clientes.length, 0), nota: t('e26b.mcp_clientes_nota') },
+    { etiqueta: t('e26.mcp_ultimo_uso'), valor: ultimoUso === null ? null : fechaMx(ultimoUso), nota: ultimoUso === null ? t('e26b.mcp_sin_uso_nota') : t('e26b.mcp_ultimo_uso_nota') },
   ];
 
   return (

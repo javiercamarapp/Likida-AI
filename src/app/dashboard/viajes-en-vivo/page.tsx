@@ -65,6 +65,8 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
 
   const totalEnCurso = await contarViajesEnCurso(tenantId, 'viajes_en_vivo.contarEnCurso');
   const dibujo = mapaDelTablero(tablero.filas);
+  // Viajes en curso que existen pero el tablero del conductor aún no sigue: el mapa y la tabla lo dicen, no niegan el viaje. Con filtros activos no se afirma.
+  const sinSeguimiento = !terminalId && !clienteId && !soloExcepciones && typeof totalEnCurso === 'number' ? Math.max(0, totalEnCurso - tablero.filas.length) : 0;
 
   const ocultos: Record<string, string> = {};
   if (sp.tenant) ocultos.tenant = sp.tenant;
@@ -105,9 +107,11 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         accionUrl={RUTA}
         ocultos={ocultos}
         hrefMapa="/dashboard/mapa"
+        sinSeguimiento={sinSeguimiento}
         totalEnCurso={totalEnCurso}
         // La tarjeta de mapa con su panel va SIEMPRE (plantilla MP): sin viajes dibuja su propio estado vacío, no desaparece.
-        mapa={<MapaVivo viajes={dibujo.viajes} pines={dibujo.pines} sinUbicar={dibujo.sinUbicar} />}
+        mapa={<MapaVivo viajes={dibujo.viajes} pines={dibujo.pines} sinUbicar={dibujo.sinUbicar} sinSeguimiento={sinSeguimiento}
+          nota={tx('op.mapa_nota_en_vivo')} />}
         pregunta={conChat ? <PreguntaAlAsistente tenantParam={sp.tenant ?? null} /> : null}
         tareas={<TareasAbiertas t={tx} tareas={tareas} errorLectura={tareasConError} aviso={sp.atencion ?? null} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
         // A quién le llega el aviso de una tarea nueva (apagado por defecto): solo el dueño decide quién recibe los correos de la flota.

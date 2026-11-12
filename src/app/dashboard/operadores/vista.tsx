@@ -5,7 +5,7 @@ import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
 import type { ConteosOperadores } from '@/lib/likida/administracion';
 import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
-import { FiltroRegistro } from '../registro-filtro';
+import { FiltroRegistro, PieRegistro } from '../registro-filtro';
 import { FormaOperador, FormaAltaOperador, type AccionForma, type PatioOpcion } from './forma';
 import { InvitarPendientes, InvitarUno, type AccionInvitar } from './invitaciones';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
@@ -209,7 +209,7 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
       selloCifras={selloHoy(t('op.sello'))}
       filtros={!ilegible && (pag.filtrados > 0 || hayFiltro) ? (
         <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
-          sustantivo="operadores" camposOcultos={camposOcultos} />
+          sustantivo="operadores" camposOcultos={camposOcultos} conteoEnPie />
       ) : undefined}
       avisos={(
         <>
@@ -273,9 +273,11 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
             : t('op.vacio.otro')}
         </EstadoVacio>
       ) : (
-        <TarjetaTabla titulo={t('op.registro')} contador={numero(pag.filtrados, idioma)}>
+        <TarjetaTabla titulo={t('op.registro')}>
           <TablaBase<FilaOperador> etiqueta={t('op.tabla.etiqueta')} columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
             vacio={{ titulo: t('op.vacio.sincoincidencias'), texto: t('op.vacio.busqueda', { q: pag.q }) }} />
+          {/* «25 de N» y la paginación van en el pie de la tabla (Rovaq), una sola vez: antes se repetían arriba a la derecha y en la cabecera de la tarjeta. */}
+          <PieRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag} sustantivo="operadores" />
         </TarjetaTabla>
       )}
     </EsqueletoTablaMaestra>

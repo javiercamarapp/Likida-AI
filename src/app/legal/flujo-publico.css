@@ -2,10 +2,10 @@
  * la cabecera de sitio (nunca centrada en vertical: lado a lado, cada flujo cae en el mismo sitio), y las dos que traen contenido ancho (demo, estado) también dentro de la tarjeta
  * blanca de radio 12 y borde de 1 px, no sueltas sobre el lienzo. Solo disposición; sin `content`. Va DESPUÉS de publico-r2.css. */
 [data-ui="v2"] .rv-pub__cuerpo:has(> .rv-pub__main > .rv-flujo) { padding-top: clamp(28px, 7vw, 106px); }
-/* Estado: la tabla de 4 columnas necesita el ancho de lectura de la familia (1040), no los 600 de las pantallas cortas. */
-[data-ui="v2"] .rv-pub__main[data-ancho="ancho"]:has(> .rv-flujo) { max-width: var(--pub-ancho-ancho); }
 /* La tabla de estado ya vive en una tarjeta: sin segundo borde ni fondo propios. */
 [data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla { border: 0; border-radius: 0; background: transparent; }
-@media (max-width: 820px) {
-  [data-ui="v2"] .rv-pub__main[data-ancho="ancho"]:has(> .rv-flujo) { padding: 28px 16px; }
-}
+/* Estado dentro de la tarjeta de 640: cada servicio es una fila con divisor (no una tarjeta dentro de la tarjeta). */
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla tr { margin: 0; padding: 10px 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla tr:first-child { border-top: 0; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla th[scope="row"],
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla td { padding-inline: 0; }

@@ -25,8 +25,7 @@
 /* Píldoras de método bajo el último bloque (Rovaq: «Cómo se calculó», «Fuentes y publicaciones»): chips de 24 px que abren su nota. */
 [data-ui="v2"] .rv-res__metodo { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
 [data-ui="v2"] .rv-res__pildora { font-size: var(--t-small); color: var(--muted); }
-[data-ui="v2"] .rv-res__pildora > summary { display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 500; cursor: pointer; list-style: none; }
-[data-ui="v2"] .rv-res__pildora > summary::-webkit-details-marker { display: none; }
-[data-ui="v2"] .rv-res__pildora > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-[data-ui="v2"] .rv-res__pildora[open] > summary { border-color: var(--ink); }
-[data-ui="v2"] .rv-res__pildora > span { display: block; max-width: 520px; margin-top: 6px; }
+[data-ui="v2"] .rv-res__pildora > button { display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer; }
+[data-ui="v2"] .rv-res__pildora > button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-res__pildora[data-abierta] > button { border-color: var(--ink); }
+[data-ui="v2"] .rv-res__explica { flex-basis: 100%; max-width: 520px; font-size: var(--t-small); color: var(--muted); }

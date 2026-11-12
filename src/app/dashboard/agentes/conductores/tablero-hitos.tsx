@@ -422,16 +422,15 @@ export function TableroHitos({
   return (
     <>
       <IndicadoresHitos tr={tr} i={indicadores} dias={dias} />
-      <Tarjeta titulo={tx('liquidacion.vista.viajes_en_curso')} info="conductores_tablero.viajes_en_curso" acciones={
-        <span className="rv-cd__linea">
-          {ORDEN_SEMAFORO.map((s) => (
-            <span key={s} className="rv-cd__linea">
-              <PuntoSemaforo s={s} tr={tr} /><span className="rv-ag-num rv-cd__muted">{numero(tablero.conteos[s])}</span>
-            </span>
-          ))}
-        </span>
-      }>
+      <Tarjeta titulo={tx('liquidacion.vista.viajes_en_curso')} info="conductores_tablero.viajes_en_curso">
         <div className="rv-cd__pila">
+          <span className="rv-cd__linea">
+            {ORDEN_SEMAFORO.map((s) => (
+              <span key={s} className="rv-cd__linea">
+                <PuntoSemaforo s={s} tr={tr} /><span className="rv-ag-num rv-cd__muted">{numero(tablero.conteos[s])}</span>
+              </span>
+            ))}
+          </span>
           <FiltrosTablero tr={tr} f={filtros} catalogos={catalogos} ocultos={ocultos} accionUrl={accionUrl} />
           {tablero.sinGps && (
             <p role="note" className="rv-cd__icono-linea" data-tono="warn">

@@ -79,3 +79,13 @@
   .rv-mp__panel .rv-mp__cards { flex: 1 1 auto; min-height: 0; max-height: 520px; align-content: start; }
   .rv-mp__panel > .rv-mp__nota { margin-top: auto; }
 }
+
+/* Ronda 6: cabecera de la tarjeta del mapa que se ajusta (título en una línea, el segmentado baja si no cabe), vacío del panel centrado
+   en el alto del mapa (no pegado arriba con el resto en blanco) y nota de método dentro de la tarjeta. */
+.rv-mp__tarjeta .rv-tarjeta__cab { height: auto; min-height: 32px; flex-wrap: wrap; row-gap: 6px; }
+.rv-mp__tarjeta .rv-tarjeta__titulo { white-space: nowrap; }
+.rv-mp__nota--pie { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+@media (min-width: 1024px) {
+  .rv-mp__panel .rv-mp__cards { display: flex; flex-direction: column; gap: 8px; }
+  .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: auto 0; }
+}

@@ -6,3 +6,14 @@
 .rv-mcp__forma { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; }
 .rv-mcp__ok { margin: 0; font-size: var(--t-small); color: var(--ok); }
 .rv-mcp__tenue { color: var(--muted); white-space: nowrap; }
+
+/* Tira de cifras como la `pc-kpis` de Rovaq (igual que /vendedor y Avisos): sin filete superior y con la PISTA punteada de 6 px. La pista es solo forma (no mide nada) y se omite con la celda en error o sin dato. */
+[data-ui="v2"] .rv-esq:has(.rv-mcp__tabla) .rv-kpi { min-height: 0; border-top-width: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-mcp__tabla) .rv-kpi > .rv-kpi__cab { order: 1; }
+[data-ui="v2"] .rv-esq:has(.rv-mcp__tabla) .rv-kpi > .rv-kpi__fila { order: 2; }
+[data-ui="v2"] .rv-esq:has(.rv-mcp__tabla) .rv-kpi:not([data-estado])::after {
+  content: ''; order: 3; display: block; height: 6px; margin: 4px 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
+}
+[data-ui="v2"] .rv-esq:has(.rv-mcp__tabla) .rv-kpi > .rv-kpi__nota { order: 4; }
+[data-ui="v2"] .rv-esq:has(.rv-mcp__tabla) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; }
