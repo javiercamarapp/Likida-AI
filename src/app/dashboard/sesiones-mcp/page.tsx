@@ -111,11 +111,14 @@ export default async function PaginaSesionesMcp({
       cifras={cifras} etiquetaCifras={t('cfg.sesiones_mcp')}
       pie={`${t('cfg.quien_conecta_claude_o_chatgpt_a')} ${t('cfg.el_nombre_del_cliente_lo_declaro')}`}
     >
-      {sesiones === null ? (
-        <EstadoError reintentar>{t('cfg.no_pude_leer_las_sesiones_mcp')}</EstadoError>
-      ) : (
-        <ListaSesionesMcp t={t} sesiones={sesiones} cortarSesiones={cortarSesiones} />
-      )}
+      {/* Marcador (display: contents): la tira de cifras lleva su forma también con la lista vacía, cuando no hay tabla que la dispare. */}
+      <div className="rv-mcp__cuerpo">
+        {sesiones === null ? (
+          <EstadoError reintentar>{t('cfg.no_pude_leer_las_sesiones_mcp')}</EstadoError>
+        ) : (
+          <ListaSesionesMcp t={t} sesiones={sesiones} cortarSesiones={cortarSesiones} />
+        )}
+      </div>
     </EsqueletoTablaMaestra>
   );
 }

@@ -107,7 +107,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
           {/* Rovaq «Equipo»: Invitar integrante | Qué puede hacer cada rol, lado a lado (sin tira de cifras). */}
           <FilaTarjetas variante="6-6">
             {puedeInvitar ? (
-              <Tarjeta titulo={t('cfg.invitar_a_alguien_de_tu_equipo')} entra="tarjeta">
+              <Tarjeta titulo={t('r8.usu_invitar_titulo')} entra="tarjeta">
                 <p className="rv-usu__sub">{t('r7.usu_invitar_sub')}</p>
                 <FormaInvitar accion={acciones.invitar} roles={catalogoRoles} />
               </Tarjeta>
@@ -144,14 +144,14 @@ function Acciones({ u, esYo, acciones, t = T_RESTO_ES }: {
   }
   if (!u.activo) return <FormaReactivar accion={acciones.reactivar} id={u.id} />;
   return (
-    // Una sola celda: el menú «···» (28 px, ghost) a la derecha. Reenviar acceso, cerrar sesiones y dar de baja son filas del menú; el rojo
-    // de peligro solo aparece en el diálogo de confirmación. Cada forma conserva su server action, su aviso y su confirmación.
+    // Una sola celda (Rovaq «Integrantes y accesos»): «Dar de baja» a la VISTA como botón de peligro de 28 px (la acción destructiva no se esconde) y
+    // el menú «···» (28 px, ghost) para lo menor: reenviar acceso y cerrar sesiones. Cada forma conserva su server action, su aviso y su confirmación.
     <div className="rv-usu__celda-acciones">
+      <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} enFila />
       <MenuAcciones rotulo={t('cfg.acciones')} etiqueta={`Acciones de ${u.nombre ?? u.email}`}>
         <div className="rv-menu" role="menu">
           <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
           <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
-          <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
         </div>
       </MenuAcciones>
     </div>

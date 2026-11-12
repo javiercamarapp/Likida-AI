@@ -2,8 +2,7 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { UserPlus } from 'lucide-react';
-import { AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, Icono, clasesBoton } from '@/app/ui-v2/componentes';
+import { AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, clasesBoton } from '@/app/ui-v2/componentes';
 import '../filas-ctl.css';
 import './usuarios.css';
 // SOLO TIPOS: el catálogo `ROLES_INVITABLES` viaja como PROP desde la página
@@ -21,7 +20,7 @@ export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<Resu
 function BotonInvitar() {
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={UserPlus} />}>
+    <Boton type="submit" variante="primary" loading={pending}>
       {pending ? 'Invitando…' : 'Invitar'}
     </Boton>
   );
@@ -69,7 +68,7 @@ export function FormaInvitar({ accion, roles }: {
       </div>
 
       <Aviso estado={estado} />
-      <div className="rv-fila-pie"><BotonInvitar /></div>
+      <div className="rv-fila-pie rv-usu__pie-invitar"><BotonInvitar /></div>
     </form>
   );
 }
@@ -132,10 +131,12 @@ function SelectRol({ rolActual, roles, etiqueta }: { rolActual: string; roles: R
  * Dar de baja, con el diálogo de confirmación ÚNICO del panel (W2): dice qué
  * pasa con la sesión y con el historial antes de que se confirme.
  */
-export function FormaDarDeBaja({ accion, id, nombre }: {
+export function FormaDarDeBaja({ accion, id, nombre, enFila = false }: {
   accion: AccionForma;
   id: string;
   nombre: string;
+  /** A la vista en la fila como botón de peligro (en vez de ser una fila del menú «···»). */
+  enFila?: boolean;
 }) {
   const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
@@ -146,7 +147,7 @@ export function FormaDarDeBaja({ accion, id, nombre }: {
         etiqueta={t('cfg.dar_de_baja')} tono="peligro" etiquetaConfirmar={t('cfg.si_dar_de_baja')}
         titulo={`Dar de baja a ${nombre}`}
         descripcion={t('cfg.deja_de_entrar_al_panel_en')}
-        className="rv-menu__item"
+        className={enFila ? 'rv-usu__revocar' : 'rv-menu__item'}
       />
       <Aviso estado={estado} />
     </form>

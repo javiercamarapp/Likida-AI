@@ -150,10 +150,10 @@
 .login-g-amarillo { fill: #FBBC05; }
 .login-g-rojo { fill: #EA4335; }
 
-/* Selector de idioma de la fila de la marca (Rovaq `.login-locales`): dos enlaces pequeños, el activo en tinta. */
+/* Selector de idioma de la fila de la marca (Rovaq `.login-locales a`): enlaces de TEXTO de 13 px en tono secundario, zona táctil de 44 px, sin borde ni píldora; el activo en tinta. */
 .login-editorial .login-locales { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
-.login-editorial .login-locale { min-height: 28px; min-width: 32px; padding: 0 8px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--login-muted); font: 500 12px/1 var(--login-sans); letter-spacing: .04em; cursor: pointer; }
-.login-editorial .login-locale[aria-pressed='true'] { color: var(--login-ink); border-color: var(--login-line); background: var(--login-surface); }
-.login-editorial .login-locale:not(:disabled):not([aria-pressed='true']):hover { color: var(--login-ink); background: var(--login-soft); }
+.login-editorial .login-locale { min-height: 44px; min-width: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--login-muted); font: 400 13px/1 var(--login-sans); cursor: pointer; }
+.login-editorial .login-locale[aria-pressed='true'] { color: var(--login-ink); font-weight: 600; }
+.login-editorial .login-locale:not(:disabled):not([aria-pressed='true']):hover { color: var(--login-ink); }
 .login-editorial .login-locale:disabled:not([aria-pressed='true']) { opacity: .5; cursor: not-allowed; }
 .login-editorial .login-locale:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; }
