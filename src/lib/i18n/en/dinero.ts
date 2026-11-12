@@ -2073,4 +2073,5 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'r4.rent_metodo': 'The period measures the trips in that window (margin, revenue and cost). Receivables are the current balance of all invoices and do not change with the period.',
   'r4.timb_ir_hacerlo': 'Go do it',
   'r4.pol_titulo': 'Spending policies',
+  'r7.sus_sin_suscripcion_detalle': 'This fleet does not have a subscription yet. Once Likida activates your plan it shows up here.',
 };
