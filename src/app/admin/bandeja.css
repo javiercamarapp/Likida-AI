@@ -123,3 +123,9 @@
 [data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.bj-sig { align-self: stretch; }
 [data-ui="v2"] .rv-tarjeta.bj-sig > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; }
 .bj-sig__resumen { margin-top: auto; padding-top: 12px; }
+
+/* F26 ronda 8: segmentado móvil de 36 px visibles con zona táctil de 44 px por ::after invisible (Rovaq CATALOGO §4). */
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn { position: relative; min-height: 36px; }
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
+}
