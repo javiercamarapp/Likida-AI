@@ -1018,6 +1018,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'descargaSat.vista.avisoDeCierreDe': 'Toll close notice (days before)',
   'descargaSat.vista.buzon': 'Mailbox',
   'descargaSat.vista.buzonDelSat': 'SAT mailbox',
+  'descargaSat.vista.noDisponibleAhora': 'Not available right now',
   'descargaSat.vista.buzonSinDeclarar': 'Mailbox not declared',
   'descargaSat.vista.caeSolo': 'Arrives on its own',
   'descargaSat.vista.cargadaEnLaBoveda': 'loaded in the provider\'s vault (ref. {certificadoNumero}{v})',
