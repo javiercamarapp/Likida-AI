@@ -132,7 +132,6 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
     <EsqueletoTablaMaestra
       titulo={tr('cartaPorte.documentos.vista.documentosDeClientes')}
       apoyo={tr('cartaPorte.documentos.vista.losDocumentosQueMandan')}
-      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/carta-porte${sufijo}`}>{tr('cartaPorte.documentos.vista.volverACartaPorte')}</BotonEnlace>}
       avisos={(
         <>
           <Aviso tono="info">
@@ -299,18 +298,19 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
   ];
 
   return (
+    <>
+    <BarraFiltros etiqueta={tr('cartaPorte.documentos.vista.filtrosDeLaBandeja')} enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={raiz}>
+      {conAsignacion && usuarioId !== null && (
+        <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.asignacion')} valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorPersona')}
+          opciones={[
+            { valor: 'todos', rotulo: tr('cartaPorte.documentos.vista.filtroTodos'), href: raiz },
+            { valor: 'mios', rotulo: tr('cartaPorte.documentos.vista.misCasos'), href: `${raiz}${sufijo ? '&' : '?'}mios=1` },
+          ]} />
+      )}
+      <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.envioAlTms')} valor={filtroEnvio} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorEstadoDe')}
+        opciones={filtrosEnvio(datos.sinConexion, tr).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? raiz : `${raiz}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
+    </BarraFiltros>
     <Tarjeta titulo={tr('cartaPorte.documentos.vista.bandejaDeRevision')} info="carta_porte_docs.bandeja">
-      <BarraFiltros etiqueta={tr('cartaPorte.documentos.vista.filtrosDeLaBandeja')} enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={raiz}>
-        {conAsignacion && usuarioId !== null && (
-          <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.asignacion')} valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorPersona')}
-            opciones={[
-              { valor: 'todos', rotulo: tr('cartaPorte.documentos.vista.filtroTodos'), href: raiz },
-              { valor: 'mios', rotulo: tr('cartaPorte.documentos.vista.misCasos'), href: `${raiz}${sufijo ? '&' : '?'}mios=1` },
-            ]} />
-        )}
-        <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.envioAlTms')} valor={filtroEnvio} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorEstadoDe')}
-          opciones={filtrosEnvio(datos.sinConexion, tr).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? raiz : `${raiz}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
-      </BarraFiltros>
       {orden.length === 0 ? (
         // El vacío de la bandeja es una caja punteada como los demás vacíos de la página, no texto suelto.
         <EstadoVacio contenido icono={Inbox} titulo={mios ? tr('cartaPorte.documentos.vista.tituloSinCasos') : tr('cartaPorte.documentos.vista.tituloSinDocumentos')}>
@@ -333,6 +333,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
         <p className="rv-doc__nota">{tr('cartaPorte.documentos.vista.seMuestranDeLos', { v: numero(datos.filas.length), v2: numero(datos.total) })}</p>
       )}
     </Tarjeta>
+    </>
   );
 }
 

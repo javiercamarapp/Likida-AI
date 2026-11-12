@@ -25,9 +25,10 @@
 .rv-doc__codigo { font-variant-numeric: tabular-nums; }
 .rv-doc__sub [data-tono="warn"] { color: var(--warn); }
 
-/* Zona de soltar (Rovaq `/imports`): 1.5px dashed #d6d6d9, fondo del lienzo, radio 12, padding 20×16. */
-.rv-doc__zona { padding: 20px 16px; border: 1.5px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--canvas); }
-.rv-doc__zona:hover, .rv-doc__zona:focus-within { border-color: var(--ink); }
+/* Zona de soltar (Rovaq FL): 1 px dashed #e6e6e8, radio 8, padding 10x14, SIN relleno gris (el control de archivo trae el suyo y se anula): una línea de pista que se enciende con el foco o al arrastrar encima. */
+.rv-doc__zona { padding: 10px 14px; border: 1px dashed var(--line); border-radius: 8px; background: transparent; transition: border-color 160ms cubic-bezier(.22,1,.36,1), background-color 160ms cubic-bezier(.22,1,.36,1); }
+.rv-doc__zona .rv-archivo { background: transparent; border: 0; padding: 0; min-height: 0; }
+.rv-doc__zona:hover, .rv-doc__zona:focus-within, .rv-doc__zona:has(:is(input, .rv-archivo):hover) { border-color: var(--ink); background: var(--canvas); }
 /* Sin archivo elegido, el envío no es un primario activo: se ve punteado y no responde (la validación nativa de `required` lo respalda). */
 form:has(.rv-doc__zona input[type="file"]:required:invalid) button[type="submit"] { background: transparent; color: var(--muted); border: 1px dashed var(--line2, var(--line)); pointer-events: none; }
 
