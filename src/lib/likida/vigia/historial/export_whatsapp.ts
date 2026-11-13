@@ -62,7 +62,17 @@ const MEDIO_OMITIDO = /^(imagen|video|audio|sticker|gif|documento|contacto|ubica
 /** iOS y Android con el teléfono en inglés: «image omitted», «Contact card omitted»… (ya sin «<>» ni punto ni mayúsculas). */
 const MEDIO_OMITIDO_EN = /^(image|video|audio|sticker|gif|document|contact card|contact|location|voice message) omitted$/;
 /** Llamadas en inglés: «Missed voice call», «Missed group video call», o la llamada atendida sin texto libre detrás («Video call», «Voice call, 2 min»). */
-const LLAMADA_EN = /^(missed (group )?(voice|video) call( .*)?|(voice|video) call(,? ?\d.*)?)$/;
+// Sin cuantificadores anidados (security/detect-unsafe-regex): prefijo fijo + resto libre, y el resto se valida aparte.
+const LLAMADA_PERDIDA_EN = /^missed (?:group )?(?:voice|video) call/;
+const LLAMADA_EN_PREFIJO = /^(?:voice|video) call/;
+function esLlamadaEn(n: string): boolean {
+  const perdida = LLAMADA_PERDIDA_EN.exec(n);
+  if (perdida) return n.length === perdida[0].length || n[perdida[0].length] === ' ';
+  const llamada = LLAMADA_EN_PREFIJO.exec(n);
+  if (!llamada) return false;
+  const resto = n.slice(llamada[0].length);
+  return resto === '' || /^,? ?\d/.test(resto);
+}
 const FRASES_SISTEMA = ['multimedia omitido', 'media omitted', 'se elimino este mensaje', 'eliminaste este mensaje', 'este mensaje fue eliminado', 'mensaje eliminado', 'this message was deleted', 'you deleted this message'];
 
 /** Android con multimedia: «IMG-20260912-WA0001.jpg (archivo adjunto)» / «(file attached)». */
@@ -82,7 +92,7 @@ function esAdjuntoOmitido(texto: string): boolean {
 function esMultimedia(texto: string): boolean {
   const n = normalizarMedio(texto);
   if (n.startsWith('adjunto:') || n.startsWith('attached:') || ADJUNTO_ANDROID.test(n)) return true;
-  if (LLAMADA_EN.test(n)) return true;
+  if (esLlamadaEn(n)) return true;
   if (n.startsWith('llamada perdida') || n.startsWith('llamada de voz') || n.startsWith('llamada de video') || n.startsWith('videollamada perdida')) return true;
   return MEDIO_OMITIDO.test(n) || MEDIO_OMITIDO_EN.test(n) || FRASES_SISTEMA.includes(n);
 }
