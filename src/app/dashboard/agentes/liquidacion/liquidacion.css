@@ -86,3 +86,6 @@
 .rv-liq-sub code, .rv-liq-forma code { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .rv-liq-forma { min-width: 0; }
 .rv-liq-linea { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+/* Configuración: el párrafo de ayuda de una tarjeta no se pega al primer campo (Rovaq: 8 px entre subtítulo y control). */
+[data-ui="v2"] .rv-liq-config .rv-tarjeta__cuerpo > .rv-liq-sub { margin-bottom: 8px; }

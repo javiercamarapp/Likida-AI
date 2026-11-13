@@ -17,7 +17,10 @@
 [data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-solo li { flex: 0 0 auto; }
 
 /* «Siguiente mejor acción» (Rovaq): tarjeta destacada con filete izquierdo de 3 px en el color primario (negro, decisión 10). */
-[data-ui="v2"] .rv-sig { border-left: 3px solid var(--ink); padding-left: 12px; }
+[data-ui="v2"] .rv-sig { border-left: 3px solid var(--ink); }
+/* Rovaq `.hoy-sig`: el titular de la acción es un h2 de 16/600 y el «por qué» respira debajo (no un renglón de 14 pegado a su párrafo). */
+[data-ui="v2"] .rv-sig .rv-sig__titulo { font-size: 16px; line-height: 1.35; letter-spacing: -.1px; }
+[data-ui="v2"] .rv-sig .rv-sig__porque { margin-bottom: 6px; }
 
 /* Procedencia en barra con borde (Rovaq «Hoy»): fuentes, corte de datos y avisos en una sola tarjeta baja, no una línea suelta. */
 [data-ui="v2"] .rv-esq--portada .rv-esq__procedencia { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); gap: 4px 16px; }

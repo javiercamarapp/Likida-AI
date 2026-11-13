@@ -1,5 +1,5 @@
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, hoyMx } from '@/lib/formato';
+import { fechaMx, hoyMx, mxnEntero, numero } from '@/lib/formato';
 import { Aviso, BotonEnlace, Chip, FilaTarjetas, Tarjeta } from '@/app/ui-v2/componentes';
 import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
@@ -63,11 +63,18 @@ export async function ResumenV2({
   const cob = coberturaDe(d);
   const ambito = `${tenantId}:${userId}`;
 
+  // Titular de lectura (Rovaq «Hoy»: la cifra del periodo en una frase bajo el h1). Solo con lectura real de los KPI: sin ella no hay frase, nunca un 0.
+  const k = d.kpis;
+  const titular = k === null ? undefined : d.veDinero
+    ? t('op.res.titular_dinero', { periodo: PERIODO_RANGO[rango], monto: mxnEntero(k.montoComprobado, idioma), cerradas: numero(k.viajesLiquidados, idioma), revisar: numero(k.porRevisar, idioma) })
+    : t('op.res.titular', { periodo: PERIODO_RANGO[rango], cerradas: numero(k.viajesLiquidados, idioma), revisar: numero(k.porRevisar, idioma) });
+
   return (
     <EsqueletoPortada
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
       titulo={t('op.resumen')}
       apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? t('op.tus_cinco_agentes_de_un_vistazo_3') : t('op.tu_flota_de_un_vistazo')}`}
+      titular={titular}
       acciones={<Chip className="rv-res__fecha">{fechaMx(diaMx, idioma)}</Chip>}
       etiquetaProcedencia={t('op.res.corte', { fecha: fechaMx(diaMx, idioma) })}
       procedencia={(

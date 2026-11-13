@@ -807,6 +807,8 @@ export const resto = {
   'op.fuente_y_corte': 'Fuente y corte',
   'op.res.corte': 'Corte de datos: {fecha}',
   'op.res.periodo': 'Periodo: {periodo}',
+  'op.res.titular': 'Periodo ({periodo}): {cerradas} liquidaciones cerradas y {revisar} por revisar.',
+  'op.res.titular_dinero': 'Periodo ({periodo}): {monto} comprobados en {cerradas} liquidaciones cerradas; {revisar} por revisar.',
   'op.res.sin_lectura': '{n} de {total} lecturas sin respuesta',
   'op.nada_urgente_por_hacer_hoy': 'Nada urgente por hacer hoy',
   'op.no_hay_pasos_pendientes_ni_alertas': 'No hay pasos pendientes ni alertas de los agentes en este periodo.',

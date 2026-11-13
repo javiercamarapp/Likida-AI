@@ -809,6 +809,8 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.fuente_y_corte': 'Source and cutoff',
   'op.res.corte': 'Data cut: {fecha}',
   'op.res.periodo': 'Period: {periodo}',
+  'op.res.titular': 'Period ({periodo}): {cerradas} settlements closed and {revisar} to review.',
+  'op.res.titular_dinero': 'Period ({periodo}): {monto} verified across {cerradas} closed settlements; {revisar} to review.',
   'op.res.sin_lectura': '{n} of {total} readings unanswered',
   'op.nada_urgente_por_hacer_hoy': 'Nothing urgent to do today',
   'op.no_hay_pasos_pendientes_ni_alertas': 'There are no pending steps or agent alerts in this period.',

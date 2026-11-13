@@ -17,12 +17,12 @@
 .rv-cd__form { display: grid; gap: 10px; max-width: 52ch; }
 .rv-cd__cuad { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; }
 .rv-cd__dos { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 900px) { .rv-cd__dos { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-cd__tres { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .rv-cd__tres { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .rv-cd__dos { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-cd__tres { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .rv-cd__col { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .rv-cd__rotulo { margin: 0; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .rv-cd__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.rv-cd__bloque { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: var(--t-small, 12px); }
+.rv-cd__bloque { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: var(--t-small, 12px); }
 .rv-cd__bloque[data-urgente] { border-color: var(--bad); }
 .rv-cd__bloque--lista { list-style: none; }
 .rv-cd__item { padding-bottom: 10px; border-bottom: 1px solid var(--line); font-size: var(--t-small, 12px); display: grid; gap: 4px; }
@@ -42,7 +42,7 @@
 .rv-cd__hito-cab[data-e="bad"] svg { color: var(--bad); }
 .rv-cd__hito-cab[data-e="faint"] svg { color: var(--faint); }
 .rv-cd__viajes { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.rv-cd__viaje { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-cd__viaje { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .rv-cd__semaforo-linea { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .rv-cd__icono-linea { display: flex; align-items: flex-start; gap: 6px; font-size: var(--t-small, 12px); }
 .rv-cd__icono-linea[data-tono="warn"] { color: var(--warn); }
@@ -53,11 +53,11 @@
 .rv-cd__foto { display: inline-flex; align-items: center; gap: 2px; text-decoration: underline; }
 .rv-cd__foto[data-alerta] { color: var(--warn); }
 .rv-cd__kpis { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.rv-cd__kpi { display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-cd__kpi { display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .rv-cd__kpi-valor { font-size: var(--t-kpi, 26px); font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .rv-cd__columnas { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 900px) { .rv-cd__columnas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.rv-cd__ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--t-body, 13px); }
+.rv-cd__ul { margin: 4px 0 0; padding-left: 0; list-style: none; display: grid; gap: 4px; font-size: var(--t-body, 13px); }
 .rv-cd__tabla-cuerpo { display: grid; gap: 12px; }
 .rv-cd__seccion-conf { display: grid; gap: 10px; }
 .rv-cd__dias { display: flex; flex-wrap: wrap; gap: 4px 14px; }
@@ -72,7 +72,7 @@
 
 /* «¿Está lista la flota?» como tarjetas de paso (Rovaq `.setup-paso`): radio 12, padding 14/16, chip de contorno «Para revisar / Hecho». */
 .rv-cd__pasos { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.rv-cd__paso { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-cd__paso { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .rv-cd__paso[data-estado="falta"] { border-color: var(--line-strong, var(--line)); }
 .rv-cd__paso-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .rv-cd__paso-titulo { margin: 0; font-size: var(--t-card, 14px); font-weight: 600; color: var(--ink); line-height: 1.3; }
@@ -97,3 +97,7 @@
 .rv-cd__cajon > section:first-child { padding-top: 0; border-top: 0; }
 .rv-cd__cajon > section:last-child { padding-bottom: 0; }
 .rv-cd__cajon h3 { margin: 0; font: 600 var(--t-body, 13px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
+
+/* Columnas iguales en tarjeta (Rovaq): «Lo que entiende por WhatsApp» y los Insights son fichas de la misma altura, no bloques sueltos. */
+.rv-cd__tres { align-items: stretch; }
+.rv-cd__tres > .rv-cd__col { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }

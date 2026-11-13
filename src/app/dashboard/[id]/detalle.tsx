@@ -307,7 +307,8 @@ export function DetalleLiquidacion({ d, sufijo, volverA, estatus, etiqueta, pdfH
           filas viejas escritas antes del cambio; se conserva para no ocultarlas. */}
       <Tarjeta className="rv-liq__acred" titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
         <div className="rv-liq__acred-datos">
-          <CamposSistema className="rv-liq__datos"
+          {/* Sin nada acreditable no se pintan cuatro filas de «—»: la nota de abajo ya lo dice (Rovaq: lo vacío es una línea, no una tabla). */}
+          {hayAcred && <CamposSistema className="rv-liq__datos"
           etiqueta={tr('liquidacion.detalle.acreditableTabla')}
           campos={[
             { etiqueta: tr('liquidacion.detalle.dieselElegible'), valor: d.litrosDiesel > 0 ? litros(d.litrosDiesel) : '—' },
@@ -315,7 +316,7 @@ export function DetalleLiquidacion({ d, sufijo, volverA, estatus, etiqueta, pdfH
             { etiqueta: tr('liquidacion.detalle.ivaAcreditable'), valor: d.iva > 0 ? mxn(d.iva) : '—' },
             { etiqueta: tr('liquidacion.detalle.peaje50'), valor: d.peaje > 0 ? mxn(d.peaje) : '—' },
           ]}
-        />
+        />}
         {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático — el motor no verifica ninguna de las condiciones de la ficha
             (ingresos < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
         <p className="rv-liq__tenue">{hayAcred ? tr('liquidacion.detalle.acreditableNota') : tr('liquidacion.detalle.acreditableNada')}</p>

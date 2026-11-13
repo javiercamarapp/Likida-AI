@@ -129,8 +129,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
       {insights !== undefined && <InsightsDelAgente tr={tr} insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
 
       <Tarjeta titulo={tx('cartaporte.vista.lo_que_hace_y_lo')} info="carta_porte_agente.alcance">
-        <Disclosure titulo={tx('cartaporte.vista.alcance_del_agente')} resumen={tx('cartaporte.vista.al_despachar_con_lo_capturado')} abierto variante="linea">
-          <div className="rv-cp__tres">
+        <div className="rv-cp__tres">
             <div className="rv-cp__col">
               <p className="rv-cp__rotulo">{tx('cartaporte.vista.al_despachar')}</p>
               <p className="rv-cp__nota">
@@ -149,8 +148,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
                 {tx('cartaporte.vista.no_afirma_no_necesitas_carta')}
               </p>
             </div>
-          </div>
-        </Disclosure>
+        </div>
       </Tarjeta>
 
       {notificaciones}
