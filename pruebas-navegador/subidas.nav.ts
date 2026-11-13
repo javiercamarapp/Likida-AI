@@ -1,5 +1,6 @@
 import { test, expect } from './apoyo/fixture';
 import { ESTADOS } from './apoyo/sesion';
+import { abrirImportarTms } from './apoyo/viajes';
 
 test.use({ storageState: ESTADOS.duena });
 
@@ -13,7 +14,7 @@ for (const formulario of formularios) {
   test(`${formulario.ruta}: avisa del archivo excesivo antes de enviarlo`, async ({ page }) => {
     await page.goto(formulario.ruta);
     if (formulario.ruta === '/dashboard/viajes') {
-      await page.locator('summary').filter({ hasText: 'Importar desde tu TMS' }).click();
+      await abrirImportarTms(page);
     }
     const archivo = page.getByLabel(formulario.etiqueta, { exact: true });
     await expect(archivo).toBeVisible();

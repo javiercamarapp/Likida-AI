@@ -27,14 +27,6 @@
 .rv-liq-pagina { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* Fichas de conteo del desglose (enlace a la lista filtrada o, para nómina, solo el conteo). */
-.rv-liq-fichas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-@media (min-width: 1024px) { .rv-liq-fichas { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
-.rv-liq-ficha { display: block; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); text-decoration: none; }
-.rv-liq-ficha[data-alerta] { border-color: var(--bad); }
-.rv-liq-ficha[data-enlace]:hover { background: var(--canvas); }
-.rv-liq-ficha__rotulo { display: block; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.rv-liq-ficha__valor { display: block; font-size: var(--t-kpi, 26px); font-weight: 600; line-height: 1.2; }
-.rv-liq-ficha[data-alerta] .rv-liq-ficha__valor { color: var(--bad); }
 
 /* «Qué pasó · qué significa · qué hacer». */
 .rv-liq-insights { display: grid; gap: 6px; }
@@ -76,3 +68,21 @@
 @media (min-width: 640px) { .rv-liq-cuatro { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1024px) { .rv-liq-cuatro { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .rv-liq-total { display: grid; gap: 8px; align-content: start; }
+
+/* Cifras de tabla y de texto: numerales tabulares en la tipografía de la interfaz (Rovaq usa monoespaciada solo en los rótulos del menú). */
+.rv-ag-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Marca «Póliza provisional» bajo la bitácora (decisión 3 del dueño) y la lectura de los desgloses en rejilla de tarjetas, sin hueco bajo la tabla. */
+.rv-liq-marca { display: block; margin-top: 4px; }
+.rv-liq-insights__lista { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+
+/* Rovaq: los bloques de una tabla maestra se apilan a 12 px (el contenedor no los separaba y las tarjetas quedaban pegadas) y el vacío de una tarjeta
+   es la caja punteada de `ac-vacio` (1 px, radio 8, padding 20/14), no un hueco alto sin borde. Se repite en el CSS de cada agente para que lo
+   cargue su ruta (pedido_compartido: llevarlo a esqueletos.css y a EstadoVacio). */
+[data-ui="v2"] .rv-esq--tabla > .rv-esq__tabla { display: grid; gap: var(--sp-gap, 12px); }
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
+
+/* Los <code> de las columnas (numero_empleado;correo;…) no traen espacios: sin esto empujan más allá de la tarjeta. */
+.rv-liq-sub code, .rv-liq-forma code { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.rv-liq-forma { min-width: 0; }
+.rv-liq-linea { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }

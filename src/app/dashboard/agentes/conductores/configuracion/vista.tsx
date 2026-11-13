@@ -9,8 +9,9 @@ import type { DocumentoCliente } from '@/lib/likida/conductor/documentos_cliente
 import type { AccionSitio } from '../sitios/formas';
 import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
 import '../conductores.css';
-import { MarcoPagina, AvisoCompacto, BotonEnlace, EstadoError, Tarjeta } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BotonEnlace, EstadoError, Tarjeta } from '@/app/ui-v2/componentes';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { MarcoConfigAgente } from '@/app/dashboard/agentes/marco-config';
 
 export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada, documentosCliente, clientes, accionAltaDocumento, accionBajaDocumento, tr = TR_ES }: {
   sufijo: string;
@@ -46,9 +47,9 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   const { t: tx } = tr;
   const legible = config !== null && valores !== null && contactos !== null;
   return (
-    <MarcoPagina titulo={tx('conductores.forma.configuracion_del_agente_conductor')} apoyo={tx('rest.cuando_y_cuanto_insiste_el_agente')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
+    <MarcoConfigAgente titulo={tx('conductores.forma.configuracion_del_agente_conductor')} apoyo={tx('rest.cuando_y_cuanto_insiste_el_agente')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
       <AvisoCompacto tono="info" resumen={tx('rest.lo_que_guardes_aplica_desde_la')} />
-      {preflight !== undefined && <PanelPreflight tr={tr} preflight={preflight} />}
+      {preflight !== undefined && <PanelPreflight tr={tr} preflight={preflight} sufijo={sufijo} />}
       {legible ? (
         <FormaConfigConductor accion={accionGuardar} config={config} valores={valores} contactos={contactos} patios={patios} puedeEditar={puedeEditar} puedeForzarPreflight={puedeForzarPreflight} />
       ) : (
@@ -83,6 +84,6 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
           </div>
         </Tarjeta>
       )}
-    </MarcoPagina>
+    </MarcoConfigAgente>
   );
 }

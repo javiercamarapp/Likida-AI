@@ -29,6 +29,59 @@ y los titulares (`--font-sans-ui`, `--font-display`); **IBM Plex Mono** (`next/f
 **Rótulo «Ejemplo».** Todo dato de demostración (la página pública `/demo`, escenarios de ejemplo) lleva la etiqueta visible
 «Ejemplo» (`Chip` tono `warn`). Un dato ficticio sin rótulo es una cifra inventada (regla de `CLAUDE.md`).
 
+## Esqueletos de página F26
+
+Decisión 11 (10-nov-2026): cada página de Likida se reconstruye con el ESQUELETO de su equivalente en Rovaq, en todas las cuentas. Los
+esqueletos viven en `src/app/ui-v2/esqueletos/` (puerta única `index.ts`), están construidos sobre las piezas de `ui-v2` y NO añaden
+piezas nuevas: fijan el ORDEN de los bloques y los márgenes (12 px entre bloques, 14 de padding de tarjeta). El mapa de las 145
+páginas, con su plantilla, orden de bloques y talla, es `F26-MAPA.md` (en la carpeta de trabajo de la sesión).
+
+| Esqueleto | Plantilla de Rovaq | Orden de bloques (de arriba abajo) |
+|---|---|---|
+| `EsqueletoPortada` | Hoy `/overview`, Resumen de plataforma | cabecera → `titular` → `filtros` → `procedencia` → `avisos` (≤2) → `cifras` (tira) → `children` (filas de `FilaTarjetas`) → `metodo` |
+| `EsqueletoTablaMaestra` | Problemas, Importaciones, Auditoría, bandejas | cabecera → (pestañas del marco) → `filtros` → `avisos` → `cifras` → `agrupacion` → tabla (`children`) → `pie` («25 de N») → `vistaRapida` |
+| `EsqueletoPanelCifras` | CFO, Brechas, Fuga, Cortes, mapas | cabecera → `titular` → `filtros` → `avisos` → `cifras` → `graficas` (rejilla 2 col) → `children` → `saberes` (Qué se sabe / Qué no se sabe) → `metodo` |
+| `EsqueletoFicha` | Ficha de problema, Ficha 360 | cabecera «FICHA DE …» + Volver → `chips` + `descripcion` → `avisos` → `cifras` → `bloques` (2 col) → `children` |
+| `EsqueletoConfiguracion` | `/setup`, Equipo, Retención, Entrega de avisos | cabecera sin eyebrow → `contexto` → `avisos` → `progreso` → `secciones` (≤780 px) |
+
+**Uso.** Una página elige UNA plantilla y le pasa piezas ya armadas; no importa `MarcoPagina` por su cuenta. Los filtros son
+`BarraPeriodo` (segmentado píldora 30/24 + «Filtros N» con contador + chips de alcance, ya existente: no hay una `BarraFiltros` nueva); las
+cifras son `PropsCifra[]` de `ui-v2/graficas`; la tabla es `TablaLista` (cabecera 36, fila 40); los estados son los de `Tarjeta`/`EstadoVacio`
+(vacío punteado, «No disponible ahora. No es cero»); el sello Observado/Inferido/Estimado lo pone `Cifra` o `SelloDato`.
+
+```tsx
+// Tabla maestra con cajón de vista rápida (la fila es un enlace `?ver=<id>`; el servidor arma el cajón de esa fila).
+<EsqueletoTablaMaestra
+  titulo="Viajes" apoyo="Los viajes del periodo y su estado de liquidación."
+  acciones={<Boton variante="secondary">Exportar</Boton>}
+  filtros={<BarraPeriodo periodo={...} cajon={...} chips={...} />}
+  cifras={[{ etiqueta: 'Viajes', valor: 128 }, ...]}
+  pie={`${visibles} de ${total}`}
+  vistaRapida={sel ? (
+    <CajonVistaRapida titulo={sel.folio} subtitulo={`Viaje ${n} de ${total}`} hrefCerrar="/dashboard/viajes"
+      cifras={[{ etiqueta: 'Flete', valor: '$12,400' }, { etiqueta: 'Anticipo', valor: '—' }, ...]}
+      pie={<BotonEnlace variante="suave" href={`/dashboard/${sel.id}`}>Abrir viaje</BotonEnlace>} />
+  ) : null}
+>
+  <TablaLista etiqueta="Viajes" columnas={...} filas={...} idFila={...} base="/dashboard/viajes" params={...} />
+</EsqueletoTablaMaestra>
+```
+
+**Reglas.**
+1. Un solo `h1` (lo pone el marco) y un solo primario por zona; las acciones secundarias son fantasma o van en menú.
+2. Las cifras son una tira (`formaCifras="tira"`) o cuatro tarjetas sueltas con filete (`"tarjetas"`, la consola). Una cifra sin dato dice
+   «—», nunca 0; una gráfica sin serie real se queda en `estado="vacio"`.
+3. **Cajón**: 420 (`tamano="m"`) y 640 (`xl`) —Rovaq usa 420 y 480; la Vista rápida de 480 se pinta a 420 (decisión 7, R8). Foco, Esc, fondo,
+   hoja inferior en móvil y logo los da `Drawer`; `CajonVistaRapida` solo arma el 2×2 de cifras, el aviso y el pie.
+4. **Paleta (decisión 10, anula a Rovaq)**: ni azul, ni petróleo, ni naranja, ni violeta en el cromo de los esqueletos. El borde del paso
+   actual es la tinta (`--ink`), el progreso es negro sobre gris, el segmentado activo lee los tokens `--seg-activo-*`. `esqueletos.css` no
+   lleva un solo color, sombra ni animación (la guarda `esqueletos_css.test.ts` lo exige). Burdeos `--senal` solo para «requiere acción».
+5. Movimiento: la entrada escalonada (`data-entra`) y el lift (`data-lift`) los ponen `Tarjeta` y `TiraCifras`, ambos tras
+   `prefers-reduced-motion: no-preference`; los esqueletos no añaden ninguno.
+6. Pestañas de hub: las pinta `MarcoPagina` (`PestanasDelMarco`); un esqueleto NO añade otra barra.
+7. Los esqueletos NO traen texto propio (decisión 4, guarda `i18n_deuda`): los nombres accesibles (`etiquetaProcedencia`, `etiquetaResumen`,
+   `etiquetaChips`, `etiquetaCifras`) y los títulos de «Qué se sabe / Qué no se sabe» (`saberes.seSabe.titulo`) los pasa la página desde su diccionario.
+
 ---
 
 # Sistema v3.1 (historial)

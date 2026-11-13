@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -10,9 +11,10 @@ import { logger } from '@/lib/logger';
 import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
 import { agregarDiasHabiles } from '@/lib/admin/dias-habiles';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
-import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
-import { TiraCifras } from '../../ui-v2/graficas';
+import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
+import { BarraVistas, PanelesVistas, ProveedorVistas, type OpcionVista } from '../aprobaciones/vistas';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
@@ -103,26 +105,73 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
     { id: 'resolucion', titulo: t('compliance.resolucion'), celda: (s) => s.resolucion ?? '—' },
   ];
 
+  // Las obligaciones salen de lo que la pantalla PUEDE medir con las solicitudes leídas; lo que no tiene flujo construido dice «Sin medición».
+  const vencidasN = pendientes.filter((s) => s.venceEn < hoy).length;
+  const ejecutables = pendientes.filter((s) => s.tipo === 'cancelacion' || s.tipo === 'oposicion').length;
+  const obligaciones: FilaObligacion[] = [
+    { id: 'plazo', obligacion: t('compliance.ob_plazo'), base: t('compliance.ob_plazo_base'), medida: lectura !== null, tono: lectura === null ? 'neutral' : vencidasN > 0 ? 'bad' : 'ok', estado: lectura === null ? t('compliance.ob_sin_lectura') : vencidasN > 0 ? t('compliance.ob_vencidas', { n: vencidasN }) : t('compliance.ob_al_dia'), detalle: t('compliance.ob_plazo_detalle') },
+    { id: 'ejecucion', obligacion: t('compliance.ob_ejecucion'), base: t('compliance.ob_ejecucion_base'), medida: lectura !== null, tono: lectura === null ? 'neutral' : ejecutables > 0 ? 'warn' : 'ok', estado: lectura === null ? t('compliance.ob_sin_lectura') : ejecutables > 0 ? t('compliance.ob_por_ejecutar', { n: ejecutables }) : t('compliance.ob_al_dia'), detalle: t('compliance.ob_ejecucion_detalle') },
+    { id: 'retencion', obligacion: t('compliance.ob_retencion'), base: 'CFF art. 30', medida: false, tono: 'neutral', estado: t('compliance.ob_sin_medicion'), detalle: t('compliance.ob_retencion_detalle') },
+    { id: 'avisos', obligacion: t('compliance.ob_avisos'), base: 'LFPDPPP', medida: false, tono: 'neutral', estado: t('compliance.ob_sin_medicion'), detalle: t('compliance.ob_avisos_detalle') },
+  ];
+  const columnasObligaciones: ColumnaTabla<FilaObligacion>[] = [
+    { id: 'obligacion', titulo: t('compliance.ob_col_obligacion'), principal: true, celda: (o) => o.obligacion },
+    { id: 'base', titulo: t('compliance.ob_col_base'), corta: true, celda: (o) => o.base },
+    { id: 'estado', titulo: t('salud_sistema.estado'), celda: (o) => <StatusChip tono={o.tono}>{o.estado}</StatusChip> },
+    { id: 'detalle', titulo: t('compliance.detalle'), celda: (o) => o.detalle },
+  ];
+  const panelObligaciones = (
+    <>
+      <TablaLista<FilaObligacion> etiqueta={t('compliance.ob_etiqueta')} columnas={columnasObligaciones} filas={obligaciones} idFila={(o) => o.id} base="/admin/compliance" params={{}} />
+      <Disclosure titulo={t('compliance.lo_que_aun_no_existe_aqui')} resumen={t('compliance.retencion_de_comprobantes_y_avisos_por')}>
+        <p className="adm-sis-nota">{t('compliance.la_retencion_de_comprobantes_cff_art')}</p>
+      </Disclosure>
+    </>
+  );
+
+  const opcionesVistas: readonly OpcionVista<VistaCompliance>[] = [
+    { valor: 'pendientes', etiqueta: t('compliance.por_responder'), conteo: pendientes.length },
+    { valor: 'resueltas', etiqueta: t('compliance.ya_resueltas'), conteo: resueltas.length },
+    { valor: 'obligaciones', etiqueta: t('compliance.ob_pestana'), conteo: obligaciones.length },
+  ];
+
   return (
-    <MarcoPagina titulo={t('compliance.seguridad_y_datos')} apoyo={t('compliance.las_solicitudes_de_derechos_de_los')}>
-      {/* Sin una sola solicitud, dos ceros no son dos mediciones: el único estado vacío (abajo) lo dice una vez. */}
-      {lectura !== null && solicitudes.length === 0 ? null : <TiraCifras etiqueta={t('compliance.solicitudes_arco')} items={lectura === null ? [
+    <ProveedorVistas inicial="pendientes">
+    <EsqueletoTablaMaestra
+      filtros={lectura === null ? undefined : <BarraVistas<VistaCompliance> etiqueta={t('compliance.vistas')} opciones={opcionesVistas} />}
+      titulo={t('compliance.seguridad_y_datos')}
+      apoyo={t('compliance.las_solicitudes_de_derechos_de_los')}
+      etiquetaCifras={t('compliance.solicitudes_arco')}
+      cifras={uniformes(lectura === null ? [
         { etiqueta: t('compliance.por_responder'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
         { etiqueta: t('compliance.vencen_pronto'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
+        { etiqueta: t('compliance.kpi_resueltas'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
+        { etiqueta: t('compliance.kpi_obligaciones'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
+      ] : solicitudes.length === 0 ? [
+        /* Sin una sola solicitud no hay qué medir: la pista punteada lo dice, no un cero que parezca medición. */
+        { etiqueta: t('compliance.por_responder'), valor: null, estado: 'vacio', mensaje: t('compliance.kpi_sin_solicitudes') },
+        { etiqueta: t('compliance.vencen_pronto'), valor: null, estado: 'vacio', mensaje: t('compliance.kpi_sin_solicitudes') },
+        { etiqueta: t('compliance.kpi_resueltas'), valor: null, estado: 'vacio', mensaje: t('compliance.kpi_sin_solicitudes') },
+        { etiqueta: t('compliance.kpi_obligaciones'), valor: `${obligaciones.filter((o) => o.medida).length} / ${obligaciones.length}`, nota: t('compliance.kpi_obligaciones_nota') },
       ] : [
         { etiqueta: t('compliance.por_responder'), valor: pendientes.length, formato: 'entero', tono: pendientes.length > 0 ? 'warn' : undefined, nota: t('compliance.recibidas_o_en_proceso_de_todas') },
         { etiqueta: t('compliance.vencen_pronto'), valor: lectura.pendientesVencen, formato: 'entero', tono: lectura.pendientesVencen > 0 ? 'bad' : undefined, nota: t('compliance.plazo_en_5_dias_habiles_o') },
-      ]} />}
+        { etiqueta: t('compliance.kpi_resueltas'), valor: resueltas.length, formato: 'entero' },
+        { etiqueta: t('compliance.kpi_obligaciones'), valor: `${obligaciones.filter((o) => o.medida).length} / ${obligaciones.length}`, nota: t('compliance.kpi_obligaciones_nota') },
+      ])}
+    >
 
       {lectura === null ? (
         <EstadoError reintentar>{t('compliance.no_se_pudieron_leer_las_solicitudes_2')}</EstadoError>
-      ) : solicitudes.length === 0 ? (
-        <Tarjeta titulo={t('compliance.solicitudes_arco')} estado="vacio" mensaje={t('compliance.ninguna_solicitud_arco_registrada')}
-          detalle={t('compliance.cuando_un_operador_escribe_privacidad_por')} />
       ) : (
-        <>
-          <section className="adm-sis-bloque" aria-labelledby="arco-pendientes">
-            <h2 className="adm-sis-titulo" id="arco-pendientes">{t('compliance.por_responder')}</h2>
+        <PanelesVistas<VistaCompliance>
+          opciones={opcionesVistas}
+          paneles={{
+            pendientes: solicitudes.length === 0 ? (
+              <Tarjeta titulo={t('compliance.solicitudes_arco')} estado="vacio" mensaje={t('compliance.ninguna_solicitud_arco_registrada')}
+                detalle={t('compliance.cuando_un_operador_escribe_privacidad_por')} />
+            ) : (
+          <section className="adm-sis-bloque" aria-label={t('compliance.por_responder')}>
             {pendientes.length === 0 ? (
               <Tarjeta titulo={t('compliance.solicitudes_arco')} estado="vacio" mensaje={t('compliance.nada_por_responder')} detalle={t('compliance.todas_las_solicitudes_registradas_ya_tienen')} />
             ) : pendientes.map((s) => {
@@ -156,9 +205,11 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
               );
             })}
           </section>
-
-          <section className="adm-sis-bloque" aria-labelledby="arco-resueltas">
-            <h2 className="adm-sis-titulo" id="arco-resueltas">{t('compliance.ya_resueltas')}</h2>
+            ),
+            resueltas: solicitudes.length === 0 ? (
+              <Tarjeta titulo={t('compliance.solicitudes_arco')} estado="vacio" mensaje={t('compliance.aun_no_hay_resueltas')} detalle={t('compliance.aparecen_aqui_en_cuanto_se_contesta')} />
+            ) : (
+          <section className="adm-sis-bloque" aria-label={t('compliance.ya_resueltas')}>
             {resueltas.length === 0 ? (
               <Tarjeta titulo={t('compliance.solicitudes_arco')} estado="vacio" mensaje={t('compliance.aun_no_hay_resueltas')} detalle={t('compliance.aparecen_aqui_en_cuanto_se_contesta')} />
             ) : (
@@ -168,15 +219,18 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
               />
             )}
           </section>
-        </>
+            ),
+            obligaciones: panelObligaciones,
+          }}
+        />
       )}
-
-      <Disclosure titulo={t('compliance.lo_que_aun_no_existe_aqui')} resumen={t('compliance.retencion_de_comprobantes_y_avisos_por')}>
-        <p className="adm-sis-nota">{t('compliance.la_retencion_de_comprobantes_cff_art')}</p>
-      </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
+    </ProveedorVistas>
   );
 }
+
+type VistaCompliance = 'pendientes' | 'resueltas' | 'obligaciones';
+interface FilaObligacion { id: string; obligacion: string; base: string; medida: boolean; tono: TonoEstado; estado: string; detalle: string }
 
 // ── Datos del server component (sin hooks de cliente) ───────────────────────
 interface SolicitudArcoPanel {

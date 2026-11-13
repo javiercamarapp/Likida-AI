@@ -24,3 +24,18 @@
 .rv-doc__forma { display: grid; gap: 12px; }
 .rv-doc__codigo { font-variant-numeric: tabular-nums; }
 .rv-doc__sub [data-tono="warn"] { color: var(--warn); }
+
+/* Zona de soltar (Rovaq FL): 1 px dashed #e6e6e8, radio 8, padding 10x14, SIN relleno gris (el control de archivo trae el suyo y se anula): una línea de pista que se enciende con el foco o al arrastrar encima. */
+.rv-doc__zona { padding: 10px 14px; border: 1px dashed var(--line); border-radius: 8px; background: transparent; transition: border-color 160ms cubic-bezier(.22,1,.36,1), background-color 160ms cubic-bezier(.22,1,.36,1); }
+.rv-doc__zona .rv-archivo { background: transparent; border: 0; padding: 0; min-height: 0; }
+.rv-doc__zona:hover, .rv-doc__zona:focus-within, .rv-doc__zona:has(:is(input, .rv-archivo):hover) { border-color: var(--ink); background: var(--canvas); }
+/* Sin archivo elegido, el envío no es un primario activo: se ve punteado y no responde (la validación nativa de `required` lo respalda). */
+form:has(.rv-doc__zona input[type="file"]:required:invalid) button[type="submit"] { background: transparent; color: var(--muted); border: 1px dashed var(--line2, var(--line)); pointer-events: none; }
+
+/* «Activar buzón» (y todo envío que sigue a un párrafo) lleva respiro arriba: no va pegado al texto. */
+.rv-doc__canales .rv-doc__nota ~ form { margin-top: 12px; }
+
+/* «No disponible ahora»: botón punteado (precondición sin cumplir). */
+.rv-nd { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; cursor: not-allowed; }
+.rv-nd__rotulo { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px dashed #bfbfc2; border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.rv-nd__motivo { font-size: 12px; color: var(--muted); line-height: 1.3; }

@@ -64,3 +64,51 @@
 .rv-cx__alerta { margin: 8px 0 0; font-size: var(--t-small); color: var(--bad); }
 .rv-cx__alerta ul { margin: 4px 0 0; padding-left: 20px; }
 .rv-cx__icono-linea { display: inline-flex; vertical-align: -3px; margin-right: 4px; }
+
+/* Maestro-detalle de las conexiones (Rovaq `/connections`): tarjetas-pestaña de 60 px a la izquierda, panel de detalle a la derecha. */
+.rv-cx__md { display: grid; gap: 12px; min-width: 0; }
+.rv-cx__md-cuerpo { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 819px) { .rv-cx__md-cuerpo { grid-template-columns: minmax(0, 1fr); } }
+.rv-cx__tabs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rv-cx__tab { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 60px; padding: 8px 12px; text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; transition: border-color 120ms ease, background-color 120ms ease; }
+.rv-cx__tab:hover { background: var(--canvas); }
+.rv-cx__tab[data-activo] { border-color: var(--ink); }
+.rv-cx__tab:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-cx__tab-texto { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.rv-cx__tab-nombre { min-width: 0; font-size: var(--t-body); font-weight: 500; }
+.rv-cx__tab-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-micro); color: var(--muted); }
+.rv-cx__solo-lectura { margin: 8px 0 0; font-size: var(--t-micro); color: var(--faint); }
+.rv-cx__tab .rv-cx__marca { margin-top: 0; }
+.rv-cx__panel { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); min-width: 0; }
+.rv-cx__panel-titulo { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.rv-cx__panel-titulo .rv-cx__marca { margin-top: 0; }
+.rv-cx__pares { margin: 0; display: grid; }
+.rv-cx__pares > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: var(--t-small); }
+.rv-cx__pares > div:first-child { border-top: 0; }
+.rv-cx__pares dt { color: var(--muted); }
+.rv-cx__pares dd { margin: 0; min-width: 0; }
+/* Paleta monocroma: el logo de marca se ve en grises. */
+.rv-cx__marca, .rv-cx__marca [data-marca] { filter: grayscale(1); }
+
+/* Contención del desborde del documento: los controles ocultos (.rv-sr, .rv-archivo__input) son absolutos; sin un ancestro posicionado salen del marco
+   y alargan la ventana. Mientras el marco no lo declare (pedido a ui-v2/shell.css), esta página lo ancla. */
+[data-ui="v2"] .rv-contenido { position: relative; }
+
+/* Ronda 6: la tarjeta-pestaña mide 60 px (el chip y el nombre no se parten), el detalle va a la altura de su contenido y la zona
+   «Configurar sincronización» agrupa las secciones bajo un segmentado. */
+.rv-cx__tab { height: 60px; }
+.rv-cx__tab .rv-estado { flex: none; white-space: nowrap; }
+.rv-cx__tab-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-cx__config { display: grid; gap: 12px; min-width: 0; }
+.rv-cx__config-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.rv-cx__config-titulo { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.rv-cx__config-panel { display: grid; gap: 12px; min-width: 0; }
+.rv-cx__config-panel[hidden] { display: none; }
+
+/* Acción bloqueada (p. ej. «Revisar archivo» sin archivo): contorno punteado de 1 px, sin relleno gris (Rovaq). */
+.rv-cx__config .rv-btn:disabled { background: transparent; border: 1px dashed #bfbfc2; color: var(--muted); opacity: 1; }
+
+/* Ronda 8 (Rovaq «Fuentes conectadas»): el detalle de la derecha llena la altura de la lista de tarjetas-pestaña (la ronda 6 lo dejaba a su contenido: 180 px junto a 470). */
+.rv-cx__md-cuerpo { align-items: stretch; }
+.rv-cx__panel { display: flex; flex-direction: column; }
+.rv-cx__panel > .rv-cx__pares { flex: 1 1 auto; align-content: start; }

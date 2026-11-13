@@ -366,12 +366,12 @@ export function ChatEntrevista({
       <input
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
-        placeholder={documento ? t('op.pregunta_sobre_o_tu_operacion', { nombre: documento.nombre }) : t('op.pregunta_sobre_tu_operacion')}
+        placeholder={documento ? t('op.pregunta_sobre_o_tu_operacion', { nombre: documento.nombre }) : t('op.escribe_tu_respuesta')}
         aria-label={t('op.pregunta_sobre_tu_operacion_2')}
         className="rv-ob__campo" data-anillo="envolvente"
       />
       <div className="rv-ob__barra">
-        <Boton variante="primary" tamano="sm" icono={<Icono icono={Search} tam={14} />} onClick={() => setRecomendar((v) => !v)}>{t('op.consulta')}</Boton>
+        <Boton variante="secondary" tamano="sm" aria-expanded={recomendar} icono={<Icono icono={Search} tam={14} />} onClick={() => setRecomendar((v) => !v)}>{t('op.consulta')}</Boton>
 
         <div className="rv-ob__herramientas">
           <input ref={inputCamara} type="file" accept="image/*" capture="environment" className="rv-ob__archivo"
@@ -380,13 +380,13 @@ export function ChatEntrevista({
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
           <input ref={inputArchivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="rv-ob__archivo"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-          <Tooltip texto={t('op.adjuntar_comprobante')}>
+          <span className="rv-ob__clip"><Tooltip texto={t('op.adjuntar_comprobante')}>
             <Boton ref={botonClip} variante="ghost" className="rv-btn--icono" aria-label={t('op.adjuntar_comprobante')}
               onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado} icono={<Icono icono={Paperclip} />}>{null}</Boton>
-          </Tooltip>
-          <Tooltip texto={t('op.enviar')}>
+          </Tooltip></span>
+          <span className="rv-ob__enviar"><Tooltip texto={t('op.enviar')}>
             <Boton type="submit" variante="primary" className="rv-btn--icono" aria-label={t('op.enviar')} disabled={!puedeEnviar} icono={<Icono icono={ArrowUp} />}>{null}</Boton>
-          </Tooltip>
+          </Tooltip></span>
         </div>
       </div>
     </form>
@@ -411,7 +411,7 @@ export function ChatEntrevista({
   const chipsRow = chips.length > 0 && (
     <div className="rv-ob__chips" data-portada={vacio || undefined}>
       {chips.map((c) => (
-        <Boton key={c.valor} variante="suave" tamano="sm" onClick={() => preguntar(c.valor, c.etiqueta)}>
+        <Boton key={c.valor} variante="secondary" tamano="sm" className="rv-ob__chip" onClick={() => preguntar(c.valor, c.etiqueta)}>
           {c.etiqueta}
         </Boton>
       ))}
@@ -427,9 +427,9 @@ export function ChatEntrevista({
   if (!vacio) {
     return (
       <div className="rv-ob__lienzo">
-        {pillListo}
         <div className="rv-ob__conversacion">
           <div className="rv-ob__hilo-col">
+            {pillListo}
             <div className="rv-ob__hilo">
               {historial.map((h, i) => (
                 <div key={i}>
@@ -478,7 +478,6 @@ export function ChatEntrevista({
   return (
     <div className="rv-ob__lienzo">
       <CampoPixeles />
-      {pillListo}
       <div className="rv-ob__portada">
         <div className="rv-ob__columna">
           <Logo alto="h-7" className="rv-ob__marca" />
@@ -488,6 +487,7 @@ export function ChatEntrevista({
                 ? t('op.puedes_corregir_lo_declarado_el_motor')
                 : t('op.fiscal_sistemas_y_operacion_adjunta_la'))}
           </p>
+          {pillListo}
 
           {caja}
 

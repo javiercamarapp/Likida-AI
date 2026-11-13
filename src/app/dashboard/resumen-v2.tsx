@@ -1,15 +1,20 @@
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, hoyMx } from '@/lib/formato';
-import { Aviso, BotonEnlace, Chip, FilaTarjetas, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { Aviso, BotonEnlace, Chip, FilaTarjetas, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import type { AgenteInsight, Insight } from '@/lib/likida/insights/tipos';
 import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { AvisoSinFlota } from './sin-flota';
 import { ATAJOS_RESUMEN, coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from './resumen-datos';
 import { FiltrosResumen, ListaAtencion, SiguienteAccion } from './resumen-cliente';
-import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo } from './resumen-tarjetas';
+import { PildorasMetodo } from './resumen-metodo';
+import { itemsKpi, TarjetaCierres, TarjetaCierresMensuales, TarjetaDiferencias, TarjetaHizoSolo, TarjetaTopTipos, TarjetaViajesRecientes } from './resumen-tarjetas';
 import { getT } from '@/lib/i18n/servidor';
+import { PERIODO_RANGO } from './resumen-modelo';
+import { cifrasUniformes } from './formato';
+import './estados.css';
+import './resumen.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RESUMEN v2 DEL DUEÑO, página CANÓNICA del contrato visual (MarcoPagina + FilaTarjetas + TiraCifras; 0 style=, 0 .card):
@@ -59,36 +64,60 @@ export async function ResumenV2({
   const ambito = `${tenantId}:${userId}`;
 
   return (
-    <MarcoPagina
+    <EsqueletoPortada
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
       titulo={t('op.resumen')}
       apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? t('op.tus_cinco_agentes_de_un_vistazo_3') : t('op.tu_flota_de_un_vistazo')}`}
-      acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}
-    >
-      {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
-
-      {avisoFiscalPospuesto && (
-        <Aviso tono="warn" acciones={puede('/dashboard/onboarding') ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/onboarding${sufijo}`}>{t('op.declararlo_ahora')}</BotonEnlace> : undefined}>{t('op.tu_perfil_fiscal_sigue_sin_declararse')}</Aviso>
+      acciones={<Chip className="rv-res__fecha">{fechaMx(diaMx, idioma)}</Chip>}
+      etiquetaProcedencia={t('op.res.corte', { fecha: fechaMx(diaMx, idioma) })}
+      procedencia={(
+        <>
+          <li>{t('op.res.corte', { fecha: fechaMx(diaMx, idioma) })}</li>
+          <li>{t('op.res.periodo', { periodo: PERIODO_RANGO[rango] })}</li>
+          <li>{`Fuentes ${cob.ok} de ${cob.total}`}</li>
+          {cob.ok < cob.total ? <li>{t('op.res.sin_lectura', { n: cob.total - cob.ok, total: cob.total })}</li> : null}
+        </>
       )}
-
-      <FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />
-
-      <TiraCifras items={itemsKpi(d, sufijo, puede, t)} etiqueta={t('op.tu_flota_en_likida')} />
-
-      <FilaTarjetas variante="8-4">
-        <TarjetaCierres t={t} d={d} />
+      filtros={<FiltrosResumen rango={rango} periodoTexto={PERIODO_RANGO[rango]} />}
+      avisos={(
+        <>
+          {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
+          {avisoFiscalPospuesto && (
+            <Aviso tono="warn" acciones={puede('/dashboard/onboarding') ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/onboarding${sufijo}`}>{t('op.declararlo_ahora')}</BotonEnlace> : undefined}>{t('op.tu_perfil_fiscal_sigue_sin_declararse')}</Aviso>
+          )}
+        </>
+      )}
+      metodo={<PildorasMetodo etiquetaComo={t('op.res.como_se_calculo')} comoTexto={t('op.res.como_texto', { periodo: PERIODO_RANGO[rango] })}
+        etiquetaFuentes={t('op.res.fuentes_publicaciones')} fuentesTexto={t('op.res.fuentes_texto', { ok: cob.ok, total: cob.total, fecha: fechaMx(diaMx, idioma) })} />}
+      cifras={cifrasUniformes(itemsKpi(d, sufijo, puede, t))}
+      etiquetaCifras={t('op.tu_flota_en_likida')}
+    >
+      <FilaTarjetas variante="4-4-4">
         <Tarjeta titulo={t('op.requiere_tu_atencion')} info="resumen.requiere_atencion">
           <ListaAtencion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
         </Tarjeta>
-      </FilaTarjetas>
-
-      <FilaTarjetas variante="4-4-4" llena>
         <TarjetaDiferencias t={t} d={d} />
-        <TarjetaHizoSolo t={t} d={d} sufijo={sufijo} puede={puede} />
         <Tarjeta titulo={t('op.siguiente_mejor_accion')} info="resumen.siguiente_mejor_accion">
           <SiguienteAccion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} atajos={atajos} />
         </Tarjeta>
       </FilaTarjetas>
-    </MarcoPagina>
+
+      {/* Plantilla PO (Rovaq «Hoy»): fila 6-6 con la serie y la tabla de viajes recientes, parejas en alto. */}
+      <FilaTarjetas variante="6-6">
+        <TarjetaCierres t={t} d={d} />
+        <TarjetaViajesRecientes t={t} d={d} sufijo={sufijo} puede={puede} />
+      </FilaTarjetas>
+
+      {/* Plantilla Portada (Rovaq): columnas mensuales a todo el ancho antes de «Top» y «Lo más importante». */}
+      <FilaTarjetas variante="12">
+        <TarjetaCierresMensuales t={t} d={d} />
+      </FilaTarjetas>
+
+      {/* Con dinero: «Top» por tipo de diferencia + lo que hizo solo, parejos. Sin dinero no hay «Top» que mostrar y lo que hizo solo no se estira. */}
+      <FilaTarjetas variante={d.veDinero ? '6-6' : '12'}>
+        {d.veDinero ? <TarjetaTopTipos t={t} d={d} /> : null}
+        <TarjetaHizoSolo t={t} d={d} sufijo={sufijo} puede={puede} />
+      </FilaTarjetas>
+    </EsqueletoPortada>
   );
 }

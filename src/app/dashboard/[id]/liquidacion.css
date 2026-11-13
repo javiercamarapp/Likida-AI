@@ -65,3 +65,50 @@
 .rv-liq__corregir { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
 .rv-liq__corregir .rv-ctl { min-width: 140px; }
 .rv-liq__confirma { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Columna izquierda de la ficha (datos + acreditable): apila sus tarjetas a su alto natural, sin estirarse a la línea de tiempo vecina. */
+.rv-liq__col { display: grid; gap: var(--sp-gap, 12px); align-content: start; align-self: start; min-width: 0; }
+.rv-liq__col + .rv-tarjeta { align-self: start; }
+/* Acreditable a todo el ancho: datos a la izquierda y el reparto (deducible / laboral) a la derecha; sin reparto, una sola columna. */
+.rv-liq__acred .rv-tarjeta__cuerpo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px 32px; align-items: start; }
+.rv-liq__acred-datos { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.rv-liq__acred .rv-liq__sub { border-top: 0; padding-top: 0; }
+@media (max-width: 767.98px) { .rv-liq__acred .rv-liq__sub { border-top: 1px solid var(--line); padding-top: 10px; } }
+/* Fieldset plano: la semántica de grupo se conserva, el marco con muesca del navegador no. */
+[data-ui="v2"] .rv-fieldset.rv-liq__plano { padding: 0; gap: 6px; border: 0; border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-fieldset.rv-liq__plano > .rv-fieldset__leyenda { padding: 0; }
+
+/* Datos de la ficha SIN baldosas grises (Rovaq 06d: bloques narrativos de dos columnas, filete fino entre filas): etiqueta a la izquierda, valor a la derecha. */
+[data-ui="v2"] .rv-sis.rv-liq__datos { grid-template-columns: minmax(0, 1fr); gap: 0; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__campo { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; padding: 7px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__campo:first-child { padding-top: 0; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__campo:last-child { border-bottom: 0; padding-bottom: 0; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__etq { flex: none; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__valor { min-width: 0; text-align: right; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__nota { flex-basis: 100%; }
+
+/* Reabrir: casilla y botón de peligro juntos, sin hueco de 24 px. */
+.rv-liq__reabrir { display: grid; gap: 8px; justify-items: start; }
+.rv-liq__reabrir-pie { display: flex; }
+.rv-liq__reabrir-msg { margin: 0; font-size: var(--t-small, 13px); color: var(--muted); }
+.rv-liq__reabrir-msg[data-tono="bad"] { color: var(--bad); }
+
+/* Ficha del viaje: la tarjeta se estira al alto de la línea de tiempo vecina y las filas reparten ese alto por igual (filete a filete), así no queda un
+   vacío bajo la última fila. */
+[data-ui="v2"] .rv-liq__ficha > .rv-tarjeta__cuerpo { display: flex; flex-direction: column; gap: 8px; }
+[data-ui="v2"] .rv-liq__ficha .rv-sis.rv-liq__datos { flex: 1 1 auto; grid-auto-rows: minmax(0, 1fr); }
+[data-ui="v2"] .rv-liq__ficha .rv-liq__datos .rv-sis__campo { align-items: center; }
+
+/* Revisión (Rovaq: fichas en bloques de 2 columnas): estado y disputas a la izquierda (5/12), la forma a la derecha (7/12) con un filete entre ambas; en
+   pantallas angostas, una columna. Antes: una forma de 780 px en una tarjeta de 1380 px con la mitad derecha vacía. */
+.rv-liq__rev { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 24px; align-items: start; }
+.rv-liq__rev[data-dos] { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+.rv-liq__rev[data-dos] > .rv-liq__firma:first-child { padding-right: 24px; border-right: 1px solid var(--line); }
+@media (max-width: 899.98px) {
+  .rv-liq__rev[data-dos] { grid-template-columns: minmax(0, 1fr); }
+  .rv-liq__rev[data-dos] > .rv-liq__firma:first-child { padding-right: 0; border-right: 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+}
+
+/* «Qué se sabe / Qué no se sabe»: las listas llevan sus marcas (viñetas), no solo sangría. */
+[data-ui="v2"] .rv-esq__saber ul { list-style: disc; }
+[data-ui="v2"] .rv-esq__saber li::marker { color: var(--muted); }

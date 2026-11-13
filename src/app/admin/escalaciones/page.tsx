@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import { getT } from '@/lib/i18n/servidor';
 import { nombreFuenteTr } from '@/lib/i18n/rotulos_tr';
 import { urlCasoExamen } from '@/lib/admin/casos-regresion';
@@ -14,8 +15,8 @@ import { getAgentesParados } from '@/lib/admin/agentes-parados';
 import { leerResumenBandeja } from '@/lib/admin/cola-aprobacion';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaHoraMx, fechaMx, numero } from '@/lib/formato';
-import { Aviso, BotonEnlace, EstadoVacio, MarcoPagina, StatusChip, TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
-import { TiraCifras } from '../../ui-v2/graficas';
+import { Aviso, BotonEnlace, EstadoVacio, StatusChip, TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { BloqueAgentesParados } from './agentes-parados';
 import '../bandeja.css';
 
@@ -68,6 +69,10 @@ export default async function EscalacionesPage() {
   const ilegibles = FUENTES.filter((f) => bandeja.fuentes[f].error !== null);
   const legibles = FUENTES.filter((f) => bandeja.fuentes[f].error === null);
 
+  // Total real: la suma de los conteos reales de las fuentes legibles; sin dato si alguna legible no trae su conteo (nunca una suma a medias).
+  const conteosLegibles = legibles.map((f) => conteoDeFuente(f, bandeja.conteos));
+  const porResolver = ilegibles.length === 0 && conteosLegibles.every((c): c is number => c !== null) ? conteosLegibles.reduce((a, c) => a + c, 0) : null;
+
   const { t: tMon } = await getT('monitoreo');
   const { t: tSis } = await getT('admin_sistema');
   const columnas: ColumnaBase<ItemEscalacion>[] = [
@@ -91,32 +96,43 @@ export default async function EscalacionesPage() {
       id: 'resolver', titulo: t('escalaciones.se_resuelve_en'), alinear: 'der',
       // Sin pantalla a la cual llevar, se dice — un link que rebota es peor que ninguno.
       celda: (it) => (it.href
-        ? <BotonEnlace href={it.href} variante="secondary" tamano="sm">Resolver <ArrowRight width={11} height={11} strokeWidth={1.75} aria-hidden="true" /></BotonEnlace>
+        ? <BotonEnlace href={it.href} variante="secondary" tamano="sm" className="bj-nowrap">Resolver <ArrowRight width={11} height={11} strokeWidth={1.75} aria-hidden="true" /></BotonEnlace>
         : 'sin ficha'),
     },
-    { id: 'caso', titulo: '', alinear: 'der', celda: (it) => <BotonEnlace href={urlCasoExamen(it)} variante="ghost" tamano="sm">{tMon('caso.boton')}</BotonEnlace> },
+    { id: 'caso', titulo: '', alinear: 'der', celda: (it) => <BotonEnlace href={urlCasoExamen(it)} variante="ghost" tamano="sm" className="bj-nowrap">{tMon('caso.boton')}</BotonEnlace> },
   ];
 
   return (
-    <MarcoPagina titulo={t('escalaciones.escalaciones')} apoyo={t('escalaciones.todo_lo_que_espera')}>
-      <TiraCifras
-        etiqueta={t('escalaciones.escalaciones_por_fuente')}
-        items={legibles.map((f) => {
-          const Icono = ICONO_FUENTE[f];
-          return { etiqueta: nombreFuenteTr(f, tSis), valor: conteoDeFuente(f, bandeja.conteos), formato: 'entero' as const, icono: <Icono width={15} height={15} strokeWidth={1.75} /> };
-        })}
-      />
-
-      {/* Fuentes que NO se pudieron leer — dicho, nunca un 0. */}
-      {ilegibles.map((f) => (
+    <EsqueletoTablaMaestra
+      titulo={t('escalaciones.escalaciones')}
+      apoyo={t('escalaciones.todo_lo_que_espera')}
+      etiquetaCifras={t('escalaciones.escalaciones_por_fuente')}
+      cifras={uniformes([
+        // Tira de 4 celdas con rótulo de UNA línea (Rovaq): el total con su barra segmentada por fuente (los seis conteos reales),
+        // lo vencido, lo que no se pudo leer y los agentes que no corrieron. Los conteos por fuente van como chips sobre la cola.
+        porResolver === null
+          ? { etiqueta: t('escalaciones.kpi_por_resolver'), valor: null, estado: 'vacio' as const, mensaje: t('escalaciones.kpi_sin_leer_todo') }
+          : { etiqueta: t('escalaciones.kpi_por_resolver'), valor: porResolver, formato: 'entero' as const, segmentos: legibles.map((f) => ({ etiqueta: nombreFuenteTr(f, tSis), valor: conteoDeFuente(f, bandeja.conteos) })) },
+        bandeja.conteos.ticketsVencidos === null
+          ? { etiqueta: t('escalaciones.kpi_tickets_vencidos'), valor: null, estado: 'vacio' as const, mensaje: t('escalaciones.kpi_sin_leer_todo') }
+          : { etiqueta: t('escalaciones.kpi_tickets_vencidos'), valor: bandeja.conteos.ticketsVencidos, formato: 'entero' as const, tono: bandeja.conteos.ticketsVencidos > 0 ? 'bad' as const : undefined },
+        { etiqueta: t('escalaciones.kpi_fuentes_sin_leer'), valor: ilegibles.length, formato: 'entero' as const, tono: ilegibles.length > 0 ? 'bad' as const : undefined },
+        parados === null
+          ? { etiqueta: t('escalaciones.kpi_agentes_sin_correr'), valor: null, estado: 'vacio' as const, mensaje: t('escalaciones.kpi_sin_leer_todo') }
+          : { etiqueta: t('escalaciones.kpi_agentes_sin_correr'), valor: parados.parados.length, formato: 'entero' as const, tono: parados.parados.length > 0 ? 'warn' as const : undefined },
+      ])}
+      /* Fuentes que NO se pudieron leer — dicho, nunca un 0. */
+      avisos={ilegibles.length === 0 ? null : ilegibles.map((f) => (
         <Aviso key={f} tono="error" titulo={t('escalaciones.no_se_pudo_leer', { NOMBRE_FUENTE: nombreFuenteTr(f, tSis) })}>
-          
           {t('escalaciones.no_es_que_haya')} {bandeja.fuentes[f].error}
         </Aviso>
       ))}
+    >
 
       {bandeja.cola.length === 0 ? (
         legibles.length > 0 && (
+          <section className="bj-bloque bj-caja" aria-labelledby="cola-escalaciones">
+          <h2 className="bj-titulo" id="cola-escalaciones">{t('escalaciones.la_cola_lo_mas')}</h2>
           <EstadoVacio titulo={ilegibles.length === 0 ? t('escalaciones.la_cola_esta_vacia') : t('escalaciones.sin_pendientes_en_lo')}>
             {ilegibles.length === 0 ? (
               <>
@@ -129,10 +145,18 @@ export default async function EscalacionesPage() {
               </>
             )}
           </EstadoVacio>
+          </section>
         )
       ) : (
-        <section className="bj-bloque" aria-labelledby="cola-escalaciones">
+        <section className="bj-bloque bj-caja" aria-labelledby="cola-escalaciones">
           <h2 className="bj-titulo" id="cola-escalaciones">{t('escalaciones.la_cola_lo_mas')}</h2>
+          <ul className="bj-chips-fuente" aria-label={t('escalaciones.escalaciones_por_fuente')}>
+            {legibles.map((f) => {
+              const Icono = ICONO_FUENTE[f];
+              const n = conteoDeFuente(f, bandeja.conteos);
+              return <li key={f}><span className="bj-fuente"><Icono width={13} height={13} strokeWidth={1.75} aria-hidden="true" />{nombreFuenteTr(f, tSis)}</span><b>{n === null ? '—' : numero(n)}</b></li>;
+            })}
+          </ul>
           <TablaBase
             etiqueta={t('escalaciones.cola_de_escalaciones')} columnas={columnas} filas={cola50}
             idFila={(it) => `${it.fuente}-${it.desde}-${it.titulo}`} tarjetaMovil
@@ -147,8 +171,8 @@ export default async function EscalacionesPage() {
         </section>
       )}
 
-      <BloqueAgentesParados datos={parados} cola={cola} t={t} />
-    </MarcoPagina>
+      <BloqueAgentesParados datos={parados} cola={cola} t={t} tope={10} />
+    </EsqueletoTablaMaestra>
   );
 }
 

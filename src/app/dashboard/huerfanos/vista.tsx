@@ -4,7 +4,11 @@ import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { FilaAcciones, type AccionHuerfano } from './acciones';
 import type { BuscarViaje } from './combo-viaje';
-import { EstadoVacio, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Aviso, EstadoVacio, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import '../caja-vacia.css';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import './huerfanos.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
@@ -66,25 +70,35 @@ export function VistaHuerfanos({ tr = TR_OPERACION_ES, pendientes, hayViajesVivo
       ),
     },
   ];
+  // Cifras: solo lo que se midió en las filas que llegaron. Si la página viene truncada, el conteo total se declara aparte.
+  const conMonto = pendientes.filter((h) => h.monto > 0);
+  const sumaMonto = conMonto.reduce((a, h) => a + h.monto, 0);
+  const total = totalPendientes ?? (pendientes.length > 0 ? null : 0);
+  const cifras = ([
+    { etiqueta: t('hf.k.pendientes'), valor: total, formato: 'entero' as const, nota: hayMas ? t('hf.k.pendientes.mostrados', { n: numero(pendientes.length, idioma) }) : t('hf.k.pendientes.nota'), estado: total === null ? 'vacio' as const : 'ok' as const, mensaje: t('hf.k.sinconteo') },
+    { etiqueta: t('hf.k.conmonto'), valor: conMonto.length, formato: 'entero' as const, nota: t('hf.k.conmonto.nota') },
+    { etiqueta: t('hf.k.sinmonto'), valor: pendientes.length - conMonto.length, formato: 'entero' as const, nota: t('hf.k.sinmonto.nota'), tono: pendientes.length - conMonto.length > 0 ? 'warn' as const : undefined },
+    { etiqueta: t('hf.k.suma'), valor: sumaMonto, formato: 'mxn' as const, nota: hayMas ? t('hf.k.suma.parcial') : t('hf.k.suma.nota') },
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
   return (
-    <MarcoPagina titulo={t('hf.titulo')} apoyo={t('hf.apoyo')}>
-      <Tarjeta
-        titulo={pendientes.length > 0
-          ? t('hf.tarjeta.espera.n', { cifra: hayMas ? t('hf.de', { a: numero(pendientes.length, idioma), b: numero(totalPendientes!, idioma) }) : numero(pendientes.length, idioma) })
-          : t('hf.tarjeta.espera')}
-        info="huerfanos.bandeja">
-        <p className="rv-hf__nota">
-          {t('hf.nota')}
-          {hayMas && t('hf.nota.mas')}
-        </p>
-        {pendientes.length === 0 ? (
-          <EstadoVacio contenido icono={Inbox} titulo={t('hf.vacio.titulo')}>
+    <EsqueletoTablaMaestra
+      titulo={t('hf.titulo')}
+      apoyo={t('hf.apoyo')}
+      avisos={<Aviso tono="info">{t('hf.nota')}{hayMas && t('hf.nota.mas')}</Aviso>}
+      cifras={cifras}
+      etiquetaCifras={t('hf.k.etiqueta')}
+      selloCifras={selloHoy(t('hf.k.etiqueta'))}
+      pie={pendientes.length > 0 ? (hayMas ? t('hf.de', { a: numero(pendientes.length, idioma), b: numero(totalPendientes!, idioma) }) : t('hf.pie', { n: numero(pendientes.length, idioma) })) : undefined}
+    >
+      {pendientes.length === 0 ? (
+        <div className="rv-caja-vacia">
+          <EstadoVacio icono={Inbox} titulo={t('hf.vacio.titulo')}>
             {t('hf.vacio')}
           </EstadoVacio>
-        ) : (
-          <TablaBase<HuerfanoDeFlota> etiqueta={t('hf.tabla.etiqueta')} columnas={columnas} filas={pendientes} idFila={(h) => h.id} tarjetaMovil />
-        )}
-      </Tarjeta>
-    </MarcoPagina>
+        </div>
+      ) : (
+        <TablaBase<HuerfanoDeFlota> etiqueta={t('hf.tabla.etiqueta')} columnas={columnas} filas={pendientes} idFila={(h) => h.id} tarjetaMovil />
+      )}
+    </EsqueletoTablaMaestra>
   );
 }

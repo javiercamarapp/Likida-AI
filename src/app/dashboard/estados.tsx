@@ -1,5 +1,6 @@
 import { Inbox } from 'lucide-react';
 import { isValidElement, type ReactNode } from 'react';
+import './estados.css';
 import { BotonEnlace, EstadoError as EstadoErrorV2, EstadoVacio as EstadoVacioV2 } from '../ui-v2/componentes';
 
 // Los estados ÚNICOS (ui-v2) con la firma que ya usaban las pantallas de /dashboard. Así las ~50 pantallas dejan de pintar su propia

@@ -2,10 +2,11 @@ import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { EsqTarjetaV2, EsqCifrasV2, MarcoPagina } from '../../ui-v2/componentes';
+import { EsqTarjetaV2, EsqCifrasV2, FilaTarjetas } from '../../ui-v2/componentes';
 import {
-  BloqueIntro, BloqueEmbudoAdquisicion, BloqueCostoYCampanas, BloqueActivacion, BloqueCohortes, BloqueUso, BloqueSinInstrumentacion,
+  BloqueIntro, BloqueAlertasAdquisicion, BloqueCifrasCrecimiento, BloqueEmbudoAdquisicion, BloqueCostoLead, BloqueCampanas, BloqueActivacion, BloqueCohortes, BloqueUso, BloqueComisiones, BloqueSinInstrumentacion,
 } from './bloques';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import '../dinero.css';
 
 export const dynamic = 'force-dynamic';
@@ -25,15 +26,26 @@ export default async function CrecimientoPage() {
   await requireSuperadmin();
 
   return (
-    <MarcoPagina titulo={ta('crecimiento.crecimiento')} apoyo={ta('crecimiento.de_donde_vienen_los')}>
-      <Suspense fallback={<EsqTarjetaV2 alto={84} />}><BloqueIntro /></Suspense>
-      <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueEmbudoAdquisicion /></Suspense>
-      <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueCostoYCampanas /></Suspense>
-      <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueActivacion /></Suspense>
+    <EsqueletoPanelCifras titulo={ta('crecimiento.crecimiento')} apoyo={ta('crecimiento.de_donde_vienen_los')}>
+      <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueIntro /></Suspense>
+      <Suspense fallback={null}><BloqueAlertasAdquisicion /></Suspense>
+      {/* Plantilla PC de Rovaq: cifras arriba → embudo y serie (6-6) → costo por lead y campañas (6-6) → activación y comisiones (6-6) → cohortes. */}
+      <Suspense fallback={<EsqCifrasV2 n={4} />}><BloqueCifrasCrecimiento /></Suspense>
+      <FilaTarjetas variante="6-6">
+        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudoAdquisicion /></Suspense>
+        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueUso /></Suspense>
+      </FilaTarjetas>
+      <FilaTarjetas variante="6-6">
+        <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueCostoLead /></Suspense>
+        <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueCampanas /></Suspense>
+      </FilaTarjetas>
+      <FilaTarjetas variante="6-6">
+        <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueActivacion /></Suspense>
+        <BloqueComisiones ta={ta} />
+      </FilaTarjetas>
       <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueCohortes /></Suspense>
-      <Suspense fallback={<><EsqTarjetaV2 alto={240} /><EsqCifrasV2 n={2} /></>}><BloqueUso /></Suspense>
       <BloqueSinInstrumentacion ta={ta} />
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

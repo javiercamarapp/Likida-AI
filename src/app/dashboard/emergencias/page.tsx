@@ -1,9 +1,11 @@
+import { cifrasUniformes } from '../formato';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
 import { fechaMx, hoyMx, numero } from '@/lib/formato';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -20,9 +22,11 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
 import type { Metadata } from 'next';
 import {
-  CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoVacio, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, type ResultadoAccion,
+  Aviso, CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FilaTarjetas, FormaConAviso, StatusChip, TablaBase, Tarjeta, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
+import { CajonAlta } from '../cajon-alta';
 import { AccionFila } from './accion-fila';
+import '../estados.css';
 import './emergencias.css';
 import { getT } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
@@ -221,8 +225,18 @@ export default async function PaginaEmergencias({
   const polizaVencida = poliza?.vigenciaHasta ? poliza.vigenciaHasta < hoyMx() : false;
   const sinConfirmar = proveedores.filter((p) => !p.verificadoEn).length;
 
+  const cifras: PropsCifra[] | undefined = leyoOk ? [
+    // Sin póliza la cifra es «—» del mismo tamaño que las demás (26/700) y el motivo va en su sello de procedencia; no se lee como una medición.
+    { etiqueta: t('emg.cifra.poliza'), valor: poliza ? (polizaVencida ? t('emg.poliza.vencida') : t('emg.poliza.vigente')) : '—',
+      sello: poliza ? undefined : t('emg.poliza.sin'), tono: !poliza || polizaVencida ? 'warn' : undefined, info: 'emergencias.poliza' },
+    { etiqueta: t('emg.cifra.proveedores'), valor: numero(proveedores.length, idioma), info: 'emergencias.proveedores' },
+    { etiqueta: t('emg.cifra.sinconfirmar'), valor: numero(sinConfirmar, idioma), tono: sinConfirmar > 0 ? 'warn' : undefined, info: 'emergencias.sin_confirmar' },
+    { etiqueta: t('emg.cifra.contactos'), valor: numero(contactos.length, idioma), info: 'emergencias.contactos' },
+  ] : undefined;
+
   return (
-    <MarcoPagina titulo={t('emg.titulo')} apoyo={t('emg.apoyo')}>
+    <EsqueletoTablaMaestra titulo={t('emg.titulo')} apoyo={t('emg.apoyo')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy('Directorio de emergencia')}
+      avisos={leyoOk ? <Aviso>{t('emg.protocolo')}</Aviso> : undefined}>
       {!leyoOk && (
         <EstadoVacio pantalla contenido icono={ShieldCheck} titulo={t('emg.error.titulo')}>
           {t('emg.error')}
@@ -230,71 +244,13 @@ export default async function PaginaEmergencias({
       )}
 
       {leyoOk && (
-        <>
-          <TiraCifras sello={selloHoy('Directorio de emergencia')}>
-            <Cifra etiqueta={t('emg.cifra.poliza')} valor={poliza ? (polizaVencida ? t('emg.poliza.vencida') : t('emg.poliza.vigente')) : t('emg.poliza.sin')}
-              tono={!poliza || polizaVencida ? 'warn' : undefined} info="emergencias.poliza" />
-            <Cifra etiqueta={t('emg.cifra.proveedores')} valor={numero(proveedores.length, idioma)} info="emergencias.proveedores" />
-            <Cifra etiqueta={t('emg.cifra.sinconfirmar')} valor={numero(sinConfirmar, idioma)} tono={sinConfirmar > 0 ? 'warn' : undefined} info="emergencias.sin_confirmar" />
-            <Cifra etiqueta={t('emg.cifra.contactos')} valor={numero(contactos.length, idioma)} info="emergencias.contactos" />
-          </TiraCifras>
-
-          {/* ── Póliza ──────────────────────────────────────────────────── */}
-          <Tarjeta titulo={t('emg.poliza.titulo')} info="emergencias.poliza"
-            estado={poliza ? 'ok' : 'vacio'} contenida iconoVacio={ShieldCheck}
-            mensaje={t('emg.poliza.vacio')}
-            detalle={t('emg.poliza.vacio.nota')}>
-            {poliza && (
-              <p className="rv-em__nota">
-                {t('emg.poliza.resumen', {
-                  aseguradora: poliza.aseguradora, numero: poliza.numeroPoliza, tel: poliza.telefonoSiniestros,
-                  vigencia: poliza.vigenciaHasta ? (polizaVencida ? t('emg.poliza.vencida', { fecha: fechaMx(poliza.vigenciaHasta, idioma) }) : t('emg.poliza.hasta.fecha', { fecha: fechaMx(poliza.vigenciaHasta, idioma) })) : '',
-                })}
-              </p>
-            )}
-            <Disclosure variante="linea" titulo={poliza ? t('emg.poliza.reemplazar') : t('emg.poliza.capturar')} abierto={!poliza}>
-              <FormaConAviso accion={guardarPolizaAction} boton={poliza ? t('emg.poliza.reemplazar') : t('emg.poliza.guardar')} columnas="md:grid-cols-2">
-                <CampoTexto name="aseguradora" etiqueta={t('emg.poliza.aseguradora')} obligatorio defaultValue={poliza?.aseguradora ?? ''} />
-                <CampoTexto name="numeroPoliza" etiqueta={t('emg.poliza.numero')} obligatorio defaultValue={poliza?.numeroPoliza ?? ''} />
-                <CampoTexto name="telefonoSiniestros" etiqueta={t('emg.poliza.telefono')} obligatorio defaultValue={poliza?.telefonoSiniestros ?? ''}
-                  ayuda={t('emg.poliza.telefono.ayuda')} />
-                <CampoFecha name="vigenciaHasta" etiqueta={t('emg.poliza.hasta')} defaultValue={poliza?.vigenciaHasta ?? ''} />
-              </FormaConAviso>
-            </Disclosure>
-          </Tarjeta>
-
+        <div className="rv-em__pila">
           {/* ── Proveedores ─────────────────────────────────────────────── */}
-          <Tarjeta titulo={t('emg.prov.titulo')} info="emergencias.proveedores"
-            estado={proveedores.length === 0 ? 'vacio' : 'ok'} contenida iconoVacio={PhoneCall}
-            mensaje={t('emg.prov.vacio')}
-            detalle={t('emg.prov.vacio.nota')}>
-            {proveedores.length > 0 && (
-              <ul className="rv-em__lista">
-                {proveedores.map((p) => (
-                  <li key={p.id} className="rv-em__fila">
-                    <span className="rv-em__nombre">{p.nombre}</span>
-                    <span className="rv-em__dato">{p.tipo} · {p.telefono}{p.radioKm ? ` · ~${p.radioKm} km` : ''}</span>
-                    <StatusChip tono={p.verificadoEn ? 'ok' : 'warn'}>
-                      {p.verificadoEn ? `verificado ${fechaMx(p.verificadoEn, idioma)}` : t('emg.prov.sinconfirmar')}
-                    </StatusChip>
-                    <span className="rv-em__acciones">
-                      {!p.verificadoEn && (
-                        <AccionFila accion={verificarProveedor} id={p.id} etiqueta={t('emg.prov.verificado')}
-                          titulo={t('emg.prov.verificado.ayuda')} />
-                      )}
-                      <AccionFila accion={borrarProveedor} id={p.id} etiqueta={t('emg.quitar')} tono="peligro"
-                        confirmar={{
-                          titulo: `Quitar a ${p.nombre}`,
-                          descripcion: t('emg.prov.quitar.cuerpo'),
-                          etiquetaConfirmar: t('emg.quitar.si'),
-                        }} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Disclosure variante="linea" titulo={t('emg.prov.agregar.titulo')} abierto={proveedores.length === 0}>
-              <FormaConAviso accion={altaProveedor} boton={t('emg.prov.agregar')} columnas="md:grid-cols-3">
+          <Tarjeta titulo={t('emg.prov.titulo')} info="emergencias.proveedores" className={proveedores.length > 0 ? 'rv-tarjeta--tabla' : undefined}
+            contenida
+            acciones={(
+              <CajonAlta id="proveedor" titulo={t('emg.prov.agregar.titulo')} disparador={t('emg.prov.agregar.titulo')} variante="secondary" tamano="xl">
+                <FormaConAviso accion={altaProveedor} boton={t('emg.prov.agregar')} columnas="md:grid-cols-3">
                 <CampoSelect name="tipo" etiqueta={t('emg.prov.tipo')} obligatorio defaultValue="">
                   <option value="">{t('emg.elige')}</option>
                   {TIPOS_PROVEEDOR.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -309,41 +265,75 @@ export default async function PaginaEmergencias({
                 <CampoTexto name="lng" etiqueta={t('emg.prov.lon')} placeholder="-99.1332" />
                 <CampoTexto name="notas" etiqueta={t('emg.prov.notas')} placeholder={t('emg.prov.notas.ph')} />
               </FormaConAviso>
-            </Disclosure>
+              </CajonAlta>
+            )}>
+            {proveedores.length === 0 && (
+              <EstadoVacio contenido icono={PhoneCall} titulo={t('emg.prov.vacio')}>{t('emg.prov.vacio.nota')}</EstadoVacio>
+            )}
+            {proveedores.length > 0 && (
+              <TablaBase<ProveedorEmergencia>
+                etiqueta={t('emg.prov.titulo')} altoMaximo={false} tarjetaMovil filas={proveedores} idFila={(p) => p.id}
+                columnas={[
+                  { id: 'nombre', titulo: t('emg.prov.nombre'), principal: true, celda: (p) => p.nombre },
+                  { id: 'tipo', titulo: t('emg.prov.tipo'), celda: (p) => p.tipo },
+                  { id: 'telefono', titulo: t('emg.prov.telefono'), celda: (p) => <span className="rv-em__dato">{p.telefono}{p.radioKm ? ` · ~${p.radioKm} km` : ''}</span> },
+                  { id: 'estado', titulo: t('emg.cifra.sinconfirmar'), celda: (p) => (
+                    <StatusChip tono={p.verificadoEn ? 'ok' : 'warn'}>
+                      {p.verificadoEn ? `verificado ${fechaMx(p.verificadoEn, idioma)}` : t('emg.prov.sinconfirmar')}
+                    </StatusChip>
+                  ) },
+                  { id: 'acciones', titulo: '', alinear: 'der', celda: (p) => (
+                    <span className="rv-em__acciones">
+                      {!p.verificadoEn && (
+                        <AccionFila accion={verificarProveedor} id={p.id} etiqueta={t('emg.prov.verificado')}
+                          titulo={t('emg.prov.verificado.ayuda')} />
+                      )}
+                      <AccionFila accion={borrarProveedor} id={p.id} etiqueta={t('emg.quitar')} tono="peligro"
+                        confirmar={{
+                          titulo: `Quitar a ${p.nombre}`,
+                          descripcion: t('emg.prov.quitar.cuerpo'),
+                          etiquetaConfirmar: t('emg.quitar.si'),
+                        }} />
+                    </span>
+                  ) },
+                ]}
+              />
+            )}
+          </Tarjeta>
+
+          <FilaTarjetas variante="6-6">
+          {/* ── Póliza ──────────────────────────────────────────────────── */}
+          <Tarjeta titulo={t('emg.poliza.titulo')} info="emergencias.poliza"
+            contenida
+            acciones={(
+              <CajonAlta id="poliza" titulo={t('emg.poliza.titulo')} disparador={poliza ? t('emg.poliza.reemplazar') : t('emg.poliza.capturar')} variante="secondary" tamano="xl">
+                <FormaConAviso accion={guardarPolizaAction} boton={poliza ? t('emg.poliza.reemplazar') : t('emg.poliza.guardar')} columnas="md:grid-cols-2">
+                <CampoTexto name="aseguradora" etiqueta={t('emg.poliza.aseguradora')} obligatorio defaultValue={poliza?.aseguradora ?? ''} />
+                <CampoTexto name="numeroPoliza" etiqueta={t('emg.poliza.numero')} obligatorio defaultValue={poliza?.numeroPoliza ?? ''} />
+                <CampoTexto name="telefonoSiniestros" etiqueta={t('emg.poliza.telefono')} obligatorio defaultValue={poliza?.telefonoSiniestros ?? ''}
+                  ayuda={t('emg.poliza.telefono.ayuda')} />
+                <CampoFecha name="vigenciaHasta" etiqueta={t('emg.poliza.hasta')} defaultValue={poliza?.vigenciaHasta ?? ''} />
+              </FormaConAviso>
+              </CajonAlta>
+            )}>
+            {!poliza && (
+              <EstadoVacio contenido icono={ShieldCheck} titulo={t('emg.poliza.vacio')}>{t('emg.poliza.vacio.nota')}</EstadoVacio>
+            )}
+            {poliza && (
+              <p className="rv-em__nota">
+                {t('emg.poliza.resumen', {
+                  aseguradora: poliza.aseguradora, numero: poliza.numeroPoliza, tel: poliza.telefonoSiniestros,
+                  vigencia: poliza.vigenciaHasta ? (polizaVencida ? t('emg.poliza.vencida', { fecha: fechaMx(poliza.vigenciaHasta, idioma) }) : t('emg.poliza.hasta.fecha', { fecha: fechaMx(poliza.vigenciaHasta, idioma) })) : '',
+                })}
+              </p>
+            )}
           </Tarjeta>
 
           {/* ── Contactos de emergencia ─────────────────────────────────── */}
           <Tarjeta titulo={t('emg.cont.titulo')} info="emergencias.contactos"
-            estado={contactos.length === 0 ? 'vacio' : 'ok'} contenida iconoVacio={HeartHandshake}
-            mensaje={t('emg.cont.vacio')}
-            detalle={t('emg.cont.vacio.nota')}>
-            {contactos.length > 0 && (
-              <ul className="rv-em__lista">
-                {contactos.map((c) => (
-                  <li key={c.id} className="rv-em__fila">
-                    <span className="rv-em__nombre">{c.nombre}</span>
-                    <span className="rv-em__dato">
-                      {c.operadorNombre}{c.parentesco ? ` · ${c.parentesco}` : ''} · {c.telefono}
-                    </span>
-                    <StatusChip tono={c.avisarSiLesionados ? 'ok' : 'muted'}>
-                      {c.avisarSiLesionados ? t('emg.cont.avisar') : t('emg.cont.solo')}
-                    </StatusChip>
-                    <span className="rv-em__acciones">
-                      <AccionFila accion={borrarContacto} id={c.id} etiqueta={t('emg.quitar')} tono="peligro"
-                        confirmar={{
-                          titulo: `Quitar a ${c.nombre}`,
-                          descripcion: t('emg.cont.quitar.cuerpo', { operador: c.operadorNombre }),
-                          etiquetaConfirmar: t('emg.quitar.si'),
-                        }} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {operadores.length === 0 ? (
-              <p className="rv-em__nota">{t('emg.cont.sinoperadores')}</p>
-            ) : (
-              <Disclosure variante="linea" titulo={t('emg.cont.agregar.titulo')} abierto={contactos.length === 0}>
+            contenida
+            acciones={operadores.length > 0 ? (
+              <CajonAlta id="contacto" titulo={t('emg.cont.agregar.titulo')} disparador={t('emg.cont.agregar.titulo')} variante="secondary" tamano="xl">
                 <FormaConAviso accion={altaContacto} boton={t('emg.cont.agregar')} columnas="md:grid-cols-3">
                   <CampoSelect name="operadorId" etiqueta={t('emg.cont.operador')} obligatorio defaultValue="">
                     <option value="">{t('emg.elige')}</option>
@@ -358,11 +348,39 @@ export default async function PaginaEmergencias({
                     <option value="si">{t('emg.cont.si')}</option>
                   </CampoSelect>
                 </FormaConAviso>
-              </Disclosure>
+              </CajonAlta>
+            ) : undefined}>
+            {operadores.length === 0 && <p className="rv-em__nota">{t('emg.cont.sinoperadores')}</p>}
+            {contactos.length === 0 && (
+              <EstadoVacio contenido icono={HeartHandshake} titulo={t('emg.cont.vacio')}>{t('emg.cont.vacio.nota')}</EstadoVacio>
+            )}
+            {contactos.length > 0 && (
+              <TablaBase<ContactoEmergencia & { operadorNombre: string }>
+                etiqueta={t('emg.cont.titulo')} altoMaximo={false} tarjetaMovil filas={contactos} idFila={(c) => c.id}
+                columnas={[
+                  { id: 'nombre', titulo: t('emg.cont.nombre'), principal: true, celda: (c) => (<><span>{c.nombre}</span><span className="rv-tl__sub">{c.operadorNombre}{c.parentesco ? ` · ${c.parentesco}` : ''} · {c.telefono}</span></>) },
+                  { id: 'aviso', titulo: t('emg.cont.lesionados'), celda: (c) => (
+                    <StatusChip tono={c.avisarSiLesionados ? 'ok' : 'muted'}>
+                      {c.avisarSiLesionados ? t('emg.cont.avisar') : t('emg.cont.solo')}
+                    </StatusChip>
+                  ) },
+                  { id: 'acciones', titulo: '', alinear: 'der', celda: (c) => (
+                    <span className="rv-em__acciones">
+                      <AccionFila accion={borrarContacto} id={c.id} etiqueta={t('emg.quitar')} tono="peligro"
+                        confirmar={{
+                          titulo: `Quitar a ${c.nombre}`,
+                          descripcion: t('emg.cont.quitar.cuerpo', { operador: c.operadorNombre }),
+                          etiquetaConfirmar: t('emg.quitar.si'),
+                        }} />
+                    </span>
+                  ) },
+                ]}
+              />
             )}
           </Tarjeta>
-        </>
+          </FilaTarjetas>
+        </div>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

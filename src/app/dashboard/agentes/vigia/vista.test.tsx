@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import {
+  BloqueActividad, actividadVacia,
   BloqueEstadoYKpis, BloqueAprobacion, BloqueExcepciones, BloqueConversaciones, BloqueConfiguracion, BloqueBitacora, BloqueContactos, BloqueDirectores, BloqueCorreos, BloqueInsights,
   minutosDeEspera, duracion, motivosDeExcepcion, ordenarPorPrioridad, type AccionesVigia,
 } from './vista';
@@ -67,8 +68,9 @@ describe('estado y KPIs', () => {
   });
   it('sin respuestas medidas: «sin datos todavía», NUNCA un 0 min que parezca medición', async () => {
     const html = await pintar(BloqueEstadoYKpis({ datos: Promise.resolve(base()), ahoraMs: AHORA }));
-    expect(html).toContain('sin datos todavía');
+    // La línea suelta ya no existe: sin muestra no se pinta nada de mediana, y el vacío del día lo dice una vez.
     expect(html).not.toContain('mediana 0');
+    expect(html).not.toContain('Tiempo de primera respuesta');
   });
   it('con muestra: mediana, promedio y de cuántas respuestas salen', async () => {
     const html = await pintar(BloqueEstadoYKpis({ datos: Promise.resolve(base({ respuesta: { muestra: 12, promedioMin: 25, medianaMin: 70 } })), ahoraMs: AHORA }));
@@ -409,5 +411,19 @@ describe('stand-by bajo el perfil (T-A4-32)', () => {
     expect(con).toContain('value="aprobar"');
     const sin = await pintar(BloqueAprobacion({ datos: Promise.resolve(base({ pendientes: [pend] })), puedeDecidir: true, acciones }));
     expect(sin).toContain('Adjuntará: Comprobante de entrega (POD)');
+  });
+});
+
+describe('atención del día (Rovaq: un solo vacío, no cuatro tarjetas)', () => {
+  it('todo vacío: UNA tarjeta con el vacío dicho una vez', async () => {
+    const d = base();
+    expect(actividadVacia(d, d.config.slaRespuestaMin, AHORA)).toBe(true);
+    const html = await pintar(BloqueActividad({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones: {} as never }));
+    expect(html.match(/Nada que atender ahora/g)?.length).toBe(1);
+    expect(html).not.toContain('Conversaciones activas');
+  });
+  it('con una fila de bitácora ya no es vacío: cada tarjeta conserva la suya', () => {
+    const d = base({ eventos: [{ id: 'e1', tipo: 'entrante', nivel: null, creadoEn: '2026-10-01T10:00:00Z' } as never] });
+    expect(actividadVacia(d, d.config.slaRespuestaMin, AHORA)).toBe(false);
   });
 });

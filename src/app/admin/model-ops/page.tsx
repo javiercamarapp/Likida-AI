@@ -1,8 +1,10 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { usd, numero } from '@/lib/formato';
-import { MarcoPagina, FilaTarjetas, Tarjeta, Disclosure, BotonEnlace } from '@/app/ui-v2/componentes';
+import { Tarjeta, Disclosure, BotonEnlace } from '@/app/ui-v2/componentes';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { DonaMini, BarList } from '@/app/ui-v2/graficas';
 import { TarjetaFase } from '../tarjeta-fase';
 import { getT } from '@/lib/i18n/servidor';
@@ -32,39 +34,43 @@ export default async function ModelOpsPage() {
   const porFase = new Map(r.porFase.map((f) => [f.fase, f]));
 
   return (
-    <MarcoPagina
+    <EsqueletoPanelCifras
       area="Agentes"
       titulo={t('model_ops.agentes')}
       apoyo={t('model_ops.modelos_las_tres_fases_del_pipeline')}
       acciones={<BotonEnlace href="/admin/agentes" variante="secondary" tamano="sm">{t('model_ops.rol_de_modelo_por_agente')}</BotonEnlace>}
-    >
-      <FilaTarjetas variante="4-4-4">
-        {fasesTr(t).map(({ fase, nombre, queHace }) => (
+      etiquetaCifras={t('model_ops.agentes')}
+      cifras={uniformes([
+        { etiqueta: t('model_ops.kpi_gasto'), valor: r.costoIaUsd, formato: 'usd' },
+        { etiqueta: t('model_ops.kpi_llamadas'), valor: r.porFase.reduce((s, f) => s + f.n, 0), formato: 'entero' },
+        { etiqueta: t('model_ops.kpi_fases'), valor: r.porFase.length, formato: 'entero' },
+        { etiqueta: t('model_ops.kpi_modelos'), valor: r.porModelo.length, formato: 'entero' },
+      ])}
+      variante="4-4-4"
+      graficas={[
+        ...fasesTr(t).map(({ fase, nombre, queHace }) => (
           <TarjetaFase key={fase} titulo={nombre} queHace={queHace} datos={porFase.get(fase)} modelos={porFaseModelo.filter((m) => m.fase === fase)} />
-        ))}
-      </FilaTarjetas>
-
-      <FilaTarjetas variante="6-6">
-        <Tarjeta titulo={t('model_ops.costo_por_fase')} estado={r.porFase.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_actividad_de_ia')} detalle={t('model_ops.todavia_no_hay_actividad_de_ia')}>
+        )),
+        <Tarjeta key="por-fase" titulo={t('model_ops.costo_por_fase')} estado={r.porFase.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_actividad_de_ia')} detalle={t('model_ops.todavia_no_hay_actividad_de_ia')}>
           <DonaMini
             etiqueta={t('model_ops.costo_por_fase')}
             formato="usd"
             gajos={r.porFase.map((f) => ({ etiqueta: faseLabel(t)[f.fase] ?? f.fase, valor: f.costoUsd }))}
             centro={usd(r.porFase.reduce((s, f) => s + f.costoUsd, 0))}
           />
-        </Tarjeta>
-        <Tarjeta titulo={t('model_ops.costo_por_modelo_todas_las_fases')} estado={r.porModelo.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_llamadas')} detalle={t('model_ops.sin_llamadas_registradas_todavia')}>
+        </Tarjeta>,
+        <Tarjeta key="por-modelo" titulo={t('model_ops.costo_por_modelo_todas_las_fases')} estado={r.porModelo.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_llamadas')} detalle={t('model_ops.sin_llamadas_registradas_todavia')}>
           <BarList
             etiqueta={t('model_ops.costo_por_modelo')}
             items={r.porModelo.map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: t('model_ops.llamadas_costo', { costo: usd(m.costoUsd), n: numero(m.n, idioma) }) }))}
           />
-        </Tarjeta>
-      </FilaTarjetas>
-
+        </Tarjeta>,
+      ]}
+    >
       <Disclosure titulo={t('model_ops.lo_que_no_existe_todavia')} resumen={t('model_ops.versionado_y_selector_de_modelo')}>
         <p>{t('model_ops.versionado_de_prompts_reversa_y_guardrails')}</p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

@@ -1,0 +1,33 @@
+/* Resumen del dueño. La fecha ya vive en la cabecera móvil: no se repite como píldora bajo la descripción (Rovaq no la repite). */
+@media (max-width: 767px) { [data-ui="v2"] .rv-res__fecha { display: none; } }
+
+/* Filas de tarjetas del Resumen (ronda 3): sin aire muerto. Las tarjetas miden lo que miden sus datos (la fila las iguala a la más alta,
+   pero ningún cuerpo se estira por encima de su contenido), el subtítulo de «Diferencias» no deja un hueco bajo sí y el vacío es una caja
+   punteada de lo que mide su texto (padding 20x14), no un bloque de 235 px con una sola línea. */
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas[data-variante] { flex: 0 0 auto; align-items: stretch; }
+/* Ronda 8 (Rovaq «Hoy», align stretch: 3 tarjetas de 227 px, fila 6-6 pareja): las tarjetas de una fila SÍ miden lo mismo (el vacío sigue compacto arriba, sin estirar su caja). Antes, ronda 7: ninguna tarjeta se estira a la altura de su vecina (la regla base fija height:100%): cada una mide lo que mide su contenido,
+   sin 100-130 px vacíos bajo «Requiere tu atención» ni 85 px bajo la tabla de «Viajes recientes». */
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas[data-variante] > .rv-tarjeta { height: 100%; align-self: stretch; }
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio,
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-error { flex: 0 0 auto; min-height: 0; }
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-vacio { padding: 14px 20px; min-height: 0; }
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-res__tipos { flex: 0 0 auto; justify-content: flex-start; gap: 8px; }
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-res__cierres .rv-tarjeta__cuerpo > * { flex: 0 1 auto; }
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-solo { flex: 0 0 auto; }
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-solo li { flex: 0 0 auto; }
+
+/* «Siguiente mejor acción» (Rovaq): tarjeta destacada con filete izquierdo de 3 px en el color primario (negro, decisión 10). */
+[data-ui="v2"] .rv-sig { border-left: 3px solid var(--ink); padding-left: 12px; }
+
+/* Procedencia en barra con borde (Rovaq «Hoy»): fuentes, corte de datos y avisos en una sola tarjeta baja, no una línea suelta. */
+[data-ui="v2"] .rv-esq--portada .rv-esq__procedencia { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); gap: 4px 16px; }
+/* «Ver todas» pegado a la lista (sin el hueco de la altura de su pareja) y, en la segunda fila, cada tarjeta mide lo que mide su contenido. */
+[data-ui="v2"] .rv-esq--portada .rv-fila-tarjetas .rv-at__pie { margin-top: 4px; }
+
+/* Píldoras de método bajo el último bloque (Rovaq: «Cómo se calculó», «Fuentes y publicaciones»): chips de 24 px que abren su nota. */
+[data-ui="v2"] .rv-res__metodo { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+[data-ui="v2"] .rv-res__pildora { font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .rv-res__pildora > button { display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer; }
+[data-ui="v2"] .rv-res__pildora > button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-res__pildora[data-abierta] > button { border-color: var(--ink); }
+[data-ui="v2"] .rv-res__explica { flex-basis: 100%; max-width: 520px; font-size: var(--t-small); color: var(--muted); }

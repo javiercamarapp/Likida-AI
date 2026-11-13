@@ -1,5 +1,6 @@
 import { test, expect } from './apoyo/fixture';
 import { ESTADOS, MARCA_CONSOLA } from './apoyo/sesion';
+import { abrirDetalleDeViaje } from './apoyo/viajes';
 import { writeFile } from 'node:fs/promises';
 import type { TestInfo } from '@playwright/test';
 
@@ -44,7 +45,7 @@ test.describe('caché de PDF financiero privado', () => {
   test.use({ storageState: ESTADOS.duena });
   test('la puerta autenticada y la descarga conservan sus headers observables', async ({ page, browser }, info) => {
     await page.goto('/dashboard/viajes?f=liquidados');
-    await page.locator('tr', { hasText: 'VJ-2026-0844' }).getByRole('link', { name: /Ver/ }).click();
+    await abrirDetalleDeViaje(page, 'VJ-2026-0844');
     const enlace = page.locator('a', { hasText: 'Descargar PDF' });
     await expect(enlace).toBeVisible();
     const href = await enlace.getAttribute('href');

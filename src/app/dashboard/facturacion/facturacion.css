@@ -1,0 +1,35 @@
+/* Facturación · bloques de cada pestaña apilados a 12 px, como el resto del marco (F26). */
+.rv-fact__bloques { display: grid; gap: var(--sp-gap, 12px); min-width: 0; }
+
+/* Acción de la cabecera (Registrar factura): el disparador del cajón sale del kit en secundario chico (28 px / 12 px). Rovaq: una sola acción
+   primaria por zona, de 32 px / 13 px / 500. Se re-viste sin tocar la pieza compartida (pedido_compartido: `disparadorVariante` en FormaEnCajon). */
+.rv-fact__alta { display: contents; }
+[data-ui="v2"] .rv-fact__alta .rv-btn--sm {
+  min-height: var(--ctl-h, 32px); padding: 6px 12px; font-size: 13px; font-weight: 500; line-height: 1.2;
+  background: var(--btn-bg); border-color: var(--btn-borde); color: var(--btn-fg);
+}
+[data-ui="v2"] .rv-fact__alta .rv-btn--sm:hover { background: var(--btn-hover); border-color: var(--btn-borde); color: var(--btn-fg); }
+
+/* Dato que falta: cursiva apagada (Rovaq «Sin dato»); el ámbar queda para el estado, no para lo que nadie capturó. */
+.rv-fact__sindato { font-style: italic; font-weight: 400; color: var(--muted); }
+
+/* Raíz del cajón «Vista rápida» dentro de una celda numérica: el panel hereda `start`, no el `right` de la celda. */
+.rv-fact__cajon-raiz { display: contents; text-align: start; }
+.rv-fact__cajon-raiz .rv-ov, .rv-fact__cajon-raiz .rv-ov__panel { text-align: start; }
+.rv-fact__pila { display: grid; gap: 12px; min-width: 0; }
+.rv-fact__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); }
+[data-ui="v2"] .rv-sis.rv-fact__datos { grid-template-columns: minmax(0, 1fr); gap: 0; }
+[data-ui="v2"] .rv-fact__datos .rv-sis__campo { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; padding: 7px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-fact__datos .rv-sis__campo:last-child { border-bottom: 0; }
+[data-ui="v2"] .rv-fact__datos .rv-sis__valor { text-align: right; }
+
+/* Vista rápida (Rovaq 06c): cuadrícula de cifras con divisores y acción primaria en el pie. */
+.rv-fact__vr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; border: 1px solid var(--ui-border, var(--line)); border-radius: 8px; background: var(--ui-border, var(--line)); overflow: hidden; }
+.rv-fact__vr > div { display: flex; flex-direction: column-reverse; gap: 2px; padding: 10px 12px; background: var(--ui-surface, var(--surface)); min-width: 0; }
+.rv-fact__vr > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.rv-fact__vr dt { font-size: var(--t-small, 12px); font-weight: 500; color: var(--muted); }
+.rv-fact__vr dd { margin: 0; font-size: var(--t-section, 16px); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); overflow-wrap: anywhere; }
+.rv-fact__vr-pie { display: flex; justify-content: flex-end; gap: 8px; width: 100%; }
+
+/* Cifras en la fuente del sistema con dígitos tabulares (Rovaq: Hanken Grotesk), no en monoespaciada. */
+.rv-cifra { font-variant-numeric: tabular-nums; }

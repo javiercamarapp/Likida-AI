@@ -117,7 +117,7 @@ describe('VistaRentabilidad — la cartera paginada no se confunde con una carte
 });
 
 describe('VistaRentabilidad — sin ningún dato: estructura honesta, no un hueco flotante', () => {
-  it('muestra cinco cifras SIN DATO (—, nunca $0), un vacío contenido y UNA acción', () => {
+  it('la tira de 4 cifras y el segmentado de periodo SIEMPRE están (Rovaq PC): cada celda dice «—» y nunca $0; un vacío contenido y UNA acción', () => {
     const html = renderToStaticMarkup(
       <VistaRentabilidad
         rentabilidad={{ ...RENTABILIDAD, ingreso: 0, costoComprobado: 0, contribucion: 0, margenPct: null, viajesConIngreso: 0 }}
@@ -125,10 +125,27 @@ describe('VistaRentabilidad — sin ningún dato: estructura honesta, no un huec
         sufijo="?vista=demo"
       />,
     );
-    for (const e of ['Ingreso de fletes liquidados', 'Costo comprobado', 'Contribución', 'Por cobrar', 'Vencido']) expect(html).toContain(e);
+    expect(html).toContain('rv-kpis');
+    expect((html.match(/data-estado="vacio" title/g) ?? []).length).toBe(4);
+    expect(html).toContain('>—</span>');
+    expect(html).toContain('aria-label="Periodo de los viajes"');
+    expect(html).toContain('periodo=30d');
+    expect(html).toContain('Sin datos todavía');
+    for (const e of ['Ingreso, costo y contribución', 'Cartera por cobrar y vencida']) expect(html).toContain(e);
     expect(html).toContain('data-contenido');
     expect(html).toContain('href="/dashboard/facturacion?vista=demo"');
     expect(html).not.toMatch(/\$0(\.00)?/);
     expect(html).toContain('Nada de esta pantalla se estima');
+  });
+});
+
+describe('periodo de Rentabilidad', () => {
+  it('un ?periodo= desconocido cae al histórico y la ventana se calcula hacia atrás', async () => {
+    const { periodoDe, desdeDelPeriodo } = await import('./periodo');
+    expect(periodoDe('zzz')).toBe('todo');
+    expect(periodoDe(undefined)).toBe('todo');
+    expect(periodoDe('90d')).toBe('90d');
+    expect(desdeDelPeriodo('todo')).toBeNull();
+    expect(desdeDelPeriodo('30d', new Date('2026-11-11T00:00:00.000Z'))).toBe('2026-10-12T00:00:00.000Z');
   });
 });

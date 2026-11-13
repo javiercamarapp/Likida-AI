@@ -1,11 +1,11 @@
-import { Users } from 'lucide-react';
 import { fechaMx } from '@/lib/formato';
 import type { OpcionRol } from '@/lib/auth/invitar';
-import { nombreDeRol, detalleDeRol } from '@/lib/auth/roles';
+import { nombreDeRol } from '@/lib/auth/roles';
 import {
   FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, FormaCerrarSesiones, type AccionForma,
 } from './forma';
-import { BotonEnlace, Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { BotonEnlace, EstadoError, FilaTarjetas, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { MenuAcciones } from './menu-acciones';
 import './usuarios.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -76,8 +76,14 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
         </span>
       ),
     },
-    { id: 'rol', titulo: 'Rol', celda: (u) => <StatusChip tono={u.activo && u.rol === 'flota_admin' ? 'ok' : 'neutral'}>{nombreDeRol(u.rol)}</StatusChip> },
-    { id: 'que', titulo: t('cfg.que_puede_hacer'), celda: (u) => <span className="rv-usu__tenue">{detalleDeRol(u.rol)}</span> },
+    {
+      // Rol (Rovaq «Integrantes y accesos»): un select de 28 que cambia al elegir; quien no se administra (tú, Likida, una baja) ve el chip.
+      id: 'rol', titulo: 'Rol',
+      celda: (u) => (puedeInvitar && u.activo && u.id !== userId && u.rol !== 'superadmin'
+        ? <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
+        : <StatusChip tono="neutral">{nombreDeRol(u.rol)}</StatusChip>),
+    },
+    { id: 'estado', titulo: t('llaves.estado'), celda: (u) => (u.activo ? <StatusChip tono="ok">{t('e26b.usu_activo')}</StatusChip> : <StatusChip tono="bad">{t('cfg.dada_de_baja')}</StatusChip>) },
     {
       id: 'wa', titulo: 'WhatsApp',
       celda: (u) => (u.telefono
@@ -85,44 +91,50 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
         : <span className="rv-usu__sin">{t('cfg.sin_whatsapp_el_bot_no_lo')}</span>),
     },
     ...(puedeInvitar ? [{
-      id: 'acciones', titulo: t('cfg.acciones'),
-      celda: (u: UsuarioRow) => <Acciones t={t} u={u} esYo={u.id === userId} roles={roles} acciones={acciones} />,
+      id: 'acciones', titulo: t('cfg.acciones'), alinear: 'der' as const, tituloOculto: true,
+      celda: (u: UsuarioRow) => <Acciones t={t} u={u} esYo={u.id === userId} acciones={acciones} />,
     }] : []),
   ];
 
+  const catalogoRoles = rolesInvitar ?? roles;
+
   return (
-    <MarcoPagina titulo={t('cfg.usuarios_del_equipo')} apoyo={t('cfg.quien_entra_a_este_panel_y')}>
+    <EsqueletoTablaMaestra titulo={t('cfg.usuarios_del_equipo')} apoyo={t('cfg.quien_entra_a_este_panel_y')}>
       {usuarios === null ? (
         <EstadoError accion={<BotonEnlace href="" tamano="sm">{t('cfg.reintentar')}</BotonEnlace>}>{t('cfg.no_se_pudo_cargar_el_equipo')}</EstadoError>
       ) : (
         <>
-          <Tarjeta titulo={t('cfg.tu_equipo')} info="usuarios.equipo">
-            {usuarios.length === 0 ? (
-              <EstadoVacio icono={Users} titulo={t('cfg.no_hay_cuentas_dadas_de_alta')} contenido>{t('cfg.cuando_invites_a_alguien_de_tu')}</EstadoVacio>
+          {/* Rovaq «Equipo»: Invitar integrante | Qué puede hacer cada rol, lado a lado (sin tira de cifras). */}
+          <FilaTarjetas variante="6-6">
+            {puedeInvitar ? (
+              <Tarjeta titulo={t('r8.usu_invitar_titulo')} entra="tarjeta">
+                <p className="rv-usu__sub">{t('r7.usu_invitar_sub')}</p>
+                <FormaInvitar accion={acciones.invitar} roles={catalogoRoles} />
+              </Tarjeta>
             ) : (
-              <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} altoMaximo={false} tarjetaMovil />
+              <p className="rv-usu__pie">{t('cfg.tu_rol_ve_el_equipo_pero')}</p>
             )}
-          </Tarjeta>
+            <Tarjeta titulo={t('e26.usu_que_puede_cada_rol')} info="usuarios.equipo">
+              <p className="rv-usu__sub">{t('r7.usu_roles_sub')}</p>
+              {/* Lista de Rovaq: punto negro, el rol en 13/600, la descripción en 12 px y un divisor entre ítems. */}
+              <ul className="rv-usu__roles-lista">
+                {catalogoRoles.map((r) => <li key={r.valor}><strong>{r.rotulo}</strong><span>{r.detalle}</span></li>)}
+              </ul>
+              <p className="rv-usu__aislamiento"><strong>{t('cfg.el_aislamiento_no_depende_de_esconder')}</strong> {t('cfg.cada_consulta_de_este_panel_va')}</p>
+            </Tarjeta>
+          </FilaTarjetas>
 
-          {puedeInvitar ? (
-            <Disclosure titulo={t('cfg.invitar_a_alguien_de_tu_equipo')}>
-              <FormaInvitar accion={acciones.invitar} roles={rolesInvitar ?? roles} />
-            </Disclosure>
-          ) : (
-            <p className="rv-usu__pie">{t('cfg.tu_rol_ve_el_equipo_pero')}</p>
-          )}
-
-          <Tarjeta titulo={t('cfg.el_aislamiento_no_depende_de_esconder')}>
-            <p className="rv-usu__aislamiento">{t('cfg.cada_consulta_de_este_panel_va')}</p>
+          <Tarjeta titulo={t('cfg.tu_equipo')} estado={usuarios.length === 0 ? 'vacio' : 'ok'} mensaje={t('cfg.no_hay_cuentas_dadas_de_alta')} detalle={t('cfg.cuando_invites_a_alguien_de_tu')} contenida>
+            <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} altoMaximo={false} tarjetaMovil className="rv-usu__tabla" />
           </Tarjeta>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
-function Acciones({ u, esYo, roles, acciones, t = T_RESTO_ES }: {
-  u: UsuarioRow; esYo: boolean; roles: ReadonlyArray<OpcionRol>; acciones: AccionesEquipo; t?: TResto;
+function Acciones({ u, esYo, acciones, t = T_RESTO_ES }: {
+  u: UsuarioRow; esYo: boolean; acciones: AccionesEquipo; t?: TResto;
 }) {
   // Un superadmin en la lista es personal de Likida: no se administra aquí
   // (el motor lo rechaza igual — esto solo evita ofrecer un botón que rebota).
@@ -132,12 +144,16 @@ function Acciones({ u, esYo, roles, acciones, t = T_RESTO_ES }: {
   }
   if (!u.activo) return <FormaReactivar accion={acciones.reactivar} id={u.id} />;
   return (
-    // UN solo control por renglón: «Acciones» abre el grupo (cada forma conserva su server action, su aviso y su diálogo de confirmación).
-    <MenuAcciones rotulo={t('cfg.acciones')} etiqueta={`Acciones de ${u.nombre ?? u.email}`}>
-      <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
-      <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
-      <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
-      <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
-    </MenuAcciones>
+    // Una sola celda (Rovaq «Integrantes y accesos»): «Dar de baja» a la VISTA como botón de peligro de 28 px (la acción destructiva no se esconde) y
+    // el menú «···» (28 px, ghost) para lo menor: reenviar acceso y cerrar sesiones. Cada forma conserva su server action, su aviso y su confirmación.
+    <div className="rv-usu__celda-acciones">
+      <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} enFila />
+      <MenuAcciones rotulo={t('cfg.acciones')} etiqueta={`Acciones de ${u.nombre ?? u.email}`}>
+        <div className="rv-menu" role="menu">
+          <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
+          <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
+        </div>
+      </MenuAcciones>
+    </div>
   );
 }

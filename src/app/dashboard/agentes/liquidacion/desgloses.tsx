@@ -7,9 +7,12 @@ import { calcularInsightsA1, entradaDesdeFichas, type InsightA1 } from '@/lib/li
 import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
 import {
-  AvisoCompacto, BarraPeriodo, BotonConfirmar, BotonEnlace, CampoTexto, EstadoError, EstadoVacio, hrefConParams, MarcoPagina, StatusChip,
+  AvisoCompacto, BarraPeriodo, BotonConfirmar, BotonEnlace, CampoTexto, EstadoError, EstadoVacio, hrefConParams, StatusChip,
   TablaBase, Tarjeta, type TonoEstado,
 } from '@/app/ui-v2/componentes';
+import { BloqueCifras, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { VacioAgente } from '../vacio-agente';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 import { getT } from '@/lib/i18n/servidor';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
@@ -69,6 +72,9 @@ export interface FichasDesgloses {
   rebotados: number | null;
   retenidos: number | null;
   sinPoliza: number | null;
+  /** De los retenidos, los que salieron con «póliza provisional» (decisión 3 del dueño): esperan revisión humana antes de enviarse.
+   *  `null`/ausente = no se pudo contar: nunca un cero. */
+  polizaProvisional?: number | null;
 }
 
 export type FiltroDesglose = 'enviado' | 'entregado' | 'rebotado' | 'retenido' | 'sin_poliza';
@@ -217,8 +223,6 @@ const rotuloFiltro = (tx: TAgentes = TR_ES.t): Record<FiltroDesglose, string> =>
 
 // ── La sección ─────────────────────────────────────────────────────────────
 
-const ayudaVentana = (tx: TAgentes = TR_ES.t) => (tx('rest.al_abrirla_la_lista_se_limita'));
-
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
   return `?${new URLSearchParams([...contexto, ...extra]).toString()}`;
 }
@@ -251,42 +255,49 @@ export async function SeccionDesgloses(p: DesglosesProps) {
   const baseDes: Record<string, string> = { ...Object.fromEntries(p.contexto), ...(p.filtro ? { des_estado: p.filtro } : {}), ...(p.desde ? { des_desde: p.desde } : {}), ...(p.hasta ? { des_hasta: p.hasta } : {}) };
   const verSinPoliza = p.filtro === 'sin_poliza';
 
+  const cifras = cifrasDeFichas({ fichas, tx, contexto: p.contexto, desde30 });
+  // Segmentado de periodo (Rovaq: píldora 30/24 + Filtros + chips): cada opción es un enlace que fija la ventana de la lista con las MISMAS fechas del cajón.
+  const desde7 = hoyMx(new Date(Date.parse(inicioDiaMx(hoy)) - 6 * 24 * 3600 * 1000));
+  const periodoVigente = !p.desde && !p.hasta ? 'todo' : p.desde === hoy && p.hasta === hoy ? 'hoy' : !p.hasta && p.desde === desde7 ? '7' : !p.hasta && p.desde === desde30 ? '30' : '';
+  const filtros = (
+    <BarraPeriodo etiqueta={tx('rest.periodo_y_filtros_de_desgloses')}
+      periodo={{
+        etiqueta: tx('f26d5.liq.periodo_etq'), valor: periodoVigente,
+        opciones: [
+          { valor: 'todo', etiqueta: tx('f26d5.liq.periodo_todo'), href: hrefConParams('', baseDes, { des_desde: null, des_hasta: null }) },
+          { valor: 'hoy', etiqueta: tx('f26d5.liq.periodo_hoy'), href: hrefConParams('', baseDes, { des_desde: hoy, des_hasta: hoy }) },
+          { valor: '7', etiqueta: tx('rest.ultimos_7_dias'), href: hrefConParams('', baseDes, { des_desde: desde7, des_hasta: null }) },
+          { valor: '30', etiqueta: tx('rest.ultimos_30_dias'), href: hrefConParams('', baseDes, { des_desde: desde30, des_hasta: null }) },
+        ],
+      }}
+      chips={[
+        ...(p.desde || p.hasta ? [{ id: 'rango', etiqueta: `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}`, hrefQuitar: hrefConParams('', baseDes, { des_desde: null, des_hasta: null }) }] : []),
+        ...(p.filtro ? [{ id: 'estado', etiqueta: `Estado: ${rotuloFiltro(tx)[p.filtro]}`, hrefQuitar: hrefConParams('', baseDes, { des_estado: null }) }] : []),
+      ]}
+      cajon={{
+        accion: '?', ocultos: p.contexto, limpiarHref: query(p.contexto), nActivos: (p.filtro ? 1 : 0) + (p.desde || p.hasta ? 1 : 0),
+        resumen: [p.filtro ? rotuloFiltro(tx)[p.filtro] : null, p.desde || p.hasta ? `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}` : null].filter(Boolean).join(' · ') || undefined,
+        periodo: { desde: p.desde ?? null, hasta: p.hasta ?? null, nombreDesde: 'des_desde', nombreHasta: 'des_hasta', max: hoy },
+        campos: { items: [{ tipo: 'select', nombre: 'des_estado', etiqueta: tx('proveedores.vista.estado'), valor: p.filtro ?? '', opciones: [{ valor: '', rotulo: tx('rest.todos') }, ...FILTROS.map((f) => ({ valor: f, rotulo: rotuloFiltro(tx)[f] }))] }] },
+      }} />
+  );
+
+  // Orden de la tabla maestra de Rovaq: filtros → tira de cifras → UNA tarjeta con la tabla → lectura de los desgloses.
   return (
-    <div id="desgloses">
-    <Tarjeta titulo={tx('rest.desgloses_de_pago')} info="desgloses.lista" acciones={p.filtro ? <span className="rv-liq-sub">{tx('rest.filtro')}{' '}{rotuloFiltro(tx)[p.filtro]}</span> : undefined}>
+    <div id="desgloses" className="rv-ag-pila rv-ag-sin-filete">
+    {filtros}
+    <BloqueCifras cifras={cifras} etiqueta={tx('rest.desgloses_de_pago')} />
+    <Tarjeta titulo={tx('rest.desgloses_de_pago')} info="desgloses.lista" acciones={(p.filtro || (typeof fichas.polizaProvisional === 'number' && fichas.polizaProvisional > 0)) ? (
+      <span className="rv-liq-linea">
+        {typeof fichas.polizaProvisional === 'number' && fichas.polizaProvisional > 0 ? <StatusChip tono="warn">{tx('f26d2.liq.poliza_provisional')}{' · '}{numero(fichas.polizaProvisional)}</StatusChip> : null}
+        {p.filtro ? <span className="rv-liq-sub">{tx('rest.filtro')}{' '}{rotuloFiltro(tx)[p.filtro]}</span> : null}
+      </span>
+    ) : undefined}>
       <p className="rv-liq-sub">{tx('rest.el_desglose_lo_calcula_el_sistema')}</p>
-
-      <div className="rv-liq-fichas">
-        <Ficha etiqueta={tx('rest.recibidos_hoy')} valor={fichas.recibidosHoy} ayuda={tx('rest.desgloses_que_llegaron_hoy_del_sistema')} href={query(p.contexto)} />
-        <Ficha etiqueta={tx('rest.enviados_30_dias')} valor={fichas.enviados} ayuda={tx('rest.correos_que_salieron_en_los_ultimos_2', { ayudaVentana: ayudaVentana(tx) })}
-          href={query(p.contexto, [['des_estado', 'enviado'], ['des_desde', desde30]])} />
-        <Ficha etiqueta={tx('rest.entregados_30_dias')} valor={fichas.entregados} ayuda={tx('rest.correos_de_los_ultimos_30_dias_3', { ayudaVentana: ayudaVentana(tx) })}
-          href={query(p.contexto, [['des_estado', 'entregado'], ['des_desde', desde30]])} />
-        <Ficha etiqueta={tx('rest.rebotados_30_dias')} valor={fichas.rebotados} tono="bad" ayuda={tx('rest.correos_de_los_ultimos_30_dias_4', { ayudaVentana: ayudaVentana(tx) })}
-          href={query(p.contexto, [['des_estado', 'rebotado'], ['des_desde', desde30]])} />
-        <Ficha etiqueta={tx('rest.retenidos')} valor={fichas.retenidos} tono="bad" ayuda={tx('rest.desgloses_detenidos_antes_de_enviarse_por')}
-          href={query(p.contexto, [['des_estado', 'retenido']])} />
-        <Ficha etiqueta={tx('rest.sin_poliza')} valor={fichas.sinPoliza} tono="bad" ayuda={tx('rest.bitacoras_que_esperan_su_poliza_para')}
-          href={query(p.contexto, [['des_estado', 'sin_poliza']])} />
-      </div>
-
-      <BloqueInsights insights={lectura.insights ?? calcularInsightsA1(entradaDesdeFichas(fichas))} />
-
-      <BarraPeriodo etiqueta={tx('rest.periodo_y_filtros_de_desgloses')}
-        chips={[
-          ...(p.desde || p.hasta ? [{ id: 'rango', etiqueta: `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}`, hrefQuitar: hrefConParams('', baseDes, { des_desde: null, des_hasta: null }) }] : []),
-          ...(p.filtro ? [{ id: 'estado', etiqueta: `Estado: ${rotuloFiltro(tx)[p.filtro]}`, hrefQuitar: hrefConParams('', baseDes, { des_estado: null }) }] : []),
-        ]}
-        cajon={{
-          accion: '?', ocultos: p.contexto, limpiarHref: query(p.contexto), nActivos: (p.filtro ? 1 : 0) + (p.desde || p.hasta ? 1 : 0),
-          resumen: [p.filtro ? rotuloFiltro(tx)[p.filtro] : null, p.desde || p.hasta ? `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}` : null].filter(Boolean).join(' · ') || undefined,
-          periodo: { desde: p.desde ?? null, hasta: p.hasta ?? null, nombreDesde: 'des_desde', nombreHasta: 'des_hasta', max: hoy },
-          campos: { items: [{ tipo: 'select', nombre: 'des_estado', etiqueta: tx('proveedores.vista.estado'), valor: p.filtro ?? '', opciones: [{ valor: '', rotulo: tx('rest.todos') }, ...FILTROS.map((f) => ({ valor: f, rotulo: rotuloFiltro(tx)[f] }))] }] },
-        }} />
 
       {verSinPoliza ? (
         sinPoliza.length === 0 ? (
-          <EstadoVacio icono={Mail} titulo={tx('rest.ninguna_espera_poliza')}>{tx('rest.ninguna_bitacora_esta_esperando_poliza')}</EstadoVacio>
+          <VacioAgente icono={Mail} titulo={tx('rest.ninguna_espera_poliza')}>{tx('rest.ninguna_bitacora_esta_esperando_poliza')}</VacioAgente>
         ) : (
           <>
             <TablaBase<FilaSinPoliza>
@@ -307,11 +318,11 @@ export async function SeccionDesgloses(p: DesglosesProps) {
           </>
         )
       ) : filas.length === 0 ? (
-        <EstadoVacio icono={Route} titulo={filtrando ? tx('rest.ningun_desglose_con_ese_filtro') : tx('rest.aun_sin_desgloses')}>
+        <VacioAgente icono={Route} titulo={filtrando ? tx('rest.ningun_desglose_con_ese_filtro') : tx('rest.aun_sin_desgloses')}>
           {filtrando
             ? tx('rest.ningun_desglose_cae_en_ese_filtro')
             : tx('rest.aun_no_hay_desgloses_llegan_cuando')}
-        </EstadoVacio>
+        </VacioAgente>
       ) : (
         <>
           <TablaBase<FilaDesglose>
@@ -331,6 +342,10 @@ export async function SeccionDesgloses(p: DesglosesProps) {
                       <span className="rv-liq-nota">{tx('rest.liquidacion_2')}{' '}{f.numeroLiquidacion}{f.numeroPago ? ` · pago ${f.numeroPago}` : ''}
                       </span>
                     )}
+                    {/* Decisión 3: una póliza provisional lleva SU marca visible desde la primera columna, además del estado de cada destinatario. */}
+                    {ROLES_VISIBLES.some((r) => f.destinos[r].retenidoPor === 'poliza_provisional') && (
+                      <span className="rv-liq-marca"><StatusChip tono="warn">{tx('f26d2.liq.poliza_provisional')}</StatusChip></span>
+                    )}
                   </>
                 ),
               },
@@ -339,7 +354,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
                 id: 'periodo', titulo: tx('rest.periodo'),
                 celda: (f) => <span className="rv-liq-apagado">{f.periodoDesde && f.periodoHasta ? `${fechaCorta(f.periodoDesde)} – ${fechaCorta(f.periodoHasta)}` : '—'}</span>,
               },
-              { id: 'neto', titulo: tx('rest.neto_de_tu_sistema'), alinear: 'der', celda: (f) => <span className="cifra-mono">{f.neto === null ? '—' : dinero(f.neto, f.moneda)}</span> },
+              { id: 'neto', titulo: tx('rest.neto_de_tu_sistema'), alinear: 'der', celda: (f) => <span className="rv-ag-num">{f.neto === null ? '—' : dinero(f.neto, f.moneda)}</span> },
               ...ROLES_VISIBLES.map((rol) => ({
                 id: rol, titulo: ROTULO_ROL[rol],
                 celda: (f: FilaDesglose) => {
@@ -373,49 +388,63 @@ export async function SeccionDesgloses(p: DesglosesProps) {
           </div>
         </>
       )}
+      <p className="rv-liq-nota" data-testid="nota-poliza-provisional">{tx('f26d2.liq.nota_poliza_provisional')}</p>
     </Tarjeta>
+    <BloqueInsights insights={lectura.insights ?? calcularInsightsA1(entradaDesdeFichas(fichas))} />
     </div>
   );
 }
 
-/** «Qué pasó · qué significa · qué hacer»: frases calculadas por reglas (sin IA), cada una con la fuente de su cifra. */
+/** Las cifras de la tira: las seis fichas de siempre, ahora celdas de la tira del hub (Rovaq `pc-kpis`). `null` = no se pudo contar (nunca un cero);
+ *  con `contexto` cada celda lleva a la lista de su ventana, sin él (rol nómina) no es enlace. */
+export function cifrasDeFichas({ fichas, tx, contexto, desde30 }: { fichas: FichasDesgloses; tx: TAgentes; contexto?: Array<[string, string]>; desde30?: string }): PropsCifra[] {
+  const enlace = (extra: Array<[string, string]>): { href?: string } => (contexto ? { href: query(contexto, extra) } : {});
+  const celda = (etiqueta: string, valor: number | null, o: Partial<PropsCifra> & { alerta?: boolean } = {}): PropsCifra => {
+    const { alerta, ...resto } = o;
+    return valor === null
+      ? { etiqueta, valor: null, estado: 'vacio', mensaje: tx('conductores.vista.no_se_pudo_contar'), ...(resto.href ? { href: resto.href } : {}) }
+      : { etiqueta, valor: numero(valor), tono: alerta && valor > 0 ? 'bad' : undefined, ...resto };
+  };
+  const provisional = fichas.polizaProvisional;
+  return [
+    celda(tx('rest.recibidos_hoy'), fichas.recibidosHoy, { nota: tx('rest.desgloses_que_llegaron_hoy_del_sistema'), ...enlace([]) }),
+    // Rovaq `pc-kpis`: 4 celdas. Entregados y rebotados (30 días) viajan en la nota de «Enviados», con su cifra medida (null = «—», nunca 0).
+    celda(tx('rest.enviados_30_dias'), fichas.enviados, {
+      alerta: false,
+      nota: tx('f26d4.liq.nota_enviados_detalle', { e: fichas.entregados === null ? '—' : numero(fichas.entregados), r: fichas.rebotados === null ? '—' : numero(fichas.rebotados) }),
+      ...(typeof fichas.rebotados === 'number' && fichas.rebotados > 0 ? { tono: 'bad' as const } : {}),
+      ...enlace([['des_estado', 'enviado'], ...(desde30 ? [['des_desde', desde30] as [string, string]] : [])]),
+    }),
+    celda(tx('rest.retenidos'), fichas.retenidos, {
+      alerta: true,
+      nota: typeof provisional === 'number' && provisional > 0 ? tx('f26d2.liq.nota_retenidos_provisional', { n: numero(provisional) }) : tx('f26d2.liq.nota_retenidos'),
+      ...enlace([['des_estado', 'retenido']]),
+    }),
+    celda(tx('rest.sin_poliza'), fichas.sinPoliza, { alerta: true, nota: tx('f26d2.liq.nota_sin_poliza'), ...enlace([['des_estado', 'sin_poliza']]) }),
+  ];
+}
+
+/** «Qué pasó · qué significa · qué hacer»: frases calculadas por reglas (sin IA), cada una con la fuente de su cifra. Va como UNA tarjeta bajo la
+ *  tabla (Rovaq: las lecturas viven en su propia tarjeta, no dentro de la lista) y en rejilla, para no dejar un hueco alto. */
 export function BloqueInsights({ insights, tr = TR_ES }: { insights: InsightA1[]; tr?: TrAgentes }) {
   const { t: tx } = tr;
   if (insights.length === 0) return null;
   return (
-    <div className="rv-liq-insights" id="insights-desgloses" aria-label={tx('rest.lectura_de_los_desgloses')}>
-      <p className="rv-liq-rotulo">{tx('rest.que_paso_que_significa_que_hacer')}</p>
-      <ul className="rv-liq-insights__lista">
-        {insights.map((i) => (
-          <li key={i.id} data-insight={i.id} data-tono={i.tono} className="rv-liq-insight">
-            <p className="rv-liq-insight__titulo">{i.quePaso}</p>
-            <p className="rv-liq-sub">{i.queSignifica}</p>
-            <p className="rv-liq-insight__hacer">{i.queHacer}</p>
-            <p className="rv-liq-nota">{tx('rest.fuente')}{' '}{i.fuente}</p>
-          </li>
-        ))}
-      </ul>
+    <div className="rv-liq-insights" id="insights-desgloses">
+      <Tarjeta titulo={tx('rest.lectura_de_los_desgloses')}>
+        <p className="rv-liq-rotulo">{tx('rest.que_paso_que_significa_que_hacer')}</p>
+        <ul className="rv-liq-insights__lista">
+          {insights.map((i) => (
+            <li key={i.id} data-insight={i.id} data-tono={i.tono} className="rv-liq-insight">
+              <p className="rv-liq-insight__titulo">{i.quePaso}</p>
+              <p className="rv-liq-sub">{i.queSignifica}</p>
+              <p className="rv-liq-insight__hacer">{i.queHacer}</p>
+              <p className="rv-liq-nota">{tx('rest.fuente')}{' '}{i.fuente}</p>
+            </li>
+          ))}
+        </ul>
+      </Tarjeta>
     </div>
-  );
-}
-
-/** `href` ausente = la ficha NO es un enlace (la vista de conteos de `nomina` no lleva a ninguna lista). */
-export function Ficha({ etiqueta, valor, ayuda, href, tono, tr = TR_ES }: { etiqueta: string; valor: number | null; ayuda: string; href?: string; tono?: 'bad'; tr?: TrAgentes }) {
-  const { t: tx } = tr;
-  // `null` = no se pudo contar: «—», jamás un cero que nadie midió.
-  const alerta = tono === 'bad' && valor !== null && valor > 0;
-  const contenido = (
-    <>
-      <span className="rv-liq-ficha__rotulo">{etiqueta}</span>
-      <span className="rv-liq-ficha__valor cifra-mono">{valor === null ? '—' : numero(valor)}</span>
-      {valor === null && <span className="rv-liq-nota">{tx('conductores.vista.no_se_pudo_contar')}</span>}
-    </>
-  );
-  if (href === undefined) return <div title={ayuda} className="rv-liq-ficha" data-alerta={alerta || undefined}>{contenido}</div>;
-  return (
-    <Link href={href} title={ayuda} className="rv-liq-ficha" data-enlace="" data-alerta={alerta || undefined}>
-      {contenido}
-    </Link>
   );
 }
 
@@ -488,7 +517,7 @@ function TablaRenglones({ titulo, renglones, moneda, tr = TR_ES }: { titulo: str
           altoMaximo={false}
           columnas={[
             { id: 'concepto', titulo: tx('proveedores.vista.concepto'), principal: true, celda: (r) => r.descripcion },
-            { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (r) => <span className="cifra-mono">{dinero(r.monto, moneda)}</span> },
+            { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (r) => <span className="rv-ag-num">{dinero(r.monto, moneda)}</span> },
           ]}
         />
       )}
@@ -548,7 +577,7 @@ function EstadoCabecera({ d, tr = TR_ES }: { d: DetalleDesglose; tr?: TrAgentes 
       <div><dt className="rv-liq-rotulo">{tx('conductores.forma.operador')}</dt><dd>{d.operador ?? '—'}</dd></div>
       <div><dt className="rv-liq-rotulo">{tx('rest.periodo')}</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
       <div><dt className="rv-liq-rotulo">{tx('rest.terminal')}</dt><dd>{d.terminal ?? '—'}</dd></div>
-      <div><dt className="rv-liq-rotulo">{d.totalOrigen === 'calculado' ? tx('rest.neto_calculado_de_los_renglones') : tx('rest.neto_de_tu_sistema')}</dt><dd className="cifra-mono rv-liq-neto">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="rv-liq-nota">{tx('rest.tu_sistema_no_mando_su_propio')}</dd>}</div>
+      <div><dt className="rv-liq-rotulo">{d.totalOrigen === 'calculado' ? tx('rest.neto_calculado_de_los_renglones') : tx('rest.neto_de_tu_sistema')}</dt><dd className="rv-ag-num rv-liq-neto">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="rv-liq-nota">{tx('rest.tu_sistema_no_mando_su_propio')}</dd>}</div>
     </dl>
   );
 }
@@ -648,7 +677,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
             tarjetaMovil
             columnas={[
               { id: 'quien', titulo: tx('rest.quien'), principal: true, celda: (x) => ROTULO_ROL_DETALLE[x.rol] },
-              { id: 'correo', titulo: tx('vigia.vista.correo'), celda: (x) => <span className="cifra-mono rv-liq-apagado">{x.correo}</span> },
+              { id: 'correo', titulo: tx('vigia.vista.correo'), celda: (x) => <span className="rv-ag-num rv-liq-apagado">{x.correo}</span> },
               { id: 'estado', titulo: tx('proveedores.vista.estado'), celda: (x) => { const r = rotuloDestino(x.destino); return <StatusChip tono={r.tono}>{r.rotulo}</StatusChip>; } },
               { id: 'cuando', titulo: tx('rest.cuando'), celda: (x) => <span className="rv-liq-apagado">{x.en ? fechaHoraMx(x.en) : '—'}</span> },
             ]}
@@ -732,7 +761,9 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
   );
 }
 
-/** El marco de la pantalla de un tenant que recibe el desglose por correo: la sección y los avisos, sin los KPIs, la cola ni la estrategia del flujo de fotos. */
+/** El marco de la pantalla de un tenant que recibe el desglose por correo: la sección y los avisos, sin los KPIs, la cola ni la estrategia del flujo de fotos.
+ *  Es una tabla maestra de Rovaq: cabecera → (filtros → tira → tabla → lectura, que pinta la propia sección) → cargas → detalle → excepciones → avisos,
+ *  todo apilado a 12 px en UNA columna. */
 export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones, cargas, tr = TR_ES }: {
   desgloses: React.ReactNode; detalle?: React.ReactNode; excepciones?: React.ReactNode; notificaciones?: React.ReactNode;
   /** Ola 1 · A1: la subida de archivos (desgloses y correos de operadores) mientras el sistema del cliente no manda los datos solo. */
@@ -740,12 +771,13 @@ export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones
 }) {
   const { t: tx } = tr;
   return (
-    <MarcoPagina titulo={tx('liquidacion.vista.liquidacion_automatica')} apoyo={tx('rest.los_desgloses_de_liquidacion_que_llegan')}>
-      {desgloses}
-      {cargas}
-      {detalle}
-      {excepciones}
-      {notificaciones}
-    </MarcoPagina>
+    <EsqueletoTablaMaestra titulo={tx('liquidacion.vista.liquidacion_automatica')} apoyo={tx('rest.los_desgloses_de_liquidacion_que_llegan')} acciones={cargas}>
+      <div className="rv-ag-pila">
+        {desgloses}
+        {detalle}
+        {excepciones}
+        {notificaciones}
+      </div>
+    </EsqueletoTablaMaestra>
   );
 }

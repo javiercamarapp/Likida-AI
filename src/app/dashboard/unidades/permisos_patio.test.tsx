@@ -52,10 +52,9 @@ vi.mock('./taller', () => ({ BloqueTaller: () => null }));
 
 const { default: PaginaUnidades } = await import('./page');
 const props = async () => {
-  const r = await PaginaUnidades({ searchParams: Promise.resolve({}) }) as ReactElement<{ children?: unknown }>;
-  // La página devuelve <> <VistaUnidades .../> <BloqueTaller/> </>
-  const hijos = (r.props.children as ReactElement<ComponentProps<typeof VistaUnidades>>[]);
-  return hijos[0].props;
+  // La página devuelve <VistaUnidades taller={<BloqueTaller/>} .../> (el taller entra como hijo del esqueleto, no como hermano).
+  const r = await PaginaUnidades({ searchParams: Promise.resolve({}) }) as ReactElement<ComponentProps<typeof VistaUnidades>>;
+  return r.props;
 };
 const fd = (campos: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(campos)) f.set(k, v); return f; };
 const FORMA = { numeroEconomico: '47', placas: 'AB-123' };

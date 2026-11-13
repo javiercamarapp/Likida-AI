@@ -1,21 +1,20 @@
 /* El tablero del pipeline (compartido entre /admin/vendedores y /vendedor). Solo tokens globales (--ink, --line, --ok…). Cero hex, cero emojis, cero `style=` en el JSX. */
-.ven-tablero { overflow-x: auto; padding-bottom: 4px; }
-.ven-tablero__fila { display: flex; gap: 8px; align-items: flex-start; min-width: max-content; }
+.ven-tablero { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .ven-vacio { margin: 0; padding: 12px 0; font-size: 13px; color: var(--muted); }
-.ven-col { width: 248px; flex: none; padding: 8px; border-radius: 12px; border: 1px solid var(--line2); background: var(--canvas2); }
-.ven-col__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 8px; }
-.ven-col__total { font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--muted); }
-.ven-col__cuerpo { display: flex; flex-direction: column; gap: 6px; }
-.ven-col__vacia { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 8px 4px; font-size: 12px; color: var(--faint); }
-.ven-col__mas { display: block; padding: 0 4px; font-size: 11px; color: var(--muted); text-decoration: underline; }
+.ven-celda { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ven-celda__nombre { font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.ven-celda__tenue { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.ven-col__mas { font-size: 12px; color: var(--muted); text-decoration: underline; }
 .ven-col__mas:hover { opacity: .7; }
-.ven-col__recorte { margin: 0; padding: 0 4px; font-size: 11px; color: var(--muted); }
+.ven-recortes { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0 2px; list-style: none; font-size: 12px; color: var(--muted); }
 
-.ven-pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: var(--canvas); color: var(--muted); border: 1px solid var(--line); }
-.ven-pill::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
-.ven-pill[data-tono="ok"] { background: var(--okbg); color: var(--ok); border-color: transparent; }
-.ven-pill[data-tono="warn"] { background: var(--warnbg); color: var(--warn); border-color: transparent; }
-.ven-pill[data-tono="bad"] { background: var(--badbg); color: var(--bad); border-color: transparent; }
+/* La etapa: píldora MONOCROMA (decisión 10). Ganado, tinta llena; perdido, hueco; el resto, gris neutro. Nunca ámbar ni rojo. */
+.ven-pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; background: var(--canvas); color: var(--ink); border: 1px solid var(--line); }
+.ven-pill[data-fin="ganado"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.ven-pill[data-fin="perdido"] { background: transparent; color: var(--muted); border-style: dashed; }
+.ven-campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink); }
+.ven-campo > span { font-size: 12px; font-weight: 600; }
+.ven-detalle__pie { position: sticky; bottom: 0; display: flex; justify-content: flex-end; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); background: var(--surface); }
 
 .ven-tarjeta { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
 .ven-tarjeta[data-pendiente="true"] { opacity: .6; }
@@ -55,13 +54,44 @@
 .ven-regla p { margin: 0; }
 
 /* Desempeño por vendedor: 13 columnas. Relleno corto, cabeceras que envuelven y el nombre en una línea para que quepan en la tarjeta sin recortar «Conversión». */
-[data-ui="v2"] .card.ven-desempeno table thead th { padding: 6px 6px; height: auto; white-space: normal; line-height: 1.2; vertical-align: bottom; }
+[data-ui="v2"] .card.ven-desempeno table thead th { padding: 0 6px; height: 36px; white-space: normal; line-height: 1.2; vertical-align: middle; }
 [data-ui="v2"] .card.ven-desempeno table tbody td { padding: 0 6px; }
 [data-ui="v2"] .card.ven-desempeno table tbody th { padding: 0 8px; white-space: nowrap; }
 [data-ui="v2"] .card.ven-desempeno table thead th:first-child { padding-left: 8px; }
 /* La tarjeta abre el cajón de detalle; sus acciones viven allí. */
-[data-ui="v2"] .rv-btn.ven-tarjeta__abrir { justify-content: flex-start; align-items: stretch; min-height: 0; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
+[data-ui="v2"] .rv-btn.ven-tarjeta__abrir { justify-content: flex-start; align-items: stretch; min-height: 0; border-radius: 8px; box-shadow: none; display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
 [data-ui="v2"] .rv-btn.ven-tarjeta__abrir:hover { background: none; color: inherit; }
 [data-ui="v2"] .rv-btn.ven-tarjeta__abrir::after { content: none; }
 [data-ui="v2"] .rv-btn.ven-tarjeta__abrir:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 4px; }
 .ven-detalle { display: flex; flex-direction: column; gap: 12px; }
+
+/* Fila 6-6 sin aire: cada tarjeta mide lo que dice su contenido y la pila de la derecha reparte el alto del embudo. */
+[data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > .rv-tarjeta { height: auto; }
+[data-ui="v2"] .adm-pila { display: flex; flex-direction: column; gap: var(--sp-gap, 12px); min-width: 0; }
+[data-ui="v2"] .adm-pila > .rv-tarjeta { height: auto; align-self: stretch; width: 100%; }
+/* El agente asignador respira: botón, corridas y nota con separación propia; la nota al pie del embudo envuelve en vez de cortarse. */
+[data-ui="v2"] .rv-tarjeta.ven-asignador { gap: 12px; padding: 14px; }
+[data-ui="v2"] .ven-asignador .ven-corridas { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ven-asignador .ven-corridas__error { max-width: 100%; }
+.ven-tarjeta__tenue--fino { white-space: normal; overflow: visible; text-overflow: clip; }
+/* La barra de filtros no lleva fondo propio (Rovaq FilterBar): se funde con el lienzo como en las demás páginas. */
+[data-ui="v2"] .ven-filtros .rv-filtros { background: transparent; }
+
+/* Ronda 6: «Invitar vendedor» mide lo que dice su contenido (la fila de altas no estira la tarjeta corta hasta el alto de la larga). */
+[data-ui="v2"] .ven-forma { gap: 12px; }
+
+/* Ronda 7 — Agente asignador: el cuerpo de la tarjeta es una pila con gap 12 (el gap de .rv-tarjeta no alcanzaba al cuerpo), la descripción
+   se lee completa (13 px, sin «…») y el botón queda en su propia fila separado de «Últimas corridas» (Rovaq: título 14/600, cuerpo 13, acción con gap 12). */
+[data-ui="v2"] .ven-asignador .rv-tarjeta__cuerpo { display: flex; flex-direction: column; gap: 12px; }
+[data-ui="v2"] .ven-asignador .ven-tarjeta__tenue { font-size: 13px; line-height: 1.5; white-space: normal; overflow: visible; text-overflow: clip; }
+[data-ui="v2"] .ven-asignador .ven-tarjeta__tenue--fino { font-size: 12px; }
+[data-ui="v2"] .ven-asignador .ven-forma { gap: 8px; }
+[data-ui="v2"] .ven-asignador .ven-corridas { margin-top: 0; }
+
+/* Ronda 8 · móvil: los campos de la barra de filtros ocupan todo el ancho disponible (36 px de alto), sin ancho fijo que corte la ayuda. */
+@media (max-width: 767px) {
+  [data-ui="v2"] .ven-filtros form, [data-ui="v2"] .ven-filtros .rv-filtros { width: 100%; }
+  [data-ui="v2"] .ven-filtros .rv-campo, [data-ui="v2"] .ven-filtros .rv-ctl, [data-ui="v2"] .ven-filtros input, [data-ui="v2"] .ven-filtros select { width: 100%; min-width: 0; max-width: none; flex: 1 1 100%; }
+  [data-ui="v2"] .ven-filtros .rv-ctl, [data-ui="v2"] .ven-filtros input, [data-ui="v2"] .ven-filtros select { min-height: 36px; }
+}

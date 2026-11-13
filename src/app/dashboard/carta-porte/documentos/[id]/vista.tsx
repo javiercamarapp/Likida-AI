@@ -1,6 +1,6 @@
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Check, Download, CircleHelp, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
+import { BookOpen, Check, Download, CircleHelp, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
 import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, ROTULO_ORIGEN_HALLAZGO, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
@@ -8,7 +8,8 @@ import { CAUSAS_RECHAZO, type CausaRechazo } from '@/lib/likida/carta_porte_docs
 import { propuestaVacia, type PropuestaCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { lineasDelOriginal, marcaDeFila, resumenDeMarcas } from '@/lib/likida/carta_porte_docs/revision_formato';
-import { BotonEnlace, Chip, Fieldset, Icono, MarcoPagina, cx } from '@/app/ui-v2/componentes';
+import { BotonEnlace, Chip, Fieldset, Icono, cx } from '@/app/ui-v2/componentes';
+import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import { AvisosLectura } from './avisos_lectura';
 import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
@@ -171,18 +172,13 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   const editable = doc.estado === 'por_revisar';
   const meta = doc.extraccion?.meta;
   return (
-    <MarcoPagina
+    <EsqueletoFicha
       area="Carta Porte"
       titulo={doc.nombreArchivo}
       idTitulo="documento-titulo"
-      acciones={<Chip>{ROTULO_ESTADO[doc.estado]}</Chip>}
+      volver={{ href: `/dashboard/carta-porte/documentos${sufijo}`, etiqueta: tr('cartaPorte.documentos.id.vista.volverALosDocumentos') }}
+      chips={<li><Chip>{ROTULO_ESTADO[doc.estado]}</Chip></li>}
     >
-      <div>
-        <BotonEnlace href={`/dashboard/carta-porte/documentos${sufijo}`} variante="ghost" tamano="sm" icono={<Icono icono={ArrowLeft} tam={14} />}>
-          {tr('cartaPorte.documentos.id.vista.volverALosDocumentos')}
-        </BotonEnlace>
-      </div>
-
       <div className="space-y-1">
         <p className="text-[12px] text-[var(--muted)]">
           {tr('cartaPorte.documentos.id.vista.recibido', { v: ROTULO_FORMATO[doc.formato] ?? doc.formato, v2: ROTULO_CANAL[doc.canal] ?? doc.canal, v3: pesoArchivo(doc.bytes), v4: fechaHoraMx(doc.createdAt), v5: doc.remitente ? ` · de ${doc.remitente}` : '', v6: doc.asunto ? ` · «${doc.asunto}»` : '' })}
@@ -452,7 +448,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
           </ul>
         </details>
       )}
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }
 

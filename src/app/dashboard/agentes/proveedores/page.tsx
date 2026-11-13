@@ -43,6 +43,10 @@ const TIPOS_FOTO = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 type SpFlota = { vista?: string; tenant?: string; rol?: string };
 
+/** Un id del formulario. Helper de MÓDULO: una action `'use server'` que captura una función rompe el cifrado de sus argumentos ligados
+ *  («Functions cannot be passed directly to Client Components») y esa acción (Ver PDF, Descartar, Reintentar, Cancelar) falla. */
+const idDelForm = (fd: FormData, campo: string) => (typeof fd.get(campo) === 'string' ? (fd.get(campo) as string).trim().slice(0, 64) : '');
+
 /** El gateo de las actions — helper de módulo (una action solo captura
  *  valores serializables). */
 async function exigirPermiso(sp: SpFlota, tenantId: string): Promise<{ error: string } | { quien: string }> {
@@ -255,7 +259,6 @@ export default async function PaginaAgenteProveedores({
   }
 
   type Estado = { error?: string; aviso?: string } | null;
-  const idDelForm = (fd: FormData, campo: string) => (typeof fd.get(campo) === 'string' ? (fd.get(campo) as string).trim().slice(0, 64) : '');
 
   /** La configuración de la entrega: CONTROL (a dónde se manda el dinero-papel de la flota), solo el dueño. */
   async function guardarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {

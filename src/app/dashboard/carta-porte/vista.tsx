@@ -1,14 +1,20 @@
+import { cifrasUniformes } from '../formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
-import { TriangleAlert, CircleCheck, CircleHelp, Printer } from 'lucide-react';
+import { TriangleAlert, CircleCheck, CircleHelp, Printer, Truck } from 'lucide-react';
 import type { EstadoCartaPorte, ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import type { EstadoCampoCcp } from '@/lib/likida/carta_porte';
 import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
 import { numero } from '@/lib/formato';
 import { FormaDeclaracion, FormaMercancia, FormaDatosCliente, BotonBorrarMercancia, type AccionForma } from './forma';
 import {
-  Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta,
+  Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, StatusChip, TablaBase,
 } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import Link from 'next/link';
+import { TarjetaTabla } from '../bloque';
 import './carta-porte.css';
 
 /**
@@ -35,7 +41,7 @@ export interface AccionesCcp {
   guardarDatosCliente: AccionForma | null;
 }
 
-export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = null, quitarMercancia = null, guardarDatosCliente = null, sufijo = '', tr = trEs }: {
+export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = null, quitarMercancia = null, guardarDatosCliente = null, sufijo = '', tr = trEs, ver = null }: {
   datos: EstadoCartaPorte | null;
   declarar?: AccionForma | null;
   agregarMercancia?: AccionForma | null;
@@ -43,24 +49,66 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
   guardarDatosCliente?: AccionForma | null;
   /** El `?tenant=&rol=` que se arrastra en cada link interno (ver sufijo.ts). */
   sufijo?: string; tr?: Tr;
+  /** `?ver=<viajeId>`: el viaje cuyo detalle se abre en la vista rápida. Un id que no es de los evaluados se ignora. */
+  ver?: string | null;
 }) {
   const acciones: AccionesCcp = { declarar, agregarMercancia, quitarMercancia, guardarDatosCliente };
+  // Las cifras cuentan SOLO los viajes evaluados (puede haber más: la nota lo dice); sin lectura no hay tira (nunca ceros de relleno).
+  const evaluados = datos?.viajes ?? [];
+  const cuenta = (k: string) => evaluados.filter((v) => v.decision.necesita === k).length;
+  const cifras: PropsCifra[] | undefined = datos === null ? undefined : [
+    { etiqueta: tr('cartaPorte.vista.cifra.evaluados'), valor: numero(evaluados.length), nota: datos.viajes.length < datos.total ? tr('cartaPorte.vista.cifra.nota', { v: numero(datos.total) }) : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.necesitan'), valor: numero(cuenta('si')), tono: cuenta('si') > 0 ? 'warn' : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.faltan'), valor: numero(cuenta('falta_declarar')), tono: cuenta('falta_declarar') > 0 ? 'bad' : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.sinComplemento'), valor: numero(cuenta('no')) },
+  ];
+  const sel = ver && datos ? datos.viajes.find((v) => v.viajeId === ver) ?? null : null;
+  const hrefVer = (id: string | null): string => {
+    const q = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : '');
+    if (id) q.set('ver', id); else q.delete('ver');
+    const qs = q.toString();
+    return `/dashboard/carta-porte${qs ? `?${qs}` : ''}`;
+  };
   return (
-    <MarcoPagina titulo={tr('cartaPorte.vista.cartaPorte')} apoyo={tr('cartaPorte.vista.porCadaViajeEn')}>
-      <AvisoCompacto tono="info"
-        resumen={tr('cartaPorte.vista.laLeyLimitaLa')}
-        mas={<p>{rico(tr('cartaPorte.vista.seEvaluaComoStrong'), { strong: (c) => <strong>{c}</strong> })}</p>} />
+    <EsqueletoTablaMaestra
+      titulo={tr('cartaPorte.vista.cartaPorte')}
+      apoyo={tr('cartaPorte.vista.porCadaViajeEn')}
+      cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy(tr('cartaPorte.vista.cifra.evaluados'))}
+      vistaRapida={sel ? (
+        <CajonVistaRapida
+          titulo={sel.folio ?? sel.viajeId.slice(0, 8)}
+          subtitulo={sel.origen && sel.destino ? `${sel.origen} → ${sel.destino}` : sel.origen ?? sel.destino ?? tr('cartaPorte.vista.sinRutaCapturada')}
+          hrefCerrar={hrefVer(null)}
+          cifras={[
+            { etiqueta: tr('cartaPorte.vista.col.decision'), valor: pillDe(tr)[sel.decision.necesita].rotulo },
+            { etiqueta: tr('cartaPorte.vista.col.transportista'), valor: `${numero(18 - sel.checklist.faltanTransportista)} / 18` },
+            { etiqueta: tr('cartaPorte.vista.col.cliente'), valor: `${numero(19 - sel.checklist.faltanCliente)} / 19` },
+            { etiqueta: tr('cartaPorte.vista.cifra.mercancia'), valor: numero(sel.mercancias.length) },
+          ]}
+          pie={(
+            <BotonEnlace href={`/dashboard/carta-porte/borrador/${sel.viajeId}${sufijo}`} variante="primary" tamano="sm" icono={<Icono icono={Printer} />}>
+              {tr('cartaPorte.vista.verBorradorImprimible')}
+            </BotonEnlace>
+          )}
+        >
+          <DetalleViaje tr={tr} v={sel} acciones={acciones} />
+        </CajonVistaRapida>
+      ) : null}
+      avisos={(
+        <>
+          <AvisoCompacto tono="info" className="rv-aviso--linea"
+            resumen={tr('cartaPorte.vista.laLeyLimitaLa')}
+            mas={<p>{rico(tr('cartaPorte.vista.seEvaluaComoStrong'), { strong: (c) => <strong>{c}</strong> })}</p>} />
 
-      {/* FASE 6 (relojes legales): el aviso que nadie da ANTES del
-          siniestro. Es incondicional a propósito — Likida hoy no captura
-          ValorMercancia, así que no hay un "por viaje" que evaluar: el
-          dato correcto es que se declara AL EMITIR con el PAC, y la
-          consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
-      <Aviso tono="warn" titulo={AVISO_VALOR_MERCANCIA.titulo}>
-        {AVISO_VALOR_MERCANCIA.cuerpo}{' '}
-        <span className="rv-ccp__tenue">{AVISO_VALOR_MERCANCIA.fundamento}</span>
-      </Aviso>
-
+          {/* FASE 6 (relojes legales): el aviso que nadie da ANTES del siniestro. Es incondicional a propósito — Likida hoy no captura
+              ValorMercancia, así que no hay un "por viaje" que evaluar: el dato correcto es que se declara AL EMITIR con el PAC, y la
+              consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
+          <AvisoCompacto tono="warn" className="rv-aviso--linea" resumen={AVISO_VALOR_MERCANCIA.titulo}
+            mas={<p>{AVISO_VALOR_MERCANCIA.cuerpo}{' '}<span className="rv-ccp__tenue">{AVISO_VALOR_MERCANCIA.fundamento}</span></p>} />
+        </>
+      )}
+    >
       {datos !== null && datos.hazmatDeclarado === true && (
         <Aviso tono="warn">
           {rico(tr('cartaPorte.vista.tuFlotaDeclaroQue'), { strong: (c) => <strong>{c}</strong> })}
@@ -74,12 +122,24 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
       {datos === null ? (
         <EstadoError>{tr('cartaPorte.vista.noPudeLeerLos')}</EstadoError>
       ) : datos.viajes.length === 0 ? (
-        <EstadoVacio contenido titulo={tr('cartaPorte.vista.noHayViajesEn')}>
+        <EstadoVacio pantalla contenido icono={Truck} titulo={tr('cartaPorte.vista.noHayViajesEn')}>
           {tr('cartaPorte.vista.alDespacharElPrimero')}
         </EstadoVacio>
       ) : (
         <>
-          {datos.viajes.map((v) => <TarjetaViaje tr={tr} key={v.viajeId} v={v} acciones={acciones} sufijo={sufijo} />)}
+          <TarjetaTabla titulo={tr('cartaPorte.vista.cifra.evaluados')} contador={numero(datos.viajes.length)}>
+            <TablaBase<ViajeCcp>
+              etiqueta={tr('cartaPorte.vista.cifra.evaluados')} altoMaximo={false} tarjetaMovil
+              filas={datos.viajes} idFila={(v) => v.viajeId}
+              columnas={[
+                { id: 'folio', titulo: tr('cartaPorte.vista.col.folio'), principal: true, celda: (v) => <Link className="rv-ccp__folio" href={hrefVer(v.viajeId)} scroll={false}>{v.folio ?? v.viajeId.slice(0, 8)}</Link> },
+                { id: 'ruta', titulo: tr('cartaPorte.vista.col.ruta'), celda: (v) => (v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? '—') },
+                { id: 'decision', titulo: tr('cartaPorte.vista.col.decision'), celda: (v) => <StatusChip tono={pillDe(tr)[v.decision.necesita].tono}>{pillDe(tr)[v.decision.necesita].rotulo}</StatusChip> },
+                { id: 'transportista', titulo: tr('cartaPorte.vista.col.transportista'), celda: (v) => `${numero(18 - v.checklist.faltanTransportista)} / 18` },
+                { id: 'cliente', titulo: tr('cartaPorte.vista.col.cliente'), celda: (v) => `${numero(19 - v.checklist.faltanCliente)} / 19` },
+                { id: 'borrador', titulo: tr('cartaPorte.vista.col.borrador'), celda: (v) => <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijo}`} variante="secondary" tamano="sm">{tr('cartaPorte.vista.col.abrir')}</BotonEnlace> },
+              ]} />
+          </TarjetaTabla>
           {datos.viajes.length < datos.total && (
             <p className="rv-ccp__nota">
               {tr('cartaPorte.vista.seEvaluanLosViajes', { v: numero(datos.viajes.length), v2: numero(datos.total) })}
@@ -87,7 +147,7 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
           )}
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
@@ -96,18 +156,17 @@ const pillDe = (tr: Tr): Record<string, { rotulo: string; tono: 'warn' | 'ok' | 
   no: { rotulo: tr('cartaPorte.vista.sinComplemento'), tono: 'ok' },
   falta_declarar: { rotulo: tr('cartaPorte.vista.faltaDeclarar'), tono: 'bad' },
 });
-function TarjetaViaje({ v, acciones, sufijo, tr = trEs }: { v: ViajeCcp; acciones: AccionesCcp; sufijo: string; tr?: Tr }) {
+/** El detalle de UN viaje (la decisión, qué falta y de quién, y las formas de declarar), dentro de la vista rápida: ya no se despliega en línea bajo la tabla. */
+function DetalleViaje({ v, acciones, tr = trEs }: { v: ViajeCcp; acciones: AccionesCcp; tr?: Tr }) {
   const pill = pillDe(tr)[v.decision.necesita];
   const c = v.checklist;
   const listos = 18 - c.faltanTransportista;
   const b = v.borrador;
 
   return (
-    <Tarjeta titulo={v.folio ?? v.viajeId.slice(0, 8)} acciones={<StatusChip tono={pill.tono}>{pill.rotulo}</StatusChip>}>
+    <>
       <div className="rv-ccp__viaje">
-        <p className="rv-ccp__nota">
-          {v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? tr('cartaPorte.vista.sinRutaCapturada')}
-        </p>
+        <p className="rv-ccp__nota"><StatusChip tono={pill.tono}>{pill.rotulo}</StatusChip></p>
         <p className="rv-ccp__nota">
           {v.decision.motivo}{' '}
           <span className="rv-ccp__tenue">({v.decision.fundamento})</span>
@@ -189,12 +248,9 @@ function TarjetaViaje({ v, acciones, sufijo, tr = trEs }: { v: ViajeCcp; accione
               {tr('cartaPorte.vista.borradorAunNoArmable', { v: numero(b.faltantes.length), v2: b.faltantes.length === 1 ? tr('cartaPorte.vista.dato') : tr('cartaPorte.vista.datos') })}
             </span>
           )}
-          <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijo}`} variante="secondary" tamano="sm" icono={<Icono icono={Printer} />}>
-            {tr('cartaPorte.vista.verBorradorImprimible')}
-          </BotonEnlace>
         </div>
       </div>
-    </Tarjeta>
+    </>
   );
 }
 

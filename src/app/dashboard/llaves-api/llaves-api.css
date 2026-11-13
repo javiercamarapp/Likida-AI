@@ -3,11 +3,23 @@
 .rv-lla__tenue { color: var(--muted); white-space: nowrap; }
 .rv-lla__fila { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rv-lla__forma { display: grid; gap: 12px; }
-.rv-lla__rejilla { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 640px) { .rv-lla__rejilla { grid-template-columns: minmax(0, 1fr); } }
+.rv-lla__rejilla { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 .rv-lla__secreto { display: grid; gap: 8px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--warnbg); }
 .rv-lla__alerta { display: flex; align-items: flex-start; gap: 8px; font-size: var(--t-small); font-weight: 600; color: var(--warn); }
 .rv-lla__clave { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
 .rv-lla__clave code { flex: 1; min-width: 0; font-size: var(--t-small); word-break: break-all; }
 .rv-lla__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }
 .rv-lla__revocar { display: grid; gap: 8px; }
+.rv-lla__barra { display: inline-flex; }
+
+/* Tira de cifras como la `pc-kpis` de Rovaq (igual que /vendedor y Avisos): sin filete superior y con la PISTA punteada de 6 px. La pista es solo forma (no mide nada) y se omite con la celda en error o sin dato. */
+[data-ui="v2"] .rv-esq:has(.rv-lla__barra) .rv-kpi { min-height: 0; border-top-width: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-lla__barra) .rv-kpi > .rv-kpi__cab { order: 1; }
+[data-ui="v2"] .rv-esq:has(.rv-lla__barra) .rv-kpi > .rv-kpi__fila { order: 2; }
+[data-ui="v2"] .rv-esq:has(.rv-lla__barra) .rv-kpi:not([data-estado])::after {
+  content: ''; order: 3; display: block; height: 6px; margin: 4px 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
+}
+[data-ui="v2"] .rv-esq:has(.rv-lla__barra) .rv-kpi > .rv-kpi__nota { order: 4; }
+[data-ui="v2"] .rv-esq:has(.rv-lla__barra) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; min-height: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-lla__barra) .rv-kpi > .rv-kpi__pie:not(:has(*)) { display: none; }

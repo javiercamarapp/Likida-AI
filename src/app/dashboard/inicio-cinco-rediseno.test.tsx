@@ -68,15 +68,21 @@ const VACIAS = { liquidacion: undefined, peajes: undefined, carta_porte: undefin
 const DATOS_VACIOS = { ...DATOS, kpis: { ...DATOS.kpis!, viajesLiquidados: 0, porRevisar: 0, conDiferencias: 0 }, cierres: [{ inicio: 'x', etiqueta: 'x', valor: 0, parcial: false }], hechos: [], escalados: 0, cartaPorte: { completas: 0, total: 0 } };
 
 describe('Inicio rediseñado: jerarquía, iconos animados y estados honestos', () => {
-  it('un solo h1, y «Hoy» va ANTES que los cinco agentes y estos antes que las cifras de pesos', async () => {
+  it('un solo h1; los cinco agentes van en el lugar de la fila 1 de la portada (Rovaq), luego «Hoy» y al final las cifras de pesos', async () => {
     const h = await html('flota_admin');
     expect((h.match(/<h1[\s>]/g) ?? []).length).toBe(1);
     const iHoy = h.indexOf('Requiere tu atención');
     const iAgentes = h.indexOf('data-agente-resumen="liquidacion"');
     const iPesos = h.indexOf('Importe IAVE por decena');
     expect(iHoy).toBeGreaterThan(-1);
-    expect(iHoy).toBeLessThan(iAgentes);
-    expect(iAgentes).toBeLessThan(iPesos);
+    expect(iAgentes).toBeLessThan(iHoy);
+    expect(iHoy).toBeLessThan(iPesos);
+  });
+
+  it('la barra de procedencia dice hasta cuándo son las cifras y no repite el chip de fuentes', async () => {
+    const h = await html('flota_admin');
+    expect(h).toContain('class="rv-esq__procedencia"');
+    expect(texto(h)).toContain('Cifras al');
   });
 
   it('cada tarjeta lleva su icono SVG animado (decorativo) y el texto del estado al lado', async () => {
@@ -131,14 +137,23 @@ describe('Inicio rediseñado: jerarquía, iconos animados y estados honestos', (
   it('«en espera de conexión» solo se afirma con la señal medida: 0 estados de cuenta → Peajes espera; señal ilegible (null) no', async () => {
     dobles.corridas.mockResolvedValue(VACIAS);
     dobles.senales.mockResolvedValue({ ...SENALES, archivosRecibidos: 0 });
-    expect(texto(await html('flota_admin'))).toContain('En espera del estado de cuenta');
+    expect(texto(await html('flota_admin'))).toContain('Espera el estado de cuenta');
     dobles.senales.mockResolvedValue(SENALES);
-    expect(texto(await html('flota_admin'))).not.toContain('En espera del estado de cuenta');
+    expect(texto(await html('flota_admin'))).not.toContain('Espera el estado de cuenta');
   });
 
   it('cada tarjeta enlaza a su panel con el nombre accesible del agente', async () => {
     const t = texto(await html('flota_admin'));
     expect(t).toContain('Abrir panel Peajes');
     expect(t).toContain('Abrir panel Carta Porte');
+  });
+});
+
+describe('ronda 7: la portada no se desplaza de lado ni deja huecos', () => {
+  it('la tarjeta de cada agente es el ancestro posicionado de su texto solo-lectores (.rv-sr absoluto)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync(new URL('./inicio-cinco.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.rv-ic__agentes > \.rv-ic__agente \{[^}]*position: relative/);
+    expect(css).toMatch(/\.rv-ic__fila > \.rv-tarjeta\[data-contenida\] \{[^}]*height: 100%/); // ronda 8: se estira como las demás (Rovaq), ya no se ajusta al contenido
   });
 });

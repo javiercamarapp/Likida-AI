@@ -1,6 +1,8 @@
+import { cifrasUniformes } from '../../formato';
+import { DescargaNoDisponible } from '../../bloque';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
-import { TriangleAlert, Upload, Download, RotateCcw, Layers } from 'lucide-react';
+import { TriangleAlert, Upload, Download, RotateCcw, Layers, Inbox } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
@@ -10,9 +12,10 @@ import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_doc
 import { BotonEnvio, FormaAccion, type AccionDoc } from './forma_accion';
 import {
   AvisoCompacto, Aviso, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, CamposSistema, Disclosure, EstadoError, EstadoVacio,
-  FiltroOpciones, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
+  FiltroOpciones, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './documentos.css';
 
 /**
@@ -126,65 +129,77 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
   usuarioId?: string | null; tr?: Tr;
 }) {
   return (
-    <MarcoPagina titulo={tr('cartaPorte.documentos.vista.documentosDeClientes')} apoyo={tr('cartaPorte.documentos.vista.losDocumentosQueMandan')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/carta-porte${sufijo}`}>{tr('cartaPorte.documentos.vista.volverACartaPorte')}</BotonEnlace>}>
-      <Aviso tono="info">
-        {rico(tr('cartaPorte.documentos.vista.tusClientesMandanLa'), { strong: (c) => <strong>{c}</strong> })}
-      </Aviso>
-
+    <EsqueletoTablaMaestra
+      titulo={tr('cartaPorte.documentos.vista.documentosDeClientes')}
+      apoyo={tr('cartaPorte.documentos.vista.losDocumentosQueMandan')}
+      avisos={(
+        <>
+          <Aviso tono="info">
+            {rico(tr('cartaPorte.documentos.vista.tusClientesMandanLa'), { strong: (c) => <strong>{c}</strong> })}
+          </Aviso>
+          {datos?.metricas.parcial && (
+            <AvisoCompacto tono="warn" resumen={tr('cartaPorte.documentos.vista.cifrasDeLosMas', { v: numero(datos.metricas.parcial.leidos), v2: numero(datos.metricas.parcial.total) })} />
+          )}
+        </>
+      )}
+      cifras={datos === null ? undefined : cifrasUniformes(cifrasMetricas(datos.metricas, tr))}
+      etiquetaCifras={tr('cartaPorte.documentos.vista.metricasDelAgente')}
+    >
       {datos === null ? (
         <EstadoError reintentar>{tr('cartaPorte.documentos.vista.noPudeLeerLos')}</EstadoError>
       ) : (
         <>
-          <Metricas tr={tr} m={datos.metricas} />
-          {acciones.subir && <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} />}
+          {/* La bandeja es el bloque principal (Rovaq: tira → tabla de cargas → zona de soltar); la zona de subir va después. */}
           <Bandeja tr={tr} datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
+          {acciones.subir ? <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} metricas={datos.metricas} /> : <NotaMetricas tr={tr} m={datos.metricas} />}
           <Canales tr={tr} buzon={datos.buzon} acciones={acciones} />
           <Perfiles tr={tr} perfiles={datos.perfiles} acciones={acciones} />
-          <Exportacion tr={tr} configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
+          <Exportacion tr={tr} configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} aprobados={datos.metricas.aprobados} />
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
-function Metricas({ m, tr = trEs }: { m: MetricasAgente; tr?: Tr }) {
+function cifrasMetricas(m: MetricasAgente, tr: Tr = trEs): PropsCifra[] {
+  return [
+    { info: 'carta_porte_docs.recibidos', etiqueta: tr('cartaPorte.documentos.vista.documentosRecibidos90Dias'), valor: numero(m.recibidos), nota: tr('cartaPorte.documentos.vista.porRevisarSinPoder', { v: numero(m.porRevisar), v2: numero(m.fallidos) }) },
+    { info: 'carta_porte_docs.aprobados', etiqueta: tr('cartaPorte.documentos.vista.aprobados'), valor: numero(m.aprobados), nota: tr('cartaPorte.documentos.vista.rechazados', { n: numero(m.rechazados) }) },
+    {
+      info: 'carta_porte_docs.sin_correccion',
+      etiqueta: tr('cartaPorte.documentos.vista.aprobadosSinCorreccion'),
+      valor: m.pctSinCorreccion === null ? '—' : porcentaje(m.pctSinCorreccion, 0),
+      nota: m.pctSinCorreccion === null ? tr('cartaPorte.documentos.vista.aunNoHayAprobados') : tr('cartaPorte.documentos.vista.deConfirmarUnDato', { v: numero(m.sinCorreccion), v2: numero(m.aprobados) }),
+    },
+    {
+      info: 'carta_porte_docs.tiempo_ahorrado',
+      etiqueta: tr('cartaPorte.documentos.vista.tiempoAhorradoPorEmbarque'),
+      valor: m.minutosAhorradosPorEmbarque === null ? '—' : `${numero(m.minutosAhorradosPorEmbarque)} min`,
+      nota: m.minutosAhorradosPorEmbarque === null
+        ? tr('cartaPorte.documentos.vista.seCalculaConEl')
+        : tr('cartaPorte.documentos.vista.estimacionMinDeCaptura', { v: numero(MINUTOS_CAPTURA_MANUAL_EMBARQUE), v2: numero(m.minutosRevisionPromedio ?? 0), v3: numero(m.aprobadosMedidos) }),
+    },
+  ];
+}
+
+function NotaMetricas({ m, tr = trEs }: { m: MetricasAgente; tr?: Tr }) {
   return (
-    <>
-      {m.parcial && (
-        <AvisoCompacto tono="warn" resumen={tr('cartaPorte.documentos.vista.cifrasDeLosMas', { v: numero(m.parcial.leidos), v2: numero(m.parcial.total) })} />
-      )}
-      <TiraCifras etiqueta={tr('cartaPorte.documentos.vista.metricasDelAgente')}>
-        <Cifra info="carta_porte_docs.recibidos" etiqueta={tr('cartaPorte.documentos.vista.documentosRecibidos90Dias')} valor={numero(m.recibidos)} nota={tr('cartaPorte.documentos.vista.porRevisarSinPoder', { v: numero(m.porRevisar), v2: numero(m.fallidos) })} />
-        <Cifra info="carta_porte_docs.aprobados" etiqueta={tr('cartaPorte.documentos.vista.aprobados')} valor={numero(m.aprobados)} nota={tr('cartaPorte.documentos.vista.rechazados', { n: numero(m.rechazados) })} />
-        <Cifra
-          info="carta_porte_docs.sin_correccion"
-          etiqueta={tr('cartaPorte.documentos.vista.aprobadosSinCorreccion')}
-          valor={m.pctSinCorreccion === null ? '—' : porcentaje(m.pctSinCorreccion, 0)}
-          nota={m.pctSinCorreccion === null ? tr('cartaPorte.documentos.vista.aunNoHayAprobados') : tr('cartaPorte.documentos.vista.deConfirmarUnDato', { v: numero(m.sinCorreccion), v2: numero(m.aprobados) })}
-        />
-        <Cifra
-          info="carta_porte_docs.tiempo_ahorrado"
-          etiqueta={tr('cartaPorte.documentos.vista.tiempoAhorradoPorEmbarque')}
-          valor={m.minutosAhorradosPorEmbarque === null ? '—' : `${numero(m.minutosAhorradosPorEmbarque)} min`}
-          nota={m.minutosAhorradosPorEmbarque === null
-            ? tr('cartaPorte.documentos.vista.seCalculaConEl')
-            : tr('cartaPorte.documentos.vista.estimacionMinDeCaptura', { v: numero(MINUTOS_CAPTURA_MANUAL_EMBARQUE), v2: numero(m.minutosRevisionPromedio ?? 0), v3: numero(m.aprobadosMedidos) })}
-        />
-      </TiraCifras>
-      <p className="rv-doc__tenue">
-        {tr('cartaPorte.documentos.vista.costoDeIaEn', { v: usd4(m.costoUsdTotal), v2: m.costoUsdPorDocumento !== null ? ' ' + tr('cartaPorte.documentos.vista.porDocumento', { v: usd4(m.costoUsdPorDocumento) }) : '', v3: m.sinModelo > 0 ? ' ' + tr('cartaPorte.documentos.vista.documentosSeLeyeronSin', { v: numero(m.sinModelo) }) : '', v4: m.aprobadosSinMedir > 0 ? ' ' + tr('cartaPorte.documentos.vista.aprobadosNoTienenTiempo', { v: numero(m.aprobadosSinMedir) }) : '' })}
-      </p>
-    </>
+    <p className="rv-doc__tenue">
+      {tr('cartaPorte.documentos.vista.costoDeIaEn', { v: usd4(m.costoUsdTotal), v2: m.costoUsdPorDocumento !== null ? ' ' + tr('cartaPorte.documentos.vista.porDocumento', { v: usd4(m.costoUsdPorDocumento) }) : '', v3: m.sinModelo > 0 ? ' ' + tr('cartaPorte.documentos.vista.documentosSeLeyeronSin', { v: numero(m.sinModelo) }) : '', v4: m.aprobadosSinMedir > 0 ? ' ' + tr('cartaPorte.documentos.vista.aprobadosNoTienenTiempo', { v: numero(m.aprobadosSinMedir) }) : '' })}
+    </p>
   );
 }
 
-function Subir({ accion, clientes, tr = trEs }: { accion: AccionDoc; clientes: Array<{ id: string; nombre: string }>; tr?: Tr }) {
+function Subir({ accion, clientes, metricas, tr = trEs }: { accion: AccionDoc; clientes: Array<{ id: string; nombre: string }>; metricas: MetricasAgente; tr?: Tr }) {
   return (
     <Tarjeta titulo={tr('cartaPorte.documentos.vista.subirUnDocumento')} info="carta_porte_docs.subir">
       <FormaAccion accion={accion} enctype="multipart/form-data">
-        <div className="rv-forma__rejilla">
+        {/* Zona de soltar de Rovaq (`/imports`): 1.5px dashed #d6d6d9 sobre el lienzo, radio 12, 20×16. Sin archivo elegido el envío queda apagado (punteado). */}
+        <div className="rv-doc__zona">
           <CampoArchivo id="cp-archivo" name="archivo" required accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.xml,.eml,.txt"
             textoBoton={tr('cartaPorte.documentos.vista.seleccionarArchivo')} etiqueta={tr('cartaPorte.documentos.vista.archivoPdfFotoExcel')} />
+        </div>
+        <div className="rv-forma__rejilla">
           <CampoSelect id="cp-cliente" name="clienteId" defaultValue="" etiqueta={tr('cartaPorte.documentos.vista.deQueClienteEs')}>
             <option value="">{tr('cartaPorte.documentos.vista.sinIndicar')}</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -192,6 +207,7 @@ function Subir({ accion, clientes, tr = trEs }: { accion: AccionDoc; clientes: A
         </div>
         <BotonEnvio icono={<Icono icono={Upload} />} etiqueta={tr('cartaPorte.documentos.vista.subirYLeer')} pendiente={tr('cartaPorte.documentos.vista.leyendoElDocumento')} />
       </FormaAccion>
+      <NotaMetricas tr={tr} m={metricas} />
     </Tarjeta>
   );
 }
@@ -282,37 +298,42 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
   ];
 
   return (
+    <>
+    <BarraFiltros etiqueta={tr('cartaPorte.documentos.vista.filtrosDeLaBandeja')} enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={raiz}>
+      {conAsignacion && usuarioId !== null && (
+        <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.asignacion')} valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorPersona')}
+          opciones={[
+            { valor: 'todos', rotulo: tr('cartaPorte.documentos.vista.filtroTodos'), href: raiz },
+            { valor: 'mios', rotulo: tr('cartaPorte.documentos.vista.misCasos'), href: `${raiz}${sufijo ? '&' : '?'}mios=1` },
+          ]} />
+      )}
+      <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.envioAlTms')} valor={filtroEnvio} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorEstadoDe')}
+        opciones={filtrosEnvio(datos.sinConexion, tr).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? raiz : `${raiz}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
+    </BarraFiltros>
     <Tarjeta titulo={tr('cartaPorte.documentos.vista.bandejaDeRevision')} info="carta_porte_docs.bandeja">
-      <BarraFiltros etiqueta={tr('cartaPorte.documentos.vista.filtrosDeLaBandeja')} enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={raiz}>
-        {conAsignacion && usuarioId !== null && (
-          <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.asignacion')} valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorPersona')}
-            opciones={[
-              { valor: 'todos', rotulo: tr('cartaPorte.documentos.vista.filtroTodos'), href: raiz },
-              { valor: 'mios', rotulo: tr('cartaPorte.documentos.vista.misCasos'), href: `${raiz}${sufijo ? '&' : '?'}mios=1` },
-            ]} />
-        )}
-        <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.envioAlTms')} valor={filtroEnvio} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorEstadoDe')}
-          opciones={filtrosEnvio(datos.sinConexion, tr).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? raiz : `${raiz}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
-      </BarraFiltros>
-      <TablaBase
-        etiqueta={tr('cartaPorte.documentos.vista.documentosDeCartaPorte')}
-        columnas={columnas}
-        filas={orden}
-        idFila={(d) => d.id}
-        tarjetaMovil
-        vacio={{
-          titulo: mios ? tr('cartaPorte.documentos.vista.tituloSinCasos') : tr('cartaPorte.documentos.vista.tituloSinDocumentos'),
-          texto: mios
+      {orden.length === 0 ? (
+        // El vacío de la bandeja es una caja punteada como los demás vacíos de la página, no texto suelto.
+        <EstadoVacio contenido icono={Inbox} titulo={mios ? tr('cartaPorte.documentos.vista.tituloSinCasos') : tr('cartaPorte.documentos.vista.tituloSinDocumentos')}>
+          {mios
             ? tr('cartaPorte.documentos.vista.noTienesCasosAsignados')
             : filtroEnvio === 'todos'
             ? tr('cartaPorte.documentos.vista.todaviaNoHaLlegado')
-            : tr('cartaPorte.documentos.vista.ningunDocumentoAprobadoTiene'),
-        }}
-      />
+            : tr('cartaPorte.documentos.vista.ningunDocumentoAprobadoTiene')}
+        </EstadoVacio>
+      ) : (
+        <TablaBase
+          etiqueta={tr('cartaPorte.documentos.vista.documentosDeCartaPorte')}
+          columnas={columnas}
+          filas={orden}
+          idFila={(d) => d.id}
+          tarjetaMovil
+        />
+      )}
       {datos.filas.length < datos.total && (
         <p className="rv-doc__nota">{tr('cartaPorte.documentos.vista.seMuestranDeLos', { v: numero(datos.filas.length), v2: numero(datos.total) })}</p>
       )}
     </Tarjeta>
+    </>
   );
 }
 
@@ -400,8 +421,9 @@ const EJEMPLO_CONFIG = `{
   ]
 }`;
 
-function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: ConfigVista[]; acciones: AccionesDocumentos; apiSufijo: string; tr?: Tr }) {
+function Exportacion({ configs, acciones, apiSufijo, aprobados, tr = trEs }: { configs: ConfigVista[]; acciones: AccionesDocumentos; apiSufijo: string; aprobados: number; tr?: Tr }) {
   const liga = (config: string, formato: string) => `/api/export/carta-porte-docs?config=${encodeURIComponent(config)}&formato=${formato}${apiSufijo}`;
+  // Sin documentos aprobados no hay nada que exportar: el botón activo bajaría un archivo vacío. Se dice, punteado, en vez de ofrecerlo.
   const descarga = (href: string, rotulo: string, clave: string) => (
     <BotonEnlace key={clave} tamano="sm" variante="secondary" href={href} icono={<Icono icono={Download} />}>{rotulo}</BotonEnlace>
   );
@@ -410,6 +432,11 @@ function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: Con
       <p className="rv-doc__nota">
         {rico(tr('cartaPorte.documentos.vista.soloSalenDocumentosStrong'), { strong: (c) => <strong>{c}</strong> })}
       </p>
+      {aprobados === 0 ? (
+        <div className="rv-doc__enlaces">
+          <DescargaNoDisponible rotulo={tr('cartaPorte.documentos.vista.exportarLoAprobado')} motivo={tr('cartaPorte.documentos.vista.sinAprobadosParaExportar')} />
+        </div>
+      ) : (
       <div className="rv-doc__enlaces">
         {descarga(liga('estandar', 'csv'), tr('cartaPorte.documentos.vista.estandarCsv'), 'csv')}
         {descarga(liga('estandar', 'json'), tr('cartaPorte.documentos.vista.estandarJson'), 'json')}
@@ -419,6 +446,7 @@ function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: Con
         {configs.map((c) => descarga(liga(c.id, c.formato), `${c.nombre} · ${c.formato.toUpperCase()}`, c.id))}
         {configs.map((c) => descarga(liga(c.id, 'xlsx'), `${c.nombre} · ${tr('cartaPorte.documentos.vista.excel')}`, `${c.id}-xlsx`))}
       </div>
+      )}
       {acciones.guardarExport && (
         <Disclosure variante="linea" titulo={tr('cartaPorte.documentos.vista.declararUnFormatoDestino')}>
           <FormaAccion accion={acciones.guardarExport} className="rv-doc__forma">

@@ -48,8 +48,8 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
         </>
       ),
     },
-    { id: 'facturas', titulo: tx('rest.facturas'), celda: (l) => <span className="cifra-mono">{numero(l.nFacturas)}</span> },
-    { id: 'total', titulo: tx('proveedores.vista.total'), alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.total)}</span> },
+    { id: 'facturas', titulo: tx('rest.facturas'), celda: (l) => <span className="rv-cifra">{numero(l.nFacturas)}</span> },
+    { id: 'total', titulo: tx('proveedores.vista.total'), alinear: 'der', celda: (l) => <span className="rv-cifra">{mxn(l.total)}</span> },
     {
       id: 'estado', titulo: tx('proveedores.vista.estado'),
       celda: (l) => {

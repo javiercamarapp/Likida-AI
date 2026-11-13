@@ -11,10 +11,10 @@ import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, datos: FormData) => Promise<ResultadoForma>;
 
-function Enviar({ etiqueta, enviando, icono }: { etiqueta: string; enviando: string; icono: React.ReactNode }) {
+function Enviar({ etiqueta, enviando, icono, variante = 'primary' }: { etiqueta: string; enviando: string; icono: React.ReactNode; variante?: 'primary' | 'secondary' }) {
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={icono} className="rv-pt__enviar">
+    <Boton type="submit" variante={variante} tamano={variante === 'secondary' ? 'sm' : undefined} loading={pending} icono={icono} className="rv-pt__enviar">
       {pending ? enviando : etiqueta}
     </Boton>
   );
@@ -33,7 +33,7 @@ export function FormaNuevoPatio({ accion }: { accion: AccionForma }) {
         <CampoTexto id="patio-nuevo-ciudad" name="ciudad" etiqueta={t('patios.f.ciudad')} maxLength={80} placeholder={t('patios.f.ciudad.ph')} autoComplete="off" />
       </div>
       <AvisoResultado estado={estado} />
-      <Enviar etiqueta={t('patios.f.crear')} enviando={t('patios.f.creando')} icono={<Icono icono={Plus} />} />
+      <div className="rv-pt__pie"><Enviar etiqueta={t('patios.f.crear')} enviando={t('patios.f.creando')} icono={<Icono icono={Plus} />} /></div>
     </form>
   );
 }
@@ -97,7 +97,7 @@ export function FormaJefe({ accion, jefe, patios }: {
         <option value="">{t('patios.f.toda')}</option>
         {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
       </CampoSelect>
-      <Enviar etiqueta={t('patios.f.asignar.corto')} enviando={t('patios.f.guardando')} icono={<Icono icono={Save} />} />
+      <Enviar variante="secondary" etiqueta={t('patios.f.asignar.corto')} enviando={t('patios.f.guardando')} icono={<Icono icono={Save} />} />
     </form>
   );
 }

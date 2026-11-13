@@ -6,7 +6,9 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getBorradorViaje } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
-import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, Chip } from '@/app/ui-v2/componentes';
+import '../timbrado.css';
+import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import { SeccionTimbrado } from './timbrar';
 
 export const dynamic = 'force-dynamic';
@@ -51,28 +53,44 @@ export default async function PaginaTimbradoViaje({
   if (!v) notFound();
 
   const rotulo = v.folio ?? v.viajeId.slice(0, 8);
+  // El paso 1 es un hecho leído del propio borrador, no una promesa: armado y sin fallas del validador.
+  const borradorListo = v.borrador.borrador !== null && v.borrador.fallas.length === 0;
 
   return (
-    <MarcoPagina
-      area="Carta Porte"
+    <EsqueletoFicha
+      area={tr('e26b.timb_ficha')}
       titulo={tr('timbrado.viajeId.page.tituloViaje', { rotulo })}
-      ancho="lectura"
-      apoyo={tr('timbrado.viajeId.page.mercanciaS', { v: v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('timbrado.viajeId.page.rutaSinCapturar'), v2: v.unidadEconomico ? ' ' + tr('timbrado.viajeId.page.unidadEco', { unidadEconomico: v.unidadEconomico }) : '', v3: numero(v.mercancias.length) })}
-      acciones={(
+      apoyo={tr('e26b.timb_apoyo')}
+      volver={{ href: `${RUTA}${sufijoTenant(sp)}`, etiqueta: tr('timbrado.viajeId.page.volverATimbrado') }}
+      chips={(
         <>
-          <BotonEnlace href={`${RUTA}${sufijoTenant(sp)}`} variante="ghost" tamano="sm">{tr('timbrado.viajeId.page.volverATimbrado')}</BotonEnlace>
-          <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
-            {tr('timbrado.viajeId.page.verElBorradorCompleto')}
-          </BotonEnlace>
+          <li><Chip>{v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('timbrado.viajeId.page.rutaSinCapturar')}</Chip></li>
+          <li><Chip>{tr('e26.timb_mercancias', { n: numero(v.mercancias.length) })}</Chip></li>
+          {v.unidadEconomico ? <li><Chip>{tr('e26.timb_unidad', { u: v.unidadEconomico })}</Chip></li> : null}
+          {v.operadorNombre ? <li><Chip>{tr('e26b.timb_operador', { n: v.operadorNombre })}</Chip></li> : null}
+          {v.clienteNombre ? <li><Chip>{tr('e26b.timb_cliente', { n: v.clienteNombre })}</Chip></li> : null}
         </>
       )}
+      avisos={(
+        <Aviso tono="warn">
+          {tr('timbrado.viajeId.page.timbrarEmiteUnCfdi')}
+        </Aviso>
+      )}
     >
-      <Aviso tono="warn">
-        {tr('timbrado.viajeId.page.timbrarEmiteUnCfdi')}
-      </Aviso>
-
+      <section className="rv-esq__paso rv-timb__paso" data-actual={borradorListo ? undefined : true} aria-label={tr('e26b.timb_paso_borrador')}>
+        <div className="rv-esq__paso-cab">
+          <p role="heading" aria-level={2} className="rv-timb__paso-titulo"><span className="rv-timb__dot" aria-hidden="true">1</span>{tr('e26b.timb_paso_borrador')}</p>
+          <Chip tono={borradorListo ? 'ok' : 'warn'} tamano="estado">{borradorListo ? tr('e26b.timb_paso_hecho') : tr('e26b.timb_paso_revisar')}</Chip>
+        </div>
+        <p className="rv-esq__paso-quien">{borradorListo ? tr('e26b.timb_borrador_ok') : tr('e26b.timb_borrador_falta', { n: numero(v.borrador.faltantes.length + v.borrador.fallas.length) })}</p>
+        <div className="rv-esq__paso-acciones">
+          <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
+            {tr('r4.timb_ir_hacerlo')}
+          </BotonEnlace>
+        </div>
+      </section>
       <SeccionTimbrado v={v} searchParams={sp} />
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }
 

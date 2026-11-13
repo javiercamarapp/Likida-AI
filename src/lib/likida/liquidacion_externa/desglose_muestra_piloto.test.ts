@@ -110,6 +110,19 @@ describe('P0-2 · TipoOperador, Poliza, NumeroPago, Neto y Folio', () => {
     }
   });
 
+  it('TipoOperador acepta el catálogo completo (rabón, posturero, cargador) con variantes de acento, mayúsculas y espacios', () => {
+    const casos: Array<[string, string]> = [
+      ['rabon', 'rabon'], ['Rabón', 'rabon'], ['RABÓN', 'rabon'], [' rabón ', 'rabon'],
+      ['Posturero', 'posturero'], ['POSTURERO', 'posturero'], ['Cargador', 'cargador'], ['CARGADOR', 'cargador'],
+      ['Foráneo', 'foraneo'], ['FORÁNEO', 'foraneo'], ['foraneo', 'foraneo'], ['Local', 'local'], ['Permisionario', 'permisionario'],
+    ];
+    for (const [v, esperado] of casos) {
+      const r = conv({ TipoOperador: v });
+      expect(codigos(r), v).toEqual([]);
+      expect(r.desglose?.tipoOperador, v).toBe(esperado);
+    }
+  });
+
   it('TipoOperador inválido ⇒ revisión de esa bitácora (nunca tumba el lote)', () => {
     for (const v of ['mixto', 7, true, {}]) {
       const r = conv({ TipoOperador: v });

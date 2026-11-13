@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { useT } from '@/lib/i18n/proveedor';
 import { dinero } from '@/lib/i18n/es/dinero';
 // SOLO TIPOS de los módulos de servidor (importan `supabaseAdmin`): un import
@@ -7,7 +9,7 @@ import { dinero } from '@/lib/i18n/es/dinero';
 // como props desde la página. Mismo contrato que `clientes/forma.tsx`.
 import type { RenglonSinFacturar } from '@/lib/likida/facturacion_clientes';
 import {
-  Casilla, CampoFecha, CampoSelect, CampoTexto, Fieldset, FormaEnCajon,
+  Aviso, Boton, BotonEnlace, Casilla, CampoFecha, CampoSelect, CampoTexto, Drawer, Fieldset, FormaEnCajon,
   type AccionDeForma, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 
@@ -67,11 +69,13 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
     <FormaEnCajon
       id="factura-nueva" titulo={tr('facturacion.forma.registrarFactura')} descripcion={tr('facturacion.forma.elVencimientoSaleDe')}
       accion={adaptar(accion)} boton={tr('facturacion.forma.registrarFactura')} disparador={tr('facturacion.forma.registrarFactura')}
+      /* Alta de 2 columnas con ayudas largas: cajón de 640 px (Rovaq: las altas miden 640; el de 420 es de consulta). */
+      tamano="xl"
     >
       {clientes === null ? (
-        <p className="text-[12px] text-[color:var(--bad)]">{tr('facturacion.forma.tuCatalogoDeClientes')}</p>
+        <Aviso tono="error">{tr('facturacion.forma.tuCatalogoDeClientes')}</Aviso>
       ) : clientes.length === 0 ? (
-        <p className="text-[12px] text-[color:var(--warn)]">{tr('facturacion.forma.noTienesClientesDados')}</p>
+        <Aviso tono="warn">{tr('facturacion.forma.noTienesClientesDados')}</Aviso>
       ) : (
         <CampoSelect id="ff-cliente" etiqueta={tr('facturacion.forma.cliente')} name="clienteId" obligatorio defaultValue="">
           <option value="">{tr('facturacion.forma.eligeAlCliente')}</option>
@@ -103,7 +107,7 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
         <Fieldset leyenda={tr('facturacion.forma.viajesQueAmparaEsta')} ayuda={tr('facturacion.forma.marcarViajesEsLo')}>
           {viajesSinFacturar.map((v) => (
             <Casilla key={v.viajeId} name="viajeIds" value={v.viajeId}
-              etiqueta={<><span className={MONO}>{v.folio}</span> <span className="text-[color:var(--muted)]">{v.ruta ?? tr('facturacion.forma.sinRuta')} · {v.cliente ?? tr('facturacion.forma.sinClienteAsignado')}</span></>} />
+              etiqueta={<><span className="rv-cifra">{v.folio}</span> <span className="text-[color:var(--muted)]">{v.ruta ?? tr('facturacion.forma.sinRuta')} · {v.cliente ?? tr('facturacion.forma.sinClienteAsignado')}</span></>} />
           ))}
         </Fieldset>
       )}
@@ -182,5 +186,47 @@ export function FormaCancelar({ accion, facturaId }: { accion: AccionForma; fact
       <input type="hidden" name="facturaId" value={facturaId} />
       <p className="text-[12px] text-[color:var(--muted)]">{tr('facturacion.forma.cancelarlaAquiRegistraLa')}</p>
     </FormaEnCajon>
+  );
+}
+
+// ── Vista rápida de un viaje por facturar ──────────────────────────────────
+
+/**
+ * «Vista rápida» (Rovaq: tabla 36/40 con el botón fantasma en la última columna y un cajón de 420). Enseña el renglón completo del viaje
+ * sin salir de la tabla y lleva a su liquidación. Todo llega ya formateado desde el servidor (`valor: null` = no se capturó y se dice
+ * «sin dato», jamás un cero ni un monto inventado).
+ */
+export function VistaRapidaViaje({ folio, filas, href, aviso }: {
+  folio: string;
+  filas: ReadonlyArray<{ etiqueta: string; valor: string | null }>;
+  href: string;
+  aviso: string | null;
+}) {
+  const { t: tr } = useT('dinero', dinero);
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <>
+      <Boton type="button" variante="ghost" tamano="sm" aria-haspopup="dialog" onClick={() => setAbierto(true)}>{tr('facturacion.vista.vistaRapida')}</Boton>
+      {/* La raíz corta la herencia del text-align de la celda (ver facturacion.css). */}
+      <div className="rv-fact__cajon-raiz">
+        {/* Rovaq 06c: título + subtítulo, cuadrícula de cifras con divisores, aviso y la acción primaria en el pie. Las dos primeras filas
+            (ruta y cliente) son el subtítulo; el resto, la cuadrícula. «Sin dato» sigue siendo «sin dato», nunca 0. */}
+        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={folio} tamano="m"
+          descripcion={filas.slice(0, 2).map((f) => f.valor).filter(Boolean).join(' · ') || undefined}
+          pie={<div className="rv-fact__vr-pie"><BotonEnlace href={href} variante="primary" icono={<ArrowRight size={14} strokeWidth={1.75} aria-hidden />}>{tr('facturacion.vista.verLiquidacion')}</BotonEnlace></div>}>
+          <div className="rv-fact__pila">
+            <dl className="rv-fact__vr">
+              {filas.slice(2).map((f) => (
+                <div key={f.etiqueta}>
+                  <dt>{f.etiqueta}</dt>
+                  <dd>{f.valor ?? <span className="rv-fact__sindato">{tr('facturacion.vista.sinDatoRapida')}</span>}</dd>
+                </div>
+              ))}
+            </dl>
+            {aviso ? <p className="rv-fact__nota">{aviso}</p> : null}
+          </div>
+        </Drawer>
+      </div>
+    </>
   );
 }

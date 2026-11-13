@@ -46,7 +46,7 @@ function pintar(p: { usuarios: UsuarioRow[] | null; puedeInvitar: boolean; userI
 describe('la forma de invitar solo se pinta al dueño', () => {
   it('con puedeInvitar, la forma está y su ayuda dice la verdad de cada rol', () => {
     const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: true });
-    expect(html).toContain('Invitar a alguien de tu equipo');
+    expect(html).toContain('Invitar integrante');
     // La ayuda por rol sale de AREAS_POR_ROL, no de marketing: el encargado
     // no ve dinero, el contador no despacha, el dueño ve todo.
     expect(html).toContain('No ve un peso');
@@ -58,7 +58,7 @@ describe('la forma de invitar solo se pinta al dueño', () => {
 
   it('sin puedeInvitar no hay forma, y se dice por qué en vez de esconderla en silencio', () => {
     const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: false });
-    expect(html).not.toContain('Invitar a alguien de tu equipo');
+    expect(html).not.toContain('Invitar integrante');
     expect(html).toContain('decisión del dueño de la flota');
   });
 
@@ -153,13 +153,13 @@ describe('lectura caída ≠ equipo vacío', () => {
     expect(html).toContain('No se pudo cargar el equipo');
     expect(html).not.toContain('No hay cuentas dadas de alta');
     // Con la lectura ciega tampoco se ofrece invitar: no se sabe qué hay.
-    expect(html).not.toContain('Invitar a alguien de tu equipo');
+    expect(html).not.toContain('Invitar integrante');
   });
 
   it('el vacío real sí lo dice, con la forma disponible para el dueño', () => {
     const html = pintar({ usuarios: [], puedeInvitar: true });
     expect(html).toContain('No hay cuentas dadas de alta');
-    expect(html).toContain('Invitar a alguien de tu equipo');
+    expect(html).toContain('Invitar integrante');
   });
 });
 
@@ -182,5 +182,15 @@ describe('nomina en la forma de invitar, no en la de cambiar rol', () => {
     const html = pintarCon([...ROLES_INVITABLES, OPCION_NOMINA]);
     expect(html).toContain('value="nomina"');
     expect(html.split('value="nomina"').length - 1).toBe(1);
+  });
+});
+
+describe('el selector de rol de cada renglón refleja el rol REAL', () => {
+  it('una cuenta de nómina (fuera del catálogo invitable) no se pinta como «Contador» ni se queda sin su opción', () => {
+    const nomina: UsuarioRow = { id: 'u-7', nombre: 'Nómina Perfil', email: 'nomina@flota.mx', rol: 'nomina', telefono: null, activo: true, desactivadoEn: null };
+    const html = pintar({ usuarios: [nomina], puedeInvitar: true });
+    const selectFila = html.match(/<select name="rol"[^>]*aria-label[^>]*>[\s\S]*?<\/select>/)?.[0] ?? '';
+    expect(selectFila).toContain('<option value="nomina" selected="">');
+    expect(selectFila).not.toContain('<option value="contador" selected="">');
   });
 });

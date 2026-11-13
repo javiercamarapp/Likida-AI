@@ -71,12 +71,12 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
   return (
     <form action={dispatch} className="rv-forma">
       <div className="rv-forma__rejilla">
-        <CampoTexto id="folio" etiqueta="Folio" name="folio" maxLength={40} placeholder="F-0148" claseControl="cifra-mono" />
+        <CampoTexto id="folio" etiqueta="Folio" name="folio" maxLength={40} placeholder="Ej. F-0148" claseControl="cifra-mono" />
         <CampoFecha id="fechaInicio" etiqueta="Fecha de inicio" name="fechaInicio" />
-        <CampoTexto id="origen" etiqueta="Origen" name="origen" maxLength={120} placeholder="Silao" />
-        <CampoTexto id="destino" etiqueta="Destino" name="destino" maxLength={120} placeholder="Monterrey" />
+        <CampoTexto id="origen" etiqueta="Origen" name="origen" maxLength={120} placeholder="Ej. Silao" />
+        <CampoTexto id="destino" etiqueta="Destino" name="destino" maxLength={120} placeholder="Ej. Monterrey" />
         {puedeCapturarAnticipo && (
-          <CampoTexto id="anticipo" etiqueta="Anticipo (MXN)" name="anticipo" tipo="number" min={0} max={topeAnticipo} step="0.01" placeholder="8000" claseControl="cifra-mono"
+          <CampoTexto id="anticipo" etiqueta="Anticipo (MXN)" name="anticipo" tipo="number" min={0} max={topeAnticipo} step="0.01" placeholder="Ej. 8,000" claseControl="cifra-mono"
             ayuda={topeAnticipo === undefined ? undefined : topeAnticipoOrigen === 'politica'
               ? `Tope de la política de tu flota: ${mxn(topeAnticipo)}`
               : `Umbral de revisión: ${mxn(topeAnticipo)} (arriba de eso lo captura el dueño)`} />
@@ -131,9 +131,9 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
                 total={totalClientes} className="w-full" />
             </div>
           )}
-          <CampoTexto id="ingresoFlete" etiqueta="Ingreso del flete (MXN)" name="ingresoFlete" inputMode="decimal" placeholder="38,500" claseControl="cifra-mono"
+          <CampoTexto id="ingresoFlete" etiqueta="Ingreso del flete (MXN)" name="ingresoFlete" inputMode="decimal" placeholder="Ej. 38,500" claseControl="cifra-mono"
             ayuda="Lo que le cobras al cliente, NO el anticipo. Vacío no es cero." />
-          <CampoTexto id="kmRecorridos" etiqueta="Kilómetros" name="kmRecorridos" inputMode="numeric" placeholder="1,240" claseControl="cifra-mono" />
+          <CampoTexto id="kmRecorridos" etiqueta="Kilómetros" name="kmRecorridos" inputMode="numeric" placeholder="Ej. 1,240" claseControl="cifra-mono" />
         </div>
 
         <p className="rv-campo__ayuda">
@@ -143,14 +143,15 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
       </fieldset>}
 
       {!puedeCapturarDinero && (
-        <CampoTexto id="kmRecorridos" etiqueta="Kilómetros" name="kmRecorridos" inputMode="numeric" placeholder="1,240" claseControl="cifra-mono" />
+        <CampoTexto id="kmRecorridos" etiqueta="Kilómetros" name="kmRecorridos" inputMode="numeric" placeholder="Ej. 1,240" claseControl="cifra-mono" />
       )}
 
       {estado?.error && (
         <Aviso tono="error">{estado.error}</Aviso>
       )}
 
-      <div>
+      {/* El primario va en un pie fijo del cajón (Rovaq `overlay-foot`: padding 12x16, acciones a la derecha), no suelto al final del cuerpo. */}
+      <div className="rv-fv__pie">
         <BotonCrear />
       </div>
     </form>

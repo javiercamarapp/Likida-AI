@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
@@ -7,12 +8,14 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { corridasRecientes, type CorridaCruzada } from '@/lib/admin/corridas-cruzadas';
 import { getLatencias, type LatenciasMedidas, type FilaLatencia, type FilaLatenciaIa } from '@/lib/admin/slo';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { BotonEnlace, EstadoError, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { BotonEnlace, Disclosure, EstadoError, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { SeccionInterruptores, type InterruptorParaUi } from './interruptores-ui';
 import { etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
 import { nombreReloj as nombreRelojTr } from '../crons/estado-relojes';
 import { CRONS, type CronId } from '@/lib/admin/salud';
 import type { ResultadoAccion } from '../ui/forma';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
+import { BarList } from '../../ui-v2/graficas';
 import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -121,9 +124,42 @@ export default async function ObservabilidadPage() {
     getLatencias(7).catch((): LatenciasMedidas | null => null),
   ]);
   const dias = latencias?.ventanaDias ?? 7;
+  const rutas = latencias?.rutas ?? null;
+  const apagados = interruptores === null ? null : interruptores.filter((i) => i.apagado).length;
+  const conFallo = corridas === null ? null : corridas.filter((c) => c.estado === 'fallo').length;
+  // El p95 más alto SOLO entre rutas con p95 medido: sin muestras no hay cifra (jamás 0).
+  const peor = rutas === null ? null : rutas.reduce<FilaLatencia | null>((m, r) => (r.p95Ms !== null && (m === null || r.p95Ms > (m.p95Ms ?? 0)) ? r : m), null);
+  const fallosRutas = rutas === null ? null : rutas.reduce((s, r) => s + r.fallos, 0);
+  const porEstado = corridas === null ? [] : (['ok', 'parcial', 'fallo'] as const).map((e) => ({ clave: e, etiqueta: chipCorrida(t)[e].etiqueta, valor: corridas.filter((c) => c.estado === e).length }));
+  const ordenP95 = rutas === null ? [] : rutas.filter((r) => r.p95Ms !== null).sort((a, b) => (b.p95Ms ?? 0) - (a.p95Ms ?? 0)).slice(0, 6);
 
   return (
-    <MarcoPagina titulo={t('observabilidad.observabilidad')} apoyo={t('observabilidad.apagar_un_agente_en_segundos_ver')}>
+    <EsqueletoPanelCifras
+      titulo={t('observabilidad.observabilidad')}
+      apoyo={t('observabilidad.apagar_un_agente_en_segundos_ver')}
+      etiquetaCifras={t('observabilidad.interruptores')}
+      cifras={uniformes([
+        { etiqueta: t('observabilidad.kpi_apagados'), valor: apagados, formato: 'entero', estado: apagados === null ? 'error' : 'ok', reintentar: true, tono: apagados ? 'bad' : undefined, nota: interruptores === null ? undefined : t('observabilidad.kpi_de_interruptores', { n: interruptores.length }) },
+        { etiqueta: t('observabilidad.kpi_corridas_fallo'), valor: conFallo, formato: 'entero', estado: conFallo === null ? 'error' : 'ok', reintentar: true, tono: conFallo ? 'bad' : undefined, nota: corridas === null ? undefined : t('observabilidad.kpi_de_corridas', { n: corridas.length }) },
+        { etiqueta: t('observabilidad.kpi_p95'), valor: peor === null ? null : msLegible(peor.p95Ms), estado: rutas === null ? 'error' : peor === null ? 'vacio' : 'ok', reintentar: true, mensaje: rutas === null ? undefined : t('observabilidad.sin_muestras_todavia'), nota: peor?.nombre },
+        { etiqueta: t('observabilidad.kpi_fallos_rutas', { dias }), valor: fallosRutas, formato: 'entero', estado: fallosRutas === null ? 'error' : 'ok', reintentar: true, tono: fallosRutas ? 'warn' : undefined },
+      ])}
+      variante="6-6"
+      graficas={[
+        // Un solo bloque por dato: con el historial vacío o ilegible, «Corridas recientes» (abajo) ya lo dice; no se repite el mismo vacío en una gráfica.
+        ...(corridas !== null && corridas.length > 0 ? [
+          <Tarjeta key="estado" titulo={t('observabilidad.grafica_corridas')} contenida>
+            <BarList etiqueta={t('observabilidad.grafica_corridas')} items={porEstado.map((e) => ({ ...e, texto: numero(e.valor, idioma) }))} maximo={Math.max(1, ...porEstado.map((e) => e.valor))} />
+          </Tarjeta>,
+        ] : []),
+        <Tarjeta key="p95" titulo={t('observabilidad.grafica_p95', { dias })}
+          estado={latencias === null || rutas === null ? 'error' : ordenP95.length === 0 ? 'vacio' : 'ok'} reintentar contenida
+          mensaje={latencias === null || rutas === null ? t('observabilidad.no_se_pudo_leer_la_latencia') : t('observabilidad.sin_muestras_todavia')}
+          detalle={t('observabilidad.la_tabla_existe_y_esta_vacia')}>
+          <BarList etiqueta={t('observabilidad.grafica_p95', { dias })} items={ordenP95.map((r) => ({ clave: r.nombre, etiqueta: r.nombre, valor: r.p95Ms, texto: msLegible(r.p95Ms) }))} />
+        </Tarjeta>,
+      ]}
+    >
       <Tarjeta titulo={t('observabilidad.interruptores')}
         estado={interruptores === null ? 'error' : 'ok'} reintentar
         mensaje={t('observabilidad.no_se_pudieron_leer_los_interruptores')}
@@ -136,33 +172,25 @@ export default async function ObservabilidadPage() {
         estado={corridas === null ? 'error' : corridas.length === 0 ? 'vacio' : 'ok'} reintentar
         mensaje={corridas === null ? t('observabilidad.no_se_pudo_leer_el_historial') : t('observabilidad.los_agentes_no_han_corrido_todavia')}
         detalle={t('observabilidad.el_historial_existe_y_esta_vacio')}>
-        {corridas !== null ? <TablaBase etiqueta={t('observabilidad.corridas_de_agentes_recientes')} columnas={columnasCorridas(t, idioma)} filas={corridas} idFila={(c) => c.id} densa tarjetaMovil /> : null}
+        {corridas !== null ? <TablaBase etiqueta={t('observabilidad.corridas_de_agentes_recientes')} columnas={columnasCorridas(t, idioma)} filas={corridas.slice(0, 8)} idFila={(c) => c.id} densa tarjetaMovil altoMaximo={false} /> : null}
+        {corridas !== null && corridas.length > 8 ? <p className="adm-sis-nota">{t('observabilidad.pie_corridas', { n: 8, total: corridas.length })}</p> : null}
       </Tarjeta>
 
-      {/* ── Latencias medidas (0700) ─────────────────────────────────────── */}
-      <Tarjeta titulo={t('observabilidad.latencia_por_ruta_p50_y_p95', { dias })}
-        estado={latencias === null || latencias.rutas === null ? 'error' : latencias.rutas.length === 0 ? 'vacio' : 'ok'} reintentar
-        mensaje={latencias === null || latencias.rutas === null ? t('observabilidad.no_se_pudo_leer_la_latencia') : t('observabilidad.sin_muestras_todavia')}
-        detalle={t('observabilidad.la_tabla_existe_y_esta_vacia')}>
+      {/* ── Latencias medidas (0700): el detalle de las gráficas, plegado ─────────────────── */}
+      <Disclosure titulo={t('observabilidad.latencia_por_ruta_p50_y_p95', { dias })} resumen={rutas === null ? undefined : numero(rutas.length, idioma)}>
         <p className="adm-sis-nota">{t('observabilidad.percentiles_calculados_en_la_base_rango')}</p>
-        {latencias?.rutas ? <TablaBase etiqueta={t('observabilidad.latencia_por_ruta')} columnas={columnasLatencia(t('observabilidad.ruta'), (n) => n, (n) => notaDeLatenciaRuta(n, t), t, idioma)} filas={latencias.rutas} idFila={(f) => f.nombre} densa tarjetaMovil /> : null}
-      </Tarjeta>
+        {rutas ? <TablaBase etiqueta={t('observabilidad.latencia_por_ruta')} columnas={columnasLatencia(t('observabilidad.ruta'), (n) => n, (n) => notaDeLatenciaRuta(n, t), t, idioma)} filas={rutas} idFila={(f) => f.nombre} densa tarjetaMovil vacio={{ titulo: t('observabilidad.sin_muestras_todavia'), texto: t('observabilidad.la_tabla_existe_y_esta_vacia') }} /> : <EstadoError reintentar compacto>{t('observabilidad.no_se_pudo_leer_la_latencia')}</EstadoError>}
+      </Disclosure>
 
-      <Tarjeta titulo={t('observabilidad.latencia_por_reloj_p50_y_p95', { dias })}
-        estado={latencias === null || latencias.crons === null ? 'error' : latencias.crons.length === 0 ? 'vacio' : 'ok'} reintentar
-        mensaje={latencias === null || latencias.crons === null ? t('observabilidad.no_se_pudo_leer_la_latencia_2') : t('observabilidad.sin_muestras_todavia')}
-        detalle={t('observabilidad.ningun_reloj_ha_corrido_desde_que')}>
+      <Disclosure titulo={t('observabilidad.latencia_por_reloj_p50_y_p95', { dias })} resumen={latencias?.crons ? numero(latencias.crons.length, idioma) : undefined}>
         <p className="adm-sis-nota">{t('observabilidad.una_muestra_por_corrida_de_la')}</p>
-        {latencias?.crons ? <TablaBase etiqueta={t('observabilidad.latencia_por_reloj')} columnas={columnasLatencia(t('observabilidad.reloj'), (n) => nombreReloj(n, t), undefined, t, idioma)} filas={latencias.crons} idFila={(f) => f.nombre} densa tarjetaMovil /> : null}
-      </Tarjeta>
+        {latencias?.crons ? <TablaBase etiqueta={t('observabilidad.latencia_por_reloj')} columnas={columnasLatencia(t('observabilidad.reloj'), (n) => nombreReloj(n, t), undefined, t, idioma)} filas={latencias.crons} idFila={(f) => f.nombre} densa tarjetaMovil vacio={{ titulo: t('observabilidad.sin_muestras_todavia'), texto: t('observabilidad.ningun_reloj_ha_corrido_desde_que') }} /> : <EstadoError reintentar compacto>{t('observabilidad.no_se_pudo_leer_la_latencia_2')}</EstadoError>}
+      </Disclosure>
 
-      <Tarjeta titulo={t('observabilidad.latencia_de_la_ia_por_fase', { dias })}
-        estado={latencias === null || latencias.ia === null ? 'error' : latencias.ia.length === 0 ? 'vacio' : 'ok'} reintentar
-        mensaje={latencias === null || latencias.ia === null ? t('observabilidad.no_se_pudo_leer_la_latencia_3') : t('observabilidad.sin_llamadas_de_ia_en_la')}
-        detalle={t('observabilidad.la_base_esta_en_cero_porque')}>
+      <Disclosure titulo={t('observabilidad.latencia_de_la_ia_por_fase', { dias })} resumen={latencias?.ia ? numero(latencias.ia.length, idioma) : undefined}>
         <p className="adm-sis-nota">{t('observabilidad.las_llamadas_anteriores_a_esta_medicion')}</p>
-        {latencias?.ia ? <TablaBase etiqueta={t('observabilidad.duracion_por_fase')} columnas={columnasIa(t, idioma)} filas={latencias.ia} idFila={(f) => f.fase} densa tarjetaMovil /> : null}
-      </Tarjeta>
+        {latencias?.ia ? <TablaBase etiqueta={t('observabilidad.duracion_por_fase')} columnas={columnasIa(t, idioma)} filas={latencias.ia} idFila={(f) => f.fase} densa tarjetaMovil vacio={{ titulo: t('observabilidad.sin_llamadas_de_ia_en_la'), texto: t('observabilidad.la_base_esta_en_cero_porque') }} /> : <EstadoError reintentar compacto>{t('observabilidad.no_se_pudo_leer_la_latencia_3')}</EstadoError>}
+      </Disclosure>
 
       {interruptores === null && corridas === null && latencias === null ? <EstadoError reintentar>{t('observabilidad.ninguna_de_las_tres_fuentes_respondio')}</EstadoError> : null}
 
@@ -171,7 +199,7 @@ export default async function ObservabilidadPage() {
         <BotonEnlace href="/admin/salud-sistema" variante="secondary" tamano="sm">{t('observabilidad.estado_del_sistema')}</BotonEnlace>
         <BotonEnlace href="/admin/consumo" variante="secondary" tamano="sm">{t('observabilidad.gasto_de_ia_por_dia')}</BotonEnlace>
       </div>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

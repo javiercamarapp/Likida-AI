@@ -1,0 +1,6 @@
+/* Cuenta · la tarjeta única del flujo de acceso (Rovaq `access-flow`, /seguridad) a 640 px con padding 48, y SIN tarjeta anidada: la cuenta es una fila con
+   divisor dentro de la misma tarjeta, y los segmentados de idioma y tema miden 30 px (píldora de Rovaq). El rótulo, el h1 de 20/600 y el pie viven dentro. */
+[data-ui="v2"] .rv-cuenta__dl { margin-top: 16px; }
+[data-ui="v2"] .rv-pub__main[data-ancho]:has(> .rv-flujo):has(.rv-cuenta__tarjeta) { max-width: 640px; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-cuenta__tarjeta { margin-top: 24px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-cuenta__prefs { margin-top: 16px; }

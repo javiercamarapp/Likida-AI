@@ -28,6 +28,7 @@ import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { rutaPdfExterno, rutaExcelExterno } from './almacen';
 import { subirArchivoExterno, firmarPdfExterno, leerPorId, TIPO_XLSX, type NuevaLiquidacionExterna } from './repo';
 import type { CursorDesglose } from './desglose_puerto';
+import type { TipoOperadorDesglose } from './desglose_contrato';
 import type { PuertoContactos, OperadorContacto } from './contactos_csv';
 import type { RolDestinatario } from './correo_destinatarios';
 
@@ -115,7 +116,7 @@ export interface MetaDesglose {
   terminal?: string | null;
   poliza?: string | null;
   unidad?: string | null;
-  tipoOperador?: 'foraneo' | 'local' | 'permisionario' | null;
+  tipoOperador?: TipoOperadorDesglose | null;
   dias?: number | null;
   totalOrigen: 'tms' | 'calculado';
   retenidaMotivo?: string | null;

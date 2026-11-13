@@ -6,9 +6,7 @@
 .rv-cont__pie { margin: 0; font-size: var(--t-micro); color: var(--faint); }
 .rv-cont__nota { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
 .rv-cont__alertas { display: grid; gap: 6px; }
-.rv-cont__alerta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; font-size: var(--t-body); color: var(--ink); text-decoration: none; }
-.rv-cont__alerta:hover { background: var(--canvas); }
-.rv-cont__ver { font-size: var(--t-micro); color: var(--muted); }
+.rv-cont__ver { font-size: var(--t-small, 13px); font-weight: 600; color: var(--ink); white-space: nowrap; }
 .rv-cont__motor { display: grid; gap: 10px; }
 .rv-cont__motor .rv-seg { justify-self: start; }
 .rv-cont__seccion { display: grid; gap: 8px; }
@@ -16,3 +14,30 @@
 .rv-cont__estimulo, .rv-cont__tenue { font-size: var(--t-small); color: var(--muted); }
 .rv-cont__lista { display: grid; gap: 8px; }
 .rv-cont__tareas { display: grid; gap: 8px; padding: 0 24px 24px; }
+
+/* «Dónde pierdo»: filas de 41 px rótulo-valor (Rovaq), no una tira de KPI anidada en la tarjeta. */
+.rv-cont__filas { margin: 0; display: grid; }
+.rv-cont__fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 41px; border-bottom: 1px solid var(--line); }
+.rv-cont__fila dt { margin: 0; font-size: var(--t-body, 14px); color: var(--ink); }
+.rv-cont__fila dd { margin: 0; font-size: var(--t-body, 14px); font-weight: 600; color: var(--ink); }
+.rv-cont__fila[data-tono="bad"] dd { color: var(--bad); }
+
+/* La cabecera de «Dónde pierdo» lleva selector de periodo + sello: si no caben junto al título, pasan a otra fila (el título nunca se tapa). */
+.rv-cont__pierdo .rv-tarjeta__cab { flex-wrap: wrap; height: auto; min-height: 32px; row-gap: 6px; }
+.rv-cont__pierdo .rv-tarjeta__acciones { flex-wrap: wrap; margin-left: auto; }
+@media (max-width: 767.98px) { .rv-cont__pierdo .rv-tarjeta__acciones { margin-left: 0; padding-left: 0; width: 100%; } }
+/* Vacíos de tarjeta (Rovaq): ocupan TODO el alto de la gráfica (168 px), caja de 1 px discontinua del filete del sistema, radio 8, padding 20×14,
+   texto centrado. Lo desconocido se dibuja igual en toda la página. */
+[data-ui="v2"] .rv-cont__vacio-llena > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-ui="v2"] .rv-cont__vacio-llena .rv-vacio, [data-ui="v2"] .rv-cont__vacio-llena .rv-vacio[data-compacto] { flex: 1 1 auto; min-height: 168px; justify-content: center; padding: 20px 14px; border: 1px dashed var(--line); border-radius: 8px; }
+/* Vacío compacto (Rovaq no deja tarjetas altas medio vacías): la tarjeta no se estira a la de su vecina; la caja punteada mide lo que su texto. */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-cont__vacio-compacto { height: auto; align-self: start; }
+[data-ui="v2"] .rv-cont__vacio-compacto > .rv-tarjeta__cuerpo { flex: 0 0 auto; }
+[data-ui="v2"] .rv-cont__vacio-compacto .rv-vacio, [data-ui="v2"] .rv-cont__vacio-compacto .rv-vacio[data-compacto] { flex: 0 0 auto; min-height: 0; max-height: none; padding: 20px 14px; border: 1px dashed var(--line); border-radius: 8px; }
+/* Dona legible en la paleta monocroma: segundo gajo en gris medio a plena opacidad. */
+[data-ui="v2"] .rv-cont__dona .rv-dona__gajo.rv-tono-1 { stroke-opacity: 1; }
+[data-ui="v2"] .rv-cont__dona .rv-tono-1 { --tono: color-mix(in srgb, var(--ink) 38%, var(--surface)); }
+
+/* «Qué se sabe / Qué no se sabe»: las listas llevan sus marcas (viñetas), no solo sangría. */
+[data-ui="v2"] .rv-esq__saber ul { list-style: disc; }
+[data-ui="v2"] .rv-esq__saber li::marker { color: var(--muted); }

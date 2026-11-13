@@ -1,5 +1,6 @@
 import { revalidatePath } from 'next/cache';
-import { Activity, BadgePercent, CheckCircle2, Inbox } from 'lucide-react';
+import { BadgePercent, Inbox } from 'lucide-react';
+import { getT } from '@/lib/i18n/servidor';
 import { getSessionTenant } from '@/lib/auth/session';
 import { veredictoMfaDeSesion } from '@/lib/auth/superadmin-mfa';
 import { MSG_MFA_SUPERADMIN } from '@/lib/auth/mfa';
@@ -11,8 +12,8 @@ import {
 } from '@/lib/likida/vendedores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { anotarAccionVendedor, type AccionRegistrada } from '@/lib/likida/vendedores_registro';
-import { MarcoPagina, Tarjeta, Icono, Aviso } from '../ui-v2/componentes';
-import { TiraCifras } from '../ui-v2/graficas';
+import { Tarjeta, Icono, Aviso } from '../ui-v2/componentes';
+import { EsqueletoPortada } from '../ui-v2/esqueletos';
 import { TableroProspectos, type ColumnaTablero, type ResultadoAccion } from '../admin/vendedores/tablero';
 
 const RUTA = '/vendedor';
@@ -176,9 +177,19 @@ export async function PanelVendedor({
   const vivos = ESTADOS_VIVOS.reduce((sum, e) => sum + totales[e], 0);
   const comision = reglaComision();
 
+  const { t: tv } = await getT('resto');
+  const cifras = prospectos === null ? undefined : [
+    // Sin icono en el rótulo (la celda ya lleva su punto de procedencia): solo rótulo, cifra y una nota que dice qué cuenta.
+    { etiqueta: esVendedor ? 'Mi cartera viva' : 'Cartera viva (todos)', valor: vivos, formato: 'entero' as const, nota: tv('e26b.vend_vivos_nota') },
+    { etiqueta: esVendedor ? 'Mis ganados' : 'Ganados (todos)', valor: totales.won, formato: 'entero' as const, nota: tv('e26b.vend_ganados_nota') },
+    { etiqueta: 'Propuesta o piloto', valor: totales.proposal + totales.pilot, formato: 'entero' as const, nota: tv('e26b.vend_propuesta_nota') },
+  ];
+
   return (
-    <MarcoPagina
+    <EsqueletoPortada
+      area={tv('r4.vend_area')} apoyo={tv('r4.vend_apoyo')}
       titulo={esVendedor ? 'Mis prospectos' : 'Prospectos (soporte)'}
+      cifras={cifras} etiquetaCifras={esVendedor ? 'Mi cartera' : 'Cartera (todos)'}
     >
       {prospectos === null ? (
         <Aviso tono="error">
@@ -187,12 +198,6 @@ export async function PanelVendedor({
         </Aviso>
       ) : (
         <>
-          <TiraCifras etiqueta={esVendedor ? 'Mi cartera' : 'Cartera (todos)'} items={[
-            { etiqueta: esVendedor ? 'Mi cartera viva' : 'Cartera viva (todos)', valor: vivos, formato: 'entero', icono: <Icono icono={Activity} /> },
-            { etiqueta: esVendedor ? 'Mis ganados' : 'Ganados (todos)', valor: totales.won, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
-            { etiqueta: 'Propuesta o piloto', valor: totales.proposal + totales.pilot, formato: 'entero', icono: <Icono icono={Inbox} /> },
-          ]} />
-
           {/* La regla de comisión, con su aclaración pegada: 50/20 es la regla pactada; el dinero sale de cobros reales, hoy $0. */}
           <Tarjeta titulo="Tu comisión">
             <div className="vnd-comision">
@@ -227,6 +232,6 @@ export async function PanelVendedor({
           </Tarjeta>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }

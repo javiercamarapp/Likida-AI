@@ -50,6 +50,7 @@ export default async function AvisoProspectos() {
   return (
     <PaginaLegal
       etiqueta={t('av.prospectos.etiqueta')}
+      piel="sitio" rotulo={t('av.prospectos.rotulo')} titulo={t('av.prospectos.titulo')} etiquetaIndice={t('av.prospectos.indice')}
       bajada={t('av.prospectos.bajada')}
       // LEG-12: fecha del último cambio SUSTANTIVO del texto de este aviso
       // (LEG-4, auditoría 24), no la fecha en que alguien lo abre.

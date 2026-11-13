@@ -46,7 +46,7 @@ export function ControlCampanas({ campanas, integracion, leadsAds, pausar, refre
       </p>
 
       <TablaBase
-        etiqueta="Campañas" idFila={(c) => c.id} tarjetaMovil densa filas={campanas}
+        etiqueta="Campañas" idFila={(c) => c.id} tarjetaMovil filas={campanas}
         vacio={{ titulo: 'Cero campañas registradas', texto: 'Activar una exige aprobación firmada (el candado es de base: sin aprobador no puede estar activa); el agente de campañas solo propone.' }}
         columnas={[
           {

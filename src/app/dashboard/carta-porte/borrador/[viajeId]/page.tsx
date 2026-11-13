@@ -1,13 +1,18 @@
 import { getT } from '@/lib/i18n/servidor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import type { Metadata } from 'next';
-import { ArrowLeft, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { redirect, notFound } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { getBorradorViaje, type ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
-import { BotonEnlace, Icono, TablaBase } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BotonEnlace, EstadoVacio, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
+import '../../carta-porte.css';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { cifrasUniformes } from '../../../formato';
+import { selloHoy } from '../../../sello-hoy';
 import { sufijoTenant } from '../../../sufijo';
 
 export const dynamic = 'force-dynamic';
@@ -21,9 +26,9 @@ const RUTA_PADRE = '/dashboard/carta-porte';
 const RUTA_TIMBRADO = '/dashboard/timbrado';
 
 /**
- * EXCEPCION DE MARCO (decision del orquestador, 11-nov-2026): esta ruta es una HOJA PARA IMPRIMIR, no una pantalla del panel. No lleva
- * el marco de pantalla (sin sidebar ni cabecera en el papel) y por eso conserva su `<main>` y su propio titulo h1. Sin `style=`; la impresion la
- * resuelven solo las variantes `print:` de Tailwind. La guarda `borrador_hoja_impresion.test.ts` fija la excepcion.
+ * FICHA (F26, ronda 2): el borrador sigue el esqueleto de Ficha de Rovaq (eyebrow, h1 con «Volver», tarjeta de chips, tira de cifras, bloques
+ * en dos columnas y tablas relacionadas). Ya no es una hoja angosta: la impresión la resuelven las variantes `print:` de Tailwind para lo que
+ * no va en papel (XML, timbre) y el marco del panel. La guarda `borrador_hoja_impresion.test.ts` fija el esqueleto.
  *
  * EL ENTREGABLE DE LA FASE C: la vista imprimible del borrador — los 37 datos
  * del Apéndice 3 con su responsable y su valor (o su hueco), las mercancías
@@ -53,163 +58,151 @@ export default async function PaginaBorradorCcp({
   const b = v.borrador;
   const rotulo = v.folio ?? v.viajeId.slice(0, 8);
 
+  const campos = v.checklist.campos;
+  const delResp = (r: 'cliente' | 'transportista') => campos.filter((c) => c.responsable === r);
+  const capturados = (r: 'cliente' | 'transportista') => delResp(r).filter((c) => c.presente === true).length;
+  const validacion = b.borrador === null ? tr('cartaPorte.borrador.viajeId.page.cifraSinArmar') : b.fallas.length === 0 ? tr('cartaPorte.borrador.viajeId.page.cifraPasa') : tr('cartaPorte.borrador.viajeId.page.cifraFallas', { n: numero(b.fallas.length) });
+  const cifras: PropsCifra[] = [
+    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraMercancias'), valor: v.mercancias.length, matiz: 8, sello: selloHoy('Borrador de Carta Porte') },
+    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraCliente'), valor: `${numero(capturados('cliente'))} / ${numero(delResp('cliente').length)}`, matiz: 3, sello: selloHoy('Borrador de Carta Porte') },
+    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraTransportista'), valor: `${numero(capturados('transportista'))} / ${numero(delResp('transportista').length)}`, matiz: 3, sello: selloHoy('Borrador de Carta Porte') },
+    { etiqueta: tr('cartaPorte.borrador.viajeId.page.cifraValidacion'), valor: validacion, matiz: b.borrador !== null && b.fallas.length > 0 ? 6 : 5, tono: b.borrador !== null && b.fallas.length > 0 ? 'bad' : undefined, sello: selloHoy('Borrador de Carta Porte') },
+  ];
+  const veredicto = v.decision.necesita === 'si' ? tr('cartaPorte.borrador.viajeId.page.necesitaComplemento') : v.decision.necesita === 'no' ? tr('cartaPorte.borrador.viajeId.page.sinComplementoSegunLo') : tr('cartaPorte.borrador.viajeId.page.faltaDeclararParaDecidir');
+
   return (
-    <main className="max-w-3xl mx-auto px-6 py-8 space-y-5 print:px-0 print:py-0">
-      <div className="flex items-start justify-between gap-4 print:hidden">
-        <BotonEnlace href={`${RUTA_PADRE}${sufijoTenant(sp)}`} variante="ghost" tamano="sm" icono={<Icono icono={ArrowLeft} tam={14} />}>
-          {tr('cartaPorte.borrador.viajeId.page.volverACartaPorte')}
-        </BotonEnlace>
-        <p className="text-[11px] text-right text-[var(--faint)]">
-          {tr('cartaPorte.borrador.viajeId.page.paraImprimirOGuardar')}
-        </p>
-      </div>
-
-      <header className="space-y-1">
-        <h1 className="font-display text-[20px] font-semibold">
-          {tr('cartaPorte.borrador.viajeId.page.borradorDeComplementoCarta', { rotulo })}
-        </h1>
-        <p className="text-[12px] text-[var(--muted)]">
-          {v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('cartaPorte.borrador.viajeId.page.rutaSinCapturar')}
-          {v.unidadEconomico ? ' ' + tr('cartaPorte.borrador.viajeId.page.unidad', { unidadEconomico: v.unidadEconomico }) : ''}
-          {v.operadorNombre ? ' ' + tr('cartaPorte.borrador.viajeId.page.operador', { operadorNombre: v.operadorNombre }) : ''}
-        </p>
-        <p className="text-[12px] px-3 py-2 rounded-lg hairline text-[var(--warn)]">
-          {tr('cartaPorte.borrador.viajeId.page.documentoDeTrabajoNo')}
-        </p>
-      </header>
-
-      <section className="space-y-1">
-        <h2 className="font-display text-[15px] font-semibold">{tr('cartaPorte.borrador.viajeId.page.veredicto')}</h2>
-        <p className="text-[12px]">
-          {v.decision.necesita === 'si' ? tr('cartaPorte.borrador.viajeId.page.necesitaComplemento') : v.decision.necesita === 'no' ? tr('cartaPorte.borrador.viajeId.page.sinComplementoSegunLo') : tr('cartaPorte.borrador.viajeId.page.faltaDeclararParaDecidir')}{' '}
-          <span className="text-[var(--muted)]">{v.decision.motivo}</span>{' '}
-          <span className="text-[var(--faint)]">({v.decision.fundamento})</span>
-        </p>
-        <p className="text-[12px] text-[var(--muted)]">
-          {tr('cartaPorte.borrador.viajeId.page.declaradoEnElViaje', { v: v.declarado.pisaFederal === null ? tr('cartaPorte.borrador.viajeId.page.sinDeclarar') : v.declarado.pisaFederal ? tr('cartaPorte.borrador.viajeId.page.sinMin') : tr('cartaPorte.borrador.viajeId.page.noMin'), v2: ' · ', v3: v.declarado.radioKm === null ? tr('cartaPorte.borrador.viajeId.page.sinDeclarar') : tr('cartaPorte.borrador.viajeId.page.radioKm', { km: numero(v.declarado.radioKm) }) })}
-        </p>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="font-display text-[15px] font-semibold">{tr('cartaPorte.borrador.viajeId.page.mercancias', { v: numero(v.mercancias.length) })}</h2>
-        {v.mercancias.length === 0 ? (
-          <p className="text-[12px] text-[var(--warn)]">
-            {tr('cartaPorte.borrador.viajeId.page.sinRenglonesCapturadosEl')}
+    <EsqueletoFicha
+      area={tr('cartaPorte.borrador.viajeId.page.area')}
+      titulo={tr('cartaPorte.borrador.viajeId.page.borradorDeComplementoCarta', { rotulo })}
+      volver={{ href: `${RUTA_PADRE}${sufijoTenant(sp)}`, etiqueta: tr('cartaPorte.borrador.viajeId.page.volverACartaPorte') }}
+      chips={(
+        <>
+          <li><StatusChip tono={v.decision.necesita === 'si' ? 'warn' : v.decision.necesita === 'no' ? 'ok' : 'neutral'}>{veredicto}</StatusChip></li>
+          {b.borrador !== null ? <li><StatusChip tono={b.fallas.length === 0 ? 'ok' : 'bad'}>{validacion}</StatusChip></li> : null}
+        </>
+      )}
+      descripcion={`${v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('cartaPorte.borrador.viajeId.page.rutaSinCapturar')}${v.unidadEconomico ? ' ' + tr('cartaPorte.borrador.viajeId.page.unidad', { unidadEconomico: v.unidadEconomico }) : ''}${v.operadorNombre ? ' ' + tr('cartaPorte.borrador.viajeId.page.operador', { operadorNombre: v.operadorNombre }) : ''}`}
+      avisos={<AvisoCompacto tono="warn" resumen={tr('cartaPorte.borrador.viajeId.page.documentoDeTrabajoNo')} />}
+      cifras={cifrasUniformes(cifras)}
+      etiquetaCifras={tr('cartaPorte.borrador.viajeId.page.los37DatosDel')}
+      variante="6-6"
+      bloques={[
+        <Tarjeta key="veredicto" titulo={tr('cartaPorte.borrador.viajeId.page.veredicto')} className="rv-cp__ajusta">
+          <p className="text-[13px]">
+            {veredicto}{' '}
+            <span className="text-[var(--muted)]">{v.decision.motivo}</span>{' '}
+            <span className="text-[var(--faint)]">({v.decision.fundamento})</span>
           </p>
+          <p className="text-[12px] text-[var(--muted)]">
+            {tr('cartaPorte.borrador.viajeId.page.declaradoEnElViaje', { v: v.declarado.pisaFederal === null ? tr('cartaPorte.borrador.viajeId.page.sinDeclarar') : v.declarado.pisaFederal ? tr('cartaPorte.borrador.viajeId.page.sinMin') : tr('cartaPorte.borrador.viajeId.page.noMin'), v2: ' · ', v3: v.declarado.radioKm === null ? tr('cartaPorte.borrador.viajeId.page.sinDeclarar') : tr('cartaPorte.borrador.viajeId.page.radioKm', { km: numero(v.declarado.radioKm) }) })}
+          </p>
+        </Tarjeta>,
+        <Tarjeta key="validacion" titulo={tr('cartaPorte.borrador.viajeId.page.validacionContraElRechazo')} className="rv-cp__ajusta">
+          {b.borrador === null ? (
+            <>
+              <p className="text-[12px] text-[var(--muted)]">{tr('cartaPorte.borrador.viajeId.page.elBorradorAunNo')}</p>
+              <Aviso tono="warn">
+                <ul className="list-disc pl-5 text-[12px] space-y-1">
+                  {b.faltantes.map((f) => <li key={f}>{f}</li>)}
+                </ul>
+              </Aviso>
+            </>
+          ) : b.fallas.length === 0 ? (
+            <div className="space-y-2">
+              <p className="text-[12px] text-[var(--ok)]">
+                {tr('cartaPorte.borrador.viajeId.page.elBorradorPasaLas', { v: numero(b.borrador.pesoBrutoTotal), v2: numero(b.borrador.numTotalMercancias), v3: numero(b.borrador.totalDistRec) })}
+              </p>
+              {/* FASE D (export): el XML solo se ofrece con el borrador validado — la ruta vuelve a validar de todos modos (fail-closed doble). */}
+              <p className="print:hidden">
+                <BotonEnlace
+                  href={`/api/export/carta-porte-xml${sufijoTenant(sp) ? `${sufijoTenant(sp)}&` : '?'}viaje=${v.viajeId}`}
+                  tamano="sm"
+                  icono={<Icono icono={Download} />}
+                >
+                  {tr('cartaPorte.borrador.viajeId.page.descargarXmlParaTimbrar')}
+                </BotonEnlace>
+                <span className="block text-[11px] mt-1 text-[var(--faint)]">{tr('cartaPorte.borrador.viajeId.page.esteXmlSeTimbra')}</span>
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-[12px] text-[var(--muted)]">{tr('cartaPorte.borrador.viajeId.page.elBorradorSeArmo')}</p>
+              <ul className="list-disc pl-5 text-[12px] space-y-1 text-[var(--bad)]">
+                {b.fallas.map((f) => <li key={`${f.campo}:${f.detalle}`}><strong>{f.campo}</strong>: {f.detalle} <span className="text-[var(--faint)]">({f.fundamento})</span></li>)}
+              </ul>
+            </>
+          )}
+          {b.advertencias.length > 0 && (
+            <ul className="list-disc pl-5 text-[12px] space-y-1 text-[var(--warn)]">
+              {b.advertencias.map((a) => <li key={a}>{a}</li>)}
+            </ul>
+          )}
+        </Tarjeta>,
+      ]}
+    >
+      <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.mercancias', { v: numero(v.mercancias.length) })} className="rv-tarjeta--tabla">
+        {v.mercancias.length === 0 ? (
+          <EstadoVacio contenido titulo={tr('cartaPorte.borrador.viajeId.page.sinRenglonesCapturadosEl')} />
         ) : (
           <TablaBase
-            etiqueta={tr('cartaPorte.borrador.viajeId.page.mercanciasDelBorradorDe')} densa altoMaximo={false}
+            etiqueta={tr('cartaPorte.borrador.viajeId.page.mercanciasDelBorradorDe')} altoMaximo={false}
             filas={v.mercancias} idFila={(m) => m.id}
             columnas={[
               { id: 'descripcion', titulo: tr('cartaPorte.borrador.viajeId.page.descripcion'), principal: true, celda: (m) => m.descripcion },
-              { id: 'clave', titulo: tr('cartaPorte.borrador.viajeId.page.claveSat'), celda: (m) => <span className="cifra-mono">{m.bienesTransp ?? hueco(tr('cartaPorte.borrador.viajeId.page.sinClave'))}</span> },
-              { id: 'cantidad', titulo: tr('cartaPorte.borrador.viajeId.page.cantidad'), celda: (m) => <span className="cifra-mono">{numero(m.cantidad)}</span> },
-              { id: 'unidad', titulo: tr('cartaPorte.borrador.viajeId.page.unidad2'), celda: (m) => <span className="cifra-mono">{m.claveUnidad ?? hueco(tr('cartaPorte.borrador.viajeId.page.sinUnidad'))}</span> },
-              { id: 'peso', titulo: tr('cartaPorte.borrador.viajeId.page.pesoKg'), celda: (m) => <span className="cifra-mono">{m.pesoKg !== null ? numero(m.pesoKg) : hueco(tr('cartaPorte.borrador.viajeId.page.sinPeso'))}</span> },
+              { id: 'clave', titulo: tr('cartaPorte.borrador.viajeId.page.claveSat'), celda: (m) => <span>{m.bienesTransp ?? hueco(tr('cartaPorte.borrador.viajeId.page.sinClave'))}</span> },
+              { id: 'cantidad', titulo: tr('cartaPorte.borrador.viajeId.page.cantidad'), celda: (m) => <span>{numero(m.cantidad)}</span> },
+              { id: 'unidad', titulo: tr('cartaPorte.borrador.viajeId.page.unidad2'), celda: (m) => <span>{m.claveUnidad ?? hueco(tr('cartaPorte.borrador.viajeId.page.sinUnidad'))}</span> },
+              { id: 'peso', titulo: tr('cartaPorte.borrador.viajeId.page.pesoKg'), celda: (m) => <span>{m.pesoKg !== null ? numero(m.pesoKg) : hueco(tr('cartaPorte.borrador.viajeId.page.sinPeso'))}</span> },
               { id: 'peligroso', titulo: tr('cartaPorte.borrador.viajeId.page.peligroso'), celda: (m) => m.materialPeligroso === true ? tr('cartaPorte.borrador.viajeId.page.si') : m.materialPeligroso === false ? tr('cartaPorte.borrador.viajeId.page.no') : hueco(tr('cartaPorte.borrador.viajeId.page.sinDeclarar')) },
             ]}
           />
         )}
-      </section>
+      </Tarjeta>
 
-      <section className="space-y-2">
-        <h2 className="font-display text-[15px] font-semibold">{tr('cartaPorte.borrador.viajeId.page.los37DatosDel')}</h2>
-        <p className="text-[11px] text-[var(--muted)]">
-          {tr('cartaPorte.borrador.viajeId.page.laRegla27')}
-        </p>
-        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-          <TablaCampos tr={tr} v={v} responsable="cliente" titulo={tr('cartaPorte.borrador.viajeId.page.delCliente19')} />
-          <TablaCampos tr={tr} v={v} responsable="transportista" titulo={tr('cartaPorte.borrador.viajeId.page.delTransportista18')} />
-        </div>
-      </section>
+      <FilaTarjetas variante="6-6">
+        <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.delCliente19')} className="rv-tarjeta--tabla">
+          <p className="text-[11px] text-[var(--muted)]">{tr('cartaPorte.borrador.viajeId.page.laRegla27')}</p>
+          <TablaCampos tr={tr} v={v} responsable="cliente" />
+        </Tarjeta>
+        <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.delTransportista18')} className="rv-tarjeta--tabla">
+          <TablaCampos tr={tr} v={v} responsable="transportista" />
+        </Tarjeta>
+      </FilaTarjetas>
 
-      <section className="space-y-2">
-        <h2 className="font-display text-[15px] font-semibold">{tr('cartaPorte.borrador.viajeId.page.validacionContraElRechazo')}</h2>
-        {b.borrador === null ? (
-          <>
-            <p className="text-[12px] text-[var(--muted)]">
-              {tr('cartaPorte.borrador.viajeId.page.elBorradorAunNo')}
-            </p>
-            <ul className="list-disc pl-5 text-[12px] space-y-1 text-[var(--warn)]">
-              {b.faltantes.map((f) => <li key={f}>{f}</li>)}
-            </ul>
-          </>
-        ) : b.fallas.length === 0 ? (
-          <div className="space-y-2">
-            <p className="text-[12px] text-[var(--ok)]">
-              {tr('cartaPorte.borrador.viajeId.page.elBorradorPasaLas', { v: numero(b.borrador.pesoBrutoTotal), v2: numero(b.borrador.numTotalMercancias), v3: numero(b.borrador.totalDistRec) })}
-            </p>
-            {/* FASE D (export): el XML solo se ofrece con el borrador validado —
-                la ruta vuelve a validar de todos modos (fail-closed doble). */}
-            <p className="print:hidden">
-              <BotonEnlace
-                href={`/api/export/carta-porte-xml${sufijoTenant(sp) ? `${sufijoTenant(sp)}&` : '?'}viaje=${v.viajeId}`}
-                tamano="sm"
-                icono={<Icono icono={Download} />}
-              >
-                {tr('cartaPorte.borrador.viajeId.page.descargarXmlParaTimbrar')}
-              </BotonEnlace>
-              <span className="block text-[11px] mt-1 text-[var(--faint)]">
-                {tr('cartaPorte.borrador.viajeId.page.esteXmlSeTimbra')}
-              </span>
-            </p>
-          </div>
-        ) : (
-          <>
-            <p className="text-[12px] text-[var(--muted)]">
-              {tr('cartaPorte.borrador.viajeId.page.elBorradorSeArmo')}
-            </p>
-            <ul className="list-disc pl-5 text-[12px] space-y-1 text-[var(--bad)]">
-              {b.fallas.map((f) => <li key={`${f.campo}:${f.detalle}`}><strong>{f.campo}</strong>: {f.detalle} <span className="text-[var(--faint)]">({f.fundamento})</span></li>)}
-            </ul>
-          </>
-        )}
-        {b.advertencias.length > 0 && (
-          <ul className="list-disc pl-5 text-[12px] space-y-1 text-[var(--warn)]">
-            {b.advertencias.map((a) => <li key={a}>{a}</li>)}
-          </ul>
-        )}
-      </section>
-
-      {/* FASE D vía PAC (0226/0227): el timbre NO se emite desde aquí. Esta
-          pantalla es del jefe de tráfico (área `operacion`) y el CFDI —con el
-          flete, el IVA y la retención— es del contador (área `dinero`). Solo
-          se pinta el camino, y solo para quien ve esa área: al encargado esta
+      {/* FASE D vía PAC (0226/0227): el timbre NO se emite desde aquí. Esta pantalla es del jefe de tráfico (área `operacion`) y el CFDI —con el
+          flete, el IVA y la retención— es del contador (área `dinero`). Solo se pinta el camino, y solo para quien ve esa área: al encargado esta
           sección no le aparece, que es exactamente el punto. */}
       {puedeVerArea(rol, 'dinero') && (
-        <section className="space-y-1 print:hidden">
-          <h2 className="font-display text-[15px] font-semibold">{tr('cartaPorte.borrador.viajeId.page.timbre')}</h2>
-          <p className="text-[12px] text-[var(--muted)]">
-            {tr('cartaPorte.borrador.viajeId.page.elCfdiConEste')}
-          </p>
-          <p>
-            <BotonEnlace href={`${RUTA_TIMBRADO}/${v.viajeId}${sufijoTenant(sp)}`} variante="ghost" tamano="sm">
+        <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.timbre')} className="print:hidden"
+          acciones={(
+            <BotonEnlace href={`${RUTA_TIMBRADO}/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
               {tr('cartaPorte.borrador.viajeId.page.irATimbradoDe')}
             </BotonEnlace>
-          </p>
-        </section>
+          )}>
+          <p className="text-[12px] text-[var(--muted)]">{tr('cartaPorte.borrador.viajeId.page.elCfdiConEste')}</p>
+        </Tarjeta>
       )}
-    </main>
+    </EsqueletoFicha>
   );
 }
 
+/** Un dato que falta se marca con un chip de advertencia (mismo lenguaje que el resto del producto), no con texto ocre suelto. */
 function hueco(texto: string) {
-  return <em className="text-[var(--warn)]">{texto}</em>;
+  return <StatusChip tono="warn">{texto}</StatusChip>;
 }
 
-function TablaCampos({ v, responsable, titulo, tr = trEs }: { v: ViajeCcp; responsable: 'cliente' | 'transportista'; titulo: string; tr?: Tr }) {
+function TablaCampos({ v, responsable, tr = trEs }: { v: ViajeCcp; responsable: 'cliente' | 'transportista'; tr?: Tr }) {
   const campos = v.checklist.campos.filter((c) => c.responsable === responsable);
   return (
     <div>
-      <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-1.5 text-[var(--muted)]">{titulo}</h3>
       <TablaBase
-        etiqueta={titulo} densa altoMaximo={false} filas={campos} idFila={(c) => c.clave}
+        etiqueta={responsable} altoMaximo={false} filas={campos} idFila={(c) => c.clave}
         columnas={[
           { id: 'dato', titulo: tr('cartaPorte.borrador.viajeId.page.dato'), principal: true, celda: (c) => c.rotulo },
           {
             id: 'valor', titulo: tr('cartaPorte.borrador.viajeId.page.valor'),
             celda: (c) => (
-              <span className="cifra-mono">
+              <span>
                 {c.presente === true
                   ? (c.valor ?? 'capturado')
                   : c.presente === false

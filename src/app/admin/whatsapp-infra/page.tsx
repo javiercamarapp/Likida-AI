@@ -1,9 +1,11 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
+import '../sistema.css';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
 import { Smartphone, Info } from 'lucide-react';
-import { EstadoVacio, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { EstadoVacio, Tarjeta } from '../../ui-v2/componentes';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { FilaConversacion } from '../conversaciones/hilo';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -47,17 +49,23 @@ export default async function WhatsappInfraPage() {
   const recortado = total !== null && total > conversaciones.length;
 
   return (
-    <MarcoPagina titulo={t('whatsapp_infra.whatsapp_infra')}>
-      {/* El conteo REAL de `wa_conversacion` (count exact, FE-9). Antes esta tarjeta enseñaba el tamaño de la página —20— con una nota
-          que confesaba el tope: una cifra de infraestructura que se topa en 20 no sirve para dimensionar infraestructura. */}
-      <TiraCifras etiqueta={t('whatsapp_infra.conversaciones_de_whatsapp')}>
-        <Cifra
-          etiqueta={t('whatsapp_infra.conversaciones_activas')} valor={total} formato="entero"
-          estado={total === null ? 'vacio' : 'ok'}
-          mensaje={t('whatsapp_infra.no_se_pudo_contar')}
-          nota={t('whatsapp_infra.filas_vivas_en_wa_conversacion_ventana')}
-        />
-      </TiraCifras>
+    /* El conteo REAL de `wa_conversacion` (count exact, FE-9). Antes esta tarjeta enseñaba el tamaño de la página —20— con una nota
+       que confesaba el tope: una cifra de infraestructura que se topa en 20 no sirve para dimensionar infraestructura. */
+    <EsqueletoPanelCifras
+      titulo={t('whatsapp_infra.whatsapp_infra')}
+      etiquetaCifras={t('whatsapp_infra.conversaciones_de_whatsapp')}
+      cifras={uniformes([
+        {
+          etiqueta: t('whatsapp_infra.conversaciones_activas'), valor: total, formato: 'entero',
+          estado: total === null ? 'vacio' : 'ok',
+          mensaje: t('whatsapp_infra.no_se_pudo_contar'),
+          nota: t('whatsapp_infra.filas_vivas_en_wa_conversacion_ventana'),
+        },
+        { etiqueta: t('whatsapp_infra.kpi_mostradas'), valor: conversaciones.length, formato: 'entero' },
+        { etiqueta: t('whatsapp_infra.kpi_numeros'), valor: 1, formato: 'entero', nota: t('whatsapp_infra.kpi_numeros_nota') },
+        { etiqueta: t('whatsapp_infra.kpi_sin_integrar'), valor: fueraDeAlcance(t).length, formato: 'entero', tono: 'warn' },
+      ])}
+    >
 
       <Tarjeta titulo={t('whatsapp_infra.numero_operativo')}>
         <div className="flex items-center gap-2.5 rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-3 py-2.5">
@@ -73,7 +81,7 @@ export default async function WhatsappInfraPage() {
       <Tarjeta titulo={recortado ? t('whatsapp_infra.conversaciones_las_mas_recientes_de', { topeConversaciones: TOPE_CONVERSACIONES, total }) : t('whatsapp_infra.conversaciones')}>
         <div id="conversaciones" className="scroll-mt-24">
           {conversaciones.length === 0 ? (
-            <p className="m-0 text-sm text-muted">{t('whatsapp_infra.sin_conversaciones_activas')}</p>
+            <EstadoVacio titulo={t('whatsapp_infra.sin_conversaciones_activas').replace(/\.$/, '')} contenido />
           ) : (
             <div className="space-y-1.5">
               {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} />)}
@@ -93,7 +101,7 @@ export default async function WhatsappInfraPage() {
           ))}
         </ul>
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

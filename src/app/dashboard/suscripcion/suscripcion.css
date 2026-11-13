@@ -2,7 +2,13 @@
 .rv-sus__tenue { font-size: var(--t-small); color: var(--muted); margin: 0; font-weight: 400; }
 .rv-sus__nota { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
 .rv-sus__mono { font-variant-numeric: tabular-nums; letter-spacing: .04em; word-break: break-all; }
-.rv-sus__uso { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rv-sus__uso { display: grid; gap: 6px; min-width: 0; }
+/* Las cifras de uso viven EN la tarjeta, separadas por un filete: sin subtarjetas con borde dentro de otra tarjeta. */
+.rv-sus__usos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.rv-sus__usos > .rv-sus__uso + .rv-sus__uso { padding-left: 16px; border-left: 1px solid var(--line); }
+@media (max-width: 560px) { .rv-sus__usos > .rv-sus__uso + .rv-sus__uso { padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--line); } }
+.rv-sus__vacio { margin: 0; padding: 12px 14px; border: 1px dashed var(--ui-border, var(--line)); border-radius: 8px; font-size: var(--t-body, 13px); color: var(--muted); }
+.rv-sus__vacio strong { color: var(--ink); font-weight: 600; }
 .rv-sus__uso-cifra { font-size: var(--t-kpi); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rv-sus__uso-cifra .rv-sus__tenue { font-size: var(--t-body); }
 .rv-sus__rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
@@ -13,3 +19,36 @@
 .rv-sus__transf { display: grid; gap: 8px; }
 .rv-sus__enlace { display: block; font-size: var(--t-small); text-decoration: underline; margin-top: 4px; }
 .rv-sus__aviso-prueba { display: flex; gap: 8px; align-items: flex-start; }
+/* Botón de envío de las formas de esta pantalla a la medida de Rovaq (32 px, 13/500, padding 6x12, radio 8): el de `FormaConAviso` trae text-sm de Tailwind (36 px). */
+[data-ui="v2"] form button[type="submit"].px-4.py-2.text-sm { min-height: 32px; padding: 6px 12px; font-size: var(--t-body, 13px); font-weight: 500; line-height: 1.3; border-radius: 8px; }
+
+/* Todo a ancho completo (Rovaq CF: no se alternan anchos) y SIN huecos: «Tu plan» (si solo trae su vacío) va arriba a todo el ancho; datos fiscales y planes se apilan a ancho completo, y los siete campos fiscales
+   van en dos columnas para que la tarjeta no sea una torre de 880 px con 690 px de lienzo vacío al lado. */
+.rv-sus__dos { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.rv-sus__fiscales { margin-top: 12px; }
+/* Una sola columna de filas rótulo-control con divisor (Rovaq: ~780 px): todas las filas arrancan a la misma altura y el control largo (domicilio) va a lo ancho debajo de su rótulo. */
+.rv-sus__fiscales form > div.grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+/* Escritorio: rótulo a la izquierda y control PEGADO al borde derecho de la tarjeta (patrón de Equipo), sin 600 px vacíos. Móvil: una columna, control a todo el ancho. */
+@media (min-width: 641px) {
+  [data-ui="v2"] .rv-sus__fiscales .rv-fila-c:not(.rv-fila-c--larga) { grid-template-columns: minmax(0, 1fr) minmax(240px, 360px); }
+}
+@media (max-width: 640px) {
+  [data-ui="v2"] .rv-sus__fiscales .rv-fila-c :is(input, select, textarea) { width: 100%; min-height: 36px; }
+}
+[data-ui="v2"] .rv-sus__fiscales .rv-fila-c--larga { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
+[data-ui="v2"] .rv-sus__fiscales .rv-fila-c--larga > .rv-ctl { grid-column: 1; grid-row: 3; }
+[data-ui="v2"] .rv-sus__fiscales .rv-fila-c--larga > .rv-campo__ayuda { grid-row: 2; }
+.rv-sus__nota--tarjeta { margin: 0 0 4px; }
+.rv-sus__rejilla { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+/* Tira de cifras como la `pc-kpis` de Rovaq (igual que /vendedor y Avisos): sin filete superior y con la PISTA punteada de 6 px. La pista es solo forma (no mide nada) y se omite con la celda en error o sin dato. */
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi { min-height: 0; border-top-width: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__cab { order: 1; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__fila { order: 2; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi:not([data-estado])::after {
+  content: ''; order: 3; display: block; height: 6px; margin: 4px 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
+}
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__nota { order: 4; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; min-height: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-sus__dos) .rv-kpi > .rv-kpi__pie:not(:has(*)) { display: none; }

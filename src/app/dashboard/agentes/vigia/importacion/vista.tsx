@@ -10,6 +10,7 @@ import {
   ETIQUETA_DOCS, ETIQUETA_ESTADO, ROTULO_DERIVADO,
   type ComparacionTT, type DiaImportacion, type Incoherencia,
 } from '@/lib/likida/vigia/importacion/derivar';
+import { BloqueCifras } from '@/app/ui-v2/esqueletos';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
@@ -130,7 +131,17 @@ function Tablero({ r }: { r: ResumenImportacion }) {
     { id: 'sin', titulo: tx('rest.sin_estatus'), alinear: 'der', celda: (d) => miles(d.porEstado.desconocido) },
   ];
   return (
-    <div className="rv-vg__pila" aria-live="polite">
+    <div className="rv-vg__pila rv-ag-sin-filete" aria-live="polite">
+      {/* Tira de cifras del resultado (Rovaq «Importaciones»): solo lo que el archivo dijo, nunca un conteo inventado. */}
+      <BloqueCifras
+        etiqueta={tx('rest.estatus_de_importacion')}
+        cifras={[
+          { etiqueta: tx('f26d.importacion.cajas'), valor: miles(r.totalCajas) },
+          { etiqueta: tx('f26d.importacion.dias'), valor: miles(r.dias.length) },
+          { etiqueta: tx('f26d.importacion.no_cuadran'), valor: miles(r.totalIncoherencias), tono: r.totalIncoherencias > 0 ? 'warn' : undefined },
+          { etiqueta: tx('f26d.importacion.sin_fecha'), valor: miles(r.sinFecha), tono: r.sinFecha > 0 ? 'bad' : undefined },
+        ]}
+      />
       <Tarjeta titulo={tx('rest.estatus_por_dia')} info="vigia_importacion.estatus_dia">
         <div className="rv-vg__pila">
           <p data-testid="resumen">

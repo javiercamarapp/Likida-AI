@@ -17,3 +17,6 @@
 .rv-eq__fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .rv-eq__enlace { text-decoration: underline; text-underline-offset: 2px; }
 .rv-eq__en-linea { display: inline; }
+
+/* Ronda 8: la celda con nombre y número de empleado (dos líneas) mide 49-64 px como la tabla 2.7 de Rovaq, no 40. */
+[data-ui="v2"] .rv-tl__td:has(> .rv-eq__tenue) { padding-block: 8px; }

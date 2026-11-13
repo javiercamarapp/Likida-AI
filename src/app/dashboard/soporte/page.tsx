@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
-import { LifeBuoy, AlertTriangle, Timer } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -19,11 +18,11 @@ import { pillTicket } from './estatus';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { Metadata } from 'next';
 import {
-  MarcoPagina, Tarjeta, TablaBase, StatusChip, BotonEnlace, FormaConAviso, CampoTexto, CampoTextarea, CampoSelect, EstadoError,
+  TablaBase, Tarjeta, StatusChip, BotonEnlace, FormaConAviso, FormaEnCajon, TabsLinea, CampoTexto, CampoTextarea, CampoSelect, EstadoError,
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { CajonTicket } from './cajon-ticket';
 import './soporte.css';
 import { getT } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
@@ -71,7 +70,7 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 export default async function SoportePage({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; ticket?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; ticket?: string; estado?: string }>;
 }) {
   const { t, idioma } = await getT('resto');
   const sp = await searchParams;
@@ -199,10 +198,18 @@ export default async function SoportePage({
   }
   const cerrado = detalle !== null && (detalle.estado === 'resuelto' || detalle.estado === 'cerrado');
 
+  // Rótulos con mayúscula y acentos para los valores del dominio (nunca el enum crudo en pantalla); fuera del dominio se enseña tal cual.
+  const rotCategoria = (c: string): string => ({
+    facturacion: t('e27.sop_cat_facturacion'), operacion: t('e27.sop_cat_operacion'), tecnico: t('e27.sop_cat_tecnico'), cuenta: t('e27.sop_cat_cuenta'), otro: t('e27.sop_cat_otro'),
+  } as Record<string, string>)[c] ?? c;
+  const rotPrioridad = (p: string): string => ({
+    baja: t('e27.sop_pri_baja'), media: t('e27.sop_pri_media'), alta: t('e27.sop_pri_alta'), urgente: t('e27.sop_pri_urgente'),
+  } as Record<string, string>)[p] ?? p;
+
   const columnas: ColumnaBase<TicketRow>[] = [
     { id: 'asunto', titulo: t('cfg.asunto'), principal: true, celda: (t) => <Link href={enlaceHilo(t.id)} className="rv-sop__enlace">{t.asunto}</Link> },
-    { id: 'categoria', titulo: t('cfg.categoria'), celda: (t) => <span className="rv-sop__tenue">{t.categoria}</span> },
-    { id: 'prioridad', titulo: t('cfg.prioridad'), celda: (t) => t.prioridad },
+    { id: 'categoria', titulo: t('cfg.categoria'), celda: (x) => <span className="rv-sop__tenue">{rotCategoria(x.categoria)}</span> },
+    { id: 'prioridad', titulo: t('cfg.prioridad'), celda: (x) => rotPrioridad(x.prioridad) },
     {
       id: 'estado', titulo: t('llaves.estado'),
       celda: (t) => { const pill = pillTicket(t.estado); return <StatusChip tono={pill.estado}>{pill.etiqueta}</StatusChip>; },
@@ -222,34 +229,51 @@ export default async function SoportePage({
     },
   ];
 
+
+  // Pestañas Abiertos / Cerrados (Rovaq): la URL manda y cada una cuenta lo suyo; un ticket resuelto o cerrado ya no está en la cola.
+  const verCerrados = sp.estado === 'cerrados';
+  const cerradosLista = tickets?.filter((x) => x.estado === 'resuelto' || x.estado === 'cerrado') ?? [];
+  const hrefPestana = (cerrados: boolean) => `/dashboard/soporte${cerrados ? `?estado=cerrados${sufijo ? `&${sufijo}` : ''}` : sufijo ? `?${sufijo}` : ''}`;
+  const visibles = tickets ? (verCerrados ? cerradosLista : abiertos) : [];
+
   return (
-    <MarcoPagina titulo={t('cfg.centro_de_ayuda')} apoyo={t('cfg.tickets_prioridad_reloj_de_sla_y')}>
-      {!tickets ? (
-        <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_cola')}</EstadoError>
-      ) : tickets.length === 0 ? (
-        <Tarjeta titulo={t('cfg.tus_solicitudes')} estado="vacio" mensaje={t('cfg.no_hay_tickets_abiertos')}
-          detalle={t('cfg.la_cola_registra_prioridad_categoria_y')} />
-      ) : (
-        <>
-          <TiraCifras sello={selloHoy('Tickets de soporte')}>
-            <Cifra icono={<LifeBuoy width={16} height={16} strokeWidth={1.75} />} etiqueta={t('cfg.abiertos')} info="soporte.abiertos" valor={abiertos.length} />
-            <Cifra icono={<AlertTriangle width={16} height={16} strokeWidth={1.75} />} etiqueta={t('cfg.sla_vencido')} info="soporte.sla_vencido"
-              valor={vencidos.length} tono={vencidos.length > 0 ? 'bad' : undefined} />
-            <Cifra icono={<Timer width={16} height={16} strokeWidth={1.75} />} etiqueta={t('cfg.sin_sla_pactado')} info="soporte.sin_sla"
-              valor={sinSla.length} nota={t('cfg.no_estan_vencidos_nadie_les_puso')} />
-          </TiraCifras>
-
-          <Tarjeta titulo={t('cfg.tus_solicitudes')}>
-            <TablaBase etiqueta={t('cfg.solicitudes_de_soporte')} columnas={columnas} filas={tickets} idFila={(t) => t.id} altoMaximo={false} tarjetaMovil />
-            <p className="rv-sop__pie">{t('cfg.el_asunto_abre_la_conversacion_con')}</p>
-          </Tarjeta>
-        </>
-      )}
-
-      {/* ── EL HILO ───────────────────────────────────────────────────────── */}
-      {pedido !== '' && (
-        <Tarjeta titulo={detalle ? detalle.asunto : t('cfg.conversacion')}
-          acciones={<BotonEnlace href={enlaceVolver} variante="ghost" tamano="sm">{t('cfg.volver_a_mis_tickets')}</BotonEnlace>}>
+    <EsqueletoTablaMaestra
+      titulo={t('cfg.centro_de_ayuda')} apoyo={t('cfg.tickets_prioridad_reloj_de_sla_y')}
+      filtros={tickets ? (
+        <div className="rv-sop__barra">
+          <TabsLinea etiqueta={t('cfg.solicitudes_de_soporte')} actual={verCerrados ? 'cerrados' : 'abiertos'} pestanas={[
+            { clave: 'abiertos', etiqueta: t('cfg.abiertos'), href: hrefPestana(false), conteo: abiertos.length, atencion: vencidos.length > 0 },
+            { clave: 'cerrados', etiqueta: t('e26.sop_cerrados'), href: hrefPestana(true), conteo: cerradosLista.length },
+          ]} />
+        </div>
+      ) : undefined}
+      // La acción principal vive en la cabecera de la página, junto al h1 (Rovaq), no en una fila propia entre la tira y la tabla.
+      acciones={tickets ? (
+        <span className="rv-sop__cab">
+          <FormaEnCajon id="abrir-ticket" titulo={t('cfg.abrir_un_ticket')} accion={accionAbrirTicket} boton={t('cfg.abrir_ticket')} disparador={t('cfg.abrir_ticket')} abiertoInicial={false}>
+            <CampoTexto etiqueta={t('cfg.asunto')} name="asunto" required placeholder={t('cfg.que_paso_en_una_linea')} />
+            <CampoSelect etiqueta={t('cfg.categoria')} name="categoria" defaultValue="otro">
+                {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{rotCategoria(c)}</option>)}
+            </CampoSelect>
+            <CampoSelect etiqueta={t('cfg.prioridad')} name="prioridad" defaultValue="media">
+                {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{rotPrioridad(p)}</option>)}
+            </CampoSelect>
+            <CampoTexto etiqueta={t('cfg.detalle')} name="descripcion" placeholder={t('cfg.opcional_folios_pantalla_que_esperabas')} />
+          </FormaEnCajon>
+        </span>
+      ) : undefined}
+      cifras={tickets ? [
+        { etiqueta: t('cfg.abiertos'), info: 'soporte.abiertos', valor: abiertos.length, nota: t('e27.sop_abiertos_nota') },
+        { etiqueta: t('cfg.sla_vencido'), info: 'soporte.sla_vencido', valor: vencidos.length, tono: vencidos.length > 0 ? 'bad' : undefined, nota: t('e27.sop_vencido_nota') },
+        { etiqueta: t('cfg.sin_sla_pactado'), info: 'soporte.sin_sla', valor: sinSla.length, nota: t('cfg.no_estan_vencidos_nadie_les_puso') },
+      ] : undefined}
+      etiquetaCifras={t('cfg.centro_de_ayuda')}
+      pie={tickets && visibles.length > 0 ? t('cfg.el_asunto_abre_la_conversacion_con') : undefined}
+      vistaRapida={pedido !== '' ? (
+        <CajonTicket
+          titulo={detalle ? detalle.asunto : t('cfg.conversacion')} hrefCerrar={verCerrados ? hrefPestana(true) : enlaceVolver}
+          subtitulo={detalle ? `${t('cfg.abierto_2', { categoria: rotCategoria(detalle.categoria), prioridad: rotPrioridad(detalle.prioridad), fechaHoraMx: fechaHoraMx(detalle.abiertoEn, idioma) })}${detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn, idioma)}` : ' · sin SLA pactado'}${detalle.resueltoEn ? ` · resuelto ${fechaHoraMx(detalle.resueltoEn, idioma)}` : ''}` : undefined}
+        >
           <div className="rv-sop__hilo">
             {hiloFallo ? (
               <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_conversacion')}</EstadoError>
@@ -257,10 +281,6 @@ export default async function SoportePage({
               <p className="rv-sop__nota">{t('cfg.ese_ticket_no_es_de_tu')}</p>
             ) : (
               <>
-                <p className="rv-sop__nota">{t('cfg.abierto_2', { categoria: detalle.categoria, prioridad: detalle.prioridad, fechaHoraMx: fechaHoraMx(detalle.abiertoEn, idioma) })}{detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn, idioma)}` : ' · sin SLA pactado'}
-                  {detalle.resueltoEn ? ` · resuelto ${fechaHoraMx(detalle.resueltoEn, idioma)}` : ''}
-                </p>
-
                 {detalle.descripcion && <p className="rv-sop__descripcion">{detalle.descripcion}</p>}
 
                 <HiloSoporte
@@ -288,24 +308,25 @@ export default async function SoportePage({
                     </FormaConAviso>
                   </div>
                 )}
+                <div><BotonEnlace href={enlaceVolver} variante="ghost" tamano="sm">{t('cfg.volver_a_mis_tickets')}</BotonEnlace></div>
               </>
             )}
           </div>
-        </Tarjeta>
+        </CajonTicket>
+      ) : null}
+    >
+      {!tickets ? (
+        <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_cola')}</EstadoError>
+      ) : (
+        visibles.length === 0 ? (
+          // El vacío vive DENTRO de su tarjeta (Rovaq `.pc-card`), nunca suelto sobre el lienzo.
+          <Tarjeta titulo={t('cfg.solicitudes_de_soporte')} estado="vacio" mensaje={verCerrados ? t('e26.sop_sin_cerrados') : t('cfg.no_hay_tickets_abiertos')} detalle={verCerrados ? undefined : t('cfg.la_cola_registra_prioridad_categoria_y')} contenida />
+        ) : (
+          <TablaBase
+            etiqueta={t('cfg.solicitudes_de_soporte')} columnas={columnas} filas={visibles} idFila={(x) => x.id} densa altoMaximo={false} tarjetaMovil className="rv-sop__tabla"
+          />
+        )
       )}
-
-      <Tarjeta titulo={t('cfg.abrir_un_ticket')}>
-        <FormaConAviso accion={accionAbrirTicket} boton={t('cfg.abrir_ticket')}>
-          <CampoTexto etiqueta={t('cfg.asunto')} name="asunto" required placeholder={t('cfg.que_paso_en_una_linea')} />
-          <CampoSelect etiqueta={t('cfg.categoria')} name="categoria" defaultValue="otro">
-            {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{c}</option>)}
-          </CampoSelect>
-          <CampoSelect etiqueta={t('cfg.prioridad')} name="prioridad" defaultValue="media">
-            {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{p}</option>)}
-          </CampoSelect>
-          <CampoTexto etiqueta={t('cfg.detalle')} name="descripcion" placeholder={t('cfg.opcional_folios_pantalla_que_esperabas')} />
-        </FormaConAviso>
-      </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

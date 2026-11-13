@@ -1,0 +1,41 @@
+/* Estado · lo propio de la tabla de servicios sobre `legal/publico-r2.css` (se importa DESPUÉS). Filas de ~50 px (la descripción de una línea más el semáforo),
+   no de 78: la disponibilidad no se parte en tres renglones. Rótulos de móvil a 12 px (nada por debajo de 12). */
+[data-ui="v2"] .rv-estado__tabla th[scope="row"] { padding: 6px 14px; line-height: 1.3; }
+[data-ui="v2"] .rv-estado__tabla td { padding: 6px 14px; }
+[data-ui="v2"] .rv-estado__nota { margin-top: 1px; line-height: 1.3; }
+@media (min-width: 820px) {
+  [data-ui="v2"] .rv-estado__tabla .rv-estado__disp { white-space: nowrap; }
+  [data-ui="v2"] .rv-estado__pista { min-width: 240px; }
+  [data-ui="v2"] .rv-estado__celda { height: 12px; }
+}
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-estado__etq { font-size: 12px; }
+  [data-ui="v2"] .rv-estado__tabla .rv-estado__disp { font-size: 12px; }
+}
+
+/* ── Tabla compacta de semáforos (Rovaq): a partir de 820 px vuelve a ser UNA tabla (cabecera 36, filas ~50, una por servicio); debajo, tarjeta-fila apilada.
+   Anula el apilado de `publico-r2.css` (que lo forzaba a todo ancho) sin editar ese archivo compartido. ── */
+@media (min-width: 820px) {
+  [data-ui="v2"] .rv-estado__tabla { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  [data-ui="v2"] .rv-estado__tabla table { display: table; width: 100%; border-collapse: collapse; }
+  [data-ui="v2"] .rv-estado__tabla thead { display: table-header-group; position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+  [data-ui="v2"] .rv-estado__tabla tbody { display: table-row-group; }
+  [data-ui="v2"] .rv-estado__tabla tr { display: table-row; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+  [data-ui="v2"] .rv-estado__tabla th, [data-ui="v2"] .rv-estado__tabla td { display: table-cell; vertical-align: middle; }
+  [data-ui="v2"] .rv-estado__tabla thead th { height: 36px; padding: 0 14px; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
+  [data-ui="v2"] .rv-estado__tabla tbody th[scope="row"], [data-ui="v2"] .rv-estado__tabla tbody td { padding: 6px 14px; border-bottom: 1px solid var(--line); }
+  [data-ui="v2"] .rv-estado__tabla tbody tr:last-child > * { border-bottom: 0; }
+  [data-ui="v2"] .rv-estado__etq { display: none; }
+}
+
+/* Cabecera del estado general y chips de estado (`.status-chip` de Rovaq: 22 px, fondo de tono; neutro #f1f1f2 si no hay medición). */
+[data-ui="v2"] .rv-estado__general { margin-top: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 12px; background: #f1f1f2; }
+[data-ui="v2"] .rv-estado__general[data-estado="ok"] { background: var(--okbg); }
+[data-ui="v2"] .rv-estado__general[data-estado="degradado"] { background: var(--warnbg); }
+[data-ui="v2"] .rv-estado__general[data-estado="caido"] { background: var(--badbg); }
+[data-ui="v2"] .rv-estado__general h2 { margin: 0; font-family: var(--font-sans-ui), sans-serif; font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--ink); }
+[data-ui="v2"] .rv-estado__chip { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; background: #f1f1f2; color: var(--ink); }
+[data-ui="v2"] .rv-estado__chip[data-estado="ok"] { background: var(--okbg); color: var(--ok); }
+[data-ui="v2"] .rv-estado__chip[data-estado="degradado"] { background: var(--warnbg); color: var(--warn); }
+[data-ui="v2"] .rv-estado__chip[data-estado="caido"] { background: var(--badbg); color: var(--bad); }
+[data-ui="v2"] .rv-estado__general .rv-estado__chip { background: rgba(255, 255, 255, .7); }

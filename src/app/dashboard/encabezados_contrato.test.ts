@@ -21,11 +21,11 @@ function textoDeClave(clave: string): string | null {
   const m = new RegExp(`'${clave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}':\\s*'((?:[^'\\\\]|\\\\.)*)'`).exec(DICCIONARIO_ES);
   return m ? m[1].replace(/\\'/g, "'") : null;
 }
-/** El `titulo` de `<MarcoPagina>`: literal, o `{t('clave')}` resuelto contra el diccionario en español; `null` si es calculado. */
+/** El `titulo` de `<MarcoPagina>` o de un esqueleto F26 (que lo pasa al mismo marco): literal, o `{t('clave')}` resuelto contra el diccionario en español; `null` si es calculado. */
 function tituloDeMarco(src: string): string | null {
-  const lit = /<MarcoPagina\b[^>]*?\btitulo="([^"]*)"/s.exec(src);
+  const lit = /<(?:MarcoPagina|Esqueleto\w+)\b[^>]*?\btitulo="([^"]*)"/s.exec(src);
   if (lit) return lit[1];
-  const dic = /<MarcoPagina\b[^>]*?\btitulo=\{\s*\w+\('([^']+)'\)\s*\}/s.exec(src);
+  const dic = /<(?:MarcoPagina|Esqueleto\w+)\b[^>]*?\btitulo=\{\s*\w+\('([^']+)'\)\s*\}/s.exec(src);
   return dic ? textoDeClave(dic[1]) : null;
 }
 
@@ -52,7 +52,7 @@ describe('las pantallas migradas usan el encabezado único', () => {
   for (const rel of MIGRADAS) {
     it(`${rel}: MarcoPagina (o EncabezadoPagina), sin BarraPagina, HeroSaludo ni h1 propio`, () => {
       const f = sinComentarios(fuente(rel));
-      expect(f, 'debe pintar el encabezado único').toMatch(/<MarcoPagina\b|<EncabezadoPagina\b/);
+      expect(f, 'debe pintar el encabezado único').toMatch(/<MarcoPagina\b|<EncabezadoPagina\b|<MarcoConfigAgente\b|<Esqueleto(?:Portada|TablaMaestra|PanelCifras|Ficha|Configuracion)\b/);
       expect(f, 'la miga/barra superior ya no existe').not.toMatch(/<BarraPagina\b|<HeroSaludo\b/);
       expect(f, 'el h1 lo pone el encabezado único').not.toMatch(/<h1\b/);
     });
@@ -104,6 +104,8 @@ describe('sin miga de pan en el marco', () => {
 describe('el título es el nombre exacto de la entrada del menú', () => {
   const NOMBRE_ENTRADA = new Map(ENTRADAS_DASHBOARD.flatMap((e) => e.pestanas.map((p) => [p.href, e.nombre] as const)));
   const NOMBRE_ANTERIOR = new Map(TODAS_LAS_RUTAS.map((i) => [i.href, i.nombre]));
+  // Ronda 4 de F26 (calco de Rovaq): en un hub el eyebrow es el grupo y el h1 es el nombre de la PESTAÑA («Operadores», «Mesa de control»).
+  const NOMBRE_PESTANA = new Map(ENTRADAS_DASHBOARD.flatMap((e) => e.pestanas.map((p) => [p.href, p.nombre] as const)));
   it('cada vista que ES la pantalla de una entrada (o pestaña) titula con el nombre de su entrada', () => {
     const mal: string[] = [];
     let comparadas = 0;
@@ -118,7 +120,7 @@ describe('el título es el nombre exacto de la entrada del menú', () => {
       const titulo = tituloDeMarco(fuente(rel));
       if (titulo === null) continue; // título calculado (detalle)
       comparadas++;
-      if (titulo !== entrada && titulo !== anterior) mal.push(`${rel}: «${titulo}» ≠ entrada «${entrada}» (ni su nombre anterior «${anterior}»)`);
+      if (titulo !== entrada && titulo !== anterior && titulo !== NOMBRE_PESTANA.get(href)) mal.push(`${rel}: «${titulo}» ≠ entrada «${entrada}» (ni su nombre anterior «${anterior}»)`);
     }
     expect(comparadas).toBeGreaterThan(30);
     expect(mal).toEqual([]);

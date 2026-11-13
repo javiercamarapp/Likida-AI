@@ -19,3 +19,176 @@
 [data-ui="v2"] .adm-perfil-form { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 [data-ui="v2"] .adm-flota-form { margin: 0; }
 [data-ui="v2"] .adm-flota-id { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
+
+/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas (pf-tile). */
+[data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1023.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+/* pf-tile de Rovaq: gap 16, padding 20, SIN filete, cifra 26/600. */
+[data-ui="v2"] .adm-res-tiles { gap: 16px; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi { padding: 20px; border-top-width: 0; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-weight: 600; }
+@media (max-width: 767px) { [data-ui="v2"] .adm-res-tiles .rv-kpi { padding: 12px; } }
+/* Aviso de acceso: banner blanco con escudo (Rovaq P1), no una franja gris. */
+[data-ui="v2"] .adm-acceso { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: var(--t-body, 13px); color: var(--ink); }
+[data-ui="v2"] .adm-acceso svg { flex: none; color: var(--ink); }
+
+/* Ficha 360 (Rovaq P2b): seis tarjetas de cifra en 3 columnas y secciones apiladas con título de 13/600 (ov-section-title). */
+[data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1023.98px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Móvil 412: rejilla de 2 columnas (Rovaq), nunca una pila de tarjetas de 120 px. */
+@media (max-width: 479.98px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+[data-ui="v2"] .adm-ficha-sec { display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 72px; }
+/* El título de sección vive en la tarjeta; el h2 queda solo para lectores de pantalla y anclas (?seccion=). */
+[data-ui="v2"] .adm-ficha-sec__t { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+[data-ui="v2"] .adm-plan { display: flex; flex-direction: column; gap: 12px; }
+[data-ui="v2"] .adm-plan__fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Botón de envío de FormaConAviso a la escala de Rovaq (32 px, 13/500, radio 8) mientras la pieza compartida conserva su Tailwind heredado
+   (pedido_compartido: forma.tsx debe usar <Boton>). Solo dentro de `.adm-forma-fina`. */
+[data-ui="v2"] .adm-forma-fina button[type="submit"],
+[data-ui="v2"] .adm-forma-fina button[type="button"].text-sm { height: 32px; padding: 0 12px; font-size: 13px; font-weight: 500; line-height: 1; border-radius: 8px; width: auto; }
+
+
+/* Pila de bloques bajo las gráficas de un panel (misma separación de 12 px que el marco) y acción bloqueada punteada (Rovaq). */
+[data-ui="v2"] .adm-pila { display: flex; flex-direction: column; gap: var(--sp-gap, 12px); min-width: 0; }
+[data-ui="v2"] .adm-forma-fina .rv-btn:disabled,
+[data-ui="v2"] .adm-forma-fina button[type="submit"]:disabled { background: transparent; color: var(--muted); border: 1px dashed #bfbfc2; opacity: 1; }
+
+/* Equipo (Rovaq CF): filas rótulo-control en el formulario de alta, select de rol de 28 px y acciones de fila. */
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila-control { min-width: 0; }
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila-control :is(input, select) { width: 100%; max-width: 320px; }
+[data-ui="v2"] .adm-persona { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+[data-ui="v2"] .adm-persona__nombre { font-weight: 500; color: var(--ink); }
+[data-ui="v2"] .adm-persona__correo, [data-ui="v2"] .adm-persona__meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+[data-ui="v2"] .adm-rol-celda { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+[data-ui="v2"] .adm-rol-select { height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input, var(--line)); background: var(--campo-bg, var(--surface)); color: var(--ink); font: 500 13px/1 var(--font-sans-ui, inherit); }
+[data-ui="v2"] .adm-rol-select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+[data-ui="v2"] .adm-rol-aviso { font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .adm-rol-aviso[data-error] { color: var(--bad); }
+[data-ui="v2"] .adm-acciones-fila { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+
+/* Mi perfil (CF): el nombre y su botón en UNA fila de 32 px; el valor de solo lectura sin caja. */
+[data-ui="v2"] .adm-perfil-form--fila { flex-direction: row; align-items: flex-end; gap: 8px; flex-wrap: wrap; width: 100%; }
+[data-ui="v2"] .adm-perfil-form--fila > :first-child { flex: 1 1 200px; min-width: 0; max-width: 320px; }
+[data-ui="v2"] .adm-perfil-valor { font-size: var(--t-body, 13px); color: var(--ink); overflow-wrap: anywhere; }
+
+/* «Qué no se sabe» (Rovaq): caja punteada dentro de su tarjeta, texto a la izquierda. */
+[data-ui="v2"] .adm-nosabe { border-style: dashed; background: var(--canvas2, var(--canvas)); }
+[data-ui="v2"] .adm-nosabe p { margin: 0 0 8px; font-size: var(--t-body, 13px); line-height: 1.5; color: var(--muted); text-align: left; }
+[data-ui="v2"] .adm-nosabe p:last-child { margin-bottom: 0; }
+
+/* Eyebrow de un panel (Rovaq): 12/500, mayúsculas, tracking 1.2, sobre el contenido de la tarjeta. */
+[data-ui="v2"] .adm-eyebrow { margin: 0 0 8px; font: 500 12px/1.2 var(--font-sans-ui, inherit); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+
+/* Elegir flota: la fila elegida va en tinta (negra con texto blanco), como la fila resaltada del selector de cliente de Rovaq. */
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) { background: var(--ink); color: var(--surface); }
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) :is(.adm-res-fila__titulo, .adm-flota-id, svg, th) { color: inherit; }
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]):hover { background: var(--ink); }
+
+/* Mismo vacío uniforme que dinero.css (pedido_compartido: unificar `.rv-vacio` en componentes.css). */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* ── Ronda 4 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
+/* Una cifra suelta es su propia tira de UNA celda: la regla móvil de `.rv-kpis` (2 columnas) la dejaba en media caja (66 px de texto,
+   palabras partidas). Una tira de una sola celda llena SIEMPRE su caja. (pedido_compartido: lo mismo en ui-v2/graficas.css.) */
+[data-ui="v2"] .rv-kpis:has(> .rv-kpi:only-child) { grid-template-columns: minmax(0, 1fr); }
+[data-ui="v2"] .rv-kpis:has(> .rv-kpi:only-child) .rv-kpi { overflow-wrap: normal; word-break: normal; }
+/* pf-tile: rótulo en altas y bajas 12/600 (no mayúsculas mono 11) con el sello «● Observado» debajo de la cifra. */
+[data-ui="v2"] .adm-res-tiles .rv-kpi__etq,
+[data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__etq { font: 600 12px/1.3 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0; color: var(--ink2, var(--muted)); }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__sello,
+[data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__sello { flex: 0 0 auto; }
+@media (max-width: 1099px) {
+  [data-ui="v2"] .adm-res-tiles .rv-kpi__sello,
+  [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__sello { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; }
+}
+/* Filas-tarjeta de los paneles (Rovaq): borde de 1 px, radio 10, píldora de estado y «Ver detalle ›». */
+[data-ui="v2"] .adm-res-lista--tarjetas { gap: 8px; }
+[data-ui="v2"] .adm-res-lista--tarjetas .adm-res-fila { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; border-bottom-width: 1px; background: var(--surface); }
+[data-ui="v2"] .adm-res-lista--tarjetas .adm-res-fila:last-child { border-bottom: 1px solid var(--line); }
+[data-ui="v2"] .adm-res-fila__ver { flex: none; font-size: 13px; font-weight: 500; color: var(--ink); text-decoration: none; white-space: nowrap; }
+[data-ui="v2"] .adm-res-fila__ver:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* Una fila de dos paneles no estira al más bajo hasta el alto del más alto con un vacío dentro. */
+[data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > .rv-tarjeta { height: auto; }
+/* Rótulo de panel (Rovaq pf-panel): el eyebrow va ARRIBA del título. La tarjeta compartida pinta título y luego cuerpo; el cuerpo se
+   disuelve en la tarjeta y el eyebrow (primer hijo del cuerpo) pasa primero. (pedido_compartido: prop `eyebrow` en Tarjeta.) */
+[data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo { display: contents; }
+[data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo > .adm-eyebrow:first-child { order: -1; margin: 0 0 -4px; }
+[data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo > :not(.adm-eyebrow:first-child) { order: 1; }
+/* Vacío de una línea dentro de un panel (Rovaq ac-vacio): borde punteado, radio 8, relleno 20×14; sin tarjeta alta con un hueco. */
+[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }
+/* Ficha 360 y consola: las tarjetas de cifra van SIN filete (Rovaq `pf-tile`); el color de dato no pinta un borde grueso. */
+[data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi { border-top-width: 0; padding: 20px; }
+@media (max-width: 767px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi { padding: 12px; } }
+/* Descripción de una tarjeta de formulario: separada del primer campo (antes se pegaba a la fila «Flota»). */
+[data-ui="v2"] .adm-tarjeta-desc { margin: 0 0 12px; font-size: var(--t-small, 12px); line-height: 1.5; color: var(--muted); }
+/* Select de rol y Revocar de la tabla de integrantes: 28 px, Revocar en peligro (Rovaq). */
+/* Notificaciones: la configuración es una acción de la cabecera; el botón duplicado de la bandeja compartida no se pinta aquí. */
+[data-ui="v2"] .adm-notif .av-cambio { display: none; }
+
+/* Notificaciones: la configuración es una acción de la cabecera; el botón duplicado de la bandeja compartida no se pinta aquí. */
+[data-ui="v2"] .adm-notif .av-cambio { display: none; }
+
+/* Roles (Rovaq /settings/team): lista compacta con punto negro, nombre 13/600 y su descripción en 12 px; sin filas de configuración de 60 px. */
+[data-ui="v2"] .adm-roles { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+[data-ui="v2"] .adm-roles li { position: relative; display: flex; flex-direction: column; gap: 1px; padding-left: 14px; }
+[data-ui="v2"] .adm-roles li::before { content: ""; position: absolute; left: 2px; top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--ink); }
+[data-ui="v2"] .adm-roles strong { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.4; }
+[data-ui="v2"] .adm-roles span { font-size: 12px; line-height: 1.4; color: var(--muted); }
+
+/* Selector de cliente con teclado: la fila resaltada es NEGRA con texto blanco (Rovaq P2c); los botones de la fila se invierten con ella. */
+[data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] > * { background: var(--ink); color: var(--surface); }
+[data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] :is(.adm-res-fila__titulo, .adm-flota-id, svg) { color: var(--surface); }
+[data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] .rv-btn { background: transparent; color: var(--surface); border-color: var(--surface); }
+
+/* ── Ronda 6 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
+/* pf-tile (Rovaq, medido): 130 px de alto, padding 20, rótulo 12/600 con «● Observado» a la DERECHA en la misma fila, cifra 26/600 con tracking -0.91 px. */
+[data-ui="v2"] .adm-res-tiles .rv-kpi { min-height: 130px; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__pie { min-height: 0; margin-top: 0; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-size: 26px; letter-spacing: -.035em; }
+@media (min-width: 1100px) {
+  [data-ui="v2"] .adm-res-tiles .rv-kpi__sello { position: absolute; top: 20px; right: 20px; flex: 0 0 auto; width: auto; height: auto; overflow: visible; clip-path: none; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--muted); }
+  [data-ui="v2"] .adm-res-tiles .rv-kpi__cab { padding-right: 92px; }
+}
+/* Los paneles de una fila 6-6 se igualan: el pie del más corto baja al fondo en vez de dejar un vacío bajo el cuerpo. */
+[data-ui="v2"] .rv-tarjeta .adm-res-pares ~ .adm-res-pie { margin-top: auto; }
+/* El semáforo dentro de «Operación»: un aviso del panel, no un banner de página. */
+[data-ui="v2"] .rv-tarjeta .rv-aviso, [data-ui="v2"] .rv-tarjeta .rv-aviso-compacto { margin: 0; }
+/* Notificaciones: el punto de «sin leer» marca algo que requiere acción, así que usa la señal burdeos (decisión 12); el leído queda vacío. */
+[data-ui="v2"] .adm-notif .av-fila:not([data-leido="si"]) .av-punto { background: var(--senal, var(--ink)); }
+@media (max-width: 640px) {
+  /* Móvil (bandeja de Rovaq): tarjeta-fila en dos columnas, punto | cuerpo a todo el ancho, y la acción en su propia fila debajo.
+     Antes `nowrap` dejaba el cuerpo en 0 px (una letra por línea) con las acciones encimadas. */
+  [data-ui="v2"] .adm-notif .av-fila { display: grid; grid-template-columns: 8px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; align-items: start; }
+  [data-ui="v2"] .adm-notif .av-punto { margin-top: 6px; }
+  [data-ui="v2"] .adm-notif .av-cuerpo { min-width: 0; width: 100%; }
+  [data-ui="v2"] .adm-notif .av-acciones { grid-column: 2; width: auto; padding-left: 0; justify-content: flex-start; }
+}
+
+/* Móvil: en «Invitar integrante» los campos llenan la columna (Rovaq: 100 % de ancho, 36 px de alto, 44 px táctil). */
+@media (max-width: 640px) {
+  [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control { width: 100%; }
+  [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control :is(input, select) { max-width: none; min-height: 36px; }
+  /* El envoltorio del campo (flex item) se estira: antes medía ~150 px, el ancho de su contenido, y los campos quedaban cortos y desiguales. */
+  [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control > * { flex: 1 1 100%; width: 100%; min-width: 0; }
+}
+
+
+/* Ronda 8 · Notificaciones: segmentado, selects y «Marcar todo» en una sola línea centrada. El rótulo de cada select va a su izquierda
+   (en línea) y no encima, así la línea base coincide y no hay renglón alto con un hueco bajo el segmentado. */
+[data-ui="v2"] .adm-notif .av-barra,
+[data-ui="v2"] .adm-notif .av-filtros { align-items: center; gap: 8px; }
+[data-ui="v2"] .adm-notif .av-filtros .rv-campo { flex-direction: row; align-items: center; gap: 6px; }
+[data-ui="v2"] .adm-notif .av-filtros .rv-campo__etq { margin: 0; white-space: nowrap; }
+[data-ui="v2"] .adm-notif .av-filtros .rv-ctl { min-width: 0; width: auto; }
+
+/* Ronda 8 · Mi perfil: la columna de configuración ocupa todo su ancho útil (≤780 px, Rovaq CF) y no se encoge al contenido (~460 px). */
+[data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) { width: 100%; max-width: 780px; }
+
+/* Ronda 8 · Consola: los paneles de una fila miden lo que dice su contenido (el panel corto de «Requieren atención» no se estira a la altura
+   de «Costos» con ~85 px de vacío). Especificidad 0,3,0 para ganar a cualquier regla genérica de la fila y a un envoltorio de entrada. */
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > *,
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > * > .rv-tarjeta { align-self: start; height: auto; }

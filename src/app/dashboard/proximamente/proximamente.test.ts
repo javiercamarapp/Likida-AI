@@ -39,6 +39,14 @@ describe('la pantalla «Próximamente» no toca datos de la flota', () => {
   });
 });
 
+describe('un módulo sin anuncio', () => {
+  it('es una ruta inexistente: responde 404 (notFound), no un 200 con un vacío', () => {
+    const pagina = leer('[modulo]/page.tsx');
+    expect(pagina).toMatch(/if \(!contenido\) notFound\(\)/);
+    expect(pagina).not.toContain('ModuloSinPantalla');
+  });
+});
+
 describe('el contenido por módulo', () => {
   it('hay uno por cada módulo «próximamente» (ninguno hoy: A4/A5 se encendieron el 18-oct-2026)', () => {
     expect(Object.keys(CONTENIDO_PROXIMAMENTE).sort()).toEqual([...MODULOS_PROXIMAMENTE_PERFIL].sort());

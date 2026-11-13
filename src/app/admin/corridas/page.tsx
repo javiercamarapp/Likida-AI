@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -10,7 +11,7 @@ import { opcionesBitacora } from '@/lib/admin/bitacora';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
 import {
-  BarraFiltros, EstadoError, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta, type OpcionFiltro, type TonoEstado,
+  BarraFiltros, EstadoError, FiltroOpciones, StatusChip, Tarjeta, type OpcionFiltro, type TonoEstado,
 } from '../../ui-v2/componentes';
 import { MapaCalor } from '../../ui-v2/graficas';
 import { getT } from '@/lib/i18n/servidor';
@@ -19,6 +20,7 @@ import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { etiquetaInterruptorTr, etiquetaInterruptor } from '../observabilidad/etiquetas';
 import { BloqueAgentesParados } from '../escalaciones/agentes-parados';
 import { PiePaginas } from '../pie-paginas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import '../sistema.css';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
@@ -113,23 +115,37 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
   const calor = resultado !== null && resultado.corridas.length > 0 ? matrizDeCorridas(resultado.corridas.map((c) => c.inicio), t('corridas.calor.dias').split(',')) : null;
 
   return (
-    <MarcoPagina titulo={tx('corridas.corridas')} apoyo={tx('corridas.las_corridas_de_los_agentes_en')}>
+    <EsqueletoTablaMaestra
+      titulo={tx('corridas.corridas')}
+      apoyo={tx('corridas.las_corridas_de_los_agentes_en')}
+      cifras={resultado === null ? undefined : uniformes([
+        { etiqueta: tx('corridas.corridas'), valor: resultado.total, formato: 'entero' },
+        { etiqueta: tx('corridas.kpi_ok'), valor: resultado.corridas.filter((c) => c.estado === 'ok').length, formato: 'entero', nota: tx('corridas.kpi_pagina_nota') },
+        { etiqueta: tx('corridas.kpi_parciales'), valor: resultado.corridas.filter((c) => c.estado === 'parcial').length, formato: 'entero', tono: resultado.corridas.some((c) => c.estado === 'parcial') ? 'warn' : undefined },
+        { etiqueta: tx('corridas.kpi_fallos'), valor: resultado.corridas.filter((c) => c.estado === 'fallo').length, formato: 'entero', tono: resultado.corridas.some((c) => c.estado === 'fallo') ? 'bad' : undefined },
+        parados === null
+          ? { etiqueta: tx('corridas.kpi_parados'), valor: null, estado: 'vacio' as const }
+          : { etiqueta: tx('corridas.kpi_parados'), valor: parados.parados.length, formato: 'entero' as const, tono: parados.parados.length > 0 ? 'warn' as const : undefined },
+      ])}
+      filtros={
       <BarraFiltros accion="/admin/corridas" enLinea buscar etiqueta={tx('corridas.filtrar_corridas')} nActivos={[agente, estado, tenant].filter(Boolean).length} limpiarHref="/admin/corridas">
         <FiltroOpciones etiqueta={tx('observabilidad.agente')} nombre="agente" valor={agente} opciones={opcionesAgente(tx)} />
         <FiltroOpciones etiqueta={tx('salud_sistema.estado')} nombre="estado" valor={estado} opciones={[{ valor: '', rotulo: tx('corridas.cualquier_estado') }, ...ESTADOS_CORRIDA.map((e) => ({ valor: e, rotulo: chipTr(tx)[e].etiqueta }))]} />
         {flotas ? <FiltroOpciones etiqueta={tx('observabilidad.flota')} nombre="tenant" valor={tenant} opciones={flotas} /> : null}
-      </BarraFiltros>
-
+      </BarraFiltros>}
+    >
       {resultado === null ? (
         <EstadoError reintentar>{tx('corridas.no_se_pudieron_leer_las_corridas')}</EstadoError>
       ) : (
         <>
+          <div className="adm-sis-caja">
           <TablaLista<CorridaCruzada>
             etiqueta={tx('corridas.corridas_de_agentes')} columnas={columnasTr(tx, idioma)} filas={resultado.corridas} idFila={(c) => c.id} base="/admin/corridas" params={params}
             vacio={hayFiltro
               ? { titulo: tx('corridas.ninguna_corrida_coincide'), texto: tx('corridas.ninguna_corrida_coincide_con_el_filtro') }
               : { titulo: tx('corridas.aun_no_hay_corridas'), texto: tx('corridas.cada_corrida_de_un_agente_deja') }}
           />
+          </div>
           {calor !== null && calor.contadas > 0 ? (
             <Tarjeta titulo={t('corridas.calor.titulo')} elevar entra="tarjeta">
               <MapaCalor etiqueta={t('corridas.calor.etiqueta')} columnas={BLOQUES_HORA} filas={calor.filas} mostrarValores />
@@ -142,8 +158,8 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
         </>
       )}
 
-      <BloqueAgentesParados datos={parados} cola={cola} />
-    </MarcoPagina>
+      <BloqueAgentesParados datos={parados} cola={cola} resumen />
+    </EsqueletoTablaMaestra>
   );
 }
 

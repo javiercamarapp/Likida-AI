@@ -32,7 +32,8 @@ vi.mock('@/lib/auth/llave-api-escritura', async (importar) => ({
 
 import { DatoInvalido } from '@/lib/likida/errores';
 import { ListaLlaves } from './vista';
-import { FormaEmision, type AccionForma } from './forma';
+import type { AccionForma } from './forma';
+import { CajonEmitirLlave } from './cajon-emitir';
 import PaginaLlavesApi from './page';
 
 /** Busca, en el árbol ya renderizado (sin montar DOM), la primera prop de
@@ -43,7 +44,13 @@ function buscarProp<T>(nodo: ReactNode, componente: unknown, propName: string): 
   if (Array.isArray(nodo)) { for (const hijo of nodo) { const r = buscarProp<T>(hijo, componente, propName); if (r !== undefined) return r; } return undefined; }
   if (!isValidElement<Record<string, unknown>>(nodo)) return undefined;
   if (nodo.type === componente && propName in nodo.props) return nodo.props[propName] as T;
-  return buscarProp<T>(nodo.props.children as ReactNode, componente, propName);
+  // Se recorren también las props de ranura (`acciones`, `avisos`…): «Emitir llave» vive en la cabecera de la página, no en los hijos.
+  for (const valor of Object.values(nodo.props)) {
+    if (valor === null || typeof valor !== 'object') continue;
+    const r = buscarProp<T>(valor as ReactNode, componente, propName);
+    if (r !== undefined) return r;
+  }
+  return undefined;
 }
 
 const SP = Promise.resolve({});
@@ -76,7 +83,7 @@ it('una base caída se enseña como error, no como "cero llaves" — invitaría 
 it('emitir: manda tenant/usuario de la SESIÓN (no del form) y devuelve el secreto una sola vez', async () => {
   dobles.crearLlaveApi.mockResolvedValue({ enClaro: 'lk_live_secreto123', prefijo: 'lk_live_', expiraEn: '2027-01-01T00:00:00Z' });
   const pagina = await PaginaLlavesApi({ searchParams: SP });
-  const emitir = buscarProp<AccionForma>(pagina, FormaEmision, 'accion');
+  const emitir = buscarProp<AccionForma>(pagina, CajonEmitirLlave, 'accion');
   expect(emitir).toBeTypeOf('function');
 
   const r = await emitir!(null, fd({ nombre: 'TMS propio', area: 'administracion', vigencia: '1a', tenantId: 'OTRO-TENANT', userId: 'OTRO-USUARIO' }));
@@ -96,7 +103,7 @@ it.each(['contador', 'encargado', 'vendedor'])('emitir: la server action rechaza
   // la sesión en el momento de la llamada, no reutiliza la del render — así
   // es como la 0093 cierra el POST directo a una server action ya conocida.
   const pagina = await PaginaLlavesApi({ searchParams: SP });
-  const emitir = buscarProp<AccionForma>(pagina, FormaEmision, 'accion');
+  const emitir = buscarProp<AccionForma>(pagina, CajonEmitirLlave, 'accion');
   sesion = { tenantId: 't-1', rol, userId: 'u-1' };
   const r = await emitir!(null, fd({ nombre: 'x', area: 'administracion', vigencia: '1a' }));
   expect(r).toEqual({ ok: false, error: 'Solo el dueño de la flota emite llaves de API.' });
@@ -106,7 +113,7 @@ it.each(['contador', 'encargado', 'vendedor'])('emitir: la server action rechaza
 it('emitir: un error del motor (DatoInvalido) llega verbatim, no genérico', async () => {
   dobles.crearLlaveApi.mockRejectedValueOnce(new DatoInvalido('El nombre no puede pasar de 80 caracteres.'));
   const pagina = await PaginaLlavesApi({ searchParams: SP });
-  const emitir = buscarProp<AccionForma>(pagina, FormaEmision, 'accion');
+  const emitir = buscarProp<AccionForma>(pagina, CajonEmitirLlave, 'accion');
   const r = await emitir!(null, fd({ nombre: 'x'.repeat(90), area: 'administracion', vigencia: '1a' }));
   expect(r).toEqual(expect.objectContaining({ ok: false }));
   expect((r as { error: string }).error).toContain('80 caracteres');

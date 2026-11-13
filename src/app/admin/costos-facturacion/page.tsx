@@ -8,17 +8,21 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { getPlanes, guardarPriceDePlan, listarSuscripcionesVivas, type Plan, type Suscripcion } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
-  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, tenantDeFacturaSaas, type FacturaPorCobrar,
+  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, tenantDeFacturaSaas, listarFacturasSaas, type FacturaPorCobrar, type FacturaSaasFila,
 } from '@/lib/saas/transferencia';
 import { etiquetaIva } from '@/lib/saas/iva';
 import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
 import { logger } from '@/lib/logger';
-import { Aviso, BarraFiltros, CampoSelect, CampoTexto, Disclosure, EstadoError, FilaTarjetas, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { Aviso, AvisoCompacto, BarraFiltros, CampoSelect, CampoTexto, Disclosure, EstadoError, FilaTarjetas, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Columnas, DonaMini, type PropsCifra } from '@/app/ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { accionGestionarPlan } from '../flotas/acciones-plan';
 import { FormaEmitirMensualidad } from './forma-emitir';
 import '../dinero.css';
+import '../resumen.css';
 
 import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
@@ -219,6 +223,10 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
   let totalPorCobrar = 0;
   try { const lectura = await getPorCobrarTodas(); porCobrar = lectura.facturas; totalPorCobrar = lectura.total; } catch (e) { logger.error('admin.por_cobrar', { err: e instanceof Error ? e.message : String(e) }); }
   const recortada = porCobrar !== null && totalPorCobrar > porCobrar.length;
+  // Historia de lo facturado (barras por mes y dona por estado). `null` = no se pudo leer, y la gráfica lo dice; una lista recortada
+  // por el tope no se dibuja como completa.
+  let historial: { filas: FacturaSaasFila[]; truncado: boolean } | null = null;
+  try { const h = await listarFacturasSaas({ limite: 500 }); historial = { filas: h.filas, truncado: h.truncado }; } catch (e) { logger.error('admin.facturas_historial', { err: e instanceof Error ? e.message : String(e) }); }
 
   const porTenant = new Map((suscripciones ?? []).map((s) => [s.tenantId, s]));
   const filasFlota = (flotas ?? []).map((f) => ({ ...f, suscripcion: porTenant.get(f.id) ?? null }))
@@ -227,46 +235,83 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
   const contables = planes ? planes.filter((p) => p.stripePriceId && p.precioIvaIncluido !== null).length : null;
   const sumaPorCobrar = porCobrar && !recortada ? porCobrar.reduce((s, f) => s + f.monto, 0) : null;
 
+  const cifras: PropsCifra[] = uniformes([
+    porCobrar === null
+      ? { etiqueta: t('costos_facturacion.por_cobrar'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudo_leer'), reintentar: true }
+      : recortada
+        ? { etiqueta: t('costos_facturacion.por_cobrar'), valor: null, estado: 'error', mensaje: t('costos_facturacion.la_lista_esta_recortada'), reintentar: true }
+        : { etiqueta: t('costos_facturacion.por_cobrar'), valor: sumaPorCobrar, formato: 'mxn', nota: `${totalPorCobrar} ${totalPorCobrar === 1 ? 'factura pendiente o fallida' : 'facturas pendientes o fallidas'}.`, tono: totalPorCobrar > 0 ? 'warn' : undefined },
+    sinDato(suscripciones) || flotas === null
+      ? { etiqueta: t('costos_facturacion.flotas_con_plan_asignado'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudo_leer_2'), reintentar: true }
+      : { etiqueta: t('costos_facturacion.flotas_con_plan_asignado'), valor: `${conSuscripcion} de ${flotas.length}`, nota: t('costos_facturacion.sin_plan_asignado_no'), tono: conSuscripcion < flotas.length ? 'warn' : 'ok' },
+    sinDato(planes) || contables === null
+      ? { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudieron_leer'), reintentar: true }
+      : !hayStripe
+        ? { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: null, estado: 'vacio', mensaje: t('costos_facturacion.stripe_sin_conectar') }
+        : { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: `${contables} de ${planes.length}`, nota: t('costos_facturacion.necesitan_precio_ligado_y') },
+    {
+      etiqueta: t('costos_facturacion.timbrado_de_cfdi'),
+      valor: facturapiConfigurado() ? (modoFacturapi() === 'produccion' ? t('costos_facturacion.produccion') : t('costos_facturacion.en_prueba')) : t('costos_facturacion.sin_conectar'),
+      nota: facturapiConfigurado() ? t('costos_facturacion.se_timbra_al_marcar') : t('costos_facturacion.el_pago_queda_valido'),
+      tono: facturapiConfigurado() && modoFacturapi() === 'produccion' ? 'ok' : 'warn',
+    },
+  ]);
+
+  // Graficas del panel (8-4): facturado por mes (sin canceladas) y facturas por estado.
+  const porMes = new Map<string, number>();
+  for (const f of historial?.filas ?? []) if (f.estado !== 'cancelada') porMes.set(f.periodoInicio.slice(0, 7), (porMes.get(f.periodoInicio.slice(0, 7)) ?? 0) + f.monto);
+  const mesesOrden = [...porMes.keys()].sort().slice(-12);
+  const porEstado = new Map<string, number>();
+  for (const f of historial?.filas ?? []) porEstado.set(String(f.estado), (porEstado.get(String(f.estado)) ?? 0) + 1);
+  const sinFacturas = historial !== null && mesesOrden.length === 0 && porEstado.size === 0;
+  const graficas = sinFacturas ? [
+    // Sin facturas no hay barras ni dona que dibujar: UN vacío de una línea en vez de dos tarjetas vacías lado a lado.
+    <Tarjeta key="vacio" titulo={t('costos_facturacion.facturado_por_mes')} estado="vacio" contenida mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />,
+  ] : [
+    historial === null
+      ? <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} estado="error" mensaje={t('costos_facturacion.no_se_pudo_leer_3')} reintentar />
+      : mesesOrden.length === 0
+        ? <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} estado="vacio" mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />
+        : (
+          <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} elevar entra="tarjeta">
+            <Columnas datos={mesesOrden.map((m) => ({ etiqueta: m, valor: porMes.get(m)! }))} etiqueta={t('costos_facturacion.facturado_por_mes')} formato="mxn" matiz={8} />
+            {historial.truncado ? <p className="adm-din-nota">{t('costos_facturacion.historial_recortado')}</p> : null}
+          </Tarjeta>
+        ),
+    historial === null
+      ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} estado="error" mensaje={t('costos_facturacion.no_se_pudo_leer_3')} reintentar />
+      : porEstado.size === 0
+        ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} estado="vacio" mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />
+        : (
+          <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} elevar entra="tarjeta">
+            <DonaMini gajos={[...porEstado.entries()].map(([etiqueta, valor]) => ({ etiqueta, valor }))} etiqueta={t('costos_facturacion.facturas_por_estado')} formato="numero" matiz={8} />
+          </Tarjeta>
+        ),
+  ];
+
   return (
-    <MarcoPagina titulo={t('costos_facturacion.facturacion')} apoyo={t('costos_facturacion.lo_que_likida_cobra')}>
-      {!banco ? (
-        <Aviso tono="warn" titulo={t('costos_facturacion.sin_cuenta_de_cobro')}>
-          
-          {t('costos_facturacion.faltan_la_clabe_el')}
-        </Aviso>
-      ) : null}
-      {!hayStripe ? (
-        <Aviso tono="warn" titulo={t('costos_facturacion.stripe_sin_conectar')}>{t('costos_facturacion.sin_la_llave_de')}</Aviso>
-      ) : !webhookConfigurado() ? (
-        <Aviso tono="error" titulo={t('costos_facturacion.falta_el_secreto_del')}>
-          
-          {t('costos_facturacion.se_puede_mandar_a')}
-        </Aviso>
-      ) : null}
-
-      <TiraCifras etiqueta={t('costos_facturacion.cobro_de_la_mensualidad')} items={[
-        porCobrar === null
-          ? { etiqueta: t('costos_facturacion.por_cobrar'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudo_leer'), reintentar: true }
-          : recortada
-            ? { etiqueta: t('costos_facturacion.por_cobrar'), valor: null, estado: 'error', mensaje: t('costos_facturacion.la_lista_esta_recortada'), reintentar: true }
-            : { etiqueta: t('costos_facturacion.por_cobrar'), valor: sumaPorCobrar, formato: 'mxn', nota: `${totalPorCobrar} ${totalPorCobrar === 1 ? 'factura pendiente o fallida' : 'facturas pendientes o fallidas'}.`, tono: totalPorCobrar > 0 ? 'warn' : undefined },
-        sinDato(suscripciones) || flotas === null
-          ? { etiqueta: t('costos_facturacion.flotas_con_plan_asignado'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudo_leer_2'), reintentar: true }
-          : { etiqueta: t('costos_facturacion.flotas_con_plan_asignado'), valor: `${conSuscripcion} de ${flotas.length}`, nota: t('costos_facturacion.sin_plan_asignado_no'), tono: conSuscripcion < flotas.length ? 'warn' : 'ok' },
-        sinDato(planes) || contables === null
-          ? { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudieron_leer'), reintentar: true }
-          : !hayStripe
-            ? { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: null, estado: 'vacio', mensaje: t('costos_facturacion.stripe_sin_conectar') }
-            : { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: `${contables} de ${planes.length}`, nota: t('costos_facturacion.necesitan_precio_ligado_y') },
-        {
-          etiqueta: t('costos_facturacion.timbrado_de_cfdi'),
-          valor: facturapiConfigurado() ? (modoFacturapi() === 'produccion' ? t('costos_facturacion.produccion') : t('costos_facturacion.en_prueba')) : t('costos_facturacion.sin_conectar'),
-          nota: facturapiConfigurado() ? t('costos_facturacion.se_timbra_al_marcar') : t('costos_facturacion.el_pago_queda_valido'),
-          tono: facturapiConfigurado() && modoFacturapi() === 'produccion' ? 'ok' : 'warn',
-        },
-      ]} />
-
-      <FilaTarjetas variante="8-4">
+    <EsqueletoPanelCifras
+      titulo={t('costos_facturacion.facturacion')} apoyo={t('costos_facturacion.lo_que_likida_cobra')}
+      etiquetaCifras={t('costos_facturacion.cobro_de_la_mensualidad')} cifras={observadas(cifras, t('a1r4.observado'))} graficas={graficas} variante="8-4"
+      avisos={(() => {
+        // Como máximo UN aviso de una línea (Rovaq): si faltan varias conexiones se dicen juntas y el detalle queda tras «Ver más».
+        const faltas: Array<{ tono: 'warn' | 'error'; titulo: string; texto?: string }> = [];
+        if (!banco) faltas.push({ tono: 'warn', titulo: t('costos_facturacion.sin_cuenta_de_cobro'), texto: t('costos_facturacion.faltan_la_clabe_el') });
+        if (!hayStripe) faltas.push({ tono: 'warn', titulo: t('costos_facturacion.stripe_sin_conectar'), texto: t('costos_facturacion.sin_la_llave_de') });
+        else if (!webhookConfigurado()) faltas.push({ tono: 'error', titulo: t('costos_facturacion.falta_el_secreto_del'), texto: t('costos_facturacion.se_puede_mandar_a') });
+        if (faltas.length === 0) return null;
+        if (faltas.length === 1) return <Aviso tono={faltas[0].tono} titulo={faltas[0].titulo}>{faltas[0].texto}</Aviso>;
+        return (
+          <AvisoCompacto
+            tono={faltas.some((f) => f.tono === 'error') ? 'error' : 'warn'}
+            resumen={<strong>{faltas.map((f) => f.titulo).join(' · ')}</strong>}
+            mas={<ul className="adm-din-lista">{faltas.map((f) => <li key={f.titulo}><strong>{f.titulo}</strong> <span>{f.texto}</span></li>)}</ul>}
+          />
+        );
+      })()}
+    >
+      <div className="adm-pila adm-forma-fina">
+      <FilaTarjetas variante="8-4" className="adm-fila-alto-contenido">
         <Tarjeta titulo={t('costos_facturacion.por_cobrar')} estado={porCobrar === null ? 'error' : porCobrar.length === 0 ? 'vacio' : 'ok'} contenida={porCobrar !== null && porCobrar.length === 0} mensaje={porCobrar === null ? t('costos_facturacion.no_se_pudo_leer_3') : t('costos_facturacion.nada_pendiente_de_cobro')}
           detalle={porCobrar === null ? t('costos_facturacion.esto_no_quiere_decir') : t('costos_facturacion.aparece_aqui_en_cuanto')} reintentar>
           {porCobrar !== null ? (
@@ -276,7 +321,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
               ) : null}
               {/* El total manda (es lo que entra al banco) y el desglose va debajo: es lo que va a salir en el CFDI. Sin desglose se dice, porque esa factura NO se va a poder timbrar. */}
               <TablaBase
-                etiqueta={t('costos_facturacion.facturas_por_cobrar')} idFila={(f) => f.id} tarjetaMovil densa filas={porCobrar}
+                etiqueta={t('costos_facturacion.facturas_por_cobrar')} idFila={(f) => f.id} tarjetaMovil filas={porCobrar}
                 columnas={[
                   { id: 'flota', titulo: t('costos_facturacion.flota'), principal: true, celda: (f) => f.tenantNombre },
                   { id: 'periodo', titulo: t('costos_facturacion.periodo'), celda: (f) => `${f.periodoInicio} a ${f.periodoFin}` },
@@ -327,7 +372,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
               />
             </BarraFiltros>
             <TablaBase
-              etiqueta={t('costos_facturacion.plan_y_estado_de')} idFila={(f) => f.id} tarjetaMovil densa filas={filasFlota}
+              etiqueta={t('costos_facturacion.plan_y_estado_de')} idFila={(f) => f.id} tarjetaMovil filas={filasFlota}
               vacio={{ titulo: t('costos_facturacion.ninguna_flota_con_ese'), texto: t('costos_facturacion.quita_el_filtro_para') }}
               columnas={[
                 { id: 'flota', titulo: t('costos_facturacion.flota'), principal: true, celda: (f) => f.nombre },
@@ -443,7 +488,8 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
         </p>
       </Disclosure>
       {r === null ? <EstadoError reintentar>{t('costos_facturacion.no_se_pudo_leer_6')}</EstadoError> : null}
-    </MarcoPagina>
+      </div>
+    </EsqueletoPanelCifras>
   );
 }
 

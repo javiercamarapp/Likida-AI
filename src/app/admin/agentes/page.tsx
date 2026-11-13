@@ -95,9 +95,10 @@ async function accionConfig(_previo: ResultadoAccion, fd: FormData): Promise<Res
   }
 }
 
-export default async function PaginaAgentes() {
+export default async function PaginaAgentes({ searchParams }: { searchParams: Promise<{ pag?: string; ver?: string; estado?: string; depto?: string }> }) {
   await requireSuperadmin();
-  return <PanelAgentesContenido accionAlta={accionAlta} accionPalanca={accionPalanca} accionConfig={accionConfig} />;
+  const params = (await searchParams) ?? {};
+  return <PanelAgentesContenido accionAlta={accionAlta} accionPalanca={accionPalanca} accionConfig={accionConfig} params={params} />;
 }
 
 export async function generateMetadata(): Promise<Metadata> {

@@ -145,20 +145,22 @@ describe('las fichas', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-15T18:00:00Z'));
     const html = await pintar(ok([fila()]));
-    for (const t of ['Enviados · 30 días', 'Entregados · 30 días', 'Rebotados · 30 días']) expect(html).toContain(t);
+    // Rovaq pc-kpis de 4: Entregados y rebotados (misma ventana) van en la nota de Enviados.
+    expect(html).toContain('Enviados · 30 días');
+    expect(html).toContain('Entregados');
     // Retenidos / Sin póliza / Recibidos hoy no son de 30 días: no llevan el rótulo.
     expect(html).not.toContain('Retenidos · 30');
     expect(html).not.toContain('Sin póliza · 30');
     // La ventana de la ficha (hoy y los 29 días anteriores) es la misma del filtro de la lista.
-    for (const estado of ['enviado', 'entregado', 'rebotado']) {
+    for (const estado of ['enviado']) {
       expect(html).toContain(`des_estado=${estado}&amp;des_desde=2026-09-16`);
     }
     expect(html).not.toMatch(/des_estado=retenido&amp;des_desde/);
   });
 
-  it('con números de verdad los pinta, con los seis rótulos', async () => {
+  it('con números de verdad los pinta, con sus rótulos (cuatro celdas)', async () => {
     const html = await pintar(ok([fila()]));
-    for (const t of ['Recibidos hoy', 'Enviados', 'Entregados', 'Rebotados', 'Retenidos', 'Sin póliza']) expect(html).toContain(t);
+    for (const t of ['Recibidos hoy', 'Enviados', 'Entregados', 'rebotados', 'Retenidos', 'Sin póliza']) expect(html).toContain(t);
   });
 
   it('un conteo `null` es «—» con su leyenda, no un cero', async () => {
@@ -555,5 +557,28 @@ describe('ayudaExcepcion: operador sin alta según su motivo (CT-A12-09)', () =>
   });
   it('otros tipos conservan su ayuda de siempre', () => {
     expect(ayudaExcepcion('sin_poliza')).toContain('No se enviará hasta tener póliza');
+  });
+});
+
+describe('decisión 3: la póliza provisional se ve y exige revisión humana', () => {
+  it('la fila retenida por póliza provisional lleva su marca bajo la bitácora y el estado de cada destinatario', async () => {
+    const prov = fila({ destinos: destinosDe([], 'póliza provisional: pendiente de revisión') });
+    const html = await pintar(ok([prov]));
+    expect(html).toContain('rv-liq-marca');
+    expect(html).toContain('Póliza provisional');
+    expect(html).toContain('Retenido: póliza provisional');
+    // Una fila normal no lleva la marca.
+    expect(await pintar(ok([fila()]))).not.toContain('rv-liq-marca');
+  });
+
+  it('la tira cuenta cuántos retenidos son póliza provisional; sin ese conteo no inventa el número', async () => {
+    const con = await pintar(ok([fila()], { fichas: { ...FICHAS, retenidos: 3, polizaProvisional: 2 } }));
+    expect(con).toContain('2 con póliza provisional: revisión humana antes de enviar');
+    const sin = await pintar(ok([fila()], { fichas: { ...FICHAS, retenidos: 3, polizaProvisional: null } }));
+    expect(sin).not.toContain('con póliza provisional: revisión humana');
+  });
+
+  it('la regla se dice siempre en la tarjeta: nada sale sin revisión humana', async () => {
+    expect(await pintar(ok([]))).toContain('nada sale sin revisión humana');
   });
 });

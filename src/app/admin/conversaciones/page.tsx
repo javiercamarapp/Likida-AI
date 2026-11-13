@@ -8,9 +8,12 @@ import {
   type ConversacionActiva,
 } from '@/lib/admin/negocio';
 import { MessageCircle, Search } from 'lucide-react';
-import { Boton, BotonEnlace, EstadoVacio, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
-import { BarList, Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, Tarjeta } from '../../ui-v2/componentes';
+import { BarList, type PropsCifra } from '../../ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FilaConversacion } from './hilo';
+import { getT } from '@/lib/i18n/servidor';
+import '../resumen.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +35,7 @@ const TITULO_MENSAJES = 'Mensajes por conversación';
 export default async function ConversacionesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
+  const { t: ts } = await getT('admin_sistema');
   const sp = await searchParams;
   // ADM-1: sin `?q=` se conserva la vista de siempre (las 20 más recientes,
   // con las tarjetas y el ranking). CON `?q=` se cambia a `buscarConversaciones`
@@ -44,8 +48,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   if (q) {
     const resultado = await buscarConversaciones({ q, pagina });
     return (
-      <PantallaConversaciones>
-        <CajaBusqueda q={q} />
+      <PantallaConversaciones filtros={<CajaBusqueda q={q} />} apoyo={ts('conversaciones.apoyo')}>
         <Tarjeta titulo={`"${q}" — ${resultado.total} conversación${resultado.total === 1 ? '' : 'es'}, página ${resultado.pagina} de ${resultado.paginas}`}>
           {resultado.filas.length === 0 ? (
             <EstadoVacio titulo="Sin coincidencias" icono={Search} contenido>
@@ -71,18 +74,19 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   const recortado = total !== null && total > conversaciones.length;
 
   return (
-    <PantallaConversaciones>
-      <CajaBusqueda q="" />
-
-      <TiraCifras etiqueta="Conversaciones de WhatsApp">
-        <Cifra
-          etiqueta="Conversaciones activas" valor={total} formato="entero"
-          estado={total === null ? 'vacio' : 'ok'}
-          mensaje="No se pudo contar — esto no significa que no haya ninguna."
-        />
-        <Cifra etiqueta={`Mensajes en las ${conversaciones.length} que se listan`} valor={totalMensajes} formato="entero" />
-      </TiraCifras>
-
+    <PantallaConversaciones
+      filtros={<CajaBusqueda q="" />}
+      apoyo={ts('conversaciones.apoyo')}
+      etiquetaCifras="Conversaciones de WhatsApp"
+      cifras={[
+        {
+          etiqueta: 'Conversaciones activas', valor: total, formato: 'entero',
+          estado: total === null ? 'vacio' : 'ok',
+          mensaje: 'No se pudo contar — esto no significa que no haya ninguna.',
+        },
+        { etiqueta: ts('conversaciones.mensajes_listados'), valor: totalMensajes, formato: 'entero', nota: conversaciones.length > 0 ? ts('conversaciones.listadas_n', { n: numero(conversaciones.length) }) : undefined },
+      ]}
+    >
       {/* Mensajes por conversación (c.turns.length) es un conteo real que ya se calcula para el resumen de arriba, así que un
           ranking con HBars entre conversaciones es genuino — no una serie inventada. Solo con 2+ conversaciones: con 1 sola, un
           "ranking" de una barra no compara nada. */}
@@ -95,24 +99,28 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
       <Tarjeta titulo={recortado ? `Las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Todas las conversaciones'}>
         {conversaciones.length === 0 ? (
           <EstadoVacio titulo="Sin conversaciones activas" icono={MessageCircle} contenido>
-            Sin conversaciones activas.
+            {ts('conversaciones.vacio_detalle')}
           </EstadoVacio>
         ) : (
           <ListaConversaciones conversaciones={conversaciones} />
         )}
       </Tarjeta>
 
-      <EstadoVacio titulo="Fuera de alcance hoy">
-        Colas (activas/necesitan humano/escaladas/resueltas), búsqueda full-text, handoff a un humano — el bot de Likida es una máquina de estados determinística (foto→OCR→confirmar→liquidar), no un agente conversacional abierto que se pueda &quot;atorar&quot; y necesite ese patrón. Antes de construirlo hay que decidir si de verdad aplica.
-        <br /><br />
-        Volumen por canal, heatmap hora×día, histograma de mensajes por conversación — con 1 tenant y pocos días de historia no dicen nada real todavía.
-      </EstadoVacio>
+      {/* Lo que NO se sabe va en su caja punteada, DENTRO de una tarjeta y a la izquierda (Rovaq «Qué no se sabe»), no como un párrafo centrado suelto. */}
+      <Tarjeta titulo={ts('conversaciones.que_no_se_sabe')} className="adm-nosabe">
+        <p>
+          Todavía no hay colas por estado, búsqueda dentro de los mensajes ni traspaso a una persona: el bot sigue un flujo fijo (foto, lectura, confirmación y liquidación), no una charla abierta. Antes de construirlo hay que decidir si hace falta.
+        </p>
+        <p>
+          Volumen por canal y por hora: con una sola flota y pocos días de historia no dice nada real todavía.
+        </p>
+      </Tarjeta>
     </PantallaConversaciones>
   );
 }
 
-function PantallaConversaciones({ children }: { children: ReactNode }) {
-  return <MarcoPagina titulo="Conversaciones de WhatsApp">{children}</MarcoPagina>;
+function PantallaConversaciones({ filtros, cifras, etiquetaCifras, apoyo, children }: { filtros: ReactNode; cifras?: PropsCifra[]; etiquetaCifras?: string; apoyo?: string; children: ReactNode }) {
+  return <EsqueletoTablaMaestra titulo="Conversaciones de WhatsApp" apoyo={apoyo} filtros={filtros} cifras={cifras} etiquetaCifras={etiquetaCifras}>{children}</EsqueletoTablaMaestra>;
 }
 
 /**
@@ -122,15 +130,9 @@ function PantallaConversaciones({ children }: { children: ReactNode }) {
  */
 function CajaBusqueda({ q }: { q: string }) {
   return (
-    <form className="flex items-center gap-2" method="GET" role="search">
-      <Search width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
-      <input
-        type="text" name="q" defaultValue={q} placeholder="Buscar por teléfono…" aria-label="Buscar por teléfono"
-        className="rv-ctl min-w-0 flex-1"
-      />
-      <Boton type="submit" variante="secondary" tamano="sm">Buscar</Boton>
-      {q && <BotonEnlace href="/admin/conversaciones" variante="ghost" tamano="sm">Limpiar</BotonEnlace>}
-    </form>
+    <BarraFiltros accion="/admin/conversaciones" enLinea buscar etiqueta="Buscar conversaciones" limpiarHref="/admin/conversaciones" nActivos={q ? 1 : 0}>
+      <FiltroBusqueda nombre="q" valor={q} placeholder="Buscar por teléfono…" etiqueta="Buscar por teléfono" maxLength={40} />
+    </BarraFiltros>
   );
 }
 

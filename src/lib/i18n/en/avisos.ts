@@ -109,4 +109,13 @@ export const avisos: Record<keyof typeof avisosEs, string> = {
   'gen.fuente_ilegible': 'Could not read a source of the escalations inbox.',
   'gen.extras_ilegibles': 'Could not read the system alerts (crons, AI, webhook): it is not known whether something is down.',
   'gen.resumen_ilegible': 'Could not read the business summary (AI cost and fleets): the signals that depend on it are not being evaluated.',
+  'notif.sin_leer': 'Unread',
+  'notif.cargados': 'Loaded',
+  'notif.resumen': 'Notices summary',
+  'e26b.avisos_configurar': 'Configure alerts',
+  'e26b.avisos_sin_leer': 'Unread',
+  'e26b.avisos_sin_leer_nota': 'unread alerts',
+  'e26b.avisos_cargados': 'Loaded',
+  'e26b.avisos_cargados_nota': 'alerts in the list',
+  'a1r4.observado': 'Observed',
 };

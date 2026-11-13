@@ -1,13 +1,14 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
-const d = vi.hoisted(() => ({ sup: vi.fn(), resumen: vi.fn(), onb: vi.fn(), tel: vi.fn(), planes: vi.fn() }));
+const d = vi.hoisted(() => ({ sup: vi.fn(), resumen: vi.fn(), onb: vi.fn(), tel: vi.fn(), planes: vi.fn(), techos: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }), usePathname: () => '/admin/flotas', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: d.sup }));
 vi.mock('@/lib/admin/negocio', () => ({ getResumenNegocio: d.resumen }));
 vi.mock('@/lib/admin/onboarding', () => ({ getOnboardingFlotas: d.onb }));
 vi.mock('@/lib/likida/contactos', () => ({ telefonosJefe: d.tel }));
 vi.mock('@/lib/saas/suscripcion', () => ({ getPlanes: d.planes }));
+vi.mock('@/lib/admin/techo_ia', () => ({ getTechosIa: d.techos }));
 vi.mock('./acciones', () => ({ accionCrearFlota: vi.fn(), accionFacilidad: vi.fn() }));
 
 import FlotasPage from './page';
@@ -22,16 +23,32 @@ beforeEach(() => {
   d.tel.mockResolvedValue({ 'tn-1': '5512345678' });
   d.onb.mockResolvedValue(new Map());
   d.planes.mockResolvedValue([{ clave: 'pro', nombre: 'Pro' }]);
+  d.techos.mockResolvedValue({ filas: [{ tenantId: 'tn-1', nombre: 'ACME', topeUsd: 5, origen: 'plan', declaradoUsd: null, usadoHoyUsd: 1.5, pctUsado: 30 }], pisoUsd: 1, truncado: false, gastoIlegible: false });
 });
 
-it('la tabla lleva plan, arranque "n de 6", viajes y los DOS paneles con su rol', async () => {
+it('la tabla lleva plan, arranque "n de 6", viajes y el Detalle (cajón) y la Ficha 360; los dos paneles viven en el cajón', async () => {
   const html = await render();
   expect(html).toContain('ACME');
   expect(html).toContain('>pro<');
   expect(html).toMatch(/\d de 6/);
   expect(html).toContain('/admin/flotas/tn-1');
-  expect(html).toContain('/dashboard?tenant=tn-1&amp;rol=flota_admin');
-  expect(html).toContain('/dashboard?tenant=tn-1&amp;rol=encargado');
+  expect(html).toContain('>Detalle<');
+  expect(html).toContain('ver=tn-1');
+  // Una sola fila de acciones con dos botones: ya no hay tres por fila ni paneles en la tabla.
+  expect(html).not.toContain('/dashboard?tenant=tn-1&amp;rol=flota_admin');
+  const vr = await render({ ver: 'tn-1' });
+  expect(vr).toContain('/dashboard?tenant=tn-1&amp;rol=flota_admin');
+  expect(vr).toContain('/dashboard?tenant=tn-1&amp;rol=encargado');
+});
+
+it('lleva buscador y filtro de arranque, y filtra por nombre', async () => {
+  const html = await render();
+  expect(html).toContain('name="q"');
+  expect(html).toContain('name="arranque"');
+  expect(html).toContain('1 de 1');
+  const sin = await render({ q: 'zzz' });
+  expect(sin).toContain('Ninguna flota coincide con el filtro');
+  expect(sin).toContain('0 de 1');
 });
 
 it('un teléfono ilegible deja el arranque en "Sin dato", nunca "0 de 6"', async () => {
@@ -41,16 +58,15 @@ it('un teléfono ilegible deja el arranque en "Sin dato", nunca "0 de 6"', async
   expect(html).not.toMatch(/0 de 6/);
 });
 
-it('el alta vive en un cajón («Nueva flota»), ofrece el plan y conserva su acción', async () => {
+it('el alta es un bloque bajo la tabla («Dar de alta una flota»), ofrece el plan y conserva su acción', async () => {
   const html = await render();
-  expect(html).toContain('data-forma-cajon="alta-flota"');
-  expect(html).toContain('aria-haspopup="dialog"');
-  expect(html).toContain('Nueva flota');
+  expect(html).toContain('id="alta-flota"');
   expect(html).toContain('Dar de alta una flota');
   expect(html).toContain('Pro');
   expect(html).toContain('name="nombre"');
   expect(html).toContain('name="emailAdmin"');
-  expect(html).not.toMatch(/<details/);
+  expect(html).not.toContain('data-forma-cajon="alta-flota"');
+  expect(html.indexOf('id="alta-flota"')).toBeGreaterThan(html.indexOf('ACME'));
 });
 
 it('planes ilegibles: el alta lo dice, no ofrece un selector vacío', async () => {

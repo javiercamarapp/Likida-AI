@@ -1,16 +1,19 @@
+import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { Inbox, Truck, Users } from 'lucide-react';
 import type { TableroOperacion, ViajeSinAsignar, CargaOperador } from '@/lib/likida/operacion';
 import type { Pagina, ViajeEnCursoRow } from '@/lib/likida/repo_paginado';
-import { numero, fechaCorta } from '@/lib/formato';
+import { numero, fechaMx } from '@/lib/formato';
 import { FormaViaje, type AccionCrearViaje } from '../forma-viaje';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type AccionDespacho } from './acciones';
 import { PillAviso } from '../viajes/pills';
 import { EnlacePagina, NavPaginas } from '../paginador';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { CajonAlta } from '../cajon-alta';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { Aviso, BarraFiltros, EstadoVacio, FilaTarjetas, FiltroBusqueda, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Aviso, BarraFiltros, EstadoVacio, FilaTarjetas, FiltroBusqueda, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import './despacho.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
@@ -123,7 +126,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
         )
       ),
     },
-    { id: 'inicio', titulo: t('dsp.col.inicio'), celda: (v) => <span className="rv-dsp__mono">{fechaCorta(v.fechaInicio, idioma)}</span> },
+    { id: 'inicio', titulo: t('dsp.col.inicio'), celda: (v) => <span className="rv-dsp__mono">{fechaMx(v.fechaInicio, idioma)}</span> },
     { id: 'aviso', titulo: t('dsp.col.aviso'), celda: (v) => <PillAviso v={v} tr={tr} /> },
     {
       id: 'accion', titulo: t('dsp.col.accion'), alinear: 'der',
@@ -133,25 +136,47 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
     },
   ];
 
+  // Tira de 4 como Rovaq: «En taller» y «POD pendientes» no se pierden, viajan como sello de la cifra a la que pertenecen (mismo conteo, misma lectura).
+  const cifras: PropsCifra[] | undefined = tablero === null ? undefined : [
+    { etiqueta: t('dsp.cifra.activos'), valor: numero(tablero.viajesActivos, idioma), info: 'despacho.viajes_activos', sello: `${t('dsp.cifra.pod')}: ${numero(tablero.podPendientes, idioma)}` },
+    { etiqueta: t('dsp.cifra.sinunidad'), valor: numero(tablero.sinUnidad, idioma), tono: tablero.sinUnidad > 0 ? 'warn' : undefined, info: 'despacho.sin_unidad', sello: selloHoy(t('dsp.cifra.fuente')) },
+    { etiqueta: t('dsp.cifra.libres'), valor: numero(tablero.unidadesDisponibles, idioma), info: 'despacho.unidades_libres', sello: `${t('dsp.cifra.taller')}: ${numero(tablero.unidadesEnTaller, idioma)}` },
+    { etiqueta: t('dsp.cifra.incidencias'), valor: numero(tablero.incidenciasAbiertas, idioma), tono: tablero.incidenciasAbiertas > 0 ? 'warn' : undefined, info: 'despacho.incidencias', sello: selloHoy(t('dsp.cifra.fuente')) },
+  ];
+
   return (
-    <MarcoPagina titulo={t('dsp.titulo')} apoyo={t('dsp.apoyo')}>
-
-      {tablero === null ? (
-        <Aviso tono="warn">{t('dsp.tablero.error')}</Aviso>
-      ) : (
-        <TiraCifras sello={selloHoy('Tablero de despacho')}>
-          <Cifra etiqueta={t('dsp.cifra.activos')} valor={numero(tablero.viajesActivos, idioma)} info="despacho.viajes_activos" />
-          <Cifra etiqueta={t('dsp.cifra.sinunidad')} valor={numero(tablero.sinUnidad, idioma)} tono={tablero.sinUnidad > 0 ? 'warn' : undefined} info="despacho.sin_unidad" />
-          <Cifra etiqueta={t('dsp.cifra.libres')} valor={numero(tablero.unidadesDisponibles, idioma)} info="despacho.unidades_libres" />
-          <Cifra etiqueta={t('dsp.cifra.taller')} valor={numero(tablero.unidadesEnTaller, idioma)} info="despacho.en_taller" />
-          <Cifra etiqueta={t('dsp.cifra.incidencias')} valor={numero(tablero.incidenciasAbiertas, idioma)} tono={tablero.incidenciasAbiertas > 0 ? 'warn' : undefined} info="despacho.incidencias" />
-          <Cifra etiqueta={t('dsp.cifra.pod')} valor={numero(tablero.podPendientes, idioma)} info="despacho.pod_pendientes" />
-        </TiraCifras>
+    <EsqueletoTablaMaestra
+      titulo={t('dsp.titulo')}
+      apoyo={t('dsp.apoyo')}
+      acciones={(
+        <>
+          {/* ── Alta rápida ── */}
+          <CajonAlta id="alta-operador" titulo={t('dsp.alta')} descripcion={t('dsp.alta.nota')} disparador={t('dsp.alta')}>
+            <AltaOperador altaOperador={altaOperador} />
+          </CajonAlta>
+          {/* ── Crear operación nueva ── */}
+          <CajonAlta id="nuevo-viaje" titulo={t('dsp.nuevo')} descripcion={t('dsp.nuevo.nota')} disparador={t('dsp.nuevo')} primario tamano="xl">
+            <FormaViaje action={crear} buscarCatalogo={buscarCatalogo} puedeCapturarDinero={puedeCapturarDinero} puedeCapturarAnticipo={puedeCapturarAnticipo} topeAnticipo={topeAnticipo} topeAnticipoOrigen={topeAnticipoOrigen}
+              totalOperadores={totalOperadores} totalClientes={totalClientes} totalUnidades={totalUnidades} />
+          </CajonAlta>
+        </>
       )}
-
+      cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy(t('dsp.encurso'))}
+      filtros={(
+        // FE-2: buscador por folio — antes no había forma de llegar a un viaje en curso que no estuviera entre los 12 más urgentes
+        // de la primera página. GET plano, con el sufijo de previsualización como hidden para no perderlo al buscar.
+        <BarraFiltros enLinea buscar accion="/dashboard/despacho" etiqueta={t('dsp.buscar.aria')} nActivos={folioPedido ? 1 : 0}
+          limpiarHref={`/dashboard/despacho${sufijo}`}
+          ocultos={[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]}>
+          <FiltroBusqueda nombre="q" valor={folioPedido} placeholder={t('dsp.buscar.ph')} etiqueta={t('dsp.buscar.folio')} />
+        </BarraFiltros>
+      )}
+      avisos={tablero === null ? <Aviso tono="warn">{t('dsp.tablero.error')}</Aviso> : undefined}
+    >
       <FilaTarjetas variante="8-4">
         {/* ── La cola que reparte el día ── */}
-        <Tarjeta titulo={t('dsp.porasignar')} info="despacho.por_asignar">
+        <Tarjeta titulo={t('dsp.porasignar')} info="despacho.por_asignar" className="rv-dsp__tarjeta">
           <p className="rv-dsp__nota">{t('dsp.porasignar.nota')}</p>
           {sinAsignar.length === 0 ? (
             <EstadoVacio contenido icono={Inbox} titulo={t('dsp.nadasin')}>
@@ -164,7 +189,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
                   <div className="rv-dsp__item-cab">
                     <span>{v.folio ?? t('dsp.sinfolio')}</span>
                     <span className="rv-dsp__ruta">{v.origen ?? '—'} → {v.destino ?? '—'}</span>
-                    <span className="rv-dsp__fecha">{fechaCorta(v.fechaInicio, idioma)}</span>
+                    <span className="rv-dsp__fecha">{fechaMx(v.fechaInicio, idioma)}</span>
                   </div>
                   {totalOperadores === 0 ? (
                     <p className="rv-dsp__nota">{t('dsp.sinoperadores')}</p>
@@ -183,27 +208,41 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
           )}
         </Tarjeta>
 
-        {/* ── Crear operación nueva ── */}
-        <Tarjeta titulo={t('dsp.nuevo')} info="despacho.nuevo_viaje">
-          <p className="rv-dsp__nota">{t('dsp.nuevo.nota')}</p>
-          <FormaViaje action={crear} buscarCatalogo={buscarCatalogo} puedeCapturarDinero={puedeCapturarDinero} puedeCapturarAnticipo={puedeCapturarAnticipo} topeAnticipo={topeAnticipo} topeAnticipoOrigen={topeAnticipoOrigen}
-            totalOperadores={totalOperadores} totalClientes={totalClientes} totalUnidades={totalUnidades} />
-        </Tarjeta>
+
+        <div className="rv-dsp__pila">
+          {/* ── Quién trae cuánto ── */}
+          <Tarjeta titulo={t('dsp.carga')} info="despacho.carga" className="rv-dsp__tarjeta">
+            <p className="rv-dsp__nota">{t('dsp.carga.nota')}</p>
+            {carga === null ? (
+              <EstadoVacio contenido icono={Users} titulo={t('dsp.carga.error')}>{t('dsp.reintenta')}</EstadoVacio>
+            ) : carga.length === 0 ? (
+              <EstadoVacio contenido icono={Users} titulo={t('dsp.carga.vacio')}>
+                {t('dsp.carga.vacio.nota')}
+              </EstadoVacio>
+            ) : (
+              <ul className="rv-dsp__carga">
+                {carga.slice(0, 8).map((c) => (
+                  <li key={c.operadorId}>
+                    <span>
+                      {c.nombre}
+                      {!c.activo && <span className="rv-dsp__inactivo">{t('dsp.inactivo')}</span>}
+                    </span>
+                    <span>
+                      {t('dsp.carga.fila', { n: numero(c.enCurso, idioma) })}{c.sinPod > 0 ? t('dsp.carga.sinpod', { n: numero(c.sinPod, idioma) }) : ''}
+                    </span>
+                  </li>
+                ))}
+                {carga.length > 8 && <li className="rv-dsp__nota">{t('dsp.carga.mas', { n: numero(carga.length - 8, idioma) })}</li>}
+              </ul>
+            )}
+          </Tarjeta>
+        </div>
       </FilaTarjetas>
 
       {/* A todo el ancho: con 7 columnas (select de unidad y botón de acción incluidos) no cabe en 8/12 y la acción quedaba cortada. */}
       <FilaTarjetas variante="12">
         {/* ── Lo vivo, con el estado del aviso ── */}
-        <Tarjeta titulo={t('dsp.encurso')} info="despacho.en_curso"
-          acciones={(
-            // FE-2: buscador por folio — antes no había forma de llegar a un viaje en curso que no estuviera entre los 12 más urgentes
-            // de la primera página. GET plano, con el sufijo de previsualización como hidden para no perderlo al buscar.
-            <BarraFiltros buscar accion="/dashboard/despacho" enLinea etiqueta={t('dsp.buscar.aria')} nActivos={folioPedido ? 1 : 0}
-              limpiarHref={`/dashboard/despacho${sufijo}`}
-              ocultos={[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]}>
-              <FiltroBusqueda nombre="q" valor={folioPedido} placeholder={t('dsp.buscar.ph')} etiqueta={t('dsp.buscar.folio')} />
-            </BarraFiltros>
-          )}>
+        <Tarjeta titulo={t('dsp.encurso')} info="despacho.en_curso" className="rv-tarjeta--tabla rv-dsp__tarjeta">
           <p className="rv-dsp__nota">{t('dsp.encurso.orden')}</p>
           {activos.error !== null ? (
             <EstadoVacio contenido icono={Truck} titulo={t('dsp.encurso.noleyo')}>
@@ -263,47 +302,10 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
               )}
             </>
           )}
+          {/* La procedencia va DENTRO del bloque (Rovaq), no flotando bajo la tarjeta. */}
+          <p className="rv-dsp__nota rv-dsp__proc">{selloHoy('Tablero de despacho')}</p>
         </Tarjeta>
       </FilaTarjetas>
-
-      <FilaTarjetas variante="6-6">
-        <div className="rv-dsp__pila">
-          {/* ── Alta rápida ── */}
-          <Tarjeta titulo={t('dsp.alta')} info="despacho.alta_operador">
-            <p className="rv-dsp__nota">{t('dsp.alta.nota')}</p>
-            <AltaOperador altaOperador={altaOperador} />
-          </Tarjeta>
-        </div>
-
-        <div className="rv-dsp__pila">
-          {/* ── Quién trae cuánto ── */}
-          <Tarjeta titulo={t('dsp.carga')} info="despacho.carga">
-            <p className="rv-dsp__nota">{t('dsp.carga.nota')}</p>
-            {carga === null ? (
-              <EstadoVacio contenido icono={Users} titulo={t('dsp.carga.error')}>{t('dsp.reintenta')}</EstadoVacio>
-            ) : carga.length === 0 ? (
-              <EstadoVacio contenido icono={Users} titulo={t('dsp.carga.vacio')}>
-                {t('dsp.carga.vacio.nota')}
-              </EstadoVacio>
-            ) : (
-              <ul className="rv-dsp__carga">
-                {carga.slice(0, 8).map((c) => (
-                  <li key={c.operadorId}>
-                    <span>
-                      {c.nombre}
-                      {!c.activo && <span className="rv-dsp__inactivo">{t('dsp.inactivo')}</span>}
-                    </span>
-                    <span>
-                      {t('dsp.carga.fila', { n: numero(c.enCurso, idioma) })}{c.sinPod > 0 ? t('dsp.carga.sinpod', { n: numero(c.sinPod, idioma) }) : ''}
-                    </span>
-                  </li>
-                ))}
-                {carga.length > 8 && <li className="rv-dsp__nota">{t('dsp.carga.mas', { n: numero(carga.length - 8, idioma) })}</li>}
-              </ul>
-            )}
-          </Tarjeta>
-        </div>
-      </FilaTarjetas>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

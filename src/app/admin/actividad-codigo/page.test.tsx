@@ -10,6 +10,7 @@ vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol
 // confunden entre sí — "sin_token" y "error" jamás se ven como cero commits.
 // ═══════════════════════════════════════════════════════════════════════════
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/actividad-codigo', useSearchParams: () => new URLSearchParams() }));
 const dobles = vi.hoisted(() => ({ getActividadCodigo: vi.fn() }));
 vi.mock('@/lib/admin/actividad-codigo', () => ({ getActividadCodigo: dobles.getActividadCodigo }));
 
@@ -20,17 +21,23 @@ it('sin acceso a GitHub: lo dice explícito y sin jerga de variables — nunca "
   dobles.getActividadCodigo.mockResolvedValue({ estado: 'sin_token' });
   const html = await renderizar();
   expect(html).not.toContain('GITHUB_TOKEN');
-  // R9: el aviso pasó de un vacío largo a un aviso compacto accionable (misma verdad: falta la variable, no hay «cero commits»).
-  expect(html).toContain('Falta configurar el acceso a GitHub');
-  expect(html).toContain('equipo técnico');
-  expect(html).not.toContain('Commits — últimas 52 semanas');
+  // F26 ronda 5: UN solo estado de página (antes aviso + 4 cifras «Sin dato» + 3 vacíos): la causa y la salida van en ese estado.
+  expect(html).toContain('Pídele al equipo técnico');
+  expect(html.match(/GitHub aún no está conectado/g)?.length).toBe(1);
+  // F26 ronda 3: sin conexión es una caja punteada neutra con la causa verdadera (GitHub sin conectar), sin rojo y sin «Reintentar»
+  // por celda; y jamás un cero.
+  expect(html).toContain('GitHub aún no está conectado');
+  expect(html).not.toContain('no respondió a tiempo');
+  expect(html).not.toContain('Reintentar');
+  expect(html).not.toMatch(/data-estado="error"/);
+  expect(html).not.toMatch(/rv-kpi__valor"[^>]*>0</);
 });
 
 it('GitHub calculando (202): lo dice, invita a recargar — no es un error ni un cero', async () => {
   dobles.getActividadCodigo.mockResolvedValue({ estado: 'calculando' });
   const html = await renderizar();
   expect(html).toContain('todavía está calculando');
-  expect(html).not.toContain('Commits — últimas 52 semanas');
+  expect(html).not.toMatch(/rv-kpi__valor"[^>]*>0</);
 });
 
 it('error de lectura: muestra el detalle real y ACLARA que no significa "sin commits"', async () => {
@@ -39,6 +46,9 @@ it('error de lectura: muestra el detalle real y ACLARA que no significa "sin com
   expect(html).toContain('GitHub contestó 500');
   expect(html).toContain('Esto NO significa que no haya commits');
   expect(html).not.toContain('GITHUB_TOKEN');
+  // Un fallo real lleva UN solo «Reintentar» (el del aviso), no uno por celda; el rojo no se reparte.
+  expect(html.match(/>Reintentar</g)?.length).toBe(1);
+  expect(html).not.toMatch(/data-estado="error"/);
 });
 
 it('ok con datos reales: pinta el heatmap y los totales medidos', async () => {

@@ -72,6 +72,45 @@ export function semanasDeSerie(serie: ReadonlyArray<{ dia: string; valor: number
   return columnas;
 }
 
+// ── Meses de cierres (columnas mensuales a todo el ancho, plantilla Portada) ─────────────────────────────────────────
+
+export const MESES_CIERRES = 6;
+
+export interface MesCierre {
+  /** Primer día del mes (AAAA-MM-DD). */
+  inicio: string;
+  /** «nov 2026». */
+  etiqueta: string;
+  valor: number;
+  /** El mes en curso: aún le faltan días. */
+  parcial: boolean;
+}
+
+/** Días que hay que pedir al lector diario para cubrir `meses` meses COMPLETOS más el actual (del día 1 del primero hasta hoy). Pura. */
+export function diasParaMeses(hoy: string, meses: number = MESES_CIERRES): number {
+  const [a, m] = hoy.split('-').map(Number);
+  const primero = new Date(Date.UTC(a, m - 1 - (meses - 1), 1));
+  return Math.round((fechaUtc(hoy).getTime() - primero.getTime()) / DIA_MS) + 1;
+}
+
+/** Agrupa la misma serie diaria en meses calendario. Siempre devuelve `meses` columnas (cero donde no hubo cierre: el lector
+ *  diario ya rellena los días); el mes de `hoy` va marcado como parcial. Pura. */
+export function mesesDeSerie(serie: ReadonlyArray<{ dia: string; valor: number }>, hoy: string, meses: number = MESES_CIERRES): MesCierre[] {
+  const [a, m] = hoy.split('-').map(Number);
+  const columnas: MesCierre[] = [];
+  for (let i = meses - 1; i >= 0; i--) {
+    const f = new Date(Date.UTC(a, m - 1 - i, 1));
+    const clave = aIso(f).slice(0, 7);
+    columnas.push({ inicio: `${clave}-01`, etiqueta: `${MESES[f.getUTCMonth()]} ${f.getUTCFullYear()}`, valor: 0, parcial: i === 0 });
+  }
+  const porMes = new Map(columnas.map((c) => [c.inicio.slice(0, 7), c]));
+  for (const p of serie) {
+    const col = porMes.get(p.dia.slice(0, 7));
+    if (col) col.valor += p.valor;
+  }
+  return columnas;
+}
+
 // ── Cifras sueltas ────────────────────────────────────────────────────────
 
 /** Peajes del periodo = el concepto «caseta» de la serie semanal. Si «caseta» no está entre las series (solo se listan los 3
@@ -101,14 +140,22 @@ export interface DatosResumen {
   peajes: { total: number | null; semanas: number } | null;
   cartaPorte: { completas: number; total: number } | null;
   cierres: SemanaCierre[] | null;
+  /** Cierres por mes calendario (misma lectura diaria que `cierres`). Opcional: la portada de cinco agentes no lo pinta. */
+  mensuales?: MesCierre[] | null;
   porTipo: DineroObservadoTipo[] | null;
   hechos: HechoSolo[] | null;
   escalados: number | null;
+  /** Los viajes más recientes de la flota (fila 6-6 de la portada). Opcional: la portada de cinco agentes no lo lee. `undefined` = no se pidió; `null` = se pidió y falló. */
+  recientes?: ViajeReciente[] | null;
 }
+
+/** Una fila de «Viajes recientes». `diferencia` solo se llena con acceso al dinero y si el viaje ya tiene liquidación (null = «—», nunca cero). */
+export interface ViajeReciente { id: string; folio: string; ruta: string | null; estatus: string; diferencia: number | null }
 
 /** Cuántas lecturas se intentaron y cuántas respondieron: el chip «Fuentes n de N» de la barra de filtros. */
 export function coberturaDe(d: DatosResumen): { ok: number; total: number } {
-  const intentadas: unknown[] = [d.kpis, d.cartaPorte, d.cierres, d.hechos, d.escalados];
+  const intentadas: unknown[] = [d.kpis, d.cartaPorte, d.cierres, d.hechos, d.escalados];  // los meses salen de la misma lectura que las semanas: no suman fuente
+  if (d.recientes !== undefined) intentadas.push(d.recientes);
   if (d.veDinero) intentadas.push(d.peajes, d.porTipo);
   return { ok: intentadas.filter((x) => x !== null).length, total: intentadas.length };
 }
@@ -244,7 +291,8 @@ export function filasAtencion(
 
 // ── «Siguiente mejor acción» ──────────────────────────────────────────────
 
-export interface AccionSugerida { id: string; titulo: string; porQue: string; textoBoton: string; href: string }
+/** `href` null = hay un pendiente real pero este rol no abre la pantalla que lo resuelve: se dice QUÉ pasa, sin botón que rebote. */
+export interface AccionSugerida { id: string; titulo: string; porQue: string; textoBoton: string; href: string | null }
 
 /** Regla fija (no un modelo): 1) el siguiente paso de la Puesta en marcha, 2) una alerta urgente de un agente,
  *  3) viajes escalados, 4) liquidaciones por revisar. Devuelve la lista ordenada; la primera es «la» acción. Pura. */
@@ -258,6 +306,12 @@ export function elegirAcciones(e: {
   const urgente = e.filas.find((f) => f.id.startsWith('insight-') && f.severidad === 'accion' && f.href);
   for (const f of [urgente, por('escalados'), por('por-revisar')]) {
     if (f?.href && f.textoAccion) out.push({ id: f.id, titulo: f.titulo, porQue: f.queSignifica ?? f.detalle, textoBoton: f.textoAccion, href: f.href });
+  }
+  // La tarjeta sale de lo MISMO que «Requiere tu atención»: un pendiente real sin enlace (el rol no abre esa pantalla) sigue siendo un
+  // pendiente. Se enumera sin botón, nunca como «nada urgente» al lado de una fila que pide atención.
+  for (const f of e.filas) {
+    if (f.sinPendiente || f.severidad === 'info' || out.some((a) => a.id === f.id)) continue;
+    out.push({ id: f.id, titulo: f.titulo, porQue: f.queSignifica ?? f.detalle, textoBoton: '', href: null });
   }
   return out;
 }

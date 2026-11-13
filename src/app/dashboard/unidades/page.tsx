@@ -298,9 +298,11 @@ export default async function PaginaUnidades({
   }
 
   return (
-    <>
-      <VistaUnidades
+    <VistaUnidades
       tr={await getT('operacion')}
+        // Fase 9 (0209): el taller — órdenes de mantenimiento y rutinas preventivas de las mismas unidades. Va DENTRO del marco de la
+        // pantalla (como hijo del esqueleto): fuera de él, el min-height del marco lo empujaba al fondo y dejaba un hueco de lienzo vacío.
+        taller={<BloqueTaller sp={sp} />}
         pag={pag}
         bajas={bajas.filas}
         totalBajas={bajas.total}
@@ -323,10 +325,6 @@ export default async function PaginaUnidades({
         // Al cliente viaja SOLO id+nombre: el catálogo trae los `probar()` y
         // las fuentes de cada fabricante, y nada de eso va al navegador.
         proveedoresGps={CONECTORES_GPS.map((c) => ({ id: c.id, nombre: c.nombre }))}
-      />
-      {/* Fase 9 (0209): el taller — órdenes de mantenimiento y rutinas
-          preventivas de las mismas unidades de arriba. */}
-      <BloqueTaller sp={sp} />
-    </>
+    />
   );
 }

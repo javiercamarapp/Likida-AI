@@ -8,11 +8,13 @@ import { trAdminFlotasEs } from '@/lib/i18n/tr_admin';
  * El formulario de alta de una flota. Presentacional: la acción de servidor (`accionCrearFlota`, con su puerta, su segundo factor y su
  * bitácora) llega por prop. `planes === null` = no se pudieron leer los planes: se dice, no se ofrece un selector vacío como si no hubiera.
  */
-export function AltaFlota({ accion, planes }: { accion: AccionDeForma; planes: Array<{ clave: string; nombre: string }> | null }) {
+export function AltaFlota({ accion, planes, t = trAdminFlotasEs }: { accion: AccionDeForma; planes: Array<{ clave: string; nombre: string }> | null; t?: TrDe<'admin_flotas'> }) {
   return (
-    <FormaConAviso accion={accion} boton="Dar de alta" columnas="md:grid-cols-2">
-      <CamposAltaFlota planes={planes} />
-    </FormaConAviso>
+    <div className="adm-forma-fina">
+      <FormaConAviso accion={accion} boton={t('flotas_alta.dar_de_alta')} columnas="md:grid-cols-1">
+        <CamposAltaFlota planes={planes} t={t} />
+      </FormaConAviso>
+    </div>
   );
 }
 

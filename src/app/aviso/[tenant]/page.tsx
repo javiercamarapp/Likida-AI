@@ -5,6 +5,7 @@ import { fechaMx } from '@/lib/formato';
 import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 import { getT } from '@/lib/i18n/servidor';
 import { rico } from '@/lib/i18n/rico';
+import '../../legal/publico-r2.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO INTEGRAL DE UNA FLOTA. Página PÚBLICA, y tiene que serlo.
@@ -96,7 +97,7 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
       }
     >
       {pendientes.length > 0 && (
-        <p className="rv-pub__aviso-falta">
+        <p className="rv-pub__aviso-falta" data-ambar="">
           {tp('av.integral.faltan', pendientes.length)}
         </p>
       )}

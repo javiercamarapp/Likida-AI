@@ -19,8 +19,8 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { sufijoTenant } from '../sufijo';
 import { FormaOnboarding, type Opcion } from './forma';
 import { ChatEntrevista } from './chat';
-import { estadoEntrevista, mensajeBienvenida } from '@/lib/likida/perfil/entrevista';
-import { Boton, Disclosure, MarcoPagina, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import { estadoEntrevista, mensajeBienvenida, CATALOGO } from '@/lib/likida/perfil/entrevista';
+import { Boton, Disclosure, MarcoPagina, StatusChip, type ResultadoAccion } from '@/app/ui-v2/componentes';
 import './entrevista.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -144,6 +144,27 @@ export default async function OnboardingFlotaPage({
         {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
           <form action={posponer} className="rv-ob__pospuesto">{t('op.no_tienes_a_la_mano_tus')}{' '}<Boton type="submit" variante="ghost" tamano="sm">{t('op.lo_confirmo_con_mi_contador')}</Boton>{' '}{t('op.el_resumen_se_abre_con_un')}</form>
         )}
+        <div className="rv-ob__fl">
+        {/* Indicador de avance (plantilla FL de Rovaq): cuántos datos del perfil ya están declarados, contados del perfil guardado, nunca estimados. */}
+        <div className="rv-ob__avance" role="group" aria-label={t('op.ob.avance', { n: entrevista.declaradas.length, total: CATALOGO.length })}>
+          <progress className="rv-ob__avance-barra" max={CATALOGO.length} value={entrevista.declaradas.length} aria-hidden="true" />
+          <span className="rv-ob__avance-txt">{t('op.ob.avance', { n: entrevista.declaradas.length, total: CATALOGO.length })}</span>
+        </div>
+        {/* Pasos de la entrevista (plantilla FL): una tarjeta por dato del perfil con su chip de estado y el paso actual con borde. Todo sale del perfil guardado. */}
+        <ol className="rv-ob__pasos-fl" aria-label={t('op.ob.pasos')}>
+          {CATALOGO.map((p, i) => {
+            const hecho = entrevista.declaradas.includes(p.id);
+            const actual = entrevista.siguiente?.id === p.id;
+            return (
+              <li key={p.id} className="rv-ob__paso-fl" data-estado={hecho ? 'hecho' : actual ? 'actual' : 'pendiente'} aria-current={actual ? 'step' : undefined}>
+                <span className="rv-ob__paso-fl-n">{i + 1}</span>
+                <span className="rv-ob__paso-fl-t" title={p.titulo}>{p.titulo}</span>
+                <StatusChip tono={hecho ? 'ok' : actual ? 'warn' : 'neutral'}>{hecho ? t('op.ob.paso.hecho') : actual ? t('op.ob.paso.actual') : t('op.ob.paso.pendiente')}</StatusChip>
+              </li>
+            );
+          })}
+        </ol>
+        </div>
         <ChatEntrevista
           preguntaInicial={preguntaInicial}
           preguntaIdInicial={entrevista.siguiente?.id ?? null}

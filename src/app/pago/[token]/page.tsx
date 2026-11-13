@@ -11,6 +11,8 @@ import { FormaDePago } from './forma';
 import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 import { getT } from '@/lib/i18n/servidor';
 import type { TrPublico } from '@/lib/i18n/publico_tr';
+import '../../legal/publico-r2.css';
+import '../../legal/flujo-publico.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /pago/<token> — LO QUE VE EL CLIENTE DE LA FLOTA. Sin sesión, sin cuenta.
@@ -60,9 +62,11 @@ export async function generateMetadata() {
 /** El sobre de todas las pantallas de esta ruta: mismo ancho, mismo tono, y
  *  colores del sistema — este documento se abre de noche, desde un teléfono en
  *  modo oscuro, igual que el aviso de privacidad. */
-function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
+function Aviso({ titulo, texto, rotulo }: { titulo: string; texto: string; rotulo: string }) {
   return (
-    <MarcoPublico titulo={titulo} apoyo={texto} />
+    <MarcoPublico rotulo={rotulo} titulo={titulo} apoyo={texto} ancho="estrecho">
+      <div className="rv-flujo" aria-hidden="true" />
+    </MarcoPublico>
   );
 }
 
@@ -79,6 +83,7 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
   if (!(await rateLimit(`portal-pago-vista:${ip}`, 60, 10 * 60_000))) {
     return (
       <Aviso
+        rotulo={t('pg.rotulo')}
         titulo={t('pg.limite.titulo')}
         texto={t('pg.limite.texto')}
       />
@@ -90,12 +95,13 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
     if (resolucion.motivo === 'no_disponible') {
       return (
         <Aviso
+          rotulo={t('pg.rotulo')}
           titulo={t('pg.falla.titulo')}
           texto={t('pg.falla.texto')}
         />
       );
     }
-    return <Aviso titulo={t('pg.enlace.titulo')} texto={t('pg.enlace.texto')} />;
+    return <Aviso rotulo={t('pg.rotulo')} titulo={t('pg.enlace.titulo')} texto={t('pg.enlace.texto')} />;
   }
   const liga = resolucion.liga;
 
@@ -104,6 +110,7 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
     if (vista.motivo === 'no_disponible') {
       return (
         <Aviso
+          rotulo={t('pg.rotulo')}
           titulo={t('pg.falla.titulo')}
           texto={t('pg.falla.texto')}
         />
@@ -119,6 +126,7 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
       await anotarAcceso(liga, 'vista', { motivo: 'no_cobrable', estatus: vista.estatus });
       return (
         <Aviso
+          rotulo={t('pg.rotulo')}
           titulo={t('pg.nocobrable.titulo')}
           texto={
             vista.estatus === 'cancelada'
@@ -128,7 +136,7 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
         />
       );
     }
-    return <Aviso titulo={t('pg.enlace.titulo')} texto={t('pg.enlace.texto')} />;
+    return <Aviso rotulo={t('pg.rotulo')} titulo={t('pg.enlace.titulo')} texto={t('pg.enlace.texto')} />;
   }
 
   const v = vista.vista;

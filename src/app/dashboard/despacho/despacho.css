@@ -1,6 +1,7 @@
 /* Despacho · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
-.rv-dsp__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }
-.rv-dsp__pila { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.rv-dsp__nota { margin: 0; font-size: var(--t-small); line-height: 1.45; color: var(--muted); }
+.rv-dsp__pila { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.rv-dsp__pila > .rv-tarjeta { flex: 1 1 auto; }
 .rv-dsp__cola { display: grid; gap: 10px; }
 .rv-dsp__item { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
 .rv-dsp__item-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--t-body); min-width: 0; }
@@ -29,3 +30,47 @@
    ya se apila como tarjetas (`tarjetaMovil`), y ahí no aplica el ancho mínimo. */
 .rv-dsp__tabla table td:last-child { white-space: nowrap; width: 1%; }
 @media (min-width: 820px) { .rv-dsp__tabla table { min-width: 720px; } }
+
+/* Ronda 3 — «En curso» a sangre (la tabla ya trae su borde: la tarjeta no pone un segundo marco con margen) y, en móvil, la tabla pasa a tarjeta-fila sin
+   forzar anchos que la desbordan. Las notas y el pie conservan su respiro dentro de la tarjeta sin relleno. */
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__nota { padding: 6px 14px 8px; }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__pie { padding: 8px 14px; }
+/* La tabla va a sangre dentro de la tarjeta (Rovaq): sin su propio marco, radio ni sombra; la separa solo el filete de la nota y del pie. */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-dsp__tabla { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-dsp__tabla .rv-tb__region { border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__pie { border-top: 1px solid var(--line); }
+@media (max-width: 819.98px) {
+  .rv-dsp__tabla table td:last-child { white-space: normal; width: auto; }
+  .rv-dsp__nombre { min-width: 0; max-width: 100%; }
+  .rv-dsp__tabla table, .rv-dsp__tabla { min-width: 0; max-width: 100%; }
+}
+
+/* Pie de acción del cajón «Nuevo viaje»: pegado al fondo del cuerpo desplazable, con el borde y el respiro del pie de cualquier overlay. */
+.rv-fv__pie { position: sticky; bottom: -16px; z-index: 1; display: flex; justify-content: flex-end; gap: 8px; margin: 8px -16px -16px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+
+/* Ronda 5: el pie con «Crear viaje» va pegado al fondo del cajón aunque el formulario sea corto (Rovaq `overlay-foot`), sin dejar el hueco antes de la marca. */
+[data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-fv__pie) { display: flex; flex-direction: column; min-height: calc(100% + 0px); }
+[data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-fv__pie) > .rv-fv__pie { margin-top: auto; }
+
+/* Ronda 6: tabla «En curso» a sangre (sin margen ni relleno propios), procedencia dentro de la tarjeta con su filete, y filas de «Carga por operador»
+   con divisor de 1 px (Rovaq: las filas de lista llevan filete). */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-dsp__tabla { margin: 0; padding: 0; width: 100%; max-width: none; }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__proc { border-top: 1px solid var(--line); padding: 8px 14px; font-size: 12px; }
+.rv-dsp__carga { gap: 0; margin-top: 6px; }
+.rv-dsp__carga li { padding: 8px 0; border-top: 1px solid var(--line); }
+.rv-dsp__carga li:first-child { border-top: 0; }
+
+/* Ronda 7: el vacío dentro de una tarjeta es UNA caja punteada de 1 px con padding 20x14 y sin alto forzado (Rovaq ac-vacio), no un bloque de
+   170 px con una línea; las notas de «En curso» arrancan en el mismo eje que el título de la tarjeta y la tabla va a sangre. */
+[data-ui="v2"] .rv-dsp__tarjeta .rv-vacio { min-height: 0; padding: 14px 20px; border: 1px dashed var(--line2); border-radius: 8px; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo { padding: 0; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-dsp__nota { padding: 8px 14px 10px; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-vacio { margin: 12px 14px; }
+
+/* Ronda 8: la tabla «En curso» va a sangre de verdad (la tarjeta no pone su relleno de 14 px: la cabecera gris arrancaba 14 px adentro), el título y su
+   ayuda comparten el mismo eje de 14 px (antes la nota sumaba otros 14: 318 contra 304) y el vacío de «Por asignar» es la caja compacta de Rovaq
+   (ac-vacio: 1 px punteado, radio 8, padding 20x14), no un bloque de 170 px que se estira al alto de su pareja. */
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta { padding: 0; gap: 0; overflow: hidden; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cab { padding: 10px 14px 0; }
+[data-ui="v2"] .rv-tarjeta--tabla.rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-dsp__nota { padding: 2px 14px 10px; }
+[data-ui="v2"] .rv-fila-tarjetas > .rv-dsp__tarjeta > .rv-tarjeta__cuerpo > .rv-vacio { flex: 0 0 auto; min-height: 0; padding: 14px 20px; }

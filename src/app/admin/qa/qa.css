@@ -17,10 +17,10 @@
 .rv-qa-pila { display: grid; gap: 12px; min-width: 0; }
 .rv-qa-pila--corta { gap: 8px; }
 .rv-qa-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.rv-qa-params { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.rv-qa-params { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; max-width: 720px; }
 .rv-qa-dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
 .rv-qa-escenarios { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 4px 16px; }
-.rv-qa-politica { display: grid; grid-template-columns: minmax(0, 1fr) 120px auto auto; align-items: center; gap: 8px; }
+.rv-qa-politica { display: grid; grid-template-columns: minmax(0, 260px) 120px auto auto; align-items: center; gap: 8px; }
 @media (max-width: 640px) { .rv-qa-politica { grid-template-columns: minmax(0, 1fr) 96px; } }
 
 /* Zona de arrastre: una etiqueta que contiene el input real (accesible por teclado) */
@@ -75,3 +75,12 @@
 
 /* Disclosure dentro de una fila del banco: sin la separación propia de la tarjeta */
 .rv-qa-disc { margin: 0; }
+
+/* F26 ronda 4: el vacío dentro de una tarjeta va punteado (Rovaq `ac-vacio`: 1 px, radio 8, 20×14). */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* F26 ronda 8: segmentado móvil de 36 px visibles con zona táctil de 44 px por ::after invisible (Rovaq CATALOGO §4). */
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn { position: relative; min-height: 36px; }
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
+}

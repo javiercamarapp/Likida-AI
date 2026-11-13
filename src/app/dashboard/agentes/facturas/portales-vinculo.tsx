@@ -1,6 +1,8 @@
 import { ExternalLink } from 'lucide-react';
 import './facturas.css';
-import { AvisoCompacto, Icono, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
+import '../../estados.css';
+import { AvisoCompacto, Icono, StatusChip, TablaBase, Tarjeta, clasesBoton, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { CajonPortal } from './portal-cajon';
 import { fechaCorta } from '@/lib/formato';
 import type { EstadoVinculo } from '@/lib/likida/facturacion/vinculo_portal';
 import { ControlesRelogin, type AccionRelogin, type EstadoRelogin } from './relogin-controles';
@@ -67,58 +69,58 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
   const { t: tx } = tr;
   const caducados = filas.filter((f) => f.estado === 'caducada');
 
+  const columnas: ColumnaBase<FilaPortal>[] = [
+    {
+      id: 'portal', titulo: tx('facturas.portales.colPortal'), principal: true,
+      celda: (f) => (
+        <span className="rv-fact__dos">
+          <strong>{f.nombre}</strong>
+          {f.motivo && f.estado !== 'vinculado' && <span className="rv-fact__sub">{f.motivo}</span>}
+        </span>
+      ),
+    },
+    { id: 'estado', titulo: tx('facturas.portales.colEstado'), celda: (f) => { const p = pildora(tx)[f.estado]; return <StatusChip tono={p.tono}>{p.rotulo}</StatusChip>; } },
+    { id: 'desde', titulo: tx('facturas.portales.colSesion'), celda: (f) => <span className="rv-fact__tenue">{leyenda(f, tx)}</span> },
+    {
+      id: 'accion', titulo: tx('facturas.portales.colAccion'), alinear: 'der',
+      celda: (f) => (
+        <CajonPortal titulo={f.nombre} subtitulo={leyenda(f, tx)} disparador={tx('facturas.portales.vistaRapida')}
+          cifras={[
+            { etiqueta: tx('facturas.portales.cifraEstado'), valor: pildora(tx)[f.estado].rotulo },
+            { etiqueta: tx('facturas.portales.cifraVinculadoDesde'), valor: f.vinculadaEn ? fechaCorta(f.vinculadaEn) : '—' },
+            { etiqueta: tx('facturas.portales.cifraSesionCaida'), valor: f.caducadaEn ? fechaCorta(f.caducadaEn) : '—' },
+            { etiqueta: tx('facturas.portales.cifraReconexion'), valor: f.relogin === null ? '—' : f.relogin.permitido ? tx('facturas.portales.reconexionSi') : tx('facturas.portales.reconexionNo') },
+          ]}
+          pie={(
+            <a href={f.portal} target="_blank" rel="noopener noreferrer" className={clasesBoton('primary')}>
+              {tx('rest.abrir_el_portal')}<Icono icono={ExternalLink} tam={14} />
+            </a>
+          )}>
+          {/* 0540: el paso humano del CAPTCHA/MFA con código de un solo uso. También con el portal vinculado: «re-vincular» antes de que caduque. */}
+          <VincularAsistida clave={f.clave} nombre={f.nombre} flota={flota} />
+          {/* El permiso de re-login es por portal (una flota puede querer reconexión en la gasolinera diaria y no en el portal de su facturación del año). */}
+          <ControlesRelogin clave={f.clave} nombre={f.nombre} estado={f.relogin} autorizar={autorizarRelogin} revocar={revocarRelogin} />
+          {/* LO QUE NO SE PROMETE: Likida no resuelve ni rodea CAPTCHAs ni guarda tu contraseña con «Vincular con código». */}
+          <p className="rv-fact__nota" data-tono="faint">{tx('rest.vincular_con_codigo_te_da_un')}</p>
+        </CajonPortal>
+      ),
+    },
+  ];
+
   return (
-    <Tarjeta titulo={tx('rest.tus_portales')} estado={!vinculos ? 'error' : filas.length === 0 ? 'vacio' : 'ok'}
+    <Tarjeta titulo={tx('rest.tus_portales')} className="rv-tarjeta--tabla" estado={!vinculos ? 'error' : filas.length === 0 ? 'vacio' : 'ok'}
       mensaje={!vinculos ? tx('rest.no_se_pudo_leer_el_estado') : tx('rest.ningun_portal_por_vincular')}
       detalle={tx('rest.ninguno_de_los_comercios_de_tus')}>
-      <div className="rv-fact__pila">
-        <p className="rv-fact__nota">{tx('rest.portales_que_piden_tu_cuenta_entras')}</p>
-        {caducados.length > 0 && (
-          <AvisoCompacto tono="warn" resumen={caducados.length === 1
-            ? tx('rest.se_cayo_la_sesion_de_sus', { nombre: caducados[0].nombre })
-            : tx('rest.se_cayeron_sesiones_sus_tickets_estan', { length: caducados.length })} />
-        )}
-
-        <ul className="rv-fact__reglones">
-          {filas.map((f) => {
-            const p = pildora(tx)[f.estado];
-            return (
-              <li key={f.clave} className="rv-fact__portal">
-                <div className="rv-fact__reglon">
-                  <div className="rv-fact__dos">
-                    <strong>{f.nombre}</strong>
-                    <span className="rv-fact__sub">{leyenda(f)}</span>
-                    {f.motivo && f.estado !== 'vinculado' && <span className="rv-fact__nota">{f.motivo}</span>}
-                  </div>
-                  <div className="rv-fact__linea">
-                    <StatusChip tono={p.tono}>{p.rotulo}</StatusChip>
-                    {f.estado !== 'vinculado' && (
-                      <a href={f.portal} target="_blank" rel="noopener noreferrer" className="rv-fact__enlace">{tx('rest.abrir_el_portal')}{' '}<Icono icono={ExternalLink} tam={14} />
-                      </a>
-                    )}
-                  </div>
-                </div>
-                {/* 0540: el paso humano del CAPTCHA/MFA con código de un solo uso. También
-                    con el portal vinculado: «re-vincular» antes de que la sesión caduque. */}
-                <VincularAsistida clave={f.clave} nombre={f.nombre} flota={flota} />
-                {/* La casilla del re-login va DEBAJO de cada portal y no en
-                    un ajuste global: el permiso es por portal, porque una
-                    flota puede querer que Likida reconecte sola en la
-                    gasolinera de todos los días y no en el portal donde
-                    guarda su facturación del año. */}
-                <ControlesRelogin
-                  clave={f.clave} nombre={f.nombre} estado={f.relogin}
-                  autorizar={autorizarRelogin} revocar={revocarRelogin}
-                />
-              </li>
-            );
-          })}
-        </ul>
-
-        {/* LO QUE NO SE PROMETE. Un servidor no tiene pantalla donde enseñarte un navegador:
-            «Vincular con código» te da un código de un solo uso y el comando que corres en TU
-            computadora; ahí entras tú. Likida no resuelve ni rodea CAPTCHAs ni guarda tu contraseña. */}
-        <p className="rv-fact__nota" data-tono="faint">{tx('rest.vincular_con_codigo_te_da_un')}</p>
+      <div className="rv-fact__pila rv-fact__portales">
+        <div className="rv-fact__portales-pad">
+          <p className="rv-fact__nota">{tx('rest.portales_que_piden_tu_cuenta_entras')}</p>
+          {caducados.length > 0 && (
+            <AvisoCompacto tono="warn" resumen={caducados.length === 1
+              ? tx('rest.se_cayo_la_sesion_de_sus', { nombre: caducados[0].nombre })
+              : tx('rest.se_cayeron_sesiones_sus_tickets_estan', { length: caducados.length })} />
+          )}
+        </div>
+        <TablaBase<FilaPortal> etiqueta={tx('rest.tus_portales')} columnas={columnas} filas={filas} idFila={(f) => f.clave} tarjetaMovil />
       </div>
     </Tarjeta>
   );

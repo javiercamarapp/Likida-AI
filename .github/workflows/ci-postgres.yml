@@ -124,7 +124,13 @@ jobs:
         run: |
           docker exec "$POSTGRES_CONTAINER_ID" bash -ceu '
             apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postgresql-16-pgtap
+            # pgTAP es SQL puro (paquete `all`). `apt-get install` lo ligaba a postgresql-16 >= 16.16 y reemplazaba en caliente
+            # las librerías del servidor 16.4 (plpgsql.so: undefined symbol), así que se baja solo el paquete y se instala sin
+            # resolver esa dependencia: el servidor sigue siendo exactamente la imagen fijada arriba.
+            cd /tmp
+            apt-get download postgresql-16-pgtap
+            dpkg -i --force-depends postgresql-16-pgtap_*.deb
+            rm -f /tmp/postgresql-16-pgtap_*.deb
             rm -rf /var/lib/apt/lists/*
           '
           if ! command -v pg_prove >/dev/null 2>&1; then
@@ -427,6 +433,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0933_a1_modo_primer_mes_y_remitente.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0940_a1_fecha_de_corte_y_entregas_omitidas.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/1003_liquidacion_desglose_folio_origen.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/1004_liquidacion_desglose_tipos_operador.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0935_a2_ola1_desglose_linea_icident.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0936_a2_ola1_peaje_regla_flota.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0937_a2_ola1_peaje_aviso_enviado.sql

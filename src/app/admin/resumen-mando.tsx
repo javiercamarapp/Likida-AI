@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { fechaHoraMx, numero, porcentaje, usd } from '@/lib/formato';
@@ -58,14 +59,15 @@ export async function BloqueTuTurno() {
   const { t: ta } = await getT('admin_inicio');
   const t = armarTuTurno(await entradaTuTurno(), ahoraMs());
   if (t.filas.length === 0 && t.ciegas.length > 0) {
-    return <Tarjeta titulo={ta('resumen_mando.tu_turno')} estado="error" mensaje={ta('resumen_mando.no_se_pudo_leer', { ciegas: t.ciegas.join(', ') })} reintentar />;
+    return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} estado="error" mensaje={ta('resumen_mando.no_se_pudo_leer', { ciegas: t.ciegas.join(', ') })} reintentar />;
   }
   if (t.filas.length === 0) {
-    return <Tarjeta titulo={ta('resumen_mando.tu_turno')} estado="vacio" mensaje={ta('resumen_mando.nada_espera_tu_decision')} detalle={ta('resumen_mando.cuando_algo_necesite_tu')} />;
+    return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} estado="vacio" mensaje={ta('resumen_mando.nada_espera_tu_decision')} detalle={ta('resumen_mando.cuando_algo_necesite_tu')} />;
   }
   return (
-    <Tarjeta titulo={ta('resumen_mando.tu_turno')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/tu-turno">{ta('resumen_mando.ver_todo')}</BotonEnlace>}>
-      <ul className="adm-res-lista">
+    <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/tu-turno">{ta('a1r4.ver_todas')}</BotonEnlace>}>
+      <p className="adm-eyebrow">{ta('a1r4.eb_atencion')}</p>
+      <ul className="adm-res-lista adm-res-lista--tarjetas">
         {t.filas.map((f) => (
           <li key={f.clave} className="adm-res-fila">
             <div className="adm-res-fila__texto">
@@ -73,7 +75,7 @@ export async function BloqueTuTurno() {
               {f.detalle ? <span className="adm-res-fila__detalle">{f.detalle}</span> : null}
             </div>
             <StatusChip tono={f.urgencia === 'neutral' ? 'neutral' : f.urgencia}>{f.etiqueta}</StatusChip>
-            {f.href ? <BotonEnlace tamano="sm" variante="secondary" href={f.href}>{f.accion}</BotonEnlace> : <StatusChip tono="muted">{ta('resumen_mando.sin_pantalla')}</StatusChip>}
+            {f.href ? <BotonEnlace tamano="sm" variante="secondary" href={f.href}>{ta('a1r4.ver_detalle')}<span aria-hidden="true"> ›</span><span className="rv-sr"> · {f.accion}</span></BotonEnlace> : <StatusChip tono="muted">{ta('resumen_mando.sin_pantalla')}</StatusChip>}
           </li>
         ))}
       </ul>
@@ -87,9 +89,10 @@ export async function BloqueTuTurno() {
 export async function BloqueCaja() {
   const { t: ta } = await getT('admin_inicio');
   const [r, mes] = await Promise.all([resumenNegocio(), costoIaMes()]);
-  if (r === null && mes === null) return <Tarjeta titulo={ta('resumen_mando.caja_y_clientes')} estado="error" reintentar />;
+  if (r === null && mes === null) return <Tarjeta titulo={ta('resumen_mando.costos')} estado="error" reintentar />;
   return (
-    <Tarjeta titulo={ta('resumen_mando.caja_y_clientes')} elevar entra="tarjeta">
+    <Tarjeta titulo={ta('resumen_mando.costos')} elevar entra="tarjeta">
+      <p className="adm-eyebrow">{ta('a1r4.eb_dinero')}</p>
       <dl className="adm-res-pares">
         <dt>{mes ? ta('resumen_mando.gasto_de_ia_en', { etiquetaMes: mes.etiquetaMes }) : ta('resumen_mando.gasto_de_ia_del')}</dt>
         <dd>{mes ? usd(mes.mesUsd) : '—'}</dd>
@@ -123,27 +126,36 @@ const columnasCalidad = (ta: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES):
 ];
 
 /** 5. ¿Quién trabaja bien? Una fila por agente; lo que no se mide dice «sin medir». */
-export async function BloqueCalidad() {
+export async function BloqueCalidad({ semaforo }: { semaforo?: ReactNode } = {}) {
   const { t: ta } = await getT('admin_inicio');
   const { t: tSis } = await getT('admin_sistema');
   const [cal, p] = await Promise.all([calidadAgentes(), parados()]);
   const filas = filasCalidad(cal ? cal.agentes : null, p ? p.parados : null, (id) => agentePorId(id)?.nombre ?? null);
   const ilegible = cal === null && p === null;
+  // 49 agentes «sin medir» no son una tabla: la consola enseña los primeros (los problemas van primero en `filasCalidad`) y manda al resto.
+  const MAX_FILAS = 8;
+  const visibles = filas.slice(0, MAX_FILAS);
   return (
-    <section aria-labelledby="res-calidad">
-      <h2 id="res-calidad" className="rv-recuadro-tit__texto">{ta('resumen_mando.calidad_de_los_agentes')}</h2>
+    <Tarjeta
+      titulo={ta('resumen_mando.operacion')}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/agentes">{ta('a1r4.ver_todas')}</BotonEnlace>}
+      elevar entra="tarjeta"
+    >
+      <p className="adm-eyebrow">{ta('a1r4.eb_calidad')}</p>
+      {semaforo}
       {cal && cal.errores.length > 0 ? <AvisoCompacto tono="warn" resumen="Alguna fuente de calidad no se pudo leer: sus columnas dicen «sin dato», no cero." /> : null}
       <TablaBase
         etiqueta={ta('resumen_mando.calidad_de_los_agentes')}
         columnas={columnasCalidad(ta, tSis)}
-        filas={filas}
+        filas={visibles}
         idFila={(f) => f.agente}
         estado={ilegible ? 'error' : 'ok'}
         mensajeError="No disponible ahora. No es cero."
         vacio={{ titulo: ta('resumen_mando.sin_agentes_medidos'), texto: ta('resumen_mando.aparecen_aqui_cuando_corren') }}
-        densa tarjetaMovil
+        tarjetaMovil
       />
-    </section>
+      {filas.length > MAX_FILAS ? <p className="adm-res-pie">{numero(MAX_FILAS)} / {numero(filas.length)}</p> : null}
+    </Tarjeta>
   );
 }
 
@@ -152,7 +164,7 @@ export async function BloquePlataforma() {
   const { t: ta } = await getT('admin_inicio');
   const [s, d, q, { t: tMon }] = await Promise.all([slos(), despliegues(), quema(), getT('monitoreo')]);
   return (
-    <Disclosure titulo={ta('resumen_mando.plataforma_y_que_cambio')} resumen={d.estado === 'ok' ? ta('resumen_mando.despliegues_en_30_dias', { length: d.anotaciones.length }) : ta('resumen_mando.despliegues_sin_medir')}>
+    <Disclosure titulo={ta('resumen_mando.trazabilidad')} resumen={d.estado === 'ok' ? ta('resumen_mando.despliegues_en_30_dias', { length: d.anotaciones.length }) : ta('resumen_mando.despliegues_sin_medir')}>
       <h3 className="rv-recuadro-tit__texto">{ta('resumen_mando.objetivos_de_servicio')}</h3>
       {s === null ? <p className="adm-res-pie">{ta('resumen_mando.no_disponible_ahora_no')}</p> : (
         <ul className="adm-res-lista">

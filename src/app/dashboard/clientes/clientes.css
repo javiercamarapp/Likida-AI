@@ -18,3 +18,32 @@
 .rv-cl__cartera { display: grid; gap: 8px; }
 .rv-cl__nopasa { white-space: nowrap; color: var(--muted); }
 .rv-cl__aviso-texto { color: var(--warn); }
+
+/* F26: los bloques de la tabla maestra (clientes, tarifas, viajes sin ingreso) van apilados a 12 px, como el resto del marco. */
+.rv-cl__bloques { display: grid; gap: var(--sp-gap, 12px); min-width: 0; }
+.rv-cl__pie-cajon { display: flex; justify-content: flex-end; gap: 8px; width: 100%; }
+.rv-cl__pie-cajon .rv-cl__guardar { height: 32px; }
+
+/* Viajes sin ingreso: las celdas Viaje y Ruta llevan DOS líneas (folio + fecha, ruta + km); la fila de 40 px las pegaba al divisor. Rovaq: filas de dos líneas de 52 a 64 px. */
+[data-ui="v2"] .rv-cl__sin-ingreso tbody :is(td, th) { height: 52px; padding-block: 8px; }
+.rv-cl__sin-ingreso + .rv-cl__pie { margin-top: 4px; padding-top: 4px; }
+.rv-cl__sin-ingreso { margin-bottom: 8px; }
+
+/* «Viajes sin ingreso»: la tabla llega a sangre dentro de su tarjeta (Rovaq: padding 0, sin segundo borde); la nota y el pie conservan su respiro. */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-cl__sin-ingreso .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-cl__sin-ingreso .rv-tb__region { border-top: 1px solid var(--line); }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-cl__nota { padding: 10px 14px 8px; }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-cl__pie { margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-cl__sin-ingreso { margin-bottom: 0; }
+
+/* Vacíos dentro de tarjeta (Rovaq `ac-vacio`): caja de 1 px discontinua, radio 8, padding 20/14 y texto de 13 px CENTRADO. Título y texto comparten renglón
+   centrado cuando caben y, si no, se apilan centrados; el texto no se limita a 48ch (la columna angosta a la izquierda dejaba dos tercios de la caja vacíos).
+   Los vacíos de página entera quedan para la página entera. Solo bajo `.rv-cl__bloques` (Clientes y Tarifas). */
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio:not([data-pantalla]) {
+  flex: 0 0 auto; min-height: 0; max-height: none; flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: center;
+  gap: 2px 8px; padding: 20px 14px; text-align: center; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; background: transparent;
+}
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio .rv-vacio__icono { display: none; }
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio .rv-vacio__titulo { margin: 0; font-size: 13px; font-weight: 600; }
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio .rv-vacio__texto { margin: 0; max-width: none; font-size: 13px; }
+[data-ui="v2"] .rv-cl__bloques .rv-caja-vacia > .rv-vacio .rv-vacio__accion { flex: 0 0 100%; margin-top: 8px; }

@@ -58,7 +58,7 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
         </form>
       ) : (
         <Tooltip texto={!activo ? t('cobranza.controles.el_agente_esta_pausado') : enCola === 0 ? t('cobranza.controles.no_hay_a_quien_contactar') : t('cobranza.controles.correr_la_cobranza_ahora_sin')}><Boton variante="primary" onClick={() => setConfirmando(true)}
-          disabled={!activo || enCola === 0}
+          disabled={!activo || enCola === 0} className={!activo || enCola === 0 ? 'rv-ag-no-disponible' : undefined}
           icono={<Icono icono={Send} tam={14} />}>
           {t('cobranza.controles.ejecutar_ahora')}
         </Boton></Tooltip>
@@ -71,7 +71,7 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
             <AvisoCompacto tono="warn" resumen={t('cobranza.controles.el_agente_no_corrio', { omitido: r.omitido })} />
           ) : (
             <p className="rv-ag-notif__nota">
-              {rico(t('cobranza.controles.contacto_a_de'), { contactados: <strong>{r.contactados}</strong>, revisados: <span className="cifra-mono">{r.revisados}</span>, sinTelefono: r.sinTelefono > 0 && <> {t('cobranza.controles.sin_telefono', { n: r.sinTelefono })}</>, fallos: r.fallos.length > 0 && <> <span className="rv-ag-malo">{t('cobranza.controles.fallos', { n: r.fallos.length })}</span></> })}
+              {rico(t('cobranza.controles.contacto_a_de'), { contactados: <strong>{r.contactados}</strong>, revisados: <span className="rv-cifra">{r.revisados}</span>, sinTelefono: r.sinTelefono > 0 && <> {t('cobranza.controles.sin_telefono', { n: r.sinTelefono })}</>, fallos: r.fallos.length > 0 && <> <span className="rv-ag-malo">{t('cobranza.controles.fallos', { n: r.fallos.length })}</span></> })}
             </p>
           )}
           {/* FE-14: el reloj de corte (25 s) puede dejar folios sin tocar en una cola grande: se dice, para que el humano sepa que hay

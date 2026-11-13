@@ -3,10 +3,14 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarClientesPendientes, type ClienteParaRevision } from '@/lib/mcp/oauth';
 import { logger } from '@/lib/logger';
 import { fechaHoraMx } from '@/lib/formato';
-import { EstadoError, EstadoVacio, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, EstadoError, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { FormaRechazarCliente } from './forma-rechazar';
 import { decidirYAnotar } from './decidir';
+import { uniformes } from '@/app/admin/cifras-uniformes';
+import '../sistema.css';
+import { getT } from '@/lib/i18n/servidor';
 import './mcp-clientes.css';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +30,7 @@ export const dynamic = 'force-dynamic';
  * el POST).
  */
 export default async function McpClientesPage() {
+  const { t } = await getT('admin_sistema');
   await requireSuperadmin();
 
   async function accionAprobar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -44,43 +49,63 @@ export default async function McpClientesPage() {
     logger.error('admin.mcp_clientes.lectura', { err: e instanceof Error ? e.message : String(e) });
   }
 
+  const totalTokens = pendientes === null ? null : pendientes.reduce((n, c) => n + (c.tokensVivos ?? 0), 0);
   return (
-    <MarcoPagina titulo="Clientes MCP por aprobar" apoyo="Clientes que se registraron por su cuenta y esperan tu decisión antes de recibir acceso.">
-      <div className="rv-mcp-lista">
-        {pendientes === null ? (
-          <EstadoError>No se pudo leer la cola. No significa que no haya clientes por aprobar: la consulta falló.</EstadoError>
-        ) : pendientes.length === 0 ? (
-          <EstadoVacio titulo="Sin clientes MCP pendientes">
-            Los de hosts conocidos (Claude, ChatGPT) y loopback se aprueban solos.
+    <EsqueletoTablaMaestra
+      titulo={t('mcp_clientes.titulo')}
+      apoyo={t('mcp_clientes.apoyo')}
+      etiquetaCifras={t('mcp_clientes.cola')}
+      cifras={uniformes([
+        pendientes === null
+          ? { etiqueta: t('mcp_clientes.por_aprobar'), valor: null, estado: 'error' as const, mensaje: t('mcp_clientes.no_se_pudo_leer_corto') }
+          : { etiqueta: t('mcp_clientes.por_aprobar'), valor: pendientes.length, formato: 'entero' as const, tono: pendientes.length > 0 ? 'warn' as const : undefined },
+        totalTokens === null
+          ? { etiqueta: t('mcp_clientes.accesos_vivos'), valor: null, estado: 'error' as const, mensaje: t('mcp_clientes.no_se_pudo_leer_corto') }
+          : { etiqueta: t('mcp_clientes.accesos_vivos'), valor: totalTokens, formato: 'entero' as const, nota: t('mcp_clientes.accesos_nota') },
+      ])}
+      avisos={(
+        <Aviso tono="info">
+          {t('mcp_clientes.aviso')}
+        </Aviso>
+      )}
+    >
+      {pendientes === null ? (
+        <EstadoError reintentar>{t('mcp_clientes.error_lectura')}</EstadoError>
+      ) : pendientes.length === 0 ? (
+        <Tarjeta titulo={t('mcp_clientes.cola_aprobacion')}>
+          <EstadoVacio titulo={t('mcp_clientes.vacio_titulo')}>
+            {t('mcp_clientes.vacio_texto')}
           </EstadoVacio>
-        ) : (
-          pendientes.map((c) => (
-            <Tarjeta key={c.clientId} titulo={c.nombre ?? 'Sin nombre'}>
+        </Tarjeta>
+      ) : (
+        <div className="rv-mcp-lista">
+          {pendientes.map((c) => (
+            <Tarjeta key={c.clientId} titulo={c.nombre ?? t('mcp_clientes.sin_nombre')}>
               <div className="rv-mcp-cuerpo">
                 <p className="rv-mcp-nota">
-                  Registrado {fechaHoraMx(c.creadoEn)}. El nombre lo declaró quien se registró. Devolvería el código a:{' '}
-                  <strong>{c.anfitriones.join(', ') || 'dirección inválida'}</strong>
+                  {t('mcp_clientes.registrado', { fecha: fechaHoraMx(c.creadoEn) })}{' '}
+                  <strong>{c.anfitriones.join(', ') || t('mcp_clientes.direccion_invalida')}</strong>
                 </p>
                 <ul className="rv-mcp-uris">
                   {c.redirectUris.map((u) => <li key={u}>{u}</li>)}
                 </ul>
                 <div className="rv-mcp-acciones">
-                  <FormaConAviso accion={accionAprobar} boton="Aprobar" columnas="md:grid-cols-1">
+                  <FormaConAviso accion={accionAprobar} boton={t('mcp_clientes.aprobar')} columnas="md:grid-cols-1">
                     <input type="hidden" name="cliente" value={c.clientId} />
                   </FormaConAviso>
                   <FormaRechazarCliente
                     accion={accionRechazar}
                     clientId={c.clientId}
-                    nombre={c.nombre ?? 'Sin nombre'}
+                    nombre={c.nombre ?? t('mcp_clientes.sin_nombre')}
                     tokensVivos={c.tokensVivos}
                   />
                 </div>
               </div>
             </Tarjeta>
-          ))
-        )}
-      </div>
-    </MarcoPagina>
+          ))}
+        </div>
+      )}
+    </EsqueletoTablaMaestra>
   );
 }
 

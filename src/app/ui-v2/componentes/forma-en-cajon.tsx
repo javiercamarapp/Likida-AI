@@ -71,7 +71,7 @@ export function FormaEnCajon({ id, titulo, descripcion, accion, boton, disparado
 
   return (
     <>
-      {disparador ? <Boton type="button" variante="secondary" tamano="sm" aria-haspopup="dialog" onClick={alAbrir}>{disparador}</Boton> : null}
+      {disparador ? <Boton type="button" variante="secondary" aria-haspopup="dialog" onClick={alAbrir}>{disparador}</Boton> : null}
       {/* Región viva SIEMPRE presente: un aria-live que nace con su texto no se anuncia. */}
       <span className="sr-only" role="status" aria-live="polite">{confirmado}</span>
       <Drawer

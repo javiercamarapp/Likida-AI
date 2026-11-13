@@ -5,3 +5,26 @@
 .rv-conocimiento__nota { margin: 0; font-size: var(--t-micro, 11px); color: var(--faint); }
 .rv-conocimiento__nota[data-puede] { color: var(--muted); }
 .rv-conocimiento__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 4px; }
+.rv-conocimiento__norma { display: grid; gap: 1px; min-width: 0; }
+.rv-conocimiento__norma strong { font-weight: 500; color: var(--ink); }
+.rv-conocimiento__detalle { display: grid; gap: 12px; }
+.rv-conocimiento__ver { white-space: nowrap; }
+.rv-conocimiento__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Filas de dos líneas (título 13 + instrumento 11): 56 px con 8 de aire arriba y abajo (Rovaq: 49 a 64 px con dos líneas), y la primera columna a 14 px como la cabecera. */
+[data-ui="v2"] .rv-conocimiento__tabla table tbody :is(th, td) { height: 56px; padding-block: 8px; }
+[data-ui="v2"] .rv-conocimiento__tabla table tbody tr > :first-child { padding-left: 14px; }
+.rv-conocimiento__norma { gap: 2px; }
+.rv-conocimiento__norma strong { line-height: 1.3; }
+.rv-conocimiento__nota { line-height: 1.35; }
+
+/* La tira de tres cifras: la celda con ⓘ (32 px) fija el alto del rótulo de TODAS, así las cifras quedan a la misma altura. */
+[data-ui="v2"] .rv-esq:has(.rv-conocimiento__tabla) .rv-kpi__cab { min-height: 32px; }
+
+/* Pie «25 de N» con «Ver más» ghost a su lado. */
+.rv-conocimiento__mas { margin-left: 8px; vertical-align: middle; }
+
+/* Móvil: la tabla sigue siendo tabla (filas compactas de Rovaq), sin tarjeta por norma. Se quedan norma, estado y «Ver»; nivel y fecha viven en la Vista rápida. */
+@media (max-width: 780px) {
+  [data-ui="v2"] .rv-conocimiento__tabla table :is(th, td):is(:nth-child(2), :nth-child(4)) { display: none; }
+  [data-ui="v2"] .rv-conocimiento__tabla table tbody :is(th, td) { height: 49px; padding-block: 6px; }
+}

@@ -4,14 +4,57 @@
 .rv-usu__yo { margin-left: 8px; font-size: var(--t-small); font-weight: 400; color: var(--muted); }
 .rv-usu__correo { display: block; font-size: var(--t-micro); font-weight: 400; color: var(--faint); }
 .rv-usu__tenue { color: var(--muted); }
-.rv-usu__sin { font-size: var(--t-small); color: var(--faint); }
-.rv-usu__acciones { display: grid; gap: 8px; min-width: 260px; }
+.rv-usu__sin { display: block; max-width: 240px; font-size: var(--t-small); line-height: 1.35; color: var(--faint); }
+.rv-usu__acciones { display: grid; gap: 0; min-width: 220px; }
+.rv-usu__acciones .rv-usu__fila-forma { gap: 0; }
+.rv-usu__acciones .rv-menu__item { width: 100%; box-sizing: border-box; }
+.rv-usu__acciones .rv-menu__item[disabled] { color: var(--muted); cursor: progress; }
 .rv-usu__pie { margin: 0; font-size: var(--t-micro); color: var(--faint); }
 .rv-usu__aislamiento { margin: 0; font-size: var(--t-small); color: var(--muted); }
 .rv-usu__forma { display: grid; gap: 12px; }
-.rv-usu__rejilla { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 640px) { .rv-usu__rejilla { grid-template-columns: minmax(0, 1fr); } }
+.rv-usu__rejilla { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr); }
 .rv-usu__roles { margin: 0; display: grid; gap: 2px; font-size: var(--t-micro); color: var(--faint); }
 .rv-usu__roles p { margin: 0; }
 .rv-usu__fila-forma { display: grid; gap: 6px; }
 .rv-usu__cambiar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rv-usu__roles--lista { margin: 0 0 8px; font-size: var(--t-small); color: var(--muted); gap: 4px; }
+.rv-usu__roles--lista strong { color: var(--ink); font-weight: 600; }
+.rv-usu__aislamiento strong { color: var(--ink); font-weight: 600; }
+.rv-usu__rol { height: 28px; min-height: 28px; padding-block: 0; font-size: var(--t-body, 13px); min-width: 180px; }
+.rv-usu__celda-acciones { display: flex; justify-content: flex-end; flex-wrap: nowrap; align-items: center; gap: 8px; }
+.rv-usu__celda-acciones .rv-btn { min-height: 28px; white-space: nowrap; }
+.rv-usu__celda-acciones > * { min-width: 0; }
+/* La tabla del equipo va a sangre en su tarjeta: sin marco propio (un solo borde) y filas de 40. */
+.rv-tarjeta:has(.rv-usu__tabla) { overflow: hidden; }
+.rv-usu__tabla.card { margin: 4px calc(-1 * var(--ui-pad)) calc(-1 * var(--ui-pad)); border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+@media (min-width: 820px) {
+  .rv-usu__tabla table td, .rv-usu__tabla table th { white-space: nowrap; }
+  .rv-usu__tabla table td:first-child, .rv-usu__tabla table th:first-child, .rv-usu__tabla .rv-usu__sin { white-space: normal; }
+}
+
+/* «Qué puede hacer cada rol» (Rovaq «Equipo»): lista con punto negro, rol 13/600, descripción 12 px y divisores entre ítems. */
+.rv-usu__roles-lista { list-style: none; margin: 0 0 8px; padding: 0; display: grid; }
+.rv-usu__roles-lista > li { position: relative; display: grid; gap: 2px; padding: 8px 0 8px 14px; border-top: 1px solid var(--line); }
+.rv-usu__roles-lista > li:first-child { border-top: 0; padding-top: 0; }
+.rv-usu__roles-lista > li::before { content: ''; position: absolute; left: 0; top: 14px; width: 5px; height: 5px; border-radius: 50%; background: var(--ink); }
+.rv-usu__roles-lista > li:first-child::before { top: 6px; }
+.rv-usu__roles-lista strong { font-size: var(--t-body, 13px); font-weight: 600; color: var(--ink); }
+.rv-usu__roles-lista span { font-size: var(--t-small, 12px); line-height: 1.4; color: var(--muted); }
+
+/* Fila como la de Rovaq «Integrantes y accesos»: el select de rol de 28 px con radio 8 (lo fija con más peso que el `.rv-ctl` de 32 del sistema) y a la vista solo «Dar de baja» en peligro; reenviar acceso y cerrar sesiones viven tras un «···» fantasma de 28 px sin texto. */
+[data-ui="v2"] .rv-usu__tabla select.rv-usu__rol { height: 28px; min-height: 28px; padding-block: 0; border-radius: 8px; font-size: var(--t-small, 12px); min-width: 160px; width: auto; }
+[data-ui="v2"] .rv-usu__celda-acciones .rv-usu__mas { width: 28px; min-width: 28px; padding: 0; }
+
+/* Subtítulo de las tarjetas de invitar y de roles (Rovaq: 12 px, tono secundario). */
+.rv-usu__sub { margin: 0 0 8px; font-size: var(--t-small, 12px); line-height: 1.4; color: var(--muted); }
+
+/* «Dar de baja» a la vista (Rovaq «Revocar»): botón de peligro de 28 px, radio 8, 13/500, fondo #fdeef0, borde rgba(172,36,64,.24), texto #ac2440. */
+[data-ui="v2"] .rv-usu__celda-acciones .rv-usu__fila-forma { display: flex; gap: 0; }
+[data-ui="v2"] .rv-usu__revocar { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 8px; font-size: var(--t-body, 13px); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; background: #fdeef0; border: 1px solid rgba(172, 36, 64, .24); color: #ac2440; transition: background-color 140ms ease, border-color 140ms ease; }
+[data-ui="v2"] .rv-usu__revocar:hover { background: #fbe0e5; border-color: rgba(172, 36, 64, .5); }
+[data-ui="v2"] .rv-usu__revocar:focus-visible { outline: 2px solid #ac2440; outline-offset: 2px; }
+/* El menú «···» es de la familia flotante: radio 12 y sombra del sistema. */
+[data-ui="v2"] .rv-usu__acciones.rv-pop { border-radius: 12px; box-shadow: var(--sh-pop, 0 8px 24px rgba(0, 0, 0, .12)); }
+/* Tarjeta de invitar compacta (Rovaq «Invitar integrante»): primario de 32 px abajo a la IZQUIERDA y sin la holgura de arriba. */
+[data-ui="v2"] .rv-usu__pie-invitar { justify-content: flex-start; padding-top: 12px; }
+[data-ui="v2"] .rv-usu__pie-invitar .rv-btn { min-height: 32px; }

@@ -40,3 +40,17 @@
 .rv-vg__bullets[data-tono="bad"] { color: var(--bad); }
 .rv-vg__campos { border: 0; margin: 0; padding: 0; min-width: 0; }
 .rv-vg__icono-linea { display: flex; align-items: flex-start; gap: 6px; }
+
+/* Bandeja de avisos: día como subtítulo dentro de la única tarjeta de lista, y las notas de regla/privacidad juntas al pie. */
+.rv-vg__dia { margin: 0; font-size: var(--t-card, 14px); font-weight: 600; color: var(--ink); }
+.rv-vg__notas { display: grid; gap: 4px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.rv-vg__notas:empty { display: none; }
+
+/* Cifras de tabla y de texto: numerales tabulares en la tipografía de la interfaz (Rovaq usa monoespaciada solo en los rótulos del menú). */
+.rv-ag-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Rovaq: los bloques de una tabla maestra se apilan a 12 px (el contenedor no los separaba y las tarjetas quedaban pegadas) y el vacío de una tarjeta
+   es la caja punteada de `ac-vacio` (1 px, radio 8, padding 20/14), no un hueco alto sin borde. Se repite en el CSS de cada agente para que lo
+   cargue su ruta (pedido_compartido: llevarlo a esqueletos.css y a EstadoVacio). */
+[data-ui="v2"] .rv-esq--tabla > .rv-esq__tabla { display: grid; gap: var(--sp-gap, 12px); }
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }

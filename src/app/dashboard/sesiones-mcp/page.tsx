@@ -4,12 +4,14 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
+import { fechaMx } from '@/lib/formato';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { listarSesionesMcp, revocarSesionesMcp, type SesionMcpUsuario } from '@/lib/mcp/sesiones';
 import type { ResultadoForma } from './forma';
 import { ListaSesionesMcp } from './vista';
 import './sesiones-mcp.css';
-import { MarcoPagina, AvisoCompacto, EstadoError } from '@/app/ui-v2/componentes';
+import { EstadoError } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
@@ -96,19 +98,28 @@ export default async function PaginaSesionesMcp({
     }
   }
 
+  // Las cifras salen de las mismas filas que la tabla; si la lectura cayó no hay cifras (nunca un 0 que parezca «nadie conectado»).
+  const ultimoUso = sesiones === null ? null : sesiones.reduce<string | null>((m, s) => (s.ultimoUsoEn !== null && (m === null || s.ultimoUsoEn > m) ? s.ultimoUsoEn : m), null);
+  const cifras = sesiones === null ? undefined : [
+    { etiqueta: t('e26.mcp_personas'), valor: sesiones.length, nota: t('e26b.mcp_personas_nota') },
+    { etiqueta: t('e26.mcp_clientes'), valor: sesiones.reduce((n, s) => n + s.clientes.length, 0), nota: t('e26b.mcp_clientes_nota') },
+    { etiqueta: t('e26.mcp_ultimo_uso'), valor: ultimoUso === null ? null : fechaMx(ultimoUso), nota: ultimoUso === null ? t('e26b.mcp_sin_uso_nota') : t('e26b.mcp_ultimo_uso_nota') },
+  ];
+
   return (
-    <MarcoPagina titulo={t('cfg.sesiones_mcp')} apoyo={t('cfg.quien_de_tu_equipo_tiene_claude')}>
-      <AvisoCompacto tono="info"
-        resumen={t('cfg.quien_conecta_claude_o_chatgpt_a')}
-        mas={<p>{t('cfg.cuando_alguien_de_tu_equipo_conecta')}</p>} />
-
-      {sesiones === null ? (
-        <EstadoError reintentar>{t('cfg.no_pude_leer_las_sesiones_mcp')}</EstadoError>
-      ) : (
-        <ListaSesionesMcp t={t} sesiones={sesiones} cortarSesiones={cortarSesiones} />
-      )}
-
-      <p className="rv-mcp__pie">{t('cfg.el_nombre_del_cliente_lo_declaro')}</p>
-    </MarcoPagina>
+    <EsqueletoTablaMaestra
+      titulo={t('cfg.sesiones_mcp')} apoyo={t('cfg.quien_de_tu_equipo_tiene_claude')}
+      cifras={cifras} etiquetaCifras={t('cfg.sesiones_mcp')}
+      pie={`${t('cfg.quien_conecta_claude_o_chatgpt_a')} ${t('cfg.el_nombre_del_cliente_lo_declaro')}`}
+    >
+      {/* Marcador (display: contents): la tira de cifras lleva su forma también con la lista vacía, cuando no hay tabla que la dispare. */}
+      <div className="rv-mcp__cuerpo">
+        {sesiones === null ? (
+          <EstadoError reintentar>{t('cfg.no_pude_leer_las_sesiones_mcp')}</EstadoError>
+        ) : (
+          <ListaSesionesMcp t={t} sesiones={sesiones} cortarSesiones={cortarSesiones} />
+        )}
+      </div>
+    </EsqueletoTablaMaestra>
   );
 }

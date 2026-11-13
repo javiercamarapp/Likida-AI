@@ -1,10 +1,9 @@
 import Link from 'next/link';
-import { Check, CircleHelp } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import type { PasoMarcha, GrupoPaso, ResumenMarcha } from '@/lib/likida/puesta_en_marcha';
 import { AUTOMATIZACIONES } from '../rutas';
-import { MarcoPagina, Tarjeta, BotonEnlace, Icono } from '@/app/ui-v2/componentes';
-import { ProgresoAnillo } from '@/app/ui-v2/graficas';
+import { BotonEnlace, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoConfiguracion, type SeccionConfig } from '@/app/ui-v2/esqueletos';
 import './arranque.css';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -29,38 +28,28 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
   /** Por cada automatización: su href (con sufijo) o null si el rol no la ve. */
   hrefAutomatizacion: Record<string, string | null>; t?: TResto;
 }) {
-  return (
-    <MarcoPagina titulo={t('cfg.puesta_en_marcha')} apoyo={t('cfg.lo_que_falta_para_que_tu')}>
-      <Tarjeta titulo={resumen.completo ? t('cfg.tu_flota_esta_lista_para_operar') : t('cfg.lo_que_falta_para_operar_sin')} info="arranque.avance"
-        acciones={<span className="rv-ar__nota">{numero(resumen.hechos)}{' '}{t('cfg.de_pasos', { numero: numero(resumen.total) })}</span>}>
-        <div className="rv-ar__avance">
-          <ProgresoAnillo valor={resumen.total === 0 ? 0 : Math.round((resumen.hechos / resumen.total) * 100)} etiqueta={t('cfg.avance_de_la_puesta_en_marcha')} />
-          <div className="rv-ar__resumen">
-            {resumen.hayDatoFaltante && (
-              <p className="rv-ar__aviso">{t('cfg.algunos_pasos_no_se_pudieron_comprobar')}</p>
-            )}
-            {resumen.siguiente && (
-              <p className="rv-ar__nota">{t('cfg.siguiente')}{' '}<strong>{resumen.siguiente.titulo}</strong>
-                {(puedeAdministrar || !resumen.siguiente.soloDueno) && (
-                  <> — <Link href={resumen.siguiente.href} className="rv-ar__enlace">{resumen.siguiente.cta}</Link></>
-                )}
-              </p>
-            )}
-          </div>
-        </div>
-      </Tarjeta>
-
-      {grupos(t).map((g) => (
-        <Tarjeta key={g.id} titulo={g.titulo} info={g.info}>
-          <p className="rv-ar__nota-grupo">{g.nota}</p>
-          <ol className="rv-ar__pasos">
-            {pasos.filter((p) => p.grupo === g.id).map((p) => <Paso t={t} key={p.id} p={p} puedeAdministrar={puedeAdministrar} />)}
-          </ol>
-        </Tarjeta>
-      ))}
-
-      <Tarjeta titulo={t('cfg.las_automatizaciones_que_trabajan_con_lo')} info="arranque.automatizaciones">
-        <p className="rv-ar__nota-grupo">{t('cfg.cada_una_se_activa_en_tu')}</p>
+  // El paso que toca ahora (borde en tinta): el primer grupo con algo por hacer. Un grupo cuyos pasos no se pudieron comprobar NO se da
+  // por hecho: «hecho» exige que todos digan hecho.
+  const porGrupo = grupos(t).map((g) => {
+    const delGrupo = pasos.filter((p) => p.grupo === g.id);
+    const hechos = delGrupo.filter((p) => p.estado === 'hecho').length;
+    return { g, delGrupo, hechos, completo: delGrupo.length > 0 && hechos === delGrupo.length };
+  });
+  const iActual = porGrupo.findIndex((x) => !x.completo);
+  const secciones: SeccionConfig[] = [
+    ...porGrupo.map(({ g, delGrupo, hechos, completo }, idx) => ({
+      id: g.id, titulo: g.titulo, descripcion: g.nota,
+      estado: { texto: `${numero(hechos)}/${numero(delGrupo.length)}`, tono: completo ? 'ok' as const : 'neutral' as const },
+      actual: idx === iActual,
+      contenido: (
+        <ol className="rv-ar__pasos">
+          {delGrupo.map((p) => <Paso t={t} key={p.id} p={p} puedeAdministrar={puedeAdministrar} />)}
+        </ol>
+      ),
+    })),
+    {
+      id: 'automatizaciones', titulo: t('cfg.las_automatizaciones_que_trabajan_con_lo'), descripcion: t('cfg.cada_una_se_activa_en_tu'),
+      contenido: (
         <ul className="rv-ar__lista">
           {AUTOMATIZACIONES.map((a) => {
             const href = hrefAutomatizacion[a.href];
@@ -71,8 +60,37 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
             );
           })}
         </ul>
-      </Tarjeta>
-    </MarcoPagina>
+      ),
+    },
+  ];
+
+  return (
+    <EsqueletoConfiguracion
+      titulo={t('cfg.puesta_en_marcha')}
+      apoyo={t('cfg.lo_que_falta_para_que_tu')}
+      variante="pasos"
+      contexto={(
+        <Tarjeta titulo={resumen.completo ? t('cfg.tu_flota_esta_lista_para_operar') : t('cfg.lo_que_falta_para_operar_sin')} info="arranque.avance"
+          acciones={<span className="rv-ar__nota">{numero(resumen.hechos)}{' '}{t('cfg.de_pasos', { numero: numero(resumen.total) })}</span>}>
+          <div className="rv-ar__avance">
+            <progress role="progressbar" className="rv-ar__barra" max={resumen.total || 1} value={resumen.hechos} aria-valuemin={0} aria-valuemax={resumen.total || 1} aria-valuenow={resumen.hechos} aria-label={t('cfg.avance_de_la_puesta_en_marcha')} />
+            <div className="rv-ar__resumen">
+              {resumen.hayDatoFaltante && (
+                <p className="rv-ar__aviso">{t('cfg.algunos_pasos_no_se_pudieron_comprobar')}</p>
+              )}
+              {resumen.siguiente && (
+                <p className="rv-ar__nota">{t('cfg.siguiente')}{' '}<strong>{resumen.siguiente.titulo}</strong>
+                  {(puedeAdministrar || !resumen.siguiente.soloDueno) && (
+                    <> — <Link href={resumen.siguiente.href} className="rv-ar__enlace">{resumen.siguiente.cta}</Link></>
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+        </Tarjeta>
+      )}
+      secciones={secciones}
+    />
   );
 }
 
@@ -82,14 +100,13 @@ function Paso({ p, puedeAdministrar, t = T_RESTO_ES }: { p: PasoMarcha; puedeAdm
   const puedeActuar = puedeAdministrar || !p.soloDueno;
   return (
     <li className="rv-ar__paso">
-      <span aria-hidden="true" className="rv-ar__marca" data-estado={p.estado}>
-        {hecho ? <Icono icono={Check} tam={14} /> : sinDato ? <Icono icono={CircleHelp} tam={14} /> : null}
+      <span className="rv-ar__estado">
+        <StatusChip tono={hecho ? 'ok' : sinDato ? 'warn' : 'muted'}>{hecho ? t('cfg.paso.hecho') : sinDato ? t('cfg.paso.sin_dato') : t('cfg.paso.para_revisar')}</StatusChip>
       </span>
       <div className="rv-ar__texto">
         <p className="rv-ar__titulo" data-hecho={hecho || undefined}>
           {p.titulo}
           {p.opcional && <span className="rv-ar__opcional">(opcional)</span>}
-          <span className="rv-sr">{hecho ? ' — hecho' : sinDato ? t('cfg.no_se_pudo_comprobar') : ' — pendiente'}</span>
         </p>
         <p className="rv-ar__detalle">
           {sinDato ? t('cfg.no_pude_comprobarlo_en_este_momento') : ''}{p.detalle}

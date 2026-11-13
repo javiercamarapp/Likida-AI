@@ -57,7 +57,7 @@ export function SubirHook({
   }
 
   return (
-    <div className="adm-din-forma">
+    <div className="adm-din-forma adm-din-forma--ancha">
       <CampoArchivo etiqueta="Video de referencia" entradaRef={inputRef} accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
         nombreArchivo={archivo?.name ?? null} onChange={elegirArchivo} disabled={pendiente} />
       <CampoTextarea etiqueta="Hook que usa el video" value={hookTexto} onChange={(e) => setHookTexto(e.target.value)} disabled={pendiente}

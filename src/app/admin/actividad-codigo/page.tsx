@@ -1,10 +1,14 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
 import { numero, fechaCorta } from '@/lib/formato';
-import { Aviso, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../ui-v2/graficas';
-import { AvisoGitHub } from '../ui/aviso-github';
+import { FilaTarjetas, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
+import { BotonReintentar } from '../../ui-v2/componentes/boton-reintentar';
+import { Columnas } from '../../ui-v2/graficas';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
+import { getT } from '@/lib/i18n/servidor';
+import '../sistema.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +20,8 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CELDA = 11, GAP = 3;
+const TITULO = 'Actividad de código — likida.ai', CONTEXTO = 'actividad de código';
+const ETQ_ANUAL = 'Commits — últimas 52 semanas', ETQ_SEMANA = 'Esta semana', ETQ_MEJOR = 'La mejor semana';
 const DIAS_ROTULO = ['', 'lun', '', 'mié', '', 'vie', ''];
 
 function opacidad(commits: number, max: number): number {
@@ -35,36 +41,47 @@ const COLUMNAS_COMMITS: ColumnaBase<Commit>[] = [
 export default async function ActividadCodigoPage() {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
+  const { t } = await getT('admin_sistema');
   const a = await getActividadCodigo();
+  const ok = a.estado === 'ok';
+  // F26: el esqueleto se dibuja SIEMPRE. Sin lectura, cada bloque dice «No disponible ahora. No es cero.» (con Reintentar) o que GitHub
+  // sigue calculando; nunca un cero ni una página casi vacía.
+  const calculando = a.estado === 'calculando';
+  // Neutro (caja punteada) para todo lo que no hay que alarmar: GitHub sin conectar, calculando o una lectura caída. NUNCA un rojo por
+  // celda ni un «Reintentar» por celda: el único Reintentar vive en el aviso de arriba y solo cuando la lectura de verdad falló.
+  const mensajeSinLectura = calculando ? t('actividad_codigo.calculando') : a.estado === 'sin_token' ? t('actividad_codigo.sin_conexion') : t('actividad_codigo.no_disponible');
+    const mejor = ok ? a.semanas.reduce((m, s) => (s.total > m.total ? s : m), a.semanas[0]) : undefined;
+  const max = ok ? Math.max(...a.semanas.flatMap((s) => s.dias), 1) : 1;
+  const ancho = ok ? a.semanas.length * (CELDA + GAP) + 28 : 0;
+  const alto = 7 * (CELDA + GAP) + 4;
+
+  // F26 ronda 5: sin lectura hay UN solo estado de página (Rovaq 2.12), no 4 cifras «Sin dato» + aviso + 3 vacíos idénticos.
+  const estadoUnico = a.estado === 'ok' ? null : (
+    <Tarjeta
+      titulo={t('actividad_codigo.estado_lectura')}
+      estado="vacio"
+      mensaje={mensajeSinLectura}
+      detalle={a.estado === 'sin_token' ? t('actividad_codigo.sin_conexion_detalle') : a.estado === 'calculando' ? t('actividad_codigo.calculando_detalle') : t('actividad_codigo.error_detalle', { detalle: a.detalle })}
+      accionVacio={a.estado === 'sin_token' ? undefined : <BotonReintentar contexto={CONTEXTO} />}
+    />
+  );
 
   return (
-    <MarcoPagina titulo="Actividad de código — likida.ai">
-      {a.estado === 'sin_token' && <AvisoGitHub causa="sin_token" />}
-      {a.estado === 'calculando' && (
-        <Aviso tono="info">GitHub todavía está calculando la estadística del repo (contestó 202) — recarga en unos segundos.</Aviso>
-      )}
-      {a.estado === 'error' && (
-        <>
-          <AvisoGitHub causa="error" />
-          <Aviso tono="warn">No se pudo leer la actividad: {a.detalle}. Esto NO significa que no haya commits.</Aviso>
-        </>
-      )}
-
-      {a.estado === 'ok' && (() => {
-        const max = Math.max(...a.semanas.flatMap((s) => s.dias), 1);
-        const mejorSemana = a.semanas.reduce((m, s) => (s.total > m.total ? s : m), a.semanas[0]);
-        const ancho = a.semanas.length * (CELDA + GAP) + 28;
-        const alto = 7 * (CELDA + GAP) + 4;
-        return (
-          <>
-            <TiraCifras etiqueta="Commits del repositorio">
-              <Cifra etiqueta="Commits — últimas 52 semanas" valor={a.totalAnual} formato="entero" />
-              <Cifra etiqueta="Esta semana" valor={a.semanas[a.semanas.length - 1]?.total ?? 0} formato="entero" />
-              <Cifra etiqueta="La mejor semana" valor={mejorSemana?.total ?? 0} formato="entero"
-                nota={mejorSemana ? `semana del ${fechaCorta(new Date(mejorSemana.semana * 1000).toISOString())}` : undefined} />
-            </TiraCifras>
-
-            <Tarjeta titulo="Los puntitos — commits por día">
+    <EsqueletoPanelCifras
+      titulo={TITULO}
+      apoyo={t('actividad_codigo.apoyo')}
+      etiquetaCifras="Commits del repositorio"
+      cifras={!ok ? undefined : uniformes([
+        { etiqueta: ETQ_ANUAL, ...(ok ? { valor: a.totalAnual, formato: 'entero' as const } : { valor: null }) },
+        { etiqueta: ETQ_SEMANA, ...(ok ? { valor: a.semanas[a.semanas.length - 1]?.total ?? 0, formato: 'entero' as const } : { valor: null }) },
+        { etiqueta: ETQ_MEJOR, ...(ok ? { valor: mejor?.total ?? 0, formato: 'entero' as const, nota: mejor ? `semana del ${fechaCorta(new Date(mejor.semana * 1000).toISOString())}` : undefined } : { valor: null }) },
+        { etiqueta: t('actividad_codigo.kpi_recientes'), ...(ok ? { valor: a.recientes.length, formato: 'entero' as const } : { valor: null }) },
+      ])}
+      variante="12"
+      graficas={!ok ? undefined : [
+        <Tarjeta key="puntitos" titulo="Los puntitos — commits por día" contenida>
+          {ok ? (
+            <>
               {/* Wide content scrollea DENTRO de su contenedor (regla). */}
               <div className="overflow-x-auto pb-1">
                 <svg width={ancho} height={alto} className="block">
@@ -92,23 +109,37 @@ export default async function ActividadCodigoPage() {
                 ))}
                 más · escala relativa al mejor día ({numero(max)})
               </div>
-            </Tarjeta>
-
-            <Tarjeta titulo="Últimos commits">
-              {/* FE-19: un asunto de commit largo no estira la página. */}
-              <TablaBase
-                etiqueta="Últimos commits"
-                columnas={COLUMNAS_COMMITS}
-                filas={a.recientes}
-                idFila={(c) => c.sha}
-                altoMaximo={false}
-                vacio={{ titulo: 'Sin commits recientes' }}
-              />
-            </Tarjeta>
-          </>
-        );
-      })()}
-    </MarcoPagina>
+            </>
+          ) : null}
+        </Tarjeta>,
+      ]}
+    >
+      {estadoUnico}
+      {ok ? <FilaTarjetas variante="6-6">
+        <Tarjeta titulo={t('actividad_codigo.por_semana')} contenida>
+          {ok ? (
+            <Columnas
+              etiqueta={t('actividad_codigo.por_semana')}
+              formato="numero"
+              datos={a.semanas.slice(-12).map((s) => ({ etiqueta: fechaCorta(new Date(s.semana * 1000).toISOString()), valor: s.total }))}
+            />
+          ) : null}
+        </Tarjeta>
+        <Tarjeta titulo="Últimos commits" contenida>
+          {/* FE-19: un asunto de commit largo no estira la página. */}
+          {ok ? (
+            <TablaBase
+              etiqueta="Últimos commits"
+              columnas={COLUMNAS_COMMITS}
+              filas={a.recientes}
+              idFila={(c) => c.sha}
+              altoMaximo={false}
+              densa
+              vacio={{ titulo: 'Sin commits recientes' }} tarjetaMovil />
+          ) : null}
+        </Tarjeta>
+      </FilaTarjetas> : null}
+    </EsqueletoPanelCifras>
   );
 }
 

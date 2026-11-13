@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
@@ -7,9 +8,10 @@ import { sentryActivo } from '@/lib/observability/sentry';
 import { correoConfigurado } from '@/lib/correo/enviar';
 import { hookDeCorreoConfigurado } from '@/lib/correo/auth';
 import { envHealth, faltantes } from '@/lib/env';
-import { Disclosure, EstadoError, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import { Disclosure, EstadoError, Tarjeta } from '../../ui-v2/componentes';
 import { TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
-import { TarjetaRenglon, type RenglonSistema } from '../renglon-sistema';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
+import { TablaRenglones, type RenglonSistema } from '../renglon-sistema';
 import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -83,13 +85,26 @@ export default async function IntegracionesPage() {
   ];
 
   return (
-    <MarcoPagina titulo={t('integraciones.integraciones')} apoyo={t('integraciones.los_servicios_reales_de_los_que')}>
-      <section className="adm-sis-bloque" aria-labelledby="conectores">
-        <h2 className="adm-sis-titulo" id="conectores">{t('integraciones.conectores')}</h2>
-        <div className="adm-sis-rejilla">
-          {conectores.map((c) => <TarjetaRenglon key={c.titulo} r={c} />)}
-        </div>
-      </section>
+    <EsqueletoTablaMaestra
+      titulo={t('integraciones.integraciones')}
+      apoyo={t('integraciones.los_servicios_reales_de_los_que')}
+      cifras={uniformes([
+        { etiqueta: t('integraciones.conectores'), valor: conectores.length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : conectores.some((c) => c.tono === 'warn') ? 'warn' : 'ok' },
+        { etiqueta: t('integraciones.kpi_ok'), valor: conectores.filter((c) => c.tono === 'ok').length, formato: 'entero' },
+        { etiqueta: t('integraciones.kpi_atencion'), valor: conectores.filter((c) => c.tono === 'warn').length, formato: 'entero', tono: conectores.some((c) => c.tono === 'warn') ? 'warn' : undefined },
+        { etiqueta: t('integraciones.kpi_faltan'), valor: conectores.filter((c) => c.tono === 'bad').length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : undefined },
+        r === null
+          ? { etiqueta: t('integraciones.kpi_modelos'), valor: null, estado: 'vacio' as const, mensaje: t('integraciones.no_se_pudo_leer_el_gasto') }
+          : { etiqueta: t('integraciones.kpi_modelos'), valor: r.porModelo.length, formato: 'entero' as const },
+      ])}
+    >
+      <Tarjeta titulo={t('integraciones.conectores')}>
+        <TablaRenglones
+          renglones={conectores} etiqueta={t('integraciones.conectores')}
+          columnas={{ servicio: t('salud_sistema.col_servicio'), estado: t('salud_sistema.estado'), significa: t('salud_sistema.col_significa'), enlace: t('salud_sistema.col_enlace') }}
+          rotuloArreglo={(n) => t('salud_sistema.como_arreglar_n', { n })}
+        />
+      </Tarjeta>
 
       {r === null ? (
         <EstadoError reintentar>{t('integraciones.no_se_pudo_leer_el_gasto')}</EstadoError>
@@ -103,7 +118,7 @@ export default async function IntegracionesPage() {
       <Disclosure titulo={t('compliance.lo_que_aun_no_existe_aqui')} resumen={t('integraciones.rotacion_de_llaves')}>
         <p className="adm-sis-nota">{t('integraciones.la_rotacion_de_llaves_de_api')}</p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

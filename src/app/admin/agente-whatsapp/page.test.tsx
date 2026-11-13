@@ -27,7 +27,7 @@ vi.mock('@/lib/admin/negocio', async (importar) => ({
 
 import AgenteWhatsappPage from './page';
 
-const RESUMEN_SIN_WA = { porFase: [{ fase: 'ocr', n: 10, costoUsd: 5 }] };
+const RESUMEN_SIN_WA = { porFase: [{ fase: 'ocr', n: 10, costoUsd: 5 }], porDia: [] };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,7 +45,7 @@ it('sin fase "whatsapp" en llm_costo: gasto y llamadas son CERO medido, no un fa
 });
 
 it('con fase "whatsapp" real: usa esas cifras exactas, no las de otra fase', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ porFase: [{ fase: 'whatsapp', n: 42, costoUsd: 7.5 }, { fase: 'ocr', n: 999, costoUsd: 999 }] });
+  dobles.getResumenNegocio.mockResolvedValue({ porFase: [{ fase: 'whatsapp', n: 42, costoUsd: 7.5 }, { fase: 'ocr', n: 999, costoUsd: 999 }], porDia: [] });
   const html = await renderizar();
   expect(html).toContain('US$7.50');
   expect(html).not.toContain('999');

@@ -54,7 +54,15 @@ describe('el catálogo de sitios', () => {
     expect(html).toContain('(archivado)');
     expect(html).toContain('Reactivar');
   });
-  it('con permiso: editor, importador, formato de ejemplo con coordenadas EN BLANCO a propósito', () => {
+  it('con permiso: «Nuevo sitio» (primario) e «Importar» (secundario, abre un cajón) en la cabecera; el importador ya no es una tarjeta larga en la página', () => {
+    const cerrado = pintar();
+    expect(cerrado).toContain('Nuevo sitio');
+    expect(cerrado).toContain('>Importar<');
+    // El importador vive DENTRO del cajón de la cabecera (no hay tarjeta «Importar desde CSV» en la página).
+    expect(cerrado).not.toContain('rv-tarjeta__titulo">Importar desde CSV');
+    expect(cerrado).not.toContain('rv-tarjeta__titulo">Catálogo depurado');
+  });
+  it('con permiso y el cajón abierto: editor, importador, formato de ejemplo con coordenadas EN BLANCO a propósito', () => {
     const html = pintar();
     expect(html).toContain('Nuevo sitio');
     expect(html).toContain('Importar desde CSV');
@@ -75,7 +83,7 @@ describe('el catálogo de sitios', () => {
     const html = pintar({ editando: S() });
     expect(html).toContain('Editar «Planta Zapopan»');
     expect(html).toContain('value="PL-ZAP"');
-    expect(html).toContain('Cancelar la edición');
+    expect(html).toContain('Cancelar');
   });
   it('avisa cuando hay más sitios de los que se listan', () => {
     expect(pintar({ hayMas: true })).toContain('Hay más sitios de los que se listan');

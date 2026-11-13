@@ -1,10 +1,12 @@
 import { Inbox, Download, Mail } from 'lucide-react';
+import '../agentes.css';
 import './proveedores.css';
 import type { FacturaProveedor } from '@/lib/likida/proveedores';
 import type { BuzonDeFlota } from '@/lib/correo/buzon_escritura';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { AvisoCompacto, Boton, Disclosure, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { AvisoCompacto, BarraPeriodo, Boton, Disclosure, EstadoVacio, FilaTarjetas, Icono, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import { SelloDato, TablaLista, type ColumnaTabla, type ParamsURL } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 
@@ -78,26 +80,65 @@ export function VistaAgenteProveedores({
   const sinExportar = aprobadas.filter((f) => f.exportadaEn === null).length;
   const exportadas = aprobadas.length - sinExportar;
 
+  const cifras: PropsCifra[] = ([
+    { info: 'proveedores.esperan_decision', etiqueta: tx('proveedores.vista.esperan_tu_decision'), valor: numero(pendientes.length), tono: pendientes.length > 0 ? 'warn' : undefined },
+    {
+      info: 'proveedores.aprobadas', etiqueta: tx('proveedores.vista.aprobadas'), valor: numero(aprobadas.length),
+      nota: aprobadas.length === 0 ? undefined : tx('proveedores.vista.sin_exportar_ya_exportadas', { sinExportar: numero(sinExportar), exportadas: numero(exportadas) }),
+      // Barra de 6 px (Rovaq pc-kpis): lo aprobado que aún espera exportación contra lo ya exportado.
+      segmentos: aprobadas.length === 0 ? undefined : [
+        { etiqueta: tx('proveedores.vista.est_aprobada'), valor: sinExportar },
+        { etiqueta: tx('proveedores.vista.est_exportada'), valor: exportadas },
+      ],
+    },
+    { info: 'proveedores.rechazadas', etiqueta: tx('proveedores.vista.rechazadas'), valor: numero(rechazadas.length) },
+    { info: 'proveedores.receptor_ajeno', etiqueta: tx('proveedores.vista.con_receptor_ajeno'), valor: numero(receptorAjeno), nota: tx('proveedores.vista.el_cfdi_no_es_a'), tono: receptorAjeno > 0 ? 'bad' : undefined },
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
+
   return (
-    <MarcoPagina titulo={tx('proveedores.vista.facturas_de_proveedores')} apoyo={tx('proveedores.vista.la_bandeja_donde_el_xml')}>
-
-      <TiraCifras sello={selloHoyTr(tr, tx('proveedores.vista.sello_facturas_de_proveedores'))}>
-        <Cifra info="proveedores.esperan_decision" etiqueta={tx('proveedores.vista.esperan_tu_decision')} valor={numero(pendientes.length)}
-          tono={pendientes.length > 0 ? 'warn' : undefined} />
-        <Cifra info="proveedores.aprobadas" etiqueta={tx('proveedores.vista.aprobadas')} valor={numero(aprobadas.length)}
-          nota={aprobadas.length === 0 ? undefined
-            : tx('proveedores.vista.sin_exportar_ya_exportadas', { sinExportar: numero(sinExportar), exportadas: numero(exportadas) })} />
-        <Cifra info="proveedores.rechazadas" etiqueta={tx('proveedores.vista.rechazadas')} valor={numero(rechazadas.length)} />
-        <Cifra info="proveedores.receptor_ajeno" etiqueta={tx('proveedores.vista.con_receptor_ajeno')} valor={numero(receptorAjeno)}
-          nota={tx('proveedores.vista.el_cfdi_no_es_a')} tono={receptorAjeno > 0 ? 'bad' : undefined} />
-      </TiraCifras>
-
-      {topeTocado && (
+    <EsqueletoTablaMaestra
+      titulo={tx('proveedores.vista.facturas_de_proveedores')}
+      apoyo={tx('proveedores.vista.la_bandeja_donde_el_xml')}
+      filtros={<BarraPeriodo etiqueta={tx('proveedores.vista.sello_facturas_de_proveedores')} chips={[{ id: 'alcance', etiqueta: tx('proveedores.vista.sello_facturas_de_proveedores') }]} />}
+      cifras={cifras}
+      etiquetaCifras={tx('proveedores.vista.sello_facturas_de_proveedores')}
+      selloCifras={selloHoyTr(tr, tx('proveedores.vista.sello_facturas_de_proveedores'))}
+      avisos={topeTocado ? (
         <AvisoCompacto tono="info" resumen={<>
           {tx('proveedores.vista.las_aprobadas_rechazadas_y_el', { TOPE_FACTURAS: numero(TOPE_FACTURAS), hasta: pendientes.length >= TOPE_PENDIENTES ? tx('proveedores.vista.hasta_hay_mas_por_decidir', { TOPE_PENDIENTES: numero(TOPE_PENDIENTES) }) : '' })}
         </>} />
-      )}
+      ) : undefined}
+    >
+      <div className="rv-ag-pila rv-ag-compacto">
+        {/* La bandeja primero: es lo que se decide todos los días. Subir y el buzón son la puerta de entrada y van debajo, lado a lado (6/6). */}
+      <Tarjeta titulo={tx('proveedores.vista.la_bandeja')} info="proveedores.bandeja">
+        <p className="rv-prov__nota">{tx('proveedores.vista.pendientes_arriba_lo_decidido_queda')}</p>
+        {facturas.length === 0 ? (
+          <EstadoVacio titulo={tx('proveedores.vista.sin_facturas_de_proveedor')} icono={Inbox} contenido>
+            {tx('proveedores.vista.aun_no_hay_facturas_de')}
+          </EstadoVacio>
+        ) : (
+          <>
+            <TablaLista<FacturaProveedor>
+              etiqueta={tx('proveedores.vista.bandeja_de_facturas_de_proveedor')}
+              columnas={columnasBandeja(acciones, tr)}
+              filas={[...pendientes, ...aprobadas, ...rechazadas]}
+              idFila={(f) => f.id}
+              base="/dashboard/agentes/proveedores"
+              params={params}
+              orden="local"
+              paginacion={{ tamano: 25 }}
+              atributosFila={(f) => ({ 'data-estado': f.estado })}
+            />
+            <div className="rv-tl__sellos">
+              <SelloDato tipo="observado" fuente={tx('proveedores.vista.buzon_de_facturas')} leidoEn={ahoraMs()} edad={false} />
+            </div>
+          </>
+        )}
+      </Tarjeta>
 
+
+        <FilaTarjetas variante="6-6" className="rv-prov__fila">
       <Tarjeta titulo={tx('proveedores.vista.subir_factura_de_proveedor')} info="proveedores.subir">
         <p className="rv-prov__nota">
           {rico(tx('proveedores.vista.el_xml_es_el_dato'), { rfc: rfcFlota
@@ -126,35 +167,13 @@ export function VistaAgenteProveedores({
         acciones={{ generarBuzon: acciones.generarBuzon, rotarBuzon: acciones.rotarBuzon }}
       />
 
-      {recepcion}
+        </FilaTarjetas>
 
-      <Tarjeta titulo={tx('proveedores.vista.la_bandeja')} info="proveedores.bandeja">
-        <p className="rv-prov__nota">{tx('proveedores.vista.pendientes_arriba_lo_decidido_queda')}</p>
-        {facturas.length === 0 ? (
-          <EstadoVacio titulo={tx('proveedores.vista.sin_facturas_de_proveedor')} icono={Inbox} contenido>
-            {tx('proveedores.vista.aun_no_hay_facturas_de')}
-          </EstadoVacio>
-        ) : (
-          <>
-            <TablaLista<FacturaProveedor>
-              etiqueta={tx('proveedores.vista.bandeja_de_facturas_de_proveedor')}
-              columnas={columnasBandeja(acciones, tr)}
-              filas={[...pendientes, ...aprobadas, ...rechazadas]}
-              idFila={(f) => f.id}
-              base="/dashboard/agentes/proveedores"
-              params={params}
-              orden="local"
-              paginacion={{ tamano: 25 }}
-              atributosFila={(f) => ({ 'data-estado': f.estado })}
-            />
-            <div className="rv-tl__sellos">
-              <SelloDato tipo="observado" fuente={tx('proveedores.vista.buzon_de_facturas')} leidoEn={ahoraMs()} edad={false} />
-            </div>
-          </>
-        )}
-      </Tarjeta>
-
-      {entrega}
+      {/* Recepción por correo y entrega al contador lado a lado (Rovaq: rejilla 6/6 con 12 px); la que no llega, como falta de dato, no deja hueco a la otra. */}
+      <FilaTarjetas variante="6-6">
+        {recepcion}
+        {entrega}
+      </FilaTarjetas>
 
       <Disclosure titulo={tx('proveedores.vista.que_son_los_csv_de')}>
       <p className="rv-prov__nota">
@@ -165,7 +184,8 @@ export function VistaAgenteProveedores({
       {ficha}
 
       {notificaciones}
-    </MarcoPagina>
+      </div>
+    </EsqueletoTablaMaestra>
   );
 }
 
@@ -272,7 +292,7 @@ function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: Accion
         </>
       ),
     },
-    { id: 'total', titulo: tx('proveedores.vista.total'), alinear: 'der', valor: (f) => f.total, celda: (f) => <span className="cifra-mono">{mxn(f.total, idioma)}</span> },
+    { id: 'total', titulo: tx('proveedores.vista.total'), alinear: 'der', valor: (f) => f.total, celda: (f) => <span className="rv-cifra">{mxn(f.total, idioma)}</span> },
     {
       id: 'estado', titulo: tx('proveedores.vista.estado'), corta: true, valor: (f) => ORDEN_ESTADO[f.estado],
       celda: (f) => (<><PillEstado f={f} tr={tr} /><NotaSat estadoSat={f.estadoSat} tr={tr} /></>),

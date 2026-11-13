@@ -1,5 +1,6 @@
 import { test, expect, type Page } from './apoyo/fixture';
 import { ESTADOS, MARCA_CONSOLA } from './apoyo/sesion';
+import { abrirDetalleDeViaje, abrirNuevoViaje } from './apoyo/viajes';
 import { getLocalE2E } from '../scripts/ci/e2e/entorno-local.mjs';
 
 const AJENO = '22222222-eeee-4eee-8eee-222222222222';
@@ -25,6 +26,8 @@ test.describe('encargado: operación sin cifras ni administración', () => {
     await expect(page.getByRole('columnheader', { name: /Anticipo/i })).toHaveCount(0);
     await page.locator('a[href="/dashboard/despacho"]').first().click();
     await expect(page).toHaveURL(/\/dashboard\/despacho$/);
+    // F26: el alta vive en un cajón que abre «Nuevo viaje»; dentro está «Crear viaje».
+    await abrirNuevoViaje(page);
     await expect(page.getByRole('button', { name: 'Crear viaje', exact: true })).toBeVisible();
     // E1-B (decisión de Javier): el encargado SÍ captura el anticipo, rotulado con el
     // tope/umbral de la política; el ingreso del flete y el cliente siguen siendo del área dinero.
@@ -81,6 +84,9 @@ test.describe('contador: dinero sin despacho ni administración', () => {
     await expect(page).toHaveURL(/\/dashboard\/facturacion$/);
     await expect(page.locator('body')).toContainText('Facturación');
     await page.waitForLoadState('networkidle');
+    // F26: Facturación se parte en pestañas; el pacto de flota (estadías) vive en «Estadías y pagos».
+    await page.getByRole('navigation', { name: 'Secciones de facturación' }).getByRole('link', { name: 'Estadías y pagos', exact: true }).click();
+    await expect(page).toHaveURL(/seccion=cobro/);
     // El pacto de flota vive en un cajón (FormaEnCajon): se abre con su disparador y «Guardar» está en el pie, ligado al formulario.
     await page.getByRole('button', { name: 'Pacto de flota', exact: true }).click();
     const cajon = page.getByRole('dialog', { name: 'Pacto de flota' });
@@ -104,7 +110,7 @@ test.describe('contador: dinero sin despacho ni administración', () => {
     try {
       const panel = await duena.newPage();
       await panel.goto('/dashboard/viajes?f=liquidados');
-      await panel.locator('tr', { hasText: 'VJ-2026-0844' }).getByRole('link', { name: /Ver/ }).click();
+      await abrirDetalleDeViaje(panel, 'VJ-2026-0844');
       const pdf = panel.locator('a', { hasText: 'Descargar PDF' });
       await expect(pdf).toBeVisible();
       const href = await pdf.getAttribute('href');
@@ -136,12 +142,12 @@ test.describe('vendedor: sólo su cartera, ningún dato de flota', () => {
   });
   test('guarda una nota propia y la conserva al recargar', async ({ page }) => {
     await page.goto('/vendedor');
-    // El panel nuevo: la tarjeta del prospecto es un botón que abre su cajón; la nota vive dentro del cajón (diálogo con el nombre de la empresa).
-    const tarjeta = page.locator('.ven-tarjeta').filter({ has: page.getByText('Cartera propia E2E', { exact: true }) }).last();
+    // F26: la cartera es una tabla (empresa, etapa, ciudad); cada fila tiene «Vista rápida», que abre su cajón. La nota vive dentro del cajón (diálogo con el nombre de la empresa).
+    const vistaRapida = page.getByRole('button', { name: 'Vista rápida de Cartera propia E2E', exact: true });
     const cajon = page.getByRole('dialog', { name: 'Cartera propia E2E' });
     const entrada = cajon.getByRole('textbox', { name: 'Nota de Cartera propia E2E' });
     const abrir = async () => {
-      if (!(await entrada.isVisible())) await tarjeta.getByRole('button').first().click();
+      if (!(await entrada.isVisible())) await vistaRapida.click();
       await expect(entrada).toBeVisible();
     };
     await abrir();
@@ -153,9 +159,9 @@ test.describe('vendedor: sólo su cartera, ningún dato de flota', () => {
       await cajon.getByRole('button', { name: 'Guardar nota', exact: true }).click();
       expect((await respuesta).status()).toBe(200);
       await page.reload();
-      // La nota persistida se ve en la tarjeta y también al reabrir el cajón.
-      await expect(tarjeta).toContainText(nota);
+      // La nota persistida se ve al reabrir el cajón: el dato rápido dice «Con nota» y el campo trae el texto guardado (la tabla ya no repite la nota en la fila).
       await abrir();
+      await expect(cajon).toContainText('Con nota');
       await expect(entrada).toHaveValue(nota);
       await expect(page.locator('body')).not.toContainText('Cartera ajena E2E');
     } finally {

@@ -8,8 +8,10 @@ import { getPiezasDunningPlataforma, getUltimaCorridaDunningPlataforma, type Cor
 import { armarEstadoDunning, type SelloToque } from '@/lib/likida/cobranza_estado';
 import { toquesDeHoy, tituloToque } from '@/lib/likida/agentes/exito';
 import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
-import { Aviso, AvisoCompacto, Disclosure, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import '../dinero.css';
 
 import { getT } from '@/lib/i18n/servidor';
@@ -48,12 +50,13 @@ async function leer<T>(nombre: string, f: () => Promise<T>): Promise<{ dato: T |
 }
 
 
-export default async function CobranzaPage() {
+export default async function CobranzaPage({ searchParams }: { searchParams?: Promise<{ ver?: string }> }) {
   const { t } = await getT('admin_dinero');
   // La puerta de la PÁGINA, no solo la del layout: en Next un layout no se vuelve a ejecutar si la petición RSC declara que el cliente
   // ya lo tiene, así que lo único que protege estos datos de TODAS las flotas (service role) es esta llamada.
   await requireSuperadmin();
   const hoy = hoyMx();
+  const ver = ((await searchParams) ?? {}).ver ?? '';
   // Los totales se calculan sobre TODAS las pendientes/fallidas (conteo exacto de la base), no sobre las filas que se pintan; la lista
   // se acota a FILAS_MOSTRADAS y lo dice.
   const [facturas, corrida] = await Promise.all([
@@ -69,50 +72,67 @@ export default async function CobranzaPage() {
   const filasVistas = estado ? estado.facturas.slice(0, FILAS_MOSTRADAS) : [];
   const totalBase = facturas.dato?.total ?? 0;
   const truncada = !!facturas.dato && totalBase > facturas.dato.facturas.length;
-  // Sin facturas leídas, sin total en la base y sin propuestas: ninguna de las 4 cifras tiene base real que medir.
-  const sinBase = !!estado && totalBase === 0 && estado.facturas.length === 0 && estado.propuestasPendientes === 0 && estado.propuestasEnviadas === 0;
   const hayError = facturas.error || piezas.error || corrida.error;
 
+  const posicion = ver ? filasVistas.findIndex((f) => f.factura.id === ver) : -1;
+  const sel = posicion >= 0 ? filasVistas[posicion] : null;
+
+  // Una lectura completa con todo en cero SÍ es un dato (cero mensualidades): se muestra (Rovaq pinta la tira y la tabla aunque estén en cero).
+  // Solo una lectura caída deja la tira vacía.
+  const cifras = estado ? uniformes([
+    { etiqueta: t('cobranza.por_cobrar'), valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? t('cobranza.incompleto_hay_mas_facturas') : undefined, tono: truncada ? 'warn' as const : undefined },
+    { etiqueta: t('cobranza.vencidas'), valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
+    {
+      etiqueta: t('cobranza.toques_sin_propuesta'), valor: String(estado.toquesSinPropuesta),
+      nota: estado.toquesSinPropuesta > 0 ? t('cobranza.el_agente_no_ha') : undefined,
+      tono: estado.toquesSinPropuesta > 0 && !piezas.error ? 'warn' as const : undefined,
+    },
+    { etiqueta: t('cobranza.propuestas_pendientes_enviadas_por'), valor: `${estado.propuestasPendientes} / ${estado.propuestasEnviadas}` },
+  ]) : undefined;
+
   return (
-    <MarcoPagina titulo={t('cobranza.facturacion')} apoyo={t('cobranza.seguimiento_de_lo_que')}>
-      {hayError ? (
-        <Aviso tono="error" titulo={t('cobranza.no_se_pudo_leer')}>
-          {facturas.error && t('cobranza.las_facturas_por_cobrar')}
-          {piezas.error && t('cobranza.las_propuestas_de_recordatorio')}
-          {corrida.error && t('cobranza.la_ultima_corrida_del')}
-          
-          {t('cobranza.recarga_la_pagina_si')}
-        </Aviso>
+    <EsqueletoTablaMaestra
+      titulo={t('cobranza.facturacion')} apoyo={t('cobranza.seguimiento_de_lo_que')}
+      etiquetaCifras={t('cobranza.cobranza_de_las_mensualidades')}
+      cifras={cifras ? observadas(cifras, t('a1r4.observado')) : undefined}
+      vistaRapida={sel ? (
+        <CajonVistaRapida
+          titulo={sel.factura.tenantNombre} subtitulo={t('cobranza.vr_subtitulo', { n: posicion + 1, total: filasVistas.length })} hrefCerrar="/admin/cobranza"
+          cifras={[
+            { etiqueta: t('cobranza.total'), valor: mxn(sel.factura.monto) },
+            { etiqueta: t('cobranza.corte'), valor: sel.dias >= 0 ? t('cobranza.dias_desde_el_corte', { dias: sel.dias }) : t('cobranza.faltan_dias', { dias: -sel.dias }) },
+            { etiqueta: t('cobranza.toques'), valor: String(sel.toques.length) },
+            { etiqueta: t('facturas.periodo'), valor: `${sel.factura.periodoInicio} a ${sel.factura.periodoFin}` },
+          ]}
+          pie={<BotonEnlace variante="primary" href="/admin/costos-facturacion">{t('cobranza.vr_abrir')}</BotonEnlace>}
+        />
       ) : null}
-
-      <AvisoCompacto
-        tono="info"
-        resumen="El dunning de las mensualidades de Likida ya corre: prepara recordatorios en cinco toques, como propuestas a la bandeja de aprobación, no envíos."
-        mas={(
-          <>
-            El agente de cobranza recorre las facturas pendientes o fallidas y, para cada una, prepara un recordatorio —3 días antes del corte, el día, y +3, +7 y +15—.
-            Son <strong>propuestas a la bandeja de aprobación, no envíos</strong>: no hay canal de correo al cliente aprobado y nada sale solo. En{' '}
-            <Link href="/admin/aprobaciones">Aprobaciones</Link> el dueño solo aprueba o rechaza la propuesta; el envío al cliente lo hace por su cuenta y el sistema no lo registra,
-            así que «enviadas» seguirá en 0 hasta que exista ese canal. Emitir la mensualidad, conciliar el pago contra el banco y timbrar el CFDI se hace en{' '}
-            <Link href="/admin/costos-facturacion">Planes y cobro</Link>. El vencimiento se toma como el inicio del periodo (la mensualidad se cobra por adelantado).
-          </>
-        )}
-      />
-
-      {estado && !sinBase ? (
-        /* Sin una sola factura ni propuesta no hay base que medir: no se pintan cuatro celdas vacías; el estado vacío de «Facturas por cobrar» (abajo) lo dice una vez. */
-        <TiraCifras etiqueta={t('cobranza.cobranza_de_las_mensualidades')} items={[
-            { etiqueta: t('cobranza.por_cobrar'), valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? t('cobranza.incompleto_hay_mas_facturas') : undefined, tono: truncada ? 'warn' as const : undefined },
-            { etiqueta: t('cobranza.vencidas'), valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
-            {
-              etiqueta: t('cobranza.toques_sin_propuesta'), valor: String(estado.toquesSinPropuesta),
-              nota: estado.toquesSinPropuesta > 0 ? t('cobranza.el_agente_no_ha') : undefined,
-              tono: estado.toquesSinPropuesta > 0 && !piezas.error ? 'warn' as const : undefined,
-            },
-            { etiqueta: t('cobranza.propuestas_pendientes_enviadas_por'), valor: `${estado.propuestasPendientes} / ${estado.propuestasEnviadas}` },
-          ]} />
-      ) : null}
-
+      avisos={(
+        <>
+          {hayError ? (
+            <Aviso tono="error" titulo={t('cobranza.no_se_pudo_leer')}>
+              {facturas.error && t('cobranza.las_facturas_por_cobrar')}
+              {piezas.error && t('cobranza.las_propuestas_de_recordatorio')}
+              {corrida.error && t('cobranza.la_ultima_corrida_del')}
+              {t('cobranza.recarga_la_pagina_si')}
+            </Aviso>
+          ) : null}
+          <AvisoCompacto
+            tono="info"
+            resumen="El dunning de las mensualidades de Likida ya corre: prepara recordatorios en cinco toques, como propuestas a la bandeja de aprobación, no envíos."
+            mas={(
+              <>
+                El agente de cobranza recorre las facturas pendientes o fallidas y, para cada una, prepara un recordatorio —3 días antes del corte, el día, y +3, +7 y +15—.
+                Son <strong>propuestas a la bandeja de aprobación, no envíos</strong>: no hay canal de correo al cliente aprobado y nada sale solo. En{' '}
+                <Link href="/admin/aprobaciones">Aprobaciones</Link> el dueño solo aprueba o rechaza la propuesta; el envío al cliente lo hace por su cuenta y el sistema no lo registra,
+                así que «enviadas» seguirá en 0 hasta que exista ese canal. Emitir la mensualidad, conciliar el pago contra el banco y timbrar el CFDI se hace en{' '}
+                <Link href="/admin/costos-facturacion">Planes y cobro</Link>. El vencimiento se toma como el inicio del periodo (la mensualidad se cobra por adelantado).
+              </>
+            )}
+          />
+        </>
+      )}
+    >
       <Tarjeta titulo={t('cobranza.ultima_corrida_del_agente')} estado={corrida.error ? 'error' : 'ok'} mensaje={t('cobranza.no_se_pudo_leer_2')} reintentar>
         {corrida.dato === null ? (
           <p className="adm-din-nota">
@@ -130,17 +150,15 @@ export default async function CobranzaPage() {
       </Tarjeta>
 
       {estado ? (
-        <Tarjeta
-          titulo={t('cobranza.facturas_por_cobrar_y')} estado={estado.facturas.length === 0 ? 'vacio' : 'ok'}
-          mensaje="0 mensualidades por cobrar" detalle={t('cobranza.no_hay_ninguna_factura')}
-        >
+        <Tarjeta titulo={t('cobranza.facturas_por_cobrar_y')}>
           {estado.facturas.length > filasVistas.length || truncada ? (
             <p className="adm-din-nota" role="note">
               Mostrando {filasVistas.length} de {totalBase}; las cifras de arriba cubren {truncada ? `las ${estado.facturas.length} leídas (hay más en la base: sus totales están incompletos)` : 'todas'}.
             </p>
           ) : null}
           <TablaBase
-            etiqueta={t('cobranza.facturas_por_cobrar_y')} idFila={(f) => f.factura.id} tarjetaMovil densa filas={filasVistas}
+            etiqueta={t('cobranza.facturas_por_cobrar_y')} idFila={(f) => f.factura.id} tarjetaMovil filas={filasVistas}
+            vacio={{ titulo: '0 mensualidades por cobrar', texto: t('cobranza.no_hay_ninguna_factura') }}
             columnas={[
               { id: 'flota', titulo: t('cobranza.flota'), principal: true, celda: (f) => f.factura.tenantNombre },
               { id: 'monto', titulo: t('cobranza.total'), alinear: 'der', celda: (f) => mxn(f.factura.monto) },
@@ -168,6 +186,7 @@ export default async function CobranzaPage() {
                   </span>
                 )),
               },
+              { id: 'vr', titulo: '', alinear: 'der', celda: (f) => <BotonEnlace href={`/admin/cobranza?ver=${encodeURIComponent(f.factura.id)}`} variante="ghost" tamano="sm">{t('cobranza.vista_rapida')}</BotonEnlace> },
             ]}
           />
         </Tarjeta>
@@ -179,7 +198,7 @@ export default async function CobranzaPage() {
           {t('cobranza.pendiente_de_construir_los')}
         </p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

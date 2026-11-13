@@ -17,8 +17,9 @@ import { plantillasPara, loQueSiSeVigila } from '@/lib/likida/reglas/catalogo';
 import {
   FormaEscribirRegla, FormaElegirAMano, type ResultadoForma, type PlantillaEnPantalla,
 } from './forma';
-import { ListaReglas } from './vista';
-import { Aviso, Disclosure, EstadoError, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { seccionesDeReglas } from './vista';
+import { Disclosure, EstadoError } from '@/app/ui-v2/componentes';
+import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
 import './reglas.css';
 import type { Metadata } from 'next';
 export async function generateMetadata(): Promise<Metadata> {
@@ -224,39 +225,40 @@ export default async function PaginaReglas({
   const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
   return (
     <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
-    <MarcoPagina titulo={tr('reglas.page.notificaciones')} apoyo={tr('reglas.page.escribeDeQueQuieres2')}>
-      <Aviso tono="info">
-        {tr('reglas.page.escribeDeQueQuieres')}
-      </Aviso>
-
-      <Tarjeta titulo={tr('reglas.page.escribeUnaRegla')}>
-        <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
-      </Tarjeta>
-      <Disclosure titulo={tr('reglas.page.oEligelaDeLa')}>
-        <FormaElegirAMano accion={accionAMano} plantillas={plantillas} />
-      </Disclosure>
-
-      {reglas === null ? (
-        <EstadoError reintentar>{tr('reglas.page.noPudeLeerTus')}</EstadoError>
-      ) : (
-        <ListaReglas tr={tr}
-          reglas={reglas}
-          acciones={{
+    <EsqueletoConfiguracion
+      titulo={tr('reglas.page.notificaciones')}
+      // Configuración sin eyebrow (Rovaq /setup): `area=""` apaga la etiqueta del menú. La línea de apoyo ya dice lo que decía el aviso repetido.
+      area=""
+      apoyo={tr('reglas.page.escribeDeQueQuieres2')}
+      secciones={[
+        {
+          id: 'escribir', titulo: tr('reglas.page.escribeUnaRegla'),
+          contenido: (
+            <>
+              <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
+              <Disclosure titulo={tr('reglas.page.oEligelaDeLa')}>
+                <FormaElegirAMano accion={accionAMano} plantillas={plantillas} />
+              </Disclosure>
+            </>
+          ),
+        },
+        ...(reglas === null
+          ? [{ id: 'reglas-error', titulo: tr('reglas.vista.tusReglas'), contenido: <EstadoError reintentar>{tr('reglas.page.noPudeLeerTus')}</EstadoError> }]
+          : seccionesDeReglas(reglas, {
             confirmar: accionConfirmar, pausar: accionPausar,
             reanudar: accionReanudar, borrar: accionBorrar, frecuencia: accionFrecuencia,
-          }}
-        />
-      )}
-
-      {/* La lista completa, siempre a la vista y no solo cuando algo falla: es la frontera honesta del producto. Lo que no está aquí, Likida no lo puede prometer. */}
-      <Tarjeta titulo={tr('reglas.page.loQueSeVigilar')} info="reglas.vigilancia">
-        <ul className="rv-reglas__lista">
-          {loQueSiSeVigila(rol).map((linea) => (
-            <li key={linea}>{linea}</li>
-          ))}
-        </ul>
-      </Tarjeta>
-    </MarcoPagina>
+          }, tr)),
+        // La lista completa, siempre a la vista y no solo cuando algo falla: es la frontera honesta del producto.
+        {
+          id: 'vigila', titulo: tr('reglas.page.loQueSeVigilar'),
+          contenido: (
+            <ul className="rv-reglas__lista">
+              {loQueSiSeVigila(rol).map((linea) => (<li key={linea}>{linea}</li>))}
+            </ul>
+          ),
+        },
+      ]}
+    />
     </IdiomaProvider>
   );
 }

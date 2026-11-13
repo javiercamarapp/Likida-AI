@@ -34,3 +34,69 @@
 [data-ui="v2"] .adm-sis-error-fila { display: block; max-width: 60ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
 [data-ui="v2"] .adm-sis-dato { display: block; overflow-wrap: anywhere; }
 [data-ui="v2"] .adm-sis-fila__nombre { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* ── F26 ronda 2: kill switch con UNA acción de peligro, KPI de ficha a escala Rovaq ── */
+[data-ui="v2"] .adm-sis-apagar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+[data-ui="v2"] .adm-sis-apagar > * { min-width: 0; }
+[data-ui="v2"] .adm-sis-apagar__motivo { flex: 1 1 220px; }
+[data-ui="v2"] .adm-sis-encender { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+[data-ui="v2"] .adm-sis-linea-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Una cifra sin dato conserva la escala de la tira (26/700, tracking -.03em): solo el color la apaga. */
+[data-ui="v2"] .adm-escala-kpi { display: contents; }
+[data-ui="v2"] .adm-escala-kpi .rv-kpi__valor[data-vacio] { font-size: 26px; font-weight: 700; letter-spacing: -.03em; }
+[data-ui="v2"] .adm-sis-celda-texto { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 64ch; font-size: 12px; line-height: 1.4; color: var(--muted); }
+
+/* ── F26 ronda 3 · Bitácora: panel «N REGISTROS / título» de Rovaq (P7); la tabla y su pie dentro del mismo marco ── */
+[data-ui="v2"] .adm-bit-panel { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+[data-ui="v2"] .adm-bit-panel__cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+[data-ui="v2"] .adm-bit-panel__tit { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+[data-ui="v2"] .adm-bit-panel__kicker { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .adm-bit-panel__h { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+[data-ui="v2"] .adm-bit-panel__id { flex: none; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--canvas); font: 500 11px/1 var(--font-mono, ui-monospace, monospace); letter-spacing: .04em; text-transform: uppercase; color: var(--ink2, var(--muted)); }
+[data-ui="v2"] .adm-bit-panel .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .adm-bit-panel > .adm-sis-pie, [data-ui="v2"] .adm-bit-panel > nav { padding: 8px 16px; border-top: 1px solid var(--line); }
+
+/* ── F26 ronda 4: todo bloque va en una tarjeta (radio 12, borde 1 px, padding 14), y el vacío dentro de ella va punteado (Rovaq `ac-vacio`) ── */
+[data-ui="v2"] .adm-sis-caja { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+[data-ui="v2"] .adm-sis-caja .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+/* Vacío de una línea (1.5 px punteado, 12×14) cuando no hay serie que graficar: sin tarjetas altas medio vacías. */
+[data-ui="v2"] .adm-sis-vacio-linea { margin: 0; padding: 12px 14px; border: 1.5px dotted var(--line2, var(--line)); border-radius: 8px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+[data-ui="v2"] .adm-sis-vacio-linea > b { font-weight: 600; color: var(--ink); }
+[data-ui="v2"] .adm-sis-caja .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .adm-sis-cab-caja { display: flex; flex-direction: column; gap: 2px; }
+[data-ui="v2"] .adm-sis-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+[data-ui="v2"] .adm-sis-celda-una { display: block; max-width: 56ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+
+/* ── F26 ronda 4 · Bitácora: id-chip de Rovaq (28 px, radio 8, mono) con «Copiar» ── */
+[data-ui="v2"] .adm-bit-chip { display: inline-flex; align-items: center; gap: 8px; height: 28px; max-width: 100%; padding: 0 4px 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font-size: 12px; color: var(--ink); }
+[data-ui="v2"] .adm-bit-chip[data-mono] .adm-bit-chip__texto { font-family: var(--font-mono, ui-monospace, monospace); letter-spacing: .02em; }
+[data-ui="v2"] .adm-bit-chip__texto { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-ui="v2"] .adm-bit-chip__copiar { flex: none; height: 20px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; font: 500 11px/1 var(--font-sans-ui, inherit); color: var(--muted); cursor: pointer; }
+[data-ui="v2"] .adm-bit-chip__copiar:hover { background: var(--surface); color: var(--ink); }
+[data-ui="v2"] .adm-bit-chip__copiar:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+
+/* F26 ronda 5: filas de dos líneas (reloj + descripción, fecha + «hace») con 10 px de aire arriba y abajo, como Organizaciones de Rovaq (58 px). */
+@media (min-width: 820px) {
+  [data-ui="v2"] .rv-tl:has(.adm-sis-sub) .rv-tl__td { height: auto; min-height: 56px; padding-block: 10px; }
+  [data-ui="v2"] .rv-tb table:has(.adm-sis-sub, .rv-agente-sub) tbody :is(th, td) { height: auto; min-height: 56px; padding-block: 10px; }
+}
+
+/* F26 ronda 6: el vacío dentro de una tarjeta es el `ac-vacio` de Rovaq (1 px punteado, radio 8, 20×14) en TODA pantalla de sistema, no solo en las fases. */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* F26 ronda 6: las dos tarjetas de la rejilla de una fase (gráfica + modelos) miden LO MISMO y no dejan hueco (Rovaq): la tabla de modelos se
+   estira a la altura de su vecina y reparte sus filas; el vacío de una línea se centra en el alto sobrante. */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.adm-fase-tabla { height: 100%; align-self: stretch; }
+[data-ui="v2"] .adm-fase-tabla > .rv-tarjeta__cuerpo { display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-fase-tabla .rv-tb { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-fase-tabla .rv-tb__region { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-fase-tabla .rv-tb__region > table { flex: 1 1 auto; height: 100%; }
+[data-ui="v2"] .adm-fase-tabla .adm-sis-vacio-linea { flex: 1 1 auto; display: grid; align-content: center; justify-items: start; }
+
+/* F26 ronda 8: segmentado móvil de 36 px visibles con zona táctil de 44 px por ::after invisible (Rovaq CATALOGO §4). */
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn { position: relative; min-height: 36px; }
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
+}
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.adm-fase-tabla.adm-fase-tabla--vacia { height: auto; align-self: start; }
