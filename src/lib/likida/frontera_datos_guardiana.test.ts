@@ -354,7 +354,12 @@ import { join, relative } from 'node:path';
 // dos layouts. Todas las funciones reciben la persona y el ámbito YA resueltos por la sesión (`ui-v2/avisos/acciones.ts#contexto`, nunca del navegador), filtran por `usuario_id` y `ambito` y fallan
 // cerradas (`{ ok: false }`, jamás «no hay nada»); el cliente es `lib/avisos/cliente.ts` (service_role, porque anon y authenticated no tienen privilegios sobre esas tablas). Funcionalidad nueva, no código migrado.
 // F26 (w26, 12-nov-2026): +1 archivo (351 -> 352), `app/dashboard/viajes-en-curso.ts`: la lectura de los viajes en curso del mapa y del inicio, sacada de `mapa/page.tsx` (que bajó de 2 a 1 `.from(`) para compartirla; los 2 `Array.from(` de DOM (`navegacion-teclado.tsx`, `zona-soltar.tsx`) eran falsos positivos y se corrigieron con spread. Lectura de presentación acotada por tenant, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 352;
+// Línea de WhatsApp propia por tenant, varias por cliente (w34, 13-nov-2026, mig. 1006): +2 archivos (352 -> 354) y +7 llamadas (2,566 -> 2,573).
+// `lib/meta/linea_repo.ts` (5 llamadas: leer las líneas de un tenant, leer una por phone_number_id, alta, cambio de estado y la rpc atómica de principal) es el acceso de
+// service role al COFRE de líneas (`tenant_whatsapp_linea`: token cifrado v2; anon/authenticated sin privilegio alguno), igual que los conectores (`conector_credencial`): no
+// cabe en `repo.ts` sin arrastrar el cofre (`cifrar/descifrar`) a todo el que lee datos de flota. El otro archivo y las 2 llamadas restantes son la entrada por
+// phone_number_id (`lib/likida/entrada_linea.ts`: resuelve el tenant dueño del número, falla cerrado). Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 354;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -735,7 +740,7 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 352;
 // las preferencias por canal y leer y guardar el horario de silencio. Cada una con `usuario_id` + `ambito` de la sesión; las lecturas con límite y orden. Medidas con el guardián.
 // w15/perf (11-nov-2026): 2,565 → 2,566. UNA entrada nueva (`tablaProspecto()` en lib/admin/prospectos-mapa.ts) que sirve a las tres lecturas ligeras
 // con las que /admin/crecimiento, /admin/vendedores y /admin/mapa-prospectos dejan de bajar la tabla ancha (con `notas`) de 33 mil filas; sin archivos nuevos.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_566;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_573;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
