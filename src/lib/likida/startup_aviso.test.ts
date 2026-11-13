@@ -82,6 +82,23 @@ describe('el arranque comprueba que la liga del aviso EXISTE, no solo que esté 
     expect(logger.error).not.toHaveBeenCalled();
   });
 
+  it('un timeout tras reintento es warn, no error: no prueba que la liga esté rota', async () => {
+    getDatosResponsable.mockResolvedValue(RESPONSABLE);
+    sondearAvisoIntegral.mockResolvedValue({ abre: false, motivo: 'The operation was aborted due to timeout', transitorio: true });
+    await verificarAvisoDePrivacidad();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('startup.aviso_privacidad', expect.objectContaining({ motivo: expect.stringContaining('timeout') }));
+  });
+
+  it('la liga alojada se nombra con <tenant>, no con el UUID que el logger vuelve «id:...»', async () => {
+    getDatosResponsable.mockResolvedValue({ ...RESPONSABLE, urlAvisoIntegral: 'https://app.likida.ai/aviso/11111111-1111-1111-1111-111111111111' });
+    sondearAvisoIntegral.mockResolvedValue({ abre: false, motivo: 'http 404' });
+    await verificarAvisoDePrivacidad();
+    const msg = String(logger.error.mock.calls.at(-1)?.[1]?.msg ?? '');
+    expect(msg).toContain('/aviso/<tenant>');
+    expect(msg).not.toContain('11111111-1111');
+  });
+
   it('un tenant que no existe se dice y no se sondea nada', async () => {
     getDatosResponsable.mockResolvedValue(null);
     await verificarAvisoDePrivacidad();

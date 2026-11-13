@@ -312,9 +312,21 @@ export async function verificarAvisoDePrivacidad(): Promise<void> {
       logger.info('startup.aviso_privacidad', { ok: true });
       return;
     }
+    // La liga alojada por Likida lleva el UUID del tenant; el logger lo convierte en
+    // `id:xxxxxxxxxxxx` (huella) y esa cadena NO es una URL: quien la copia del log
+    // obtiene un 404. Se nombra la ruta con un marcador en vez de pegar la liga.
+    const liga = datos.urlAvisoIntegral.split(tenantId).join('<tenant>');
+    if (sondeo.transitorio) {
+      // Timeout tras reintento: no prueba que la liga esté rota (arranque en frío, red).
+      logger.warn('startup.aviso_privacidad', {
+        motivo: sondeo.motivo,
+        msg: `No se pudo confirmar a tiempo la liga del aviso de privacidad integral (${liga}): ${sondeo.motivo}. Puede ser un arranque en frío o un corte de red; no se marca como rota. Si persiste en varios arranques, abre la liga a mano.`,
+      });
+      return;
+    }
     logger.error('startup.aviso_privacidad', {
       motivo: sondeo.motivo,
-      msg: `La liga del aviso de privacidad integral (${datos.urlAvisoIntegral}) NO abre (${sondeo.motivo}). El aviso simplificado se la manda igual al operador, y es además el único canal para ejercer derechos ARCO (LFPDPPP art. 15 fr. V y 16 fr. II). Si la flota capturó una liga propia en \`tenant.url_aviso_privacidad\`, corrígela ahí; si esta es la página alojada por Likida (\`/aviso/${tenantId}\`), revisa que esté sirviendo.`,
+      msg: `La liga del aviso de privacidad integral (${liga}) NO abre (${sondeo.motivo}). El aviso simplificado se la manda igual al operador, y es además el único canal para ejercer derechos ARCO (LFPDPPP art. 15 fr. V y 16 fr. II). Si la flota capturó una liga propia en \`tenant.url_aviso_privacidad\`, corrígela ahí; si esta es la página alojada por Likida (\`/aviso/<tenant>\`), revisa que esté sirviendo.`,
     });
   } catch (e) {
     // Igual que los sondeos de migración: sin env/DB durante el build, no rompe.

@@ -994,8 +994,12 @@ describe('T-A4-31 · turnos de los directores (0798)', () => {
   const MIERCOLES_NOCHE = new Date('2026-10-15T03:00:00Z');      // 21:00 en America/Mexico_City
   const SABADO_MEDIODIA = new Date('2026-10-17T18:00:00Z');
 
-  const conLista = (filas: unknown[], extra?: { zona?: string | null; festivos?: string[] }) => {
+  const conLista = (filas: unknown[], extra?: { zona?: string | null; festivos?: string[]; noche?: { desde: number; hasta: number } | 'sin_columna' }) => {
     respuesta = (l) => {
+      if (l.tabla === 'vigia_sin_atender_config') {
+        if (extra?.noche === 'sin_columna') return { data: null, error: { message: 'column noche_desde_hora does not exist', code: '42703' } };
+        return { data: extra?.noche ? { noche_desde_hora: extra.noche.desde, noche_hasta_hora: extra.noche.hasta } : null, error: null };
+      }
       if (l.tabla === 'vigia_director') return { data: filas, error: null };
       if (l.tabla === 'tenant') return { data: [{ zona_horaria: extra?.zona ?? 'America/Mexico_City' }], error: null };
       if (l.tabla === 'vigia_festivo') return { data: (extra?.festivos ?? []).map((fecha) => ({ fecha })), error: null };
@@ -1040,6 +1044,28 @@ describe('T-A4-31 · turnos de los directores (0798)', () => {
     expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a', 'c']);
     conLista(lista, { festivos: [] });
     expect(await ids(SABADO_MEDIODIA)).toEqual(['a', 'c']);
+  });
+
+  it('1005: la noche de la flota decide el turno (10 a 14 hace «noche» al mediodía; a las 21 ya no es noche)', async () => {
+    const lista = [fila('a', 'siempre'), fila('b', 'noche')];
+    conLista(lista, { noche: { desde: 10, hasta: 14 } });
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a', 'b']);
+    conLista(lista, { noche: { desde: 10, hasta: 14 } });
+    expect(await ids(MIERCOLES_NOCHE)).toEqual(['a']);
+    const c = llamadas.find((l) => l.tabla === 'vigia_sin_atender_config')!;
+    expect(tiene(c, 'eq', 'tenant_id', T1)).toBe(true);
+  });
+
+  it('1005: sin fila de configuración o sin la columna (base sin la 1005) la noche sigue siendo de 20 a 7', async () => {
+    const lista = [fila('a', 'siempre'), fila('b', 'noche')];
+    conLista(lista);
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a']);
+    conLista(lista);
+    expect(await ids(MIERCOLES_NOCHE)).toEqual(['a', 'b']);
+    conLista(lista, { noche: 'sin_columna' });
+    expect(await ids(MIERCOLES_NOCHE)).toEqual(['a', 'b']);
+    conLista(lista, { noche: 'sin_columna' });
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a']);
   });
 
   it('consulta zona y festivos SOLO de esa flota', async () => {
@@ -1116,7 +1142,8 @@ describe('T-A4-31 · turno y festivos: escritura', () => {
 
 describe('0999: la configuración de «sin atender» por flota', () => {
   const FILA = { horario_atencion: { desdeHora: 8, hastaHora: 18 }, palabras_clave: ['retraso'], palabras_urgentes: [], equipo_nombres: ['Operador 1'], insistencia_min: 4, umbral_urgente_min: 20, resumen_correo_habilitado: true };
-  const valor = { horarioAtencion: { desdeHora: 8, hastaHora: 18 }, palabrasClave: ['retraso'], palabrasUrgentes: [], equipoNombres: ['Operador 1'], insistenciaMin: 4, umbralUrgenteMin: 20, resumenCorreoHabilitado: true };
+  const valor = { horarioAtencion: { desdeHora: 8, hastaHora: 18 }, palabrasClave: ['retraso'], palabrasUrgentes: [], equipoNombres: ['Operador 1'], insistenciaMin: 4, umbralUrgenteMin: 20, resumenCorreoHabilitado: true, umbralMin: null, umbralCriticoMin: null, nocheDesdeHora: null, nocheHastaHora: null };
+  const conNuevas = { ...valor, umbralMin: 45, umbralCriticoMin: 15, nocheDesdeHora: 21, nocheHastaHora: 6 };
 
   it('lee SOLO la fila de la flota pedida (filtra por tenant_id) y la mapea', async () => {
     respuesta = () => ({ data: FILA, error: null });
@@ -1154,6 +1181,37 @@ describe('0999: la configuración de «sin atender» por flota', () => {
   it('guardar con otro error lanza', async () => {
     respuesta = () => ({ data: null, error: { message: 'caída', code: '57014' } });
     await expect(repoMod.guardarConfigSinAtender(T1, null, valor)).rejects.toThrow(/sin_atender_config_guardar/);
+  });
+  it('1005: lee y mapea plazos y noche; con las columnas nulas quedan null (se usa vigia_config y 20 a 7)', async () => {
+    respuesta = () => ({ data: { ...FILA, umbral_min: 45, umbral_critico_min: 15, noche_desde_hora: 21, noche_hasta_hora: 6 }, error: null });
+    expect(await repoMod.leerConfigSinAtender(T1)).toMatchObject({ umbralMin: 45, umbralCriticoMin: 15, nocheDesdeHora: 21, nocheHastaHora: 6 });
+    respuesta = () => ({ data: { ...FILA, umbral_min: null, umbral_critico_min: null, noche_desde_hora: null, noche_hasta_hora: null }, error: null });
+    expect(await repoMod.leerConfigSinAtender(T1)).toMatchObject({ umbralMin: null, umbralCriticoMin: null, nocheDesdeHora: null, nocheHastaHora: null });
+  });
+  it('1005: base sin la 1005 (42703 / PGRST204): reintenta con las columnas de la 0999 y no rompe', async () => {
+    let n = 0;
+    respuesta = () => (++n === 1 ? { data: null, error: { message: 'column umbral_min does not exist', code: '42703' } } : { data: FILA, error: null });
+    expect(await repoMod.leerConfigSinAtender(T1)).toMatchObject({ insistenciaMin: 4, umbralMin: null, nocheDesdeHora: null });
+    expect(n).toBe(2);
+  });
+  it('1005: guarda plazos y noche en el upsert', async () => {
+    respuesta = () => ({ data: null, error: null });
+    expect((await repoMod.guardarConfigSinAtender(T1, 'u-1', conNuevas)).ok).toBe(true);
+    expect(llamadas[0]!.valores).toMatchObject({ umbral_min: 45, umbral_critico_min: 15, noche_desde_hora: 21, noche_hasta_hora: 6 });
+  });
+  it('1005: guardar sin la 1005 y SIN plazos ni noche: guarda como antes (reintento sin las columnas nuevas)', async () => {
+    let n = 0;
+    respuesta = () => (++n === 1 ? { data: null, error: { message: 'x', code: 'PGRST204' } } : { data: null, error: null });
+    expect(await repoMod.guardarConfigSinAtender(T1, null, valor)).toEqual({ ok: true, valor: { tenantId: T1 } });
+    expect(llamadas).toHaveLength(2);
+    expect(llamadas[1]!.valores).not.toHaveProperty('umbral_min');
+    expect(llamadas[1]!.valores).not.toHaveProperty('noche_desde_hora');
+  });
+  it('1005: guardar sin la 1005 CON plazos o noche: no pierde nada en silencio (ok:false, sin segundo intento)', async () => {
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42703' } });
+    const r = await repoMod.guardarConfigSinAtender(T1, null, conNuevas);
+    expect(r.ok).toBe(false);
+    expect(llamadas).toHaveLength(1);
   });
   it('aislamiento: dos flotas leen cada una con su propio filtro', async () => {
     respuesta = () => ({ data: null, error: null });

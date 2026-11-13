@@ -59,7 +59,11 @@ const ENCABEZADO_IOS = new RegExp(String.raw`^\[${FECHA},?\s+${HORA}\]\s*(.*)$`,
 const ENCABEZADO_ANDROID = new RegExp(String.raw`^${FECHA},?\s+${HORA}\s+-\s+(.*)$`, 'i');
 
 const MEDIO_OMITIDO = /^(imagen|video|audio|sticker|gif|documento|contacto|ubicacion) omitid[oa]s?$/;
-const FRASES_SISTEMA = ['multimedia omitido', 'media omitted', 'se elimino este mensaje', 'eliminaste este mensaje', 'este mensaje fue eliminado', 'mensaje eliminado'];
+/** iOS y Android con el teléfono en inglés: «image omitted», «Contact card omitted»… (ya sin «<>» ni punto ni mayúsculas). */
+const MEDIO_OMITIDO_EN = /^(image|video|audio|sticker|gif|document|contact card|contact|location|voice message) omitted$/;
+/** Llamadas en inglés: «Missed voice call», «Missed group video call», o la llamada atendida sin texto libre detrás («Video call», «Voice call, 2 min»). */
+const LLAMADA_EN = /^(missed (group )?(voice|video) call( .*)?|(voice|video) call(,? ?\d.*)?)$/;
+const FRASES_SISTEMA = ['multimedia omitido', 'media omitted', 'se elimino este mensaje', 'eliminaste este mensaje', 'este mensaje fue eliminado', 'mensaje eliminado', 'this message was deleted', 'you deleted this message'];
 
 /** Android con multimedia: «IMG-20260912-WA0001.jpg (archivo adjunto)» / «(file attached)». */
 const ADJUNTO_ANDROID = /\((archivo adjunto|file attached)\)$/;
@@ -71,15 +75,16 @@ function normalizarMedio(texto: string): string {
 /** Un adjunto omitido de la exportación (no es texto y no se revisa). Distinto de una llamada o un mensaje borrado. */
 function esAdjuntoOmitido(texto: string): boolean {
   const n = normalizarMedio(texto);
-  return n.startsWith('adjunto:') || ADJUNTO_ANDROID.test(n) || MEDIO_OMITIDO.test(n) || n === 'multimedia omitido' || n === 'media omitted';
+  return n.startsWith('adjunto:') || n.startsWith('attached:') || ADJUNTO_ANDROID.test(n) || MEDIO_OMITIDO.test(n) || MEDIO_OMITIDO_EN.test(n) || n === 'multimedia omitido' || n === 'media omitted';
 }
 
 /** Lo que WhatsApp pone donde iría un archivo o un mensaje borrado: no es texto del chat. Sin expresiones anidadas. */
 function esMultimedia(texto: string): boolean {
   const n = normalizarMedio(texto);
-  if (n.startsWith('adjunto:') || ADJUNTO_ANDROID.test(n)) return true;
+  if (n.startsWith('adjunto:') || n.startsWith('attached:') || ADJUNTO_ANDROID.test(n)) return true;
+  if (LLAMADA_EN.test(n)) return true;
   if (n.startsWith('llamada perdida') || n.startsWith('llamada de voz') || n.startsWith('llamada de video') || n.startsWith('videollamada perdida')) return true;
-  return MEDIO_OMITIDO.test(n) || FRASES_SISTEMA.includes(n);
+  return MEDIO_OMITIDO.test(n) || MEDIO_OMITIDO_EN.test(n) || FRASES_SISTEMA.includes(n);
 }
 
 function limpiar(s: string): string {

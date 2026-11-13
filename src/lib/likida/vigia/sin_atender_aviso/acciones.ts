@@ -209,7 +209,7 @@ export async function enviarResumenPanel(ctx: ContextoSinAtender, fd: FormData, 
     const fechaLocal = diaEnZona(ahora, rev.crudos.zona);
     // Solo se cobra el enfriamiento cuando de verdad habría correo: sin alertas o sin destinatarios `enviar` no manda nada.
     if (resultado.alertas.length > 0 && destinatarios.length > 0 && !(await d.permitirEnvio(ctx.tenantId))) return no('enfriamiento');
-    const envio = await d.enviar({ tenantId: ctx.tenantId, resultado, destinatarios, liga: ctx.liga, turno, fechaLocal }, { habilitado: () => d.habilitado(ctx.tenantId) });
+    const envio = await d.enviar({ tenantId: ctx.tenantId, resultado, destinatarios, clienteDeChat: rev.clienteDeChat, liga: ctx.liga, turno, fechaLocal }, { habilitado: () => d.habilitado(ctx.tenantId) });
     await d.bitacora({
       tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.sin_atender_resumen', entidad: 'vigia_historial', entidadId: ctx.tenantId,
       detalle: { enviado: envio.ok, motivo: envio.ok ? null : envio.motivo, alertas: resultado.alertas.length, destinatarios: destinatarios.length, turno, fechaLocal, corte: s.valor.fechaCorte },

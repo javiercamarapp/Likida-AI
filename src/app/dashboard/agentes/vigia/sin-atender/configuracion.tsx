@@ -55,6 +55,17 @@ export function FormaConfiguracion({ guardar, flota, guardada, configLeida }: {
           <p className="rv-vg__nota">{tx('rest.si_no_marcas_ningun_dia_cuentan')}</p>
         </div>
       </Disclosure>
+      <Disclosure titulo={tx('rest.plazos_y_noche')}>
+        <div className="rv-vg__pila">
+          <p className="rv-vg__nota">{tx('rest.si_dejas_un_campo_vacio_se')}</p>
+          <div className="rv-vg__cuad">
+            <CampoTexto etiqueta={tx('rest.plazo_normal_de_espera_min')} name="umbralMin" inputMode="numeric" defaultValue={guardada.umbralMin ?? ''} />
+            <CampoTexto etiqueta={tx('rest.plazo_en_clientes_criticos_min')} ayuda={tx('rest.no_puede_ser_mayor_que_el')} name="umbralCriticoMin" inputMode="numeric" defaultValue={guardada.umbralCriticoMin ?? ''} />
+            <CampoTexto etiqueta={tx('rest.la_noche_empieza_a_las_hora')} name="nocheDesdeHora" inputMode="numeric" defaultValue={guardada.nocheDesdeHora ?? ''} />
+            <CampoTexto etiqueta={tx('rest.la_noche_termina_a_las_hora')} ayuda={tx('rest.llena_las_dos_horas_de_la')} name="nocheHastaHora" inputMode="numeric" defaultValue={guardada.nocheHastaHora ?? ''} />
+          </div>
+        </div>
+      </Disclosure>
       <Disclosure titulo={tx('rest.urgencia_e_insistencia')}>
         <div className="rv-vg__cuad">
           <CampoTexto etiqueta={tx('rest.mensajes_seguidos_que_cuentan_como_insistencia')} ayuda={tx('rest.0_la_apaga')} name="insistenciaMin" inputMode="numeric" defaultValue={guardada.insistenciaMin} />

@@ -19,6 +19,11 @@ const render = async (tenant = TENANT) => renderToStaticMarkup(await AvisoIntegr
 beforeEach(() => { d.datos = null; });
 
 describe('/aviso/<flota>', () => {
+  it('«id:<hex>» es la huella que el logger pone en lugar del UUID, no una liga: 404 sin tocar la base', async () => {
+    d.datos = { ...base, razonSocial: 'X', nombreFlota: 'X', domicilio: 'Y' };
+    await expect(render('id:c155f09940d2')).rejects.toThrow('NEXT_NOT_FOUND');
+  });
+
   it('con los datos completos pinta la razón social y SIN el banner de pendientes de identidad', async () => {
     d.datos = { ...base, razonSocial: 'TRANSPORTES PÉREZ SA DE CV', nombreFlota: 'Pérez', domicilio: 'Calle 1, Mérida' };
     const html = await render();

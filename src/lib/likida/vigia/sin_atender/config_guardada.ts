@@ -22,6 +22,13 @@ export interface ConfigGuardadaSinAtender {
   umbralUrgenteMin: number;
   /** Interruptor PROPIO de la flota para el resumen por correo. Se suma a la bandera de plataforma y a los interruptores de plataforma. */
   resumenCorreoHabilitado: boolean;
+  /** 1005: plazo normal de espera en minutos. null = el de `vigia_config.sla_respuesta_min` (comportamiento de siempre). */
+  umbralMin: number | null;
+  /** 1005: plazo en clientes críticos. null = el de `vigia_config.sla_critico_min`. Nunca mayor que `umbralMin` si ambos existen. */
+  umbralCriticoMin: number | null;
+  /** 1005: la noche de los directores (hora local 0-23). Van JUNTAS: las dos o ninguna. null = 20 a 7. */
+  nocheDesdeHora: number | null;
+  nocheHastaHora: number | null;
 }
 
 /** Lo que vale cuando no hay fila (o la tabla no existe): todo apagado. Congelado. */
@@ -33,6 +40,10 @@ export const CONFIG_GUARDADA_POR_OMISION: Readonly<ConfigGuardadaSinAtender> = O
   insistenciaMin: 2,
   umbralUrgenteMin: 10,
   resumenCorreoHabilitado: false,
+  umbralMin: null,
+  umbralCriticoMin: null,
+  nocheDesdeHora: null,
+  nocheHastaHora: null,
 });
 
 export const copiaConfigGuardadaPorOmision = (): ConfigGuardadaSinAtender => ({ ...CONFIG_GUARDADA_POR_OMISION, palabrasClave: [], palabrasUrgentes: [], equipoNombres: [] });
@@ -79,9 +90,21 @@ export function validarConfigGuardada(entrada: unknown): { ok: true; valor: Conf
   if (equipo.excede) return { ok: false, error: `Nombres del equipo: máximo ${MAX_EQUIPO_NOMBRES}, cada uno de hasta ${MAX_LARGO_NOMBRE} caracteres.` };
   if (e.horarioAtencion !== null && e.horarioAtencion !== undefined && !horarioValido(e.horarioAtencion)) return { ok: false, error: MENSAJE_HORARIO };
   if (typeof e.resumenCorreoHabilitado !== 'boolean') return { ok: false, error: 'Indica si el resumen por correo está encendido o apagado.' };
+  // 1005: plazos propios y noche. Ausente / null = no se fija (se usa vigia_config y la noche de 20 a 7).
+  const opcional = (v: unknown): number | null | undefined => (v === undefined || v === null || v === '' ? null : esEntero(v) ? v : undefined);
+  const umbralMin = opcional(e.umbralMin);
+  const umbralCriticoMin = opcional(e.umbralCriticoMin);
+  const nocheDesdeHora = opcional(e.nocheDesdeHora);
+  const nocheHastaHora = opcional(e.nocheHastaHora);
+  if (umbralMin === undefined || (umbralMin !== null && (umbralMin < 1 || umbralMin > MAX_MIN))) return { ok: false, error: `El plazo normal de espera debe ser un número entero de 1 a ${MAX_MIN} minutos.` };
+  if (umbralCriticoMin === undefined || (umbralCriticoMin !== null && (umbralCriticoMin < 1 || umbralCriticoMin > MAX_MIN))) return { ok: false, error: `El plazo de clientes críticos debe ser un número entero de 1 a ${MAX_MIN} minutos.` };
+  if (umbralMin !== null && umbralCriticoMin !== null && umbralCriticoMin > umbralMin) return { ok: false, error: 'El plazo de clientes críticos no puede ser mayor que el plazo normal.' };
+  if (nocheDesdeHora === undefined || nocheHastaHora === undefined || (nocheDesdeHora !== null && (nocheDesdeHora < 0 || nocheDesdeHora > 23)) || (nocheHastaHora !== null && (nocheHastaHora < 0 || nocheHastaHora > 23))) return { ok: false, error: 'La noche necesita horas enteras de 0 a 23.' };
+  if ((nocheDesdeHora === null) !== (nocheHastaHora === null)) return { ok: false, error: 'Escribe la hora en que empieza la noche y la hora en que termina, o deja las dos vacías.' };
   return {
     ok: true,
     valor: {
+      umbralMin, umbralCriticoMin, nocheDesdeHora, nocheHastaHora,
       horarioAtencion: e.horarioAtencion ? horarioNormal(e.horarioAtencion as HorarioAtencion) : null,
       palabrasClave: clave.lista, palabrasUrgentes: urgentes.lista, equipoNombres: equipo.lista,
       insistenciaMin: e.insistenciaMin, umbralUrgenteMin: e.umbralUrgenteMin, resumenCorreoHabilitado: e.resumenCorreoHabilitado,
@@ -106,7 +129,20 @@ export function normalizarFilaConfig(fila: unknown): ConfigGuardadaSinAtender {
     umbralUrgenteMin: esEntero(f.umbral_urgente_min) && f.umbral_urgente_min >= 1 && f.umbral_urgente_min <= MAX_MIN ? f.umbral_urgente_min : base.umbralUrgenteMin,
     // Fail-closed: solo un `true` literal enciende el resumen de la flota.
     resumenCorreoHabilitado: f.resumen_correo_habilitado === true,
+    ...normalizarPlazosYNoche(f),
   };
+}
+
+/** 1005: lee plazos y noche de una fila. Columna ausente o valor fuera de rango = null (se usa vigia_config y 20 a 7). La noche solo vale completa. */
+function normalizarPlazosYNoche(f: Record<string, unknown>): Pick<ConfigGuardadaSinAtender, 'umbralMin' | 'umbralCriticoMin' | 'nocheDesdeHora' | 'nocheHastaHora'> {
+  const rango = (v: unknown, min: number, max: number): number | null => (esEntero(v) && v >= min && v <= max ? v : null);
+  const umbralMin = rango(f.umbral_min, 1, MAX_MIN);
+  let umbralCriticoMin = rango(f.umbral_critico_min, 1, MAX_MIN);
+  if (umbralMin !== null && umbralCriticoMin !== null && umbralCriticoMin > umbralMin) umbralCriticoMin = null;
+  const desde = rango(f.noche_desde_hora, 0, 23);
+  const hasta = rango(f.noche_hasta_hora, 0, 23);
+  const completa = desde !== null && hasta !== null;
+  return { umbralMin, umbralCriticoMin, nocheDesdeHora: completa ? desde : null, nocheHastaHora: completa ? hasta : null };
 }
 
 /** La configuración guardada vista como parcial del motor. Palabras clave vacías => no se pisan las de arranque. */
@@ -117,5 +153,9 @@ export function aParcialDelMotor(g: ConfigGuardadaSinAtender): Partial<ConfigSin
     palabrasUrgentes: g.palabrasUrgentes,
     ...(g.palabrasClave.length > 0 ? { palabrasClave: g.palabrasClave } : {}),
     ...(g.horarioAtencion ? { horarioAtencion: g.horarioAtencion } : {}),
+    // 1005: solo si la flota los fijó; null deja los de vigia_config y la noche de 20 a 7.
+    ...(g.umbralMin !== null ? { umbralMin: g.umbralMin } : {}),
+    ...(g.umbralCriticoMin !== null ? { umbralCriticoMin: g.umbralCriticoMin } : {}),
+    ...(g.nocheDesdeHora !== null && g.nocheHastaHora !== null ? { noche: { desdeHora: g.nocheDesdeHora, hastaHora: g.nocheHastaHora } } : {}),
   };
 }

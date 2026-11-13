@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 
-const { altaGrupoPanel, criticoGrupoPanel, borrarGrupoPanel, importarHistorialPanel, nombresDelEquipo, MAX_ARCHIVO_BYTES } = await import('./acciones');
+const { altaClienteRapidaPanel, altaGrupoPanel, criticoGrupoPanel, borrarGrupoPanel, importarHistorialPanel, nombresDelEquipo, MAX_ARCHIVO_BYTES } = await import('./acciones');
 type Deps = import('./acciones').DepsGrupos;
 
 const G = '11111111-1111-4111-8111-111111111111';
@@ -13,6 +13,7 @@ const fd = (o: Record<string, string>) => { const f = new FormData(); for (const
 
 function deps(sobre: Partial<Deps> = {}): Deps & { bitacora: ReturnType<typeof vi.fn> } {
   return {
+    crearCliente: vi.fn(async () => C),
     crearGrupo: vi.fn(async () => ({ ok: true as const, id: G })),
     marcarCritico: vi.fn(async () => true),
     grupoDeFlota: vi.fn(async () => ({ id: G, nombre: 'Operación Cliente A' })),
@@ -28,6 +29,36 @@ const CHAT = [
   '[12/09/2026, 10:25:00] Ana Servicio: Va por Querétaro',
 ].join('\n');
 const archivo = (txt: string, nombre = 'chat.txt') => ({ nombre, bytes: new TextEncoder().encode(txt) });
+
+describe('A1: alta rápida de cliente', () => {
+  it('solo el dueño: ningún otro rol crea clientes desde aquí', async () => {
+    for (const rol of ['contador', 'encargado', 'jefe_trafico', 'vendedor']) {
+      const d = deps();
+      expect((await altaClienteRapidaPanel({ ...dueno, rol }, fd({ nombre: 'Cliente Nuevo' }), d)).ok).toBe(false);
+      expect(d.crearCliente).not.toHaveBeenCalled();
+    }
+  });
+  it('crea con solo el nombre, activo, con el tenant y el actor de la sesión (nunca del formulario)', async () => {
+    const d = deps();
+    const r = await altaClienteRapidaPanel(dueno, fd({ nombre: '  Cliente   Nuevo ', tenantId: 'ajeno', tenant_id: 'ajeno', rfc: 'XAXX010101000' }), d);
+    expect(r.ok).toBe(true);
+    expect(d.crearCliente).toHaveBeenCalledTimes(1);
+    expect(d.crearCliente).toHaveBeenCalledWith('t1', { nombre: 'Cliente Nuevo', rfc: null, contacto: null, correo: null, telefono: null, diasCredito: null, activo: true }, { id: 'u1', email: 'a@b.mx' });
+  });
+  it('un nombre vacío o demasiado corto no llega a la base y dice qué corregir', async () => {
+    const d = deps();
+    for (const nombre of ['', '   ', 'ab', 'x'.repeat(121)]) {
+      const r = await altaClienteRapidaPanel(dueno, fd({ nombre }), d);
+      expect(r.ok).toBe(false);
+    }
+    expect(d.crearCliente).not.toHaveBeenCalled();
+  });
+  it('si la base falla no lo da por hecho', async () => {
+    const d = deps({ crearCliente: vi.fn(async () => { throw new Error('boom'); }) });
+    const r = await altaClienteRapidaPanel(dueno, fd({ nombre: 'Cliente Nuevo' }), d);
+    expect(r.ok).toBe(false);
+  });
+});
 
 describe('permiso y entradas', () => {
   it('solo el dueño: contador, encargado y jefe de tráfico no dan de alta, marcan, borran ni importan', async () => {
