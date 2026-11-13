@@ -857,7 +857,7 @@ const FRONTERA = new Set(['lib/likida/repo.ts', 'lib/likida/pg.ts']);
  *  da de alta a mano no lo ve nadie). */
 function fuentesDeProduccion(dir: string, acc: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
-    if (e === 'pruebas-manuales') continue;
+    if (e === 'pruebas-manuales' || e.startsWith('.')) continue; // `.`: temporales de otras pruebas (ENOENT en paralelo)
     const p = join(dir, e);
     if (statSync(p).isDirectory()) { fuentesDeProduccion(p, acc); continue; }
     if (!/\.(ts|tsx)$/.test(e)) continue;

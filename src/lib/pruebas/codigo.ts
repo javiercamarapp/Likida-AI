@@ -46,6 +46,9 @@ export function sinComentarios(fuente: string): string {
 export function fuentesDeProduccion(dir: string): string[] {
   const salida: string[] = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
+    // Los archivos que empiezan por punto son temporales de otras pruebas (p. ej. `.entrada_esq_<pid>.tmp.tsx`):
+    // aparecen y desaparecen mientras se recorre `src/` en paralelo y rompían la lectura con ENOENT.
+    if (e.name.startsWith('.')) continue;
     const ruta = `${dir}/${e.name}`;
     if (e.isDirectory()) salida.push(...fuentesDeProduccion(ruta));
     else if (/\.tsx?$/.test(e.name) && !e.name.includes('.test.') && !e.name.endsWith('.d.ts')) salida.push(ruta);
