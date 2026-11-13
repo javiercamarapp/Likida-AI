@@ -44,7 +44,10 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 - `wa_mensaje_procesado` NO tiene `tenant_id`: no se puede atribuir a una flota.
 - `viaje.estatus` solo admite `abierto | en_cuadre | liquidado` (constraint
   `viaje_estatus_dominio`). `app_user.rol`: superadmin, flota_admin, contador,
-  encargado, vendedor (`operador` se retiró en la 0086; `vendedor` entró en la 0105).
+  encargado, vendedor, **nomina** (`operador` se retiró en la 0086; `vendedor`
+  entró en la 0105; **`nomina` entró en la 0949** — son SEIS, no cinco).
+  De ese dominio depende `is_superadmin()` y con ella la RLS de las tablas de
+  negocio: la lista corta hacía que un agente diera por inválido un rol real.
 - `cliente`, `unidad`, `tarifa`, `factura_emitida`, `pago_recibido`, `posicion` y
   `geocerca` SÍ EXISTEN (migs. 0047-0050), y `viaje` tiene `km_recorridos` e
   `ingreso_flete`. **Están vacías, pero YA NO por falta de escritor** — la
@@ -69,9 +72,14 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
     operadores, unidades y jefes de tráfico (`app_user.terminal_id`, 0460) y las
     plantillas de carga masiva traen la columna «patio». Un jefe con patio solo
     corrige lo de su patio (`lib/auth/patio.ts`).
-  - Siguen SIN escritor: `geocerca` (solo lectores: estadías, briefing,
-    facturación), `portal_credencial`, `invitacion`, y las muertas de facto
-    `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
+  - **`geocerca` TAMBIÉN tiene escritor desde el 1-oct-2026** (la misma ola W2
+    que le dio escritor a `terminal`, y esta línea tardó seis semanas en
+    decirlo): `peajes/repo.ts:846` hace el upsert y `:858` el alta/baja, desde
+    `/dashboard/agentes/peajes/configuracion`; y la RPC
+    `importar_sitios_conductor` la escribe desde `conductor/repo_validacion.ts:148`.
+    Si vas a «construir el escritor de geocercas», ya existe.
+  - Siguen SIN escritor: `portal_credencial`, `invitacion`, y las muertas de
+    facto `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
   - La base entera está en cero (0 viajes, 14-ago-2026) porque **no hay
     clientes en producción todavía**, no porque falte código.
 
