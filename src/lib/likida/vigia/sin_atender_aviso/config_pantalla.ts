@@ -113,8 +113,23 @@ export function configGuardadaDeFormulario(fd: FormData): { ok: true; valor: Con
     horarioAtencion = dias.length > 0 && dias.length < 7 ? { desdeHora: desde, hastaHora: hasta, diasHabiles: dias } : { desdeHora: desde, hastaHora: hasta };
     if (fd.getAll('diaHabil').length > 0 && dias.length === 0) return { ok: false, error: 'Elige al menos un día hábil del horario de atención.' };
   }
+  // 1005: plazos propios y noche. Campo vacío = no se fija (null): se usa vigia_config y la noche de 20 a 7. Un número ilegible se rechaza.
+  const opcional = (campo: string, nombre: string): number | null | { error: string } => {
+    const t = String(fd.get(campo) ?? '').trim();
+    if (t === '') return null;
+    return /^\d{1,5}$/.test(t) ? Number(t) : { error: `${nombre} debe ser un número entero.` };
+  };
+  const umbralMin = opcional('umbralMin', 'El plazo normal');
+  if (umbralMin !== null && typeof umbralMin !== 'number') return { ok: false, error: umbralMin.error };
+  const umbralCriticoMin = opcional('umbralCriticoMin', 'El plazo de clientes críticos');
+  if (umbralCriticoMin !== null && typeof umbralCriticoMin !== 'number') return { ok: false, error: umbralCriticoMin.error };
+  const nocheDesdeHora = opcional('nocheDesdeHora', 'La hora en que empieza la noche');
+  if (nocheDesdeHora !== null && typeof nocheDesdeHora !== 'number') return { ok: false, error: nocheDesdeHora.error };
+  const nocheHastaHora = opcional('nocheHastaHora', 'La hora en que termina la noche');
+  if (nocheHastaHora !== null && typeof nocheHastaHora !== 'number') return { ok: false, error: nocheHastaHora.error };
   const lista = (campo: string): string[] => String(fd.get(campo) ?? '').split(/[,\n;]/).map((x) => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
   return validarConfigGuardada({
+    umbralMin, umbralCriticoMin, nocheDesdeHora, nocheHastaHora,
     horarioAtencion, palabrasClave: lista('palabrasClave'), palabrasUrgentes: lista('palabrasUrgentes'), equipoNombres: lista('equipo'),
     insistenciaMin, umbralUrgenteMin, resumenCorreoHabilitado: fd.get('resumenCorreo') === 'on',
   });

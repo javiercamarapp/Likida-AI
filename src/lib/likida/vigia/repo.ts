@@ -28,7 +28,7 @@ import { normalizarTelefonoWa } from '../wa_ventana';
 import { hashTelefono } from './servicio';
 import { MAX_DIRECTORES_POR_NIVEL, unirDestinatarios, type ValoresDirector } from './respaldo_correo';
 import { seleccionarEnEspera } from './escalamiento';
-import { aTurnoDirector, esFechaValida, esTurnoDirector, filtrarPorTurno, ZONA_POR_OMISION } from './turnos';
+import { aTurnoDirector, esFechaValida, esTurnoDirector, filtrarPorTurno, NOCHE_POR_OMISION, ZONA_POR_OMISION, type VentanaNoche } from './turnos';
 import type { RespuestaRapida } from './respuestas_rapidas';
 import {
   datosUnidadVisibles, etapaDeViaje, ultimoHitoDe, type DatosUnidadCrudos, type DatosUnidadViaje, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
@@ -450,14 +450,29 @@ export function aDirector(f: Fila): Director {
 const sinColumna = (e: { code?: string } | null | undefined): boolean => e?.code === '42703' || e?.code === 'PGRST204';
 
 /** 0798: la zona IANA y los festivos de la flota para decidir turnos. Sin tabla/columna (base sin 0798) es la zona de omisión y sin festivos. */
-async function contextoDeTurnos(tenantId: string): Promise<{ zona: string; festivos: string[] }> {
+async function contextoDeTurnos(tenantId: string): Promise<{ zona: string; festivos: string[]; noche: VentanaNoche }> {
   const z = await acotada(supabaseAdmin().from('tenant').select('zona_horaria').eq('id', tenantId).maybeSingle(), 'vigia.turnos_zona');
   if (z.error && !sinMigrar(z.error) && !sinColumna(z.error)) throw new Error(`vigia.turnos_zona: ${z.error.message}`);
   const zona = str((z.data as Fila | null)?.zona_horaria) ?? ZONA_POR_OMISION;
   const f = await acotada(supabaseAdmin().from('vigia_festivo').select('fecha').eq('tenant_id', tenantId).order('fecha').order('id').limit(400), 'vigia.turnos_festivos');
   if (f.error && !sinMigrar(f.error)) throw new Error(`vigia.turnos_festivos: ${f.error.message}`);
   const festivos = ((f.error ? [] : f.data ?? []) as Fila[]).map((x) => String(x.fecha ?? '').slice(0, 10)).filter(esFechaValida);
-  return { zona, festivos };
+  return { zona, festivos, noche: await nocheDeLaFlota(tenantId) };
+}
+
+/**
+ * 1005: la noche de la flota (`vigia_sin_atender_config.noche_*`). Sin fila, sin columnas (base sin la 1005) o a medias es `NOCHE_POR_OMISION` (20 a 7).
+ * Un error distinto de «tabla o columna ausente» LANZA: no se decide a quién avisar de noche sobre una lectura que no se hizo.
+ */
+async function nocheDeLaFlota(tenantId: string): Promise<VentanaNoche> {
+  const r = await acotada(supabaseAdmin().from('vigia_sin_atender_config').select('noche_desde_hora, noche_hasta_hora').eq('tenant_id', tenantId).maybeSingle(), 'vigia.turnos_noche');
+  if (r.error) {
+    if (sinMigrar(r.error) || sinColumna(r.error)) return { ...NOCHE_POR_OMISION };
+    throw new Error(`vigia.turnos_noche: ${r.error.message}`);
+  }
+  const f = (r.data ?? {}) as Fila;
+  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 23;
+  return ok(f.noche_desde_hora) && ok(f.noche_hasta_hora) ? { desdeHora: f.noche_desde_hora, hastaHora: f.noche_hasta_hora } : { ...NOCHE_POR_OMISION };
 }
 
 /**
@@ -477,8 +492,8 @@ async function directoresDeNivel(tenantId: string, nivel: NivelDirector, ahora: 
   const filas = (r.data ?? []) as unknown as Fila[];
   const conTurno = filas.map((f) => ({ director: aDirector(f), turno: aTurnoDirector(f.turno) }));
   if (conTurno.every((d) => d.turno === 'siempre')) return conTurno.map((d) => d.director);
-  const { zona, festivos } = await contextoDeTurnos(tenantId);
-  const { lista, cayoATodos } = filtrarPorTurno(conTurno, ahora, zona, festivos);
+  const { zona, festivos, noche } = await contextoDeTurnos(tenantId);
+  const { lista, cayoATodos } = filtrarPorTurno(conTurno, ahora, zona, festivos, noche);
   if (cayoATodos) logger.warn('vigia.turnos_nivel_sin_turno', { tenant: tenantId, nivel });
   return lista.map((d) => d.director);
 }
@@ -1381,6 +1396,8 @@ export interface DestinatariosResumenCrudos {
   nivel2: Array<{ nombre: string; correo: string; turno: ReturnType<typeof aTurnoDirector> }>;
   zona: string;
   festivos: string[];
+  /** 1005: la noche de la flota (default 20 a 7). Ausente (base sin la 1005 o pruebas viejas) = la de omisión. */
+  noche?: VentanaNoche;
 }
 
 /**
@@ -1398,7 +1415,7 @@ export async function leerDestinatariosResumen(tenantId: string): Promise<Destin
   const s = await acotada(db.from('vigia_servicio_cliente').select('id, nombre, correo, cliente_id').eq('tenant_id', tenantId).eq('activo', true)
     .not('correo', 'is', null).order('created_at').order('id').limit(MAX_SERVICIO_CLIENTE), 'vigia.destinatarios_resumen_servicio');
   if (s.error && !sinMigrar(s.error)) throw new Error(`vigia.destinatarios_resumen_servicio: ${s.error.message}`);
-  const { zona, festivos } = await contextoDeTurnos(tenantId);
+  const { zona, festivos, noche } = await contextoDeTurnos(tenantId);
   const filas = (d.error ? [] : (d.data ?? [])) as unknown as Fila[];
   const aPersona = (f: Fila) => ({ nombre: String(f.nombre ?? ''), correo: String(f.correo ?? ''), turno: aTurnoDirector(f.turno) });
   const conCorreo = filas.filter((f) => str(f.correo));
@@ -1407,14 +1424,16 @@ export async function leerDestinatariosResumen(tenantId: string): Promise<Destin
       .map((f) => ({ nombre: String(f.nombre ?? ''), correo: String(f.correo), clienteId: str(f.cliente_id) })),
     nivel1: conCorreo.filter((f) => num(f.nivel) === 1).map(aPersona),
     nivel2: conCorreo.filter((f) => num(f.nivel) === 2).map(aPersona),
-    zona, festivos,
+    zona, festivos, noche,
   };
 }
 
 
 // ── Ronda 6 / 0999: la configuración de «sin atender» por flota ──────────────────────────────────────
 
-const COLUMNAS_CONFIG_SIN_ATENDER = 'horario_atencion, palabras_clave, palabras_urgentes, equipo_nombres, insistencia_min, umbral_urgente_min, resumen_correo_habilitado';
+const COLUMNAS_CONFIG_SIN_ATENDER_0999 = 'horario_atencion, palabras_clave, palabras_urgentes, equipo_nombres, insistencia_min, umbral_urgente_min, resumen_correo_habilitado';
+/** 1005: plazos propios y noche. Una base sin la 1005 (42703 / PGRST204) se lee con las columnas de la 0999 y esos cuatro quedan en null. */
+const COLUMNAS_CONFIG_SIN_ATENDER = `${COLUMNAS_CONFIG_SIN_ATENDER_0999}, umbral_min, umbral_critico_min, noche_desde_hora, noche_hasta_hora`;
 
 /**
  * Lo que la flota dejó guardado para «sin atender». SIN FILA, o con la tabla ausente (base sin la 0999: 42P01 / PGRST205), devuelve los valores
@@ -1422,7 +1441,9 @@ const COLUMNAS_CONFIG_SIN_ATENDER = 'horario_atencion, palabras_clave, palabras_
  * «no pude preguntar» no es «está apagado». Filtra por `tenant_id`.
  */
 export async function leerConfigSinAtender(tenantId: string): Promise<ConfigGuardadaSinAtender> {
-  const r = await acotada(supabaseAdmin().from('vigia_sin_atender_config').select(COLUMNAS_CONFIG_SIN_ATENDER).eq('tenant_id', tenantId).maybeSingle(), 'vigia.sin_atender_config_leer');
+  const consulta = (columnas: string) => acotada(supabaseAdmin().from('vigia_sin_atender_config').select(columnas).eq('tenant_id', tenantId).maybeSingle(), 'vigia.sin_atender_config_leer');
+  let r = await consulta(COLUMNAS_CONFIG_SIN_ATENDER);
+  if (r.error && sinColumna(r.error)) r = await consulta(COLUMNAS_CONFIG_SIN_ATENDER_0999);   // base sin la 1005
   if (r.error) {
     if (sinMigrar(r.error)) return copiaConfigGuardadaPorOmision();
     throw new Error(`vigia.sin_atender_config_leer: ${r.error.message}`);
@@ -1440,7 +1461,14 @@ export async function guardarConfigSinAtender(tenantId: string, userId: string |
     insistencia_min: v.insistenciaMin, umbral_urgente_min: v.umbralUrgenteMin, resumen_correo_habilitado: v.resumenCorreoHabilitado,
     updated_at: new Date().toISOString(), updated_by: userId,
   };
-  const r = await acotada(supabaseAdmin().from('vigia_sin_atender_config').upsert(fila, { onConflict: 'tenant_id' }), 'vigia.sin_atender_config_guardar');
+  const nuevas = { umbral_min: v.umbralMin, umbral_critico_min: v.umbralCriticoMin, noche_desde_hora: v.nocheDesdeHora, noche_hasta_hora: v.nocheHastaHora };
+  const guardar = (f: Record<string, unknown>) => acotada(supabaseAdmin().from('vigia_sin_atender_config').upsert(f, { onConflict: 'tenant_id' }), 'vigia.sin_atender_config_guardar');
+  let r = await guardar({ ...fila, ...nuevas });
+  if (r.error && sinColumna(r.error)) {
+    // Base sin la 1005: si la flota no fijó plazos ni noche se guarda como antes; si los fijó, NO se pierden en silencio.
+    if (Object.values(nuevas).some((x) => x !== null)) return { ok: false, error: 'Los plazos propios y la noche todavía no están disponibles en tu cuenta. Avísale a Likida.' };
+    r = await guardar(fila);
+  }
   if (r.error) {
     if (sinMigrar(r.error)) return { ok: false, error: 'La configuración de esta pantalla todavía no está disponible en tu cuenta. Avísale a Likida.' };
     throw new Error(`vigia.sin_atender_config_guardar: ${r.error.message}`);

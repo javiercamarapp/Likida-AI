@@ -35,6 +35,7 @@ describe('validación estricta: rangos', () => {
       horarioAtencion: { desdeHora: 8, hastaHora: 18, diasHabiles: [1, 3, 5] },
       palabrasClave: ['embarque', 'retraso'], palabrasUrgentes: ['urgente'], equipoNombres: ['Operador 1', 'Operador 2'],
       insistenciaMin: 3, umbralUrgenteMin: 15, resumenCorreoHabilitado: true,
+      umbralMin: null, umbralCriticoMin: null, nocheDesdeHora: null, nocheHastaHora: null,
     });
   });
   it.each([
@@ -108,5 +109,53 @@ describe('el motor recibe lo guardado', () => {
     const b = detectarSinAtender([c], conHorario, T0_MS).alertas[0];
     expect(a?.antiguedadMin).toBe(660);
     expect(b?.antiguedadMin).toBe(120);
+  });
+});
+
+describe('1005: plazos propios y noche', () => {
+  it('por omisión son null y NO cambian el motor: ni plazos ni noche en el parcial', () => {
+    const base = copiaConfigGuardadaPorOmision();
+    expect(base).toMatchObject({ umbralMin: null, umbralCriticoMin: null, nocheDesdeHora: null, nocheHastaHora: null });
+    const p = aParcialDelMotor(base);
+    for (const k of ['umbralMin', 'umbralCriticoMin', 'noche']) expect(p).not.toHaveProperty(k);
+  });
+  it('fijados, pasan al motor (plazos y noche)', () => {
+    const p = aParcialDelMotor({ ...copiaConfigGuardadaPorOmision(), umbralMin: 45, umbralCriticoMin: 15, nocheDesdeHora: 21, nocheHastaHora: 6 });
+    expect(p).toMatchObject({ umbralMin: 45, umbralCriticoMin: 15, noche: { desdeHora: 21, hastaHora: 6 } });
+  });
+  it('una noche a medias no se pasa al motor', () => {
+    expect(aParcialDelMotor({ ...copiaConfigGuardadaPorOmision(), nocheDesdeHora: 21 })).not.toHaveProperty('noche');
+  });
+  it('validación: acepta bordes, normaliza ausentes a null y acepta noche que cruza medianoche o iguales', () => {
+    expect(validarConfigGuardada({ ...valido, umbralMin: 1440, umbralCriticoMin: 1, nocheDesdeHora: 0, nocheHastaHora: 23 })).toMatchObject({ ok: true, valor: { umbralMin: 1440, umbralCriticoMin: 1, nocheDesdeHora: 0, nocheHastaHora: 23 } });
+    expect(validarConfigGuardada({ ...valido, umbralMin: 30, umbralCriticoMin: 30 }).ok).toBe(true);
+    expect(validarConfigGuardada({ ...valido, nocheDesdeHora: 22, nocheHastaHora: 6 }).ok).toBe(true);
+    expect(validarConfigGuardada(valido)).toMatchObject({ ok: true, valor: { umbralMin: null, umbralCriticoMin: null, nocheDesdeHora: null, nocheHastaHora: null } });
+  });
+  it.each([
+    [{ umbralMin: 0 }], [{ umbralMin: 1441 }], [{ umbralMin: 1.5 }], [{ umbralMin: '30' }],
+    [{ umbralCriticoMin: 0 }], [{ umbralCriticoMin: 1441 }],
+    [{ umbralMin: 30, umbralCriticoMin: 31 }],
+    [{ nocheDesdeHora: 24, nocheHastaHora: 6 }], [{ nocheDesdeHora: -1, nocheHastaHora: 6 }], [{ nocheDesdeHora: 20, nocheHastaHora: 7.5 }],
+    [{ nocheDesdeHora: 20 }], [{ nocheHastaHora: 7 }],
+  ])('rechaza %j con mensaje llano', (extra) => {
+    const r = validarConfigGuardada({ ...valido, ...extra });
+    expect(r.ok).toBe(false);
+  });
+  it('el crítico mayor que el normal se rechaza solo si existen los dos', () => {
+    expect(validarConfigGuardada({ ...valido, umbralCriticoMin: 500 }).ok).toBe(true);
+    expect(validarConfigGuardada({ ...valido, umbralMin: 5 }).ok).toBe(true);
+  });
+  it('normalizarFilaConfig: lee las columnas nuevas y ante valores malos o columnas ausentes vuelve a null', () => {
+    expect(normalizarFilaConfig({ umbral_min: 45, umbral_critico_min: 15, noche_desde_hora: 21, noche_hasta_hora: 6 })).toMatchObject({ umbralMin: 45, umbralCriticoMin: 15, nocheDesdeHora: 21, nocheHastaHora: 6 });
+    expect(normalizarFilaConfig({})).toMatchObject({ umbralMin: null, umbralCriticoMin: null, nocheDesdeHora: null, nocheHastaHora: null });
+    expect(normalizarFilaConfig({ umbral_min: 0, umbral_critico_min: 5000, noche_desde_hora: 25, noche_hasta_hora: 3 })).toMatchObject({ umbralMin: null, umbralCriticoMin: null, nocheDesdeHora: null, nocheHastaHora: null });
+    expect(normalizarFilaConfig({ umbral_min: 20, umbral_critico_min: 30 }).umbralCriticoMin).toBeNull();
+    expect(normalizarFilaConfig({ noche_desde_hora: 20 })).toMatchObject({ nocheDesdeHora: null, nocheHastaHora: null });
+  });
+  it('de extremo a extremo: la noche guardada llega a la config efectiva del motor y los plazos guardados ganan a vigia_config', () => {
+    const g = { ...copiaConfigGuardadaPorOmision(), umbralMin: 45, umbralCriticoMin: 15, nocheDesdeHora: 21, nocheHastaHora: 6 };
+    const n = normalizarConfigSinAtender({ umbralMin: 99, umbralCriticoMin: 98, ...aParcialDelMotor(g) });
+    expect(n.config).toMatchObject({ umbralMin: 45, umbralCriticoMin: 15, noche: { desdeHora: 21, hastaHora: 6 } });
   });
 });

@@ -16,6 +16,18 @@ describe('destinatarios del resumen', () => {
     expect(r.turno).toBe('noche');
     expect(correos(r)).toContain('noche@ejemplo.test');
   });
+  it('1005: la noche configurable de la flota decide el turno (10 a 14: mediodía es noche; 23:00 ya no)', () => {
+    const noche = { desdeHora: 10, hastaHora: 14 };
+    const dia = destinatariosDelResumen({ crudos: crudos({ noche }), alertas: [alerta()], clienteDeChat: mapa([['g1', CLIENTE_A]]), ahora: new Date(AHORA_DIA) });
+    expect(dia.turno).toBe('noche');
+    expect(correos(dia)).toContain('noche@ejemplo.test');
+    const tarde = destinatariosDelResumen({ crudos: crudos({ noche }), alertas: [alerta()], clienteDeChat: mapa([['g1', CLIENTE_A]]), ahora: new Date(AHORA_NOCHE) });
+    expect(tarde.turno).toBe('dia');
+    expect(correos(tarde)).not.toContain('noche@ejemplo.test');
+  });
+  it('1005: sin noche en los crudos sigue de 20 a 7 (igual que antes)', () => {
+    expect(destinatariosDelResumen({ crudos: crudos(), alertas: [alerta()], clienteDeChat: mapa([['g1', CLIENTE_A]]), ahora: new Date(AHORA_NOCHE) }).turno).toBe('noche');
+  });
   it('el dueño solo recibe si hay una alerta alta en un grupo crítico', () => {
     const base = { crudos: crudos(), clienteDeChat: mapa([['g1', CLIENTE_A]]), ahora: new Date(AHORA_DIA) };
     expect(correos(destinatariosDelResumen({ ...base, alertas: [alerta({ nivel: 'alta' })] }))).not.toContain('dueno@ejemplo.test');
@@ -38,5 +50,24 @@ describe('destinatarios del resumen', () => {
     const r = destinatariosDelResumen({ crudos: c, alertas: [alerta()], clienteDeChat: mapa([]), ahora: new Date(AHORA_DIA) });
     expect(correos(r)).toEqual(['noche@ejemplo.test']);
     expect(r.cayoATodos).toBe(true);
+  });
+  it('A2: cada destinatario lleva el alcance de cliente con que se eligio', () => {
+    const c = crudos({
+      servicio: [{ nombre: 'Servicio A', correo: 'a@ejemplo.test', clienteId: CLIENTE_A }, { nombre: 'Servicio general', correo: 'todos@ejemplo.test', clienteId: null }],
+    });
+    const r = destinatariosDelResumen({ crudos: c, alertas: [alerta()], clienteDeChat: mapa([['g1', CLIENTE_A]]), ahora: new Date(AHORA_DIA) });
+    const de = (correo: string) => r.destinatarios.find((d) => d.correo === correo)!;
+    expect(de('a@ejemplo.test').clientes).toEqual([CLIENTE_A]);
+    expect(de('todos@ejemplo.test').clientes).toBeNull();
+    expect(de('dia@ejemplo.test').clientes).toBeNull();
+  });
+  it('A2: quien aparece ligado a un cliente y tambien para toda la flota queda para toda la flota; ligado a dos clientes junta ambos', () => {
+    const c = crudos({
+      servicio: [{ nombre: 'S', correo: 'dia@ejemplo.test', clienteId: CLIENTE_A }, { nombre: 'T', correo: 'dos@ejemplo.test', clienteId: CLIENTE_A }, { nombre: 'T', correo: 'DOS@ejemplo.test', clienteId: CLIENTE_B }],
+    });
+    const r = destinatariosDelResumen({ crudos: c, alertas: [alerta({ chatId: 'g1' }), alerta({ chatId: 'g2', clave: 'c2' })], clienteDeChat: mapa([['g1', CLIENTE_A], ['g2', CLIENTE_B]]), ahora: new Date(AHORA_DIA) });
+    const de = (correo: string) => r.destinatarios.find((d) => d.correo === correo)!;
+    expect(de('dia@ejemplo.test').clientes).toBeNull();
+    expect([...(de('dos@ejemplo.test').clientes ?? [])].sort()).toEqual([CLIENTE_A, CLIENTE_B]);
   });
 });

@@ -86,6 +86,41 @@ describe('leerExportWhatsapp', () => {
     expect(r.mensajes.map((m) => m.texto)).toEqual(['Ya salió la unidad']);
   });
 
+  it('reconoce las líneas en inglés de iOS y Android: adjuntos omitidos cuentan, borrados y llamadas solo se descartan', () => {
+    const txt = [
+      '[12/09/2026, 10:00:00 AM] Cliente Uno: \u200e<attached: 00000012-PHOTO-2026-09-12-10-00-00.jpg>',
+      '[12/09/2026, 10:01:00 AM] Cliente Uno: \u200eimage omitted',
+      '[12/09/2026, 10:02:00 AM] Cliente Uno: \u200evideo omitted',
+      '[12/09/2026, 10:03:00 AM] Cliente Uno: \u200eaudio omitted',
+      '[12/09/2026, 10:04:00 AM] Cliente Uno: \u200eGIF omitted',
+      '[12/09/2026, 10:05:00 AM] Cliente Uno: \u200eContact card omitted',
+      '[12/09/2026, 10:06:00 AM] Cliente Uno: \u200esticker omitted',
+      '[12/09/2026, 10:07:00 AM] Cliente Uno: \u200edocument omitted',
+      '[12/09/2026, 10:08:00 AM] Cliente Uno: \u200eThis message was deleted.',
+      '[12/09/2026, 10:09:00 AM] Cliente Uno: \u200eYou deleted this message.',
+      '[12/09/2026, 10:10:00 AM] Cliente Uno: \u200eMissed voice call',
+      '[12/09/2026, 10:11:00 AM] Cliente Uno: \u200eMissed video call',
+      '12/09/2026 10:12 - Cliente Uno: This message was deleted',
+      '12/09/2026 10:13 - Cliente Uno: You deleted this message',
+      '12/09/2026 10:14 - Cliente Uno: Missed voice call',
+      '12/09/2026 10:15 - Cliente Uno: Missed video call',
+      '12/09/2026 10:16 - Cliente Uno: Video call',
+      '12/09/2026 10:17 - Cliente Uno: IMG-20260912-WA0003.jpg (file attached)',
+      '12/09/2026 10:18 - Ana Servicio: Ya salió la unidad',
+    ].join('\n');
+    const r = leerExportWhatsapp(txt, OPC);
+    expect(r.adjuntosOmitidos).toBe(9);
+    expect(r.descartados).toBe(18);
+    expect(r.mensajes.map((m) => m.texto)).toEqual(['Ya salió la unidad']);
+  });
+
+  it('un texto real que solo empieza parecido a una marca en inglés no se descarta', () => {
+    const txt = ['12/09/2026 10:00 - Cliente Uno: Voice call me when you arrive', '12/09/2026 10:01 - Cliente Uno: the image omitted the folio number', '12/09/2026 10:02 - Cliente Uno: Missed the delivery window'].join('\n');
+    const r = leerExportWhatsapp(txt, OPC);
+    expect(r.mensajes).toHaveLength(3);
+    expect(r.descartados).toBe(0);
+  });
+
   it('sin adjuntos el conteo es cero', () => {
     expect(leerExportWhatsapp('12/09/2026 10:00 - Cliente Uno: hola', OPC).adjuntosOmitidos).toBe(0);
   });

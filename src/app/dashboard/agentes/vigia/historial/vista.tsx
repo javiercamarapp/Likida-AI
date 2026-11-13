@@ -6,7 +6,7 @@ import type { GrupoVigia } from '@/lib/likida/vigia/historial/repo';
 import type { ReporteHistorial } from '@/lib/likida/vigia/historial/analisis';
 import type { ResultadoPendientes } from '@/lib/likida/vigia/historial/pendientes';
 import type { RespuestaRapidaFila } from '@/lib/likida/vigia/historial/repo';
-import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos, type AccionLote } from './formas';
+import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaCliente, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos, type AccionLote } from './formas';
 import '../vigia.css';
 import { Aviso, BotonEnlace, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { BarList } from '@/app/ui-v2/graficas';
@@ -15,7 +15,7 @@ import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
-export interface AccionesGrupos { alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionLote; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
+export interface AccionesGrupos { altaCliente: AccionGrupos; alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionLote; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
 
 function Seccion({ titulo, info, children }: { id?: string; titulo: string; info: InfoClave; children: React.ReactNode }) {
   return (
@@ -105,6 +105,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
           {puedeEditar ? (
             <>
+              <Seccion id="alta-cliente" titulo={tx('rest.agregar_un_cliente')} info="vigia_historial.alta"><FormaAltaCliente accion={acciones.altaCliente} /></Seccion>
               <Seccion id="alta" titulo={tx('rest.agregar_un_grupo')} info="vigia_historial.alta"><FormaAltaGrupo accion={acciones.alta} clientes={clientes} /></Seccion>
               {grupos.length > 0 && (
                 <Seccion id="importar" titulo={tx('rest.subir_el_chat_exportado')} info="vigia_historial.importar">

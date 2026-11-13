@@ -171,7 +171,16 @@ export function revisarAvisoIntegral(url: string | null | undefined): EstadoAvis
 }
 
 /** Lo que el sondeo de red encontró. El motivo es para el log, no para el operador. */
-export type SondeoAvisoIntegral = { abre: true } | { abre: false; motivo: string };
+export type SondeoAvisoIntegral =
+  | { abre: true }
+  | {
+      abre: false;
+      motivo: string;
+      /** `true` si el fallo fue de tiempo (timeout/abort): no prueba que la liga esté rota. */
+      transitorio?: boolean;
+    };
+
+const ES_TIMEOUT = /timeout|timed out|aborted|abort/i;
 
 /**
  * Abre de verdad la liga del aviso integral. Es lo ÚNICO que distingue un
@@ -186,28 +195,42 @@ export type SondeoAvisoIntegral = { abre: true } | { abre: false; motivo: string
  */
 export async function sondearAvisoIntegral(
   url: string | null | undefined,
-  opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+  opts: { fetchImpl?: typeof fetch; timeoutMs?: number; intentos?: number; esperaMs?: number } = {},
 ): Promise<SondeoAvisoIntegral> {
   const estado = revisarAvisoIntegral(url);
   if (estado !== 'ok') return { abre: false, motivo: `liga ${estado}` };
 
   const f = opts.fetchImpl ?? fetch;
   const destino = (url as string).trim();
-  const señal = () => AbortSignal.timeout(opts.timeoutMs ?? 5000);
+  // 8 s y un reintento: la página alojada por Likida se sondea desde el propio
+  // arranque, cuando la función aún está en frío y 5 s no alcanzaban.
+  const señal = () => AbortSignal.timeout(opts.timeoutMs ?? 8000);
+  const intentos = Math.max(1, opts.intentos ?? 2);
+  const esperaMs = opts.esperaMs ?? 1500;
 
-  try {
-    let res = await f(destino, { method: 'HEAD', redirect: 'follow', signal: señal() });
-    // Hay servidores que no implementan HEAD y contestan 405/501 teniendo la
-    // página. Se reintenta con GET antes de declarar muerta una liga que vive.
-    if (res.status === 405 || res.status === 501) {
-      res = await f(destino, { method: 'GET', redirect: 'follow', signal: señal() });
+  let ultimo: SondeoAvisoIntegral = { abre: false, motivo: 'sin intento' };
+  for (let i = 0; i < intentos; i++) {
+    if (i > 0 && esperaMs > 0) await new Promise((r) => setTimeout(r, esperaMs));
+    try {
+      let res = await f(destino, { method: 'HEAD', redirect: 'follow', signal: señal() });
+      // Hay servidores que no implementan HEAD y contestan 405/501 teniendo la
+      // página. Se reintenta con GET antes de declarar muerta una liga que vive.
+      if (res.status === 405 || res.status === 501) {
+        res = await f(destino, { method: 'GET', redirect: 'follow', signal: señal() });
+      }
+      if (res.ok) return { abre: true };
+      // Una respuesta HTTP es veredicto del servidor: no se reintenta.
+      return { abre: false, motivo: `http ${res.status}` };
+    } catch (e) {
+      // Aquí cae el NXDOMAIN: sin zona DNS, `fetch` falla antes de hablar con nadie.
+      const motivo = e instanceof Error ? e.message : String(e);
+      const nombre = e instanceof Error ? e.name : '';
+      ultimo = { abre: false, motivo, transitorio: ES_TIMEOUT.test(nombre) || ES_TIMEOUT.test(motivo) };
+      // Solo el timeout merece otro intento; un DNS que no resuelve no cambia en 1 s.
+      if (!(ultimo as { transitorio?: boolean }).transitorio) return ultimo;
     }
-    if (!res.ok) return { abre: false, motivo: `http ${res.status}` };
-    return { abre: true };
-  } catch (e) {
-    // Aquí cae el NXDOMAIN: sin zona DNS, `fetch` falla antes de hablar con nadie.
-    return { abre: false, motivo: e instanceof Error ? e.message : String(e) };
   }
+  return ultimo;
 }
 
 /**

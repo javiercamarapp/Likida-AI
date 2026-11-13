@@ -5,7 +5,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 const { enviarResumenSinAtender, parrafosDelResumen, ASUNTO_RESUMEN, claveDelResumen } = await import('./correo');
 const { asuntoEsSeguro, MAX_PARRAFO, MAX_PARRAFOS } = await import('@/lib/likida/avisos_correo');
-const { alerta, resultado, TENANT_A } = await import('./fixtures');
+const { alerta, resultado, TENANT_A, CLIENTE_A, CLIENTE_B } = await import('./fixtures');
 
 const dest = [{ nombre: 'Servicio 1', correo: 'servicio1@ejemplo.test', origen: 'servicio' as const }];
 const base = (alertas = [alerta()]) => ({ tenantId: TENANT_A, resultado: resultado(alertas), destinatarios: dest, liga: 'https://app.ejemplo.test/x', turno: 'dia' as const, fechaLocal: '2026-11-04' });
@@ -100,5 +100,42 @@ describe('resumen por correo', () => {
     expect(p).toHaveLength(1);
     expect(p[0]).toMatch(/No hay conversaciones sin atender/);
     expect(p[0]).not.toMatch(/\d/);
+  });
+  describe('A2: un destinatario ligado a un cliente no ve alertas de otros clientes', () => {
+    const aA = alerta({ chatId: 'gA', chatNombre: 'Grupo Del Cliente A', clave: 'cA' });
+    const aB = alerta({ chatId: 'gB', chatNombre: 'Grupo Del Cliente B', clave: 'cB' });
+    const mapa = new Map([['gA', CLIENTE_A], ['gB', CLIENTE_B]]);
+    const dests = [
+      { nombre: 'Servicio A', correo: 'a@ejemplo.test', origen: 'servicio' as const, clientes: [CLIENTE_A] },
+      { nombre: 'Gerente', correo: 'gerente@ejemplo.test', origen: 'nivel1' as const, clientes: null },
+    ];
+    it('el servicio de A recibe un correo solo con A; quien ve toda la flota recibe ambos', async () => {
+      const enviar = vi.fn(async (a: import('@/lib/likida/avisos_correo').AvisoCorreo) => ({ ok: true as const, destinatarios: a.para.length }));
+      const r = await enviarResumenSinAtender({ ...base([aA, aB]), destinatarios: dests, clienteDeChat: mapa }, { enviar, habilitado: encendido });
+      expect(r.ok).toBe(true);
+      const avisos = enviar.mock.calls.map((c) => c[0]);
+      const aviso = (correo: string) => avisos.find((x) => x.para.includes(correo))!;
+      const textoA = aviso('a@ejemplo.test').parrafos.join('\n');
+      expect(textoA).toContain('Grupo Del Cliente A');
+      expect(textoA).not.toContain('Grupo Del Cliente B');
+      expect(aviso('a@ejemplo.test').para).toEqual(['a@ejemplo.test']);
+      const textoG = aviso('gerente@ejemplo.test').parrafos.join('\n');
+      expect(textoG).toContain('Grupo Del Cliente A');
+      expect(textoG).toContain('Grupo Del Cliente B');
+      expect(aviso('a@ejemplo.test').clave).not.toBe(aviso('gerente@ejemplo.test').clave);
+    });
+    it('si todas las alertas son de A, A y la flota comparten un solo correo', async () => {
+      const enviar = vi.fn(async (a: import('@/lib/likida/avisos_correo').AvisoCorreo) => ({ ok: true as const, destinatarios: a.para.length }));
+      await enviarResumenSinAtender({ ...base([aA]), destinatarios: dests, clienteDeChat: mapa }, { enviar, habilitado: encendido });
+      expect(enviar).toHaveBeenCalledTimes(1);
+      expect(enviar.mock.calls[0]![0].para.slice().sort()).toEqual(['a@ejemplo.test', 'gerente@ejemplo.test']);
+    });
+    it('un grupo sin cliente conocido no se muestra a quien esta ligado a un cliente (falla cerrado)', async () => {
+      const enviar = vi.fn(async (a: import('@/lib/likida/avisos_correo').AvisoCorreo) => ({ ok: true as const, destinatarios: a.para.length }));
+      const huerfana = alerta({ chatId: 'gX', chatNombre: 'Grupo Sin Cliente', clave: 'cX' });
+      const r = await enviarResumenSinAtender({ ...base([huerfana]), destinatarios: [dests[0]!], clienteDeChat: mapa }, { enviar, habilitado: encendido });
+      expect(enviar).not.toHaveBeenCalled();
+      expect(r).toEqual({ ok: false, motivo: 'sin_destinatarios' });
+    });
   });
 });
