@@ -201,7 +201,8 @@ async function manejarGET(req: NextRequest) {
         });
         await alertarHuecoConfiguracion(
           `cron.contrapresion:${c}`,
-          'La bandeja de aprobación tiene piezas pendientes y frena a los agentes internos: revisa o rechaza las piezas.',
+          // El motivo lo declara el propio runner en su latido (contrapresión de la bandeja): no se duplica prosa aquí.
+          String(latidos[c].detalle.motivo ?? 'contrapresion_bandeja'),
           { cron: c, estado: latidos[c].ultimoEstado },
         );
       }
