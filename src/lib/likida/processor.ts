@@ -107,6 +107,7 @@ import {
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './contactos';
 import { exigirIdentidadUnica } from './identidad_telefono';
+import { remitenteEnTenant, responderPorLinea, TEXTO_NO_REGISTRADO_EN_LINEA } from './entrada_linea';
 import { atenderComandoAdmin } from './admin_comandos_wa';
 import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
@@ -138,6 +139,14 @@ export interface InboundMessage {
   lat?: number;
   lng?: number;
   waMessageId?: string;       // id de Meta, para idempotencia
+  /**
+   * Línea propia del tenant por la que ENTRÓ el mensaje (webhook, por `metadata.phone_number_id`).
+   * Ausente = línea de plataforma (comportamiento de siempre). Con él, el remitente se busca SOLO
+   * dentro de ese tenant y la respuesta de rechazo sale por esa misma línea. NO lleva el token:
+   * esta fila se persiste en la bandeja durable; el token se resuelve al responder.
+   */
+  tenantId?: string;
+  linea?: { phoneNumberId: string; lineaId: string | null; origen: 'tenant' };
   /**
    * Cuándo lo recibió META (epoch en ms), no cuándo lo procesamos (DAT-38).
    *
@@ -1681,6 +1690,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // otro camino, acuse del jefe y operador). Si el número identifica a personas de MÁS DE UNA flota no se elige: lanza
     // `OperadorAmbiguo`, que el `catch` de este turno contesta ("tu número aparece dado de alta más de una vez… avísale a tu
     // flota") con el número enmascarado. Con la base sin migrar (0952) no hace nada nuevo; un fallo de lectura se reintenta una vez.
+    // Línea propia de un tenant: el remitente tiene que existir DENTRO de ese tenant. Si no, se le dice por ESA línea y se corta
+    // (nunca se busca en otras flotas). Un fallo de lectura lanza y lo contesta el `catch` general.
+    if (msg.tenantId && !(await remitenteEnTenant(msg.tenantId, msg.from))) {
+      logger.info('wa.linea.remitente_no_registrado', { tenantId: msg.tenantId, id: msg.waMessageId });
+      await responderPorLinea(msg.tenantId, msg.from, TEXTO_NO_REGISTRADO_EN_LINEA);
+      return;
+    }
     await exigirIdentidadUnica(msg.from);
     // L-legal-01: una emergencia ROJA va ANTES que el trámite ARCO (el ROJO de más abajo la atiende y deja la constancia ARCO sin molestar).
     if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text)

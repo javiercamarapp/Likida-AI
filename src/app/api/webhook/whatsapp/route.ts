@@ -13,6 +13,7 @@ import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { registrarEntrantesWhatsApp } from '@/lib/likida/wa_ventana';
+import { canalPorPhoneNumberId } from '@/lib/meta/canal';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { avisadosDeApagado, VENTANA_AVISO_APAGADO_MS } from './avisos_apagado';
 import { medirRuta } from '@/lib/observability/latencia';
@@ -157,6 +158,7 @@ async function manejarPOST(req: NextRequest) {
     return new NextResponse('Bad JSON', { status: 400 });
   }
 
+  await clasificarLineas(payload);
   const messages = extractMessages(payload);
   // ── VENTANA DE 24 H (mig. 0368) ───────────────────────────────────────────
   // Todo mensaje entrante válido (firma ya verificada) abre/renueva la ventana
@@ -164,7 +166,11 @@ async function manejarPOST(req: NextRequest) {
   // limit o apagado: la ventana es un hecho de WhatsApp, no del procesamiento.
   // Idempotente y a prueba de reentregas/desorden (la hora solo avanza); nunca
   // lanza ni cambia el código de respuesta — es una caché, no un requisito.
-  if (messages.length) await registrarEntrantesWhatsApp(messages);
+  // Los entrantes de una línea PROPIA de tenant NO se registran aquí: la clave de la tabla es solo el teléfono del
+  // contacto (la ventana de 24 h es por NÚMERO de negocio + contacto) y mezclarla marcaría «abierta» la ventana de la
+  // plataforma con un mensaje que entró por otra línea. Queda pendiente de migración (ver resumen del paquete W).
+  const entrantesPlataforma = messages.filter((m) => !m.tenantId);
+  if (entrantesPlataforma.length) await registrarEntrantesWhatsApp(entrantesPlataforma);
   // ── RATE LIMIT POR TELÉFONO (no por IP: todo Meta viene de sus IPs) ────────
   //
   // LO QUE PASA DE ESTE TECHO YA NO SE DESCARTA: SE APLAZA. Es el cambio del
@@ -673,19 +679,54 @@ async function avisarMantenimiento(mensajes: InboundMessage[]): Promise<void> {
   }
 }
 
+/** A qué línea pertenece un `value` del webhook: la de plataforma (env) o la propia de un tenant. */
+type RutaLinea = { origen: 'plataforma' } | { origen: 'tenant'; tenantId: string; phoneNumberId: string; lineaId: string | null };
+type ValorWebhook = { metadata?: { phone_number_id?: string } } | undefined;
+
+/** Se llena en `clasificarLineas` (async) y se lee en los extractores (sync). `null` = descartar. */
+const rutasPorValor = new WeakMap<object, RutaLinea | null>();
+
 /**
- * A37-S12-05: ¿el evento va dirigido a NUESTRO número? Si otro número de la
- * misma app de Meta (sandbox, otro producto) manda eventos con la misma firma,
- * no deben entrar al motor. Sin metadata o sin WHATSAPP_PHONE_NUMBER_ID no hay
- * contra qué comparar y se deja pasar (no se apaga el canal por un campo
- * ausente); un id presente que no coincide se descarta con log.
+ * A37-S12-05 + líneas por tenant: ¿el evento va dirigido a NUESTRO número?
+ *  - sin metadata o sin WHATSAPP_PHONE_NUMBER_ID → plataforma (se deja pasar, como siempre);
+ *  - coincide con el de plataforma → plataforma, SIN consultar nada;
+ *  - otro id → se busca como línea de un tenant: si lo es, entra a ESE tenant; si no, se descarta con
+ *    log `webhook.numero_ajeno` (nunca cae a otro tenant ni a la plataforma). Si no hay número de
+ *    plataforma configurado se conserva la tolerancia de siempre solo cuando tampoco es línea de tenant.
  */
-function esDeNuestroNumero(value: { metadata?: { phone_number_id?: string } } | undefined): boolean {
+async function rutaDelValor(value: ValorWebhook): Promise<RutaLinea | null> {
   const propio = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const recibido = value?.metadata?.phone_number_id;
-  if (!propio || !recibido || recibido === propio) return true;
+  if (!recibido || recibido === propio) return { origen: 'plataforma' };
+  try {
+    const hallada = await canalPorPhoneNumberId(recibido);
+    if (hallada) {
+      return { origen: 'tenant', tenantId: hallada.tenantId, phoneNumberId: recibido, lineaId: hallada.canal.lineaId };
+    }
+  } catch (e) {
+    // No se pudo consultar: fail-closed si hay número de plataforma contra el cual descartar (nunca se asigna a un tenant).
+    logger.warn('webhook.linea_no_consultada', { err: e instanceof Error ? e.message : String(e) });
+  }
+  if (!propio) return { origen: 'plataforma' };
   logger.warn('webhook.numero_ajeno', { recibido });
-  return false;
+  return null;
+}
+
+async function clasificarLineas(p: WaWebhook): Promise<void> {
+  const cache = new Map<string, RutaLinea | null>();
+  for (const entry of p.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const v = change.value;
+      if (!v) continue;
+      const k = v.metadata?.phone_number_id ?? '';
+      if (!cache.has(k)) cache.set(k, await rutaDelValor(v));
+      rutasPorValor.set(v, cache.get(k) ?? null);
+    }
+  }
+}
+
+function esDeNuestroNumero(value: ValorWebhook): boolean {
+  return value ? (rutasPorValor.get(value) ?? null) !== null : true;
 }
 
 function extractStatuses(p: WaWebhook): WaEstado[] {
@@ -746,7 +787,11 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
           recibidoMs = Date.now();
           logger.warn('webhook.timestamp_ilegible', { waMessageId: m.id, crudo: m.timestamp });
         }
-        const base = { from: m.from, waMessageId: m.id, timestampMs, recibidoMs };
+        const ruta = change.value ? rutasPorValor.get(change.value) : null;
+        const linea = ruta && ruta.origen === 'tenant'
+          ? { tenantId: ruta.tenantId, linea: { phoneNumberId: ruta.phoneNumberId, lineaId: ruta.lineaId, origen: 'tenant' as const } }
+          : {};
+        const base = { from: m.from, waMessageId: m.id, timestampMs, recibidoMs, ...linea };
         if (m.type === 'text' && m.text) out.push({ ...base, type: 'text', text: m.text.body });
         // El caption viaja como `text` del mensaje de imagen: `InboundMessage`
         // ya tiene el campo y el processor decide con él (POD/talacha, F4).
