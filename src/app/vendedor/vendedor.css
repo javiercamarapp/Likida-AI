@@ -38,7 +38,7 @@
 
 /* El tablero va a sangre dentro de su tarjeta (Rovaq: tabla con padding 0, cabecera de 36 y filas de 40): sin el marco propio de la tabla, que hacía un doble marco. */
 [data-ui="v2"] .rv-tarjeta:has(.ven-tablero) { overflow: hidden; }
-[data-ui="v2"] .ven-tablero { gap: 0; }
+[data-ui="v2"] .vnd-fila .ven-tablero { gap: 0; }
 [data-ui="v2"] .vnd-fila .ven-tablero > .card { margin: 4px calc(-1 * var(--ui-pad)) 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
 [data-ui="v2"] .vnd-fila .ven-tablero:not(:has(.ven-recortes)) > .card { margin-bottom: calc(-1 * var(--ui-pad)); }
 [data-ui="v2"] .vnd-fila .ven-recortes { padding: 8px 0 0; }

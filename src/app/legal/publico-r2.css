@@ -29,7 +29,7 @@
 [data-ui="v2"] .rv-estado__tabla { margin-top: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
 [data-ui="v2"] .rv-estado__tabla table { width: 100%; border-collapse: collapse; font-size: 13px; }
 [data-ui="v2"] .rv-estado__tabla th { height: 36px; padding: 0 14px; text-align: left; font-size: 12px; font-weight: 600; color: var(--ink); border-bottom: 1px solid var(--line); background: var(--canvas); white-space: nowrap; }
-[data-ui="v2"] .rv-estado__tabla td { min-height: 40px; padding: 8px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+[data-ui="v2"] .rv-estado__tabla td { min-height: 40px; padding: 6px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 [data-ui="v2"] .rv-estado__tabla tr:last-child td { border-bottom: 0; }
 [data-ui="v2"] .rv-estado__tabla td[data-col="nombre"] { font-weight: 500; color: var(--ink); }
 [data-ui="v2"] .rv-estado__nota { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
@@ -43,9 +43,6 @@
 [data-ui="v2"] .rv-estado__celda[data-nivel="sin"] { background: transparent; border: 1px dashed var(--faint); }
 @media (max-width: 640px) { [data-ui="v2"] .rv-estado__pista { min-width: 120px; } }
 
-/* ── Demo: el alto sigue al contenido (sin tarjeta alta medio vacía) ──────────────────────────────────────────────────────────────── */
-[data-ui="v2"] .rv-demo { height: auto; min-height: 0; max-height: 520px; }
-[data-ui="v2"] .rv-demo__hilo { flex: 0 1 auto; min-height: 120px; }
 
 /* ── Documentos legales con piel de sitio (índice) ───────────────────────────────────────────────────────────────────────────────── */
 [data-ui="v2"] .rv-legal__indice { margin: 24px 0 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
@@ -87,7 +84,7 @@ div[data-ui="v2"].rv-pub .rv-pub__lista { margin-top: 24px; }
 
 /* ── Estado: la tabla se desplaza o pasa a tarjeta-fila; la columna de disponibilidad no se aprieta a 3 renglones ───────────────────── */
 [data-ui="v2"] .rv-estado__tabla { overflow-x: auto; }
-[data-ui="v2"] .rv-estado__tabla th[scope="row"] { height: auto; padding: 8px 14px; border-bottom: 1px solid var(--line); background: transparent; white-space: normal; font-size: 13px; text-align: left; }
+[data-ui="v2"] .rv-estado__tabla th[scope="row"] { height: auto; padding: 6px 14px; line-height: 1.3; border-bottom: 1px solid var(--line); background: transparent; white-space: normal; font-size: 13px; text-align: left; }
 [data-ui="v2"] .rv-estado__tabla tr:last-child th[scope="row"] { border-bottom: 0; }
 [data-ui="v2"] .rv-estado__disp { min-width: 200px; line-height: 1.5; }
 [data-ui="v2"] .rv-estado__etq { display: none; }
@@ -105,12 +102,7 @@ div[data-ui="v2"].rv-pub .rv-pub__lista { margin-top: 24px; }
 
 /* ── Piel `documento` de las páginas legales con huella (/terminos, /privacidad, /aviso/[tenant]) en la misma familia que el resto de las públicas ──
  * El texto del documento NO cambia (la huella lo hashea): el logo es una máscara CSS sin texto (`content: ''`), el nombre del documento (que el DOM
- * trae como rótulo) se pinta como el título 20/600 de `access-flow`, y el h1 «Likida» queda solo para lectores de pantalla. */
+ * trae como rótulo) se pinta como el título 20/600 de `access-flow`, y el h1 y el logo los define `marco-legal.css` (sitio, no tarjeta). */
 [data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) > header { display: flex; flex-direction: column; }
-[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) > header::before {
-  content: ''; order: 0; display: block; width: 112px; height: 22px; margin-bottom: 24px; background: var(--ink);
-  -webkit-mask: url('/brand/likida-logo-horizontal-positivo.svg') left center / contain no-repeat; mask: url('/brand/likida-logo-horizontal-positivo.svg') left center / contain no-repeat;
-}
 [data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__rotulo { order: 1; font-family: var(--font-display), var(--font-sans-ui), sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; text-transform: none; color: var(--ink); }
-[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo { order: 2; position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 [data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__apoyo { order: 3; margin-top: 8px; }

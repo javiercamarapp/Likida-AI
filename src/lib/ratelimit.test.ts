@@ -58,7 +58,7 @@ describe('poda del backstop de memoria', () => {
     // Con la poda por orden de alta, la víctima era la PRIMERA en caer y esto
     // devolvía true. Con la poda por caducidad, sigue bloqueada.
     expect(await rateLimit('acceso:1.2.3.4', 1, 60_000)).toBe(false);
-  });
+  }, 30_000); // 5 200 llamadas async: bajo la suite completa en paralelo pasa de los 5 000 ms por omisión
 });
 
 describe('bodyExcede', () => {
@@ -79,7 +79,7 @@ describe('rateLimit: una inundacion de llaves no reabre una llave agotada', () =
     expect(await rateLimit(k, 10, 300_000)).toBe(false);
     for (let i = 0; i < 6000; i++) await rateLimit(`relleno:${i}`, 10, 300_000);
     expect(await rateLimit(k, 10, 300_000)).toBe(false);
-  });
+  }, 30_000); // 6 000 llamadas async: ídem
 });
 
 // CT-SEG-11 (F2): un límite que BLOQUEA deja constancia (solo la categoría, con freno por categoría), y uno que deja pasar no.

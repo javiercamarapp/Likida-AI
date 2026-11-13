@@ -403,7 +403,6 @@
 [data-ui="v2"] .rv-tarjeta__cuerpo { min-width: 0; }
 [data-ui="v2"] .rv-tarjeta[aria-busy="true"] .rv-tarjeta__cuerpo { opacity: .6; }
 /* KPI: la ⓘ vive en la esquina del encabezado de la celda, siempre en el mismo sitio. */
-[data-ui="v2"] .rv-kpi__cab { position: relative; }
 [data-ui="v2"] .rv-kpi__cab .rv-info { margin: -4px -6px -4px auto; }
 
 /* ═══ LF · Filtros de barra (como Vexa): UNA fila baja, controles de 32 px, radio 8, borde fino, 12 px / 500, activo = tinta (nunca azul) ═══ */
