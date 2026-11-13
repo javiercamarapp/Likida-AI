@@ -189,6 +189,38 @@ describe('/api/health', () => {
     );
   });
 
+  // 13-nov-2026: la bandeja de aprobación con >= 40 piezas frena a 34 de 49 agentes internos (`runner` en `parcial`). Es un freno por
+  // diseño —aprobar es humano— y dejaba el pulso en 503 para siempre. El runner VIVO con contrapresión no degrada; sigue avisando
+  // por el canal semanal de huecos, y un runner que no despacha nada o que lleva cortes seguidos SÍ degrada.
+  it('contrapresión de la bandeja con el runner vivo: no tumba el pulso y avisa por el canal de huecos', async () => {
+    dbFalla = false;
+    alertarOperador.mockClear();
+    alertarHuecoConfiguracion.mockClear();
+    latidos = frescos({
+      id: 'runner', ultimo_latido: new Date().toISOString(), estado: 'parcial',
+      detalle: { despachados: 1, cortesSeguidos: 0, contrapresion: { agentesFrenados: 34, topeBandejaGlobal: 40 } },
+    });
+    const r = await GET(peticion());
+    const c = await r.json();
+    expect(r.status).toBe(200);
+    expect(c).toMatchObject({ ok: true, status: 'ok', checks: { crons: 'ok' } });
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(alertarHuecoConfiguracion).toHaveBeenCalledWith('cron.contrapresion:runner', expect.any(String), expect.objectContaining({ cron: 'runner' }));
+  });
+
+  it.each([
+    ['no despachó ningún agente', { despachados: 0, cortesSeguidos: 0, contrapresion: { agentesFrenados: 49 } }],
+    ['lleva cortes seguidos', { despachados: 1, cortesSeguidos: 3, contrapresion: { agentesFrenados: 34 } }],
+    ['parcial sin contrapresión declarada', { despachados: 1, cortesSeguidos: 0 }],
+  ])('runner parcial que %s: SIGUE degradando el pulso', async (_motivo, detalle) => {
+    dbFalla = false;
+    alertarOperador.mockClear();
+    latidos = frescos({ id: 'runner', ultimo_latido: new Date().toISOString(), estado: 'parcial', detalle });
+    const r = await GET(peticion());
+    expect(r.status).toBe(503);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.estado_no_ok', expect.objectContaining({ error: expect.stringContaining('runner') }));
+  });
+
   it('un hueco declarado y una regresión real a la vez: cada quien su canal', async () => {
     dbFalla = false;
     alertarOperador.mockClear();

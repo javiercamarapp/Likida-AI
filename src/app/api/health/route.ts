@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { detalleLatidos, esHuecoDeConfiguracion, esApagadoPorInterruptor, diasApagado, DIAS_APAGADO_ALERTA, type CronId } from '@/lib/admin/salud';
+import { detalleLatidos, esHuecoDeConfiguracion, esContrapresionDeclarada, esApagadoPorInterruptor, diasApagado, DIAS_APAGADO_ALERTA, type CronId } from '@/lib/admin/salud';
 import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/alerta';
 import { logger } from '@/lib/logger';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
@@ -174,11 +174,13 @@ async function manejarGET(req: NextRequest) {
       // 29-ago-2026: `descarga-sat` sin LIKIDA_SAT_PROVEEDOR mandaba el mismo
       // correo "Urgente" en cada ping de un monitor externo, para siempre).
       const configAusente = noSanos.filter((c) => esHuecoDeConfiguracion(latidos[c].detalle));
-      const regresiones = noSanos.filter((c) => !configAusente.includes(c));
+      // Contrapresión de la bandeja con el runner vivo: freno por diseño, no regresión (ver `esContrapresionDeclarada`).
+      const contrapresion = noSanos.filter((c) => !configAusente.includes(c) && esContrapresionDeclarada(latidos[c].detalle));
+      const regresiones = noSanos.filter((c) => !configAusente.includes(c) && !contrapresion.includes(c));
       // OP-C1: si TODO lo no-sano es hueco declarado (y nadie está muerto), el
       // estado es `config_ausente` — visible, pero distinguible de una regresión.
       if (regresiones.length > 0) cronCheck = 'degraded';
-      else if (cronCheck !== 'degraded') cronCheck = 'config_ausente';
+      else if (cronCheck !== 'degraded') cronCheck = configAusente.length > 0 ? 'config_ausente' : 'ok';
       if (configAusente.length > 0) {
         for (const c of configAusente) {
           // Código controlado por el catálogo: sobrevive al saneador sin
@@ -191,6 +193,17 @@ async function manejarGET(req: NextRequest) {
             estado: latidos[c].ultimoEstado,
           });
         }
+      }
+      for (const c of contrapresion) {
+        logger.warn('health.cron_contrapresion', {
+          cron: c,
+          agentesFrenados: (latidos[c].detalle.contrapresion as { agentesFrenados?: number } | undefined)?.agentesFrenados ?? null,
+        });
+        await alertarHuecoConfiguracion(
+          `cron.contrapresion:${c}`,
+          'La bandeja de aprobación tiene piezas pendientes y frena a los agentes internos: revisa o rechaza las piezas.',
+          { cron: c, estado: latidos[c].ultimoEstado },
+        );
       }
       if (regresiones.length > 0) {
         logger.error('health.cron_estado_no_ok', {
