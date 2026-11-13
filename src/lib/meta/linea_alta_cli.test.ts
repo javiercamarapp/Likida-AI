@@ -49,7 +49,7 @@ function montar(opciones: { meta?: Record<string, { status: number; json: unknow
     const l: Llamada = { url: u, method: init?.method ?? 'GET', body: typeof init?.body === 'string' ? init.body : undefined };
     llamadas.push(l);
     let r: { status: number; json: unknown };
-    if (u.startsWith('https://graph.facebook.com')) {
+    if (new URL(u).hostname === 'graph.facebook.com') {
       const clave = u.includes('subscribed_apps') ? 'subs' : 'numero';
       r = opciones.meta?.[clave] ?? (clave === 'subs' ? { status: 200, json: { data: [{ id: 'app' }] } } : { status: 200, json: { id: PN, display_phone_number: '+52 55 1234 5678', verified_name: 'Flota' } });
     } else if (opciones.rest) r = opciones.rest(l);
