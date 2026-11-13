@@ -5,6 +5,7 @@
 
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
+import type { Canal } from './canal';
 import { alertarOperador } from '@/lib/observability/alerta';
 import {
   encolarSalidaWhatsApp, encolarSalidaWhatsAppDedupe, RETRASO_AMBIGUO_SEGUNDOS,
@@ -88,15 +89,50 @@ export class ImagenDemasiadoPesadaError extends Error {
   }
 }
 
-function token(): string {
+/**
+ * La línea (phone_number_id + token) por la que sale/entra un mensaje. Sin `canal` es el entorno global de
+ * siempre (IDÉNTICO a antes de las líneas por tenant); con `canal` (resuelto por `resolverCanal`, ver canal.ts)
+ * es el de la línea propia del tenant. Cada función de este archivo acepta `opts.canal`.
+ */
+export interface OpcionesCanal { canal?: Canal }
+
+function token(canal?: Canal): string {
+  if (canal) {
+    if (!canal.token) throw new Error('el canal no trae token');
+    return canal.token;
+  }
   const t = process.env.WHATSAPP_ACCESS_TOKEN;
   if (!t) throw new Error('WHATSAPP_ACCESS_TOKEN no configurado');
   return t;
 }
-function phoneNumberId(): string {
+function phoneNumberId(canal?: Canal): string {
+  if (canal) {
+    if (!canal.phoneNumberId) throw new Error('el canal no trae phone_number_id');
+    return canal.phoneNumberId;
+  }
   const id = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!id) throw new Error('WHATSAPP_PHONE_NUMBER_ID no configurado');
   return id;
+}
+
+/**
+ * Fija la línea en la carga que va a `wa_outbox` (llave privada `_canal`, que el cron quita antes de hablar con Meta):
+ * un reintento sale por la MISMA línea aunque el tenant cambie de número después. Sin línea propia devuelve el
+ * payload tal cual (mismo objeto): el outbox de siempre.
+ */
+export function conCanal<T extends Record<string, unknown>>(payload: T, canal?: Canal): T {
+  if (!canal || canal.origen !== 'tenant') return payload;
+  return { ...payload, _canal: { phoneNumberId: canal.phoneNumberId, lineaId: canal.lineaId } };
+}
+/** Lo inverso para el cron: separa la línea fijada del payload que sí se manda a Meta. */
+export function separarCanalDePayload(payload: unknown): { payload: unknown; lineaFijada: { phoneNumberId: string; lineaId: string | null } | null } {
+  if (!payload || typeof payload !== 'object' || !('_canal' in (payload as Record<string, unknown>))) return { payload, lineaFijada: null };
+  const { _canal, ...resto } = payload as Record<string, unknown>;
+  const c = _canal as { phoneNumberId?: unknown; lineaId?: unknown } | null;
+  const lineaFijada = c && typeof c.phoneNumberId === 'string' && c.phoneNumberId
+    ? { phoneNumberId: c.phoneNumberId, lineaId: typeof c.lineaId === 'string' ? c.lineaId : null }
+    : null;
+  return { payload: resto, lineaFijada };
 }
 
 /** Verifica el token del GET de configuración del webhook (timing-safe). */
@@ -279,15 +315,35 @@ export function esTokenMetaInvalido(codigo?: number, status?: number): boolean {
 export const RETRASO_TOKEN_SEGUNDOS = 600;
 
 async function alFallarPorToken(
-  payload: Record<string, unknown>, codigo: number | undefined, status: number | undefined, crudo: string,
+  payload: Record<string, unknown>, codigo: number | undefined, status: number | undefined, crudo: string, canal?: Canal,
 ): Promise<void> {
-  await encolarSalidaWhatsApp(payload, `token:HTTP ${status ?? '?'}: ${crudo}`, RETRASO_TOKEN_SEGUNDOS);
-  await avisarTokenVencido('envio', codigo, status);
+  await encolarSalidaWhatsApp(conCanal(payload, canal), `token:HTTP ${status ?? '?'}: ${crudo}`, RETRASO_TOKEN_SEGUNDOS);
+  await avisarTokenVencido('envio', codigo, status, canal);
 }
 
 /** El aviso a Javier. NUNCA lanza (`alertarOperador` ya no lo hace) y el piso de una
  *  hora por evento es de `alerta.ts`: cientos de envíos fallidos = UN correo. */
-export async function avisarTokenVencido(origen: 'envio' | 'sondeo', codigo?: number, status?: number): Promise<void> {
+export async function avisarTokenVencido(origen: 'envio' | 'sondeo', codigo?: number, status?: number, canal?: Canal): Promise<void> {
+  if (canal?.origen === 'tenant') {
+    // Línea PROPIA de un tenant: se marca ESA línea (el resolver deja de usarla y no cae a la de plataforma) y el
+    // aviso nombra la línea, no la variable de entorno global. Nunca se loguea el token.
+    logger.error('wa.token_vencido_linea', { origen, codigo, status, lineaId: canal.lineaId });
+    if (canal.lineaId) {
+      try {
+        const { marcarLineaTokenVencido } = await import('./canal');
+        await marcarLineaTokenVencido(canal.lineaId);
+      } catch (e) {
+        logger.error('wa.token_vencido_linea.no_marcada', { lineaId: canal.lineaId, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    await alertarOperador('whatsapp.token_vencido_linea', {
+      error: 'El token de una línea de WhatsApp propia de un tenant está vencido o fue revocado: Meta contesta 190. La línea quedó marcada con token vencido y NO sale ningún mensaje por ella (no se usa la línea de plataforma como respaldo). El tenant debe renovar el token de su línea.',
+      codigo: String(codigo ?? status ?? 'token_vencido'),
+      origen,
+      linea: canal.lineaId ?? canal.phoneNumberId,
+    });
+    return;
+  }
   logger.error('wa.token_vencido', { origen, codigo, status });
   await alertarOperador('whatsapp.token_vencido', {
     error: 'El token de acceso de WhatsApp (WHATSAPP_ACCESS_TOKEN) está vencido o fue revocado: Meta contesta 190. Mientras no se renueve NO sale ningún mensaje a choferes, jefes ni clientes (las salidas quedan en cola). Genera un token de USUARIO DEL SISTEMA permanente en Meta Business Manager y ponlo en Vercel.',
@@ -304,8 +360,10 @@ export type EstadoTokenWhatsApp =
 
 const TTL_SONDEO_MS = 5 * 60_000;
 let sondeoCache: { hasta: number; resultado: EstadoTokenWhatsApp } | null = null;
+/** Un veredicto por LÍNEA de tenant (clave: phone_number_id): el token vencido de una no marca a las demás. */
+const sondeoCachePorLinea = new Map<string, { hasta: number; resultado: EstadoTokenWhatsApp }>();
 /** Para pruebas, y para que renovar el token se note en la siguiente corrida. */
-export function olvidarSondeoToken(): void { sondeoCache = null; }
+export function olvidarSondeoToken(): void { sondeoCache = null; sondeoCachePorLinea.clear(); }
 
 /**
  * ¿El token sirve? `GET /{phone-number-id}?fields=id` es la lectura más barata de
@@ -314,26 +372,28 @@ export function olvidarSondeoToken(): void { sondeoCache = null; }
  * RED o un 5xx es `indeterminado` y NO se cachea ni se toma por token vencido: una
  * caída de Meta no es un token malo. Nunca lanza.
  */
-export async function sondearTokenWhatsApp(ahora: number = Date.now()): Promise<EstadoTokenWhatsApp> {
-  const t = process.env.WHATSAPP_ACCESS_TOKEN;
-  const id = process.env.WHATSAPP_PHONE_NUMBER_ID;
+export async function sondearTokenWhatsApp(ahora: number = Date.now(), canal?: Canal): Promise<EstadoTokenWhatsApp> {
+  const t = canal ? canal.token : process.env.WHATSAPP_ACCESS_TOKEN;
+  const id = canal ? canal.phoneNumberId : process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!t || !id) return { estado: 'sin_config' };
-  if (sondeoCache && sondeoCache.hasta > ahora) return sondeoCache.resultado;
+  // Sin canal: el entorno de siempre (una sola caché). Con canal de tenant: caché y veredicto POR línea.
+  const porLinea = canal?.origen === 'tenant';
+  const cacheado = porLinea ? sondeoCachePorLinea.get(id) : sondeoCache;
+  if (cacheado && cacheado.hasta > ahora) return cacheado.resultado;
+  const guardar = (resultado: EstadoTokenWhatsApp): EstadoTokenWhatsApp => {
+    const entrada = { hasta: ahora + TTL_SONDEO_MS, resultado };
+    if (porLinea) sondeoCachePorLinea.set(id, entrada); else sondeoCache = entrada;
+    return resultado;
+  };
   try {
     const res = await fetch(`${GRAPH}/${encodeURIComponent(id)}?fields=id`, {
       headers: { Authorization: `Bearer ${t}` },
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
-    if (res.ok) {
-      sondeoCache = { hasta: ahora + TTL_SONDEO_MS, resultado: { estado: 'ok' } };
-      return sondeoCache.resultado;
-    }
+    if (res.ok) return guardar({ estado: 'ok' });
     const crudo = await res.text().catch(() => '');
     const { codigo } = errorDeMeta(crudo);
-    if (esTokenMetaInvalido(codigo, res.status)) {
-      sondeoCache = { hasta: ahora + TTL_SONDEO_MS, resultado: { estado: 'vencido', codigo, status: res.status } };
-      return sondeoCache.resultado;
-    }
+    if (esTokenMetaInvalido(codigo, res.status)) return guardar({ estado: 'vencido', codigo, status: res.status });
     // 4xx de otra índole (permisos del recurso) o 5xx: no es un veredicto sobre el token.
     return { estado: 'indeterminado', detalle: `HTTP ${res.status}${codigo ? ` (código ${codigo})` : ''}` };
   } catch (e) {
@@ -353,15 +413,15 @@ export async function sondearTokenWhatsApp(ahora: number = Date.now()): Promise<
  * comportan igual, y quien necesita el código de Meta —la cobranza y la
  * escalación, para no consumir un tier por un 429— lo tiene.
  */
-export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsApp> {
+export async function enviarTexto(to: string, body: string, opts: OpcionesCanal = {}): Promise<EnvioWhatsApp> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendText');
   { const freno = await frenoPlanDeFlota(to, 'wa.sendText'); if (freno) return freno; }
   const payload = { messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } };
   let res: Response;
   try {
-    res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+    res = await fetch(`${GRAPH}/${phoneNumberId(opts.canal)}/messages`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token(opts.canal)}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
@@ -371,7 +431,7 @@ export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsA
     // AUDITORÍA E.28 (H1): la respuesta NUNCA LLEGÓ — Meta pudo haber
     // aceptado el mensaje igual. Se encola con el retraso AMBIGUO, no con
     // reintento inmediato: ver `RETRASO_AMBIGUO_SEGUNDOS`.
-    await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
+    await encolarSalidaWhatsApp(conCanal(payload, opts.canal), error, RETRASO_AMBIGUO_SEGUNDOS);
     // Un timeout o un socket caído NO es un veredicto sobre el destinatario:
     // se marca como reintentable con el status que lo dice.
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
@@ -385,8 +445,8 @@ export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsA
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendText', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
-      else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo, opts.canal);
+      else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(conCanal(payload, opts.canal), `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
   // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
@@ -415,8 +475,8 @@ export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsA
  * Meta y sin lanzar. Quien necesite saber POR QUÉ rechazó —para no consumir un
  * tier ante un 429— llama a `enviarTexto`.
  */
-export async function sendText(to: string, body: string): Promise<string | null> {
-  const r = await enviarTexto(to, body);
+export async function sendText(to: string, body: string, opts: OpcionesCanal = {}): Promise<string | null> {
+  const r = await enviarTexto(to, body, opts);
   return r.ok ? r.id : null;
 }
 
@@ -493,8 +553,8 @@ function motivoBotonesInvalidos(cuerpo: string, botones: BotonAcuse[]): Record<s
  * el botón culpable y su largo: el mismo `null` que da un rechazo de Meta, pero
  * ya diagnosticado.
  */
-export async function sendButtons(to: string, cuerpo: string, botones: BotonAcuse[]): Promise<string | null> {
-  const r = await enviarBotones(to, cuerpo, botones);
+export async function sendButtons(to: string, cuerpo: string, botones: BotonAcuse[], opts: OpcionesCanal = {}): Promise<string | null> {
+  const r = await enviarBotones(to, cuerpo, botones, undefined, opts);
   return r.ok ? r.id : null;
 }
 
@@ -540,7 +600,7 @@ export function payloadBotones(
  * Nunca lanza.
  */
 export async function enviarBotones(
-  to: string, cuerpo: string, botones: BotonAcuse[], documento?: DocumentoEncabezado,
+  to: string, cuerpo: string, botones: BotonAcuse[], documento?: DocumentoEncabezado, opts: OpcionesCanal = {},
 ): Promise<EnvioWhatsApp> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendButtons');
   { const freno = await frenoPlanDeFlota(to, 'wa.sendButtons'); if (freno) return freno; }
@@ -563,9 +623,9 @@ export async function enviarBotones(
       }
     }
     payload = payloadBotones(to, cuerpo, botones, documento);
-    const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+    const res = await fetch(`${GRAPH}/${phoneNumberId(opts.canal)}/messages`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token(opts.canal)}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
     if (!res.ok) {
@@ -573,9 +633,9 @@ export async function enviarBotones(
       const { codigo, mensaje } = errorDeMeta(crudo);
       logger.error('wa.sendButtons', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
       if (esTokenMetaInvalido(codigo, res.status)) {
-        await alFallarPorToken(payload, codigo, res.status, crudo);
+        await alFallarPorToken(payload, codigo, res.status, crudo, opts.canal);
       } else if (esReintentableMeta(codigo, res.status)) {
-        await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+        await encolarSalidaWhatsApp(conCanal(payload, opts.canal), `HTTP ${res.status}: ${crudo}`);
       }
       return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
     }
@@ -589,7 +649,7 @@ export async function enviarBotones(
     });
     // AUDITORÍA E.28 (H1): mismo caso que `sendText` — la respuesta nunca
     // llegó, así que Meta pudo haber aceptado el mensaje igual.
-    if (payload) await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
+    if (payload) await encolarSalidaWhatsApp(conCanal(payload, opts.canal), error, RETRASO_AMBIGUO_SEGUNDOS);
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
   }
 }
@@ -610,7 +670,7 @@ const MAX_CUERPO_UBICACION = 1024;
  * ubicación. Fuera de ventana usa una plantilla con botón de respuesta rápida
  * («Compartir ubicación») y contesta con esto cuando el chofer lo apriete.
  */
-export async function enviarSolicitudUbicacion(to: string, cuerpo: string): Promise<EnvioWhatsApp> {
+export async function enviarSolicitudUbicacion(to: string, cuerpo: string, opts: OpcionesCanal = {}): Promise<EnvioWhatsApp> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.solicitudUbicacion');
   { const freno = await frenoPlanDeFlota(to, 'wa.solicitudUbicacion'); if (freno) return freno; }
   const texto = typeof cuerpo === 'string' ? cuerpo.trim() : '';
@@ -624,23 +684,23 @@ export async function enviarSolicitudUbicacion(to: string, cuerpo: string): Prom
   };
   let res: Response;
   try {
-    res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+    res = await fetch(`${GRAPH}/${phoneNumberId(opts.canal)}/messages`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token(opts.canal)}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     logger.error('wa.solicitudUbicacion.red', { para: destinatarioEnmascarado(to), error });
-    await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
+    await encolarSalidaWhatsApp(conCanal(payload, opts.canal), error, RETRASO_AMBIGUO_SEGUNDOS);
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
   }
   if (!res.ok) {
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.solicitudUbicacion', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
-    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo, opts.canal);
+    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(conCanal(payload, opts.canal), `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
   const id = await idDeRespuesta(res);
@@ -656,6 +716,7 @@ export async function encolarBotonesWhatsApp(
   cuerpo: string,
   botones: BotonAcuse[],
   dedupeKey: string,
+  opts: OpcionesCanal = {},
 ): Promise<SalidaOutboxDedupe | null> {
   if (esDestinatarioBloqueado(to)) { rechazarDemo(to, 'wa.encolarButtons'); return null; }
   const invalido = motivoBotonesInvalidos(cuerpo, botones);
@@ -681,7 +742,14 @@ export async function encolarBotonesWhatsApp(
     messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'template',
     template: { name: 'gps_alerta_critica', language: { code: 'es_MX' }, components: armado.componentes },
   };
-  return encolarSalidaWhatsAppDedupe(dedupeKey, payload, 'alerta GPS pendiente de entrega');
+  // La llave de idempotencia incluye la línea: el mismo aviso por dos líneas distintas son dos salidas distintas.
+  // Sin línea propia la llave queda EXACTAMENTE como antes.
+  const llave = opts.canal?.origen === 'tenant' ? `${dedupeKey}:l${opts.canal.lineaId ?? opts.canal.phoneNumberId}` : dedupeKey;
+  if (llave.length > 300) {
+    logger.error('wa.encolarButtons.invalido', { dedupeKey: 'inválida' });
+    return null;
+  }
+  return encolarSalidaWhatsAppDedupe(llave, conCanal(payload, opts.canal), 'alerta GPS pendiente de entrega');
 }
 
 /** El payload (puro) de un mensaje de plantilla ya armado. */
@@ -717,11 +785,12 @@ export function payloadPlantilla(
 export async function sendTemplate(
   to: string,
   plantilla: string,
-  opciones: { idioma?: string } & OpcionesPlantilla = {},
+  opciones: { idioma?: string } & OpcionesPlantilla & OpcionesCanal = {},
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number; status?: number }> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendTemplate');
   { const freno = await frenoPlanDeFlota(to, 'wa.sendTemplate'); if (freno) return freno; }
-  const { idioma = 'es_MX', ...resto } = opciones;
+  const { idioma = 'es_MX', canal, ...resto } = opciones;
+  const opts: OpcionesCanal = { canal };
 
   // Encabezado (texto/documento/imagen), cuerpo y botones (respuesta rápida/URL):
   // se validan ANTES de llamar a Meta — ver plantilla_payload.ts para el
@@ -735,9 +804,9 @@ export async function sendTemplate(
   const payload = payloadPlantilla(to, plantilla, idioma, armado.componentes);
   let res: Response;
   try {
-    res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+    res = await fetch(`${GRAPH}/${phoneNumberId(opts.canal)}/messages`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token(opts.canal)}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
@@ -746,7 +815,7 @@ export async function sendTemplate(
     logger.error('wa.sendTemplate.red', { plantilla, para: destinatarioEnmascarado(to), error });
     // AUDITORÍA E.28 (H1): mismo caso que `sendText` — la respuesta nunca
     // llegó, así que Meta pudo haber aceptado el mensaje igual.
-    await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
+    await encolarSalidaWhatsApp(conCanal(payload, opts.canal), error, RETRASO_AMBIGUO_SEGUNDOS);
     // Igual que `enviarTexto`: el status 503 le dice al llamador que esto YA quedó en el outbox (no reenviar).
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
   }
@@ -755,8 +824,8 @@ export async function sendTemplate(
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendTemplate', { plantilla, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
-    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo, opts.canal);
+    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(conCanal(payload, opts.canal), `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
 
@@ -821,6 +890,7 @@ export async function sendDocument(
   link: string,
   filename: string,
   caption?: string,
+  opts: OpcionesCanal = {},
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number; status?: number }> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendDocument');
   { const freno = await frenoPlanDeFlota(to, 'wa.sendDocument'); if (freno) return freno; }
@@ -830,9 +900,9 @@ export async function sendDocument(
   };
   let res: Response;
   try {
-    res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+    res = await fetch(`${GRAPH}/${phoneNumberId(opts.canal)}/messages`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token(opts.canal)}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
@@ -841,7 +911,7 @@ export async function sendDocument(
     logger.error('wa.sendDocument.red', { filename, para: destinatarioEnmascarado(to), error });
     // AUDITORÍA E.28 (H1): mismo caso que `sendText` — la respuesta nunca
     // llegó, así que Meta pudo haber aceptado el mensaje igual.
-    await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
+    await encolarSalidaWhatsApp(conCanal(payload, opts.canal), error, RETRASO_AMBIGUO_SEGUNDOS);
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
   }
 
@@ -849,8 +919,8 @@ export async function sendDocument(
     const crudo = await res.text().catch(() => '');
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendDocument', { filename, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
-    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+    if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo, opts.canal);
+    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(conCanal(payload, opts.canal), `HTTP ${res.status}: ${crudo}`);
     // A39-S30-03: el `status` HTTP también sale. Un 4xx con cuerpo no JSON no trae `codigo`, y sin `status` se leía como «fallo
     // de red ya encolado» (sellado como `encolado` sin estarlo en `wa_outbox`).
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
@@ -901,10 +971,11 @@ async function avisarFalloMedia(paso: string, mediaId: string, res: Response): P
  */
 export async function metadatosMedia(
   mediaId: string,
+  opts: OpcionesCanal = {},
 ): Promise<{ mimeType: string; fileSize: number | null } | null> {
   try {
     const meta = await fetch(`${GRAPH}/${mediaId}`, {
-      headers: { Authorization: `Bearer ${token()}` },
+      headers: { Authorization: `Bearer ${token(opts.canal)}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!meta.ok) { await avisarFalloMedia('metadatos', mediaId, meta); return null; }
@@ -926,10 +997,10 @@ export async function metadatosMedia(
 export const MAX_XML_BYTES = 5 * 1024 * 1024;
 
 /** Descarga un media entrante de Meta como TEXTO (para el XML del CFDI). */
-export async function downloadMediaAsText(mediaId: string): Promise<string | null> {
+export async function downloadMediaAsText(mediaId: string, opts: OpcionesCanal = {}): Promise<string | null> {
   try {
     const meta = await fetch(`${GRAPH}/${mediaId}`, {
-      headers: { Authorization: `Bearer ${token()}` },
+      headers: { Authorization: `Bearer ${token(opts.canal)}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!meta.ok) { await avisarFalloMedia('metadatos', mediaId, meta); return null; }
@@ -946,7 +1017,7 @@ export async function downloadMediaAsText(mediaId: string): Promise<string | nul
       return null;
     }
     const bin = await fetch(url, {
-      headers: { Authorization: `Bearer ${token()}` },
+      headers: { Authorization: `Bearer ${token(opts.canal)}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!bin.ok) { await avisarFalloMedia('contenido', mediaId, bin); return null; }
@@ -972,10 +1043,10 @@ export async function downloadMediaAsText(mediaId: string): Promise<string | nul
  * tamaño real del buffer ya descargado (por si `file_size` viniera ausente o
  * equivocado) — ninguna de las dos es opcional, son la misma guardia en dos
  * puntos distintos del camino. */
-export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | null> {
+export async function downloadMediaAsDataUrl(mediaId: string, opts: OpcionesCanal = {}): Promise<string | null> {
   try {
     const meta = await fetch(`${GRAPH}/${mediaId}`, {
-      headers: { Authorization: `Bearer ${token()}` },
+      headers: { Authorization: `Bearer ${token(opts.canal)}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!meta.ok) { await avisarFalloMedia('metadatos', mediaId, meta); return null; }
@@ -992,7 +1063,7 @@ export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | 
       return null;
     }
     const bin = await fetch(url, {
-      headers: { Authorization: `Bearer ${token()}` },
+      headers: { Authorization: `Bearer ${token(opts.canal)}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!bin.ok) { await avisarFalloMedia('contenido', mediaId, bin); return null; }
@@ -1016,11 +1087,11 @@ export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | 
  * Fuera de la ventana devuelve false — la flota entrega por otro canal, y la
  * UI lo dice (no se miente como "recibió su respuesta").
  */
-export async function enviarRespuestaArco(telefono: string, respuesta: string): Promise<{ ok: boolean; error?: string }> {
+export async function enviarRespuestaArco(telefono: string, respuesta: string, opts: OpcionesCanal = {}): Promise<{ ok: boolean; error?: string }> {
   if (esDestinatarioBloqueado(telefono)) return rechazarDemo(telefono, 'arco.envio');
-  const envia = (body: Record<string, unknown>) => fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+  const envia = (body: Record<string, unknown>) => fetch(`${GRAPH}/${phoneNumberId(opts.canal)}/messages`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token(opts.canal)}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(telefono), ...body }),
     signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
   });
