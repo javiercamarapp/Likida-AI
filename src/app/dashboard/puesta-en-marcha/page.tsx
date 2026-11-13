@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import { sufijoTenant } from '../sufijo';
 import type { IdPaso } from '@/lib/likida/asistente/pasos_cinco_agentes';
@@ -36,6 +37,9 @@ export default async function PaginaPuestaEnMarcha({
   const sp = await searchParams;
   const s = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(s.rol, RUTA)) redirect('/dashboard');
+  // UNA sola puesta en marcha: el asistente de seis pasos es del perfil de cinco agentes; una flota sin perfil usa el Checklist (/dashboard/arranque).
+  // Sin esto, la dueña sin perfil abría una página huérfana (sin ítem activo en el menú) con el mismo título que la otra.
+  if (!(await perfilDeTenant(s.tenantId))) redirect(`/dashboard/arranque${sufijoTenant(sp)}`);
 
   const [senales, lecturasListo] = await Promise.all([leerSenalesAsistente(s.tenantId), leerLecturasListo(s.tenantId)]);
   // Viendo como otra persona (superadmin con ?tenant/?vista/?rol): se mira, pero no se escribe progreso.

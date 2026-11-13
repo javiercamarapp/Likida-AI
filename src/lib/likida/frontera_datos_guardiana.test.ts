@@ -353,7 +353,8 @@ import { join, relative } from 'node:path';
 // y la función `aviso_marcar`). Rutas que lo leen: /admin/notificaciones (puerta `requireSuperadmin`) y /dashboard/notificaciones (puerta `resolverTenantEfectivo`), más el número de «Avisos» del pie de los
 // dos layouts. Todas las funciones reciben la persona y el ámbito YA resueltos por la sesión (`ui-v2/avisos/acciones.ts#contexto`, nunca del navegador), filtran por `usuario_id` y `ambito` y fallan
 // cerradas (`{ ok: false }`, jamás «no hay nada»); el cliente es `lib/avisos/cliente.ts` (service_role, porque anon y authenticated no tienen privilegios sobre esas tablas). Funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 351;
+// F26 (w26, 12-nov-2026): +1 archivo (351 -> 352), `app/dashboard/viajes-en-curso.ts`: la lectura de los viajes en curso del mapa y del inicio, sacada de `mapa/page.tsx` (que bajó de 2 a 1 `.from(`) para compartirla; los 2 `Array.from(` de DOM (`navegacion-teclado.tsx`, `zona-soltar.tsx`) eran falsos positivos y se corrigieron con spread. Lectura de presentación acotada por tenant, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 352;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -856,7 +857,7 @@ const FRONTERA = new Set(['lib/likida/repo.ts', 'lib/likida/pg.ts']);
  *  da de alta a mano no lo ve nadie). */
 function fuentesDeProduccion(dir: string, acc: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
-    if (e === 'pruebas-manuales') continue;
+    if (e === 'pruebas-manuales' || e.startsWith('.')) continue; // `.`: temporales de otras pruebas (ENOENT en paralelo)
     const p = join(dir, e);
     if (statSync(p).isDirectory()) { fuentesDeProduccion(p, acc); continue; }
     if (!/\.(ts|tsx)$/.test(e)) continue;

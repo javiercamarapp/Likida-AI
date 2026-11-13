@@ -65,7 +65,7 @@ describe('la guía de arranque del chofer', () => {
 
   it('el flujo del chofer lo cuenta como es: número dado de alta, aviso de privacidad, tickets, LISTO', () => {
     const html = pintar({ numero: CONFIGURADO, nombreFlota: 'X', enlace, qrSvg: null, operadores: null });
-    for (const t of ['SU número de WhatsApp', 'aviso de privacidad', 'fotos de sus tickets', '«LISTO»']) expect(html).toContain(t);
+    for (const t of ['su propio número de WhatsApp', 'aviso de privacidad', 'fotos de sus tickets', '«LISTO»']) expect(html).toContain(t);
   });
 
   it('el estado de los operadores es verdad: sin operadores manda a darlos de alta; con todos invitados lo dice; sin lectura lo dice', () => {

@@ -11,6 +11,7 @@ import { Calculadora } from './calc';
 import { PulsoSitio } from './pulso';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { trPublico } from '@/lib/i18n/publico_tr';
+import '../legal/publico-r2.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await trPublico();
@@ -25,6 +26,7 @@ export default async function PaginaCalculadora() {
       titulo={t('cal.titulo')}
       apoyo={t('cal.apoyo')}
     >
+      <div className="rv-flujo" aria-hidden="true" />
       <PulsoSitio pagina="calculadora" />
       <div className="rv-pub__prosa">
         <Calculadora />

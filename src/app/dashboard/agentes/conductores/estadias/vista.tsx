@@ -4,9 +4,11 @@ import { fechaMx, numero } from '@/lib/formato';
 import { horaExactaMx, type FilaEstadia, type ResumenEstadias } from '@/lib/likida/conductor/estadias_anden';
 import { textoTiempo } from '@/lib/likida/conductor/planificador';
 import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
-import { Aviso, BarraPeriodo, BotonEnlace, clasesBoton, EstadoError, hrefConParams, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
-import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { Aviso, BarraPeriodo, BotonEnlace, clasesBoton, EstadoError, hrefConParams, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { BarList } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { TablaVacia } from '../../vacio-agente';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -58,9 +60,9 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
     { id: 'viaje', titulo: tx('liquidacion.vista.viaje'), principal: true, celda: (f) => <><span className="rv-cd__medio">{f.viaje.folio ?? tx('cobranza.vista.sin_folio_2')}</span><span className="rv-cd__micro rv-cd__bloquear">{f.viaje.clienteNombre ?? ''}</span></> },
     { id: 'chofer', titulo: tx('cobranza.gasto.chofer'), celda: (f) => <>{f.viaje.operadorNombre ?? '—'}<span className="rv-cd__micro rv-cd__bloquear">{f.viaje.terminalNombre ?? ''}</span></> },
     { id: 'parada', titulo: tx('rest.parada'), celda: (f) => <>{f.estancia.lugar === 'carga' ? tx('rest.carga') : tx('rest.descarga')}<span className="rv-cd__micro rv-cd__bloquear">{f.sitio ?? ''}</span></> },
-    { id: 'llegada', titulo: tx('rest.llegada_hora_del_mensaje'), celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</span></> },
-    { id: 'salida', titulo: tx('rest.salida'), celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</span></> },
-    { id: 'tiempo', titulo: tx('rest.tiempo'), alinear: 'der', celda: (f) => <span className="cifra-mono">{minutos(f.estancia.minutos)}</span> },
+    { id: 'llegada', titulo: tx('rest.llegada_hora_del_mensaje'), celda: (f) => <><span className="rv-ag-num">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</span></> },
+    { id: 'salida', titulo: tx('rest.salida'), celda: (f) => <><span className="rv-ag-num">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</span></> },
+    { id: 'tiempo', titulo: tx('rest.tiempo'), alinear: 'der', celda: (f) => <span className="rv-ag-num">{minutos(f.estancia.minutos)}</span> },
     { id: 'estado', titulo: tx('proveedores.vista.estado'), celda: (f) => <StatusChip tono={f.estancia.fase === 'cerrada' ? 'ok' : f.estancia.fase === 'en_curso' ? 'warn' : 'muted'}>{faseTr(tx)[f.estancia.fase]}</StatusChip> },
     {
       id: 'respaldo', titulo: tx('rest.respaldo'),
@@ -82,59 +84,69 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
   const porCliente = [...acumulado.entries()]
     .map(([nombre, xs]) => ({ nombre, n: xs.length, promedio: Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) }))
     .sort((x, y) => y.promedio - x.promedio).slice(0, 8);
+  const filtrosBarra = (
+    <BarraPeriodo etiqueta={tx('rest.periodo_y_filtros_de_estadias')}
+      chips={[
+        { id: 'rango', etiqueta: tx('rest.del_al', { fechaMx: fechaMx(filtros.desde), fechaMx2: fechaMx(filtros.hasta) }) },
+        ...criterios.filter((c) => c.valor).map((c) => ({ id: c.nombre, etiqueta: `${c.etiqueta}: ${c.opciones.find((o) => o.valor === c.valor)?.rotulo ?? 'elegido'}`, hrefQuitar: hrefConParams(RUTA, base, { [c.nombre]: null }) })),
+      ]}
+      cajon={{
+        accion: RUTA, ocultos: Object.entries(ocultos), limpiarHref: hrefLimpio, nActivos: criterios.filter((c) => c.valor).length,
+        resumen: tx('rest.del_al', { fechaMx: fechaMx(filtros.desde), fechaMx2: fechaMx(filtros.hasta) }),
+        periodo: { desde: filtros.desde, hasta: filtros.hasta },
+        campos: { items: criterios.map((c) => ({ tipo: 'select' as const, ...c })) },
+      }}
+      accion={csvUrl ? (
+        <a href={csvUrl} className={clasesBoton('secondary', 'sm')}>
+          <Icono icono={Download} tam={14} />{tx('rest.csv_para_cobro_de_estadias')}</a>
+      ) : undefined} />
+  );
+  // Rovaq «Auditoría»: cabecera → filtros → avisos (≤2) → tira de cifras → tabla maestra con su pie declarado.
   return (
-    <MarcoPagina titulo={tx('rest.estadias_en_anden')} apoyo={tx('rest.el_tiempo_entre_la_llegada_y')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
-      <Aviso tono="info">{ricoT(tx('rest.la_hora_es_la_strong_hora'), { strong: (c) => <strong>{c}</strong> })}</Aviso>
-
-      <Tarjeta titulo={tx('rest.periodo_y_filtros')}>
-        <div className="rv-cd__pila">
-          <BarraPeriodo etiqueta={tx('rest.periodo_y_filtros_de_estadias')}
-            chips={[
-              { id: 'rango', etiqueta: tx('rest.del_al', { fechaMx: fechaMx(filtros.desde), fechaMx2: fechaMx(filtros.hasta) }) },
-              ...criterios.filter((c) => c.valor).map((c) => ({ id: c.nombre, etiqueta: `${c.etiqueta}: ${c.opciones.find((o) => o.valor === c.valor)?.rotulo ?? 'elegido'}`, hrefQuitar: hrefConParams(RUTA, base, { [c.nombre]: null }) })),
-            ]}
-            cajon={{
-              accion: RUTA, ocultos: Object.entries(ocultos), limpiarHref: hrefLimpio, nActivos: criterios.filter((c) => c.valor).length,
-              resumen: tx('rest.del_al', { fechaMx: fechaMx(filtros.desde), fechaMx2: fechaMx(filtros.hasta) }),
-              periodo: { desde: filtros.desde, hasta: filtros.hasta },
-              campos: { items: criterios.map((c) => ({ tipo: 'select' as const, ...c })) },
-            }}
-            accion={csvUrl ? (
-              <a href={csvUrl} className={clasesBoton('primary', 'sm')}>
-                <Icono icono={Download} tam={14} />{tx('rest.csv_para_cobro_de_estadias')}</a>
-            ) : undefined} />
-          {!csvUrl && (
-            <p className="rv-cd__micro">{tx('rest.el_csv_de_cobro_horas_libres')}</p>
-          )}
-          <p className="rv-cd__micro">{tx('rest.periodo_por_la_hora_del_aviso')}</p>
-        </div>
-      </Tarjeta>
-
+    <EsqueletoTablaMaestra
+      titulo={tx('rest.estadias_en_anden')}
+      apoyo={tx('rest.el_tiempo_entre_la_llegada_y')}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}
+      filtros={filtrosBarra}
+      avisos={(
+        <>
+          <Aviso tono="info">{ricoT(tx('rest.la_hora_es_la_strong_hora'), { strong: (c) => <strong>{c}</strong> })}</Aviso>
+          {!error && truncada ? <Aviso tono="warn">{tx('rest.hay_mas_viajes_con_llegada_en')}</Aviso> : null}
+        </>
+      )}
+      cifras={error ? undefined : ([
+        { etiqueta: tx('rest.paradas_del_periodo'), info: 'conductores_estadias.paradas', valor: numero(resumen.paradas), nota: `${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso` },
+        { etiqueta: tx('rest.tiempo_medio_en_carga'), info: 'conductores_estadias.medio_carga', valor: carga ? minutos(carga.promedio) : null, nota: carga ? `sobre ${numero(carga.n)} paradas cerradas` : tx('rest.ninguna_carga_cerrada') },
+        { etiqueta: tx('rest.tiempo_medio_en_descarga'), info: 'conductores_estadias.medio_descarga', valor: descarga ? minutos(descarga.promedio) : null, nota: descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : tx('rest.ninguna_descarga_cerrada') },
+        { etiqueta: tx('rest.en_el_anden_ahora'), info: 'conductores_estadias.en_anden', valor: numero(resumen.enCurso), tono: resumen.enCurso > 0 ? 'warn' : undefined, nota: tx('rest.llegaron_y_aun_no_avisan_su') },
+      ])}
+      etiquetaCifras={tx('rest.estadias_en_anden')}
+      selloCifras={selloHoy(tx('rest.estadias_en_anden'))}
+      agrupacion={!error && porCliente.length > 0 ? (
+        <Tarjeta titulo={tx('rest.tiempo_medio_por_cliente_paradas_cerradas')}>
+          <BarList etiqueta={tx('rest.minutos_medios_de_estadia_por_cliente')} formato={minutos}
+            items={porCliente.map((c) => ({ clave: c.nombre, etiqueta: c.nombre, valor: c.promedio, texto: minutos(c.promedio), nota: `sobre ${numero(c.n)} paradas cerradas` }))} />
+        </Tarjeta>
+      ) : undefined}
+      pie={(
+        <>
+          {tx('rest.periodo_por_la_hora_del_aviso')}
+          {!csvUrl ? <> {tx('rest.el_csv_de_cobro_horas_libres')}</> : null}
+        </>
+      )}
+    >
       {error ? (
         <EstadoError compacto>{error}</EstadoError>
       ) : (
-        <>
-          <TiraCifras sello={selloHoy(tx('rest.estadias_en_anden'))}>
-            <Cifra etiqueta={tx('rest.paradas_del_periodo')} info="conductores_estadias.paradas" valor={numero(resumen.paradas)} nota={`${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso`} />
-            <Cifra etiqueta={tx('rest.tiempo_medio_en_carga')} info="conductores_estadias.medio_carga" valor={carga ? minutos(carga.promedio) : null} nota={carga ? `sobre ${numero(carga.n)} paradas cerradas` : tx('rest.ninguna_carga_cerrada')} />
-            <Cifra etiqueta={tx('rest.tiempo_medio_en_descarga')} info="conductores_estadias.medio_descarga" valor={descarga ? minutos(descarga.promedio) : null} nota={descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : tx('rest.ninguna_descarga_cerrada')} />
-            <Cifra etiqueta={tx('rest.en_el_anden_ahora')} info="conductores_estadias.en_anden" valor={numero(resumen.enCurso)} tono={resumen.enCurso > 0 ? 'warn' : undefined} nota={tx('rest.llegaron_y_aun_no_avisan_su')} />
-          </TiraCifras>
-          {truncada && (
-            <p className="rv-cd__nota" data-tono="warn">{tx('rest.hay_mas_viajes_con_llegada_en')}</p>
-          )}
-          {porCliente.length > 0 && (
-            <Tarjeta titulo={tx('rest.tiempo_medio_por_cliente_paradas_cerradas')}>
-              <BarList etiqueta={tx('rest.minutos_medios_de_estadia_por_cliente')} formato={minutos}
-                items={porCliente.map((c) => ({ clave: c.nombre, etiqueta: c.nombre, valor: c.promedio, texto: minutos(c.promedio), nota: `sobre ${numero(c.n)} paradas cerradas` }))} />
-            </Tarjeta>
-          )}
-          <Tarjeta titulo={tx('rest.paradas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={tx('rest.sin_paradas_en_el_periodo')}
-            detalle={tx('rest.ninguna_parada_con_llegada_registrada_en')}>
+        <Tarjeta titulo={tx('rest.paradas')}>
+          {filas.length === 0 ? (
+            <TablaVacia etiqueta={tx('rest.estadias_por_viaje_y_chofer')} titulos={COLUMNAS.filter((c) => !c.tituloOculto).map((c) => c.titulo)} titulo={tx('rest.sin_paradas_en_el_periodo')}>{tx('rest.ninguna_parada_con_llegada_registrada_en')}</TablaVacia>
+          ) : (
             <TablaBase etiqueta={tx('rest.estadias_por_viaje_y_chofer')} columnas={COLUMNAS} filas={filas} idFila={(f) => `${f.viaje.id}-${f.estancia.lugar}`} densa tarjetaMovil />
-          </Tarjeta>
-        </>
+          )}
+        </Tarjeta>
       )}
-    </MarcoPagina>
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
+    </EsqueletoTablaMaestra>
   );
 }

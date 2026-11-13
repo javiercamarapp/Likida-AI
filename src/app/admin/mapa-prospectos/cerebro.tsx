@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
-  Download, Flame, Mail, Maximize2, Minimize2, Navigation, Phone, RefreshCw, SlidersHorizontal, Sparkles, Undo2, User, UserCheck, X,
+  Download, Flame, Mail, Maximize2, Minimize2, Minus, Navigation, Phone, Plus, RefreshCw, SlidersHorizontal, Sparkles, Undo2, User, UserCheck, X,
 } from 'lucide-react';
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
@@ -32,9 +32,11 @@ import { useT } from '@/lib/i18n/proveedor';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import {
-  Boton, Campo, CampoSelect, EsqTarjetaV2, Fieldset, Disclosure, Drawer, FilaTarjetas, FiltroChip, Icono, SegmentedControl, Tarjeta, Tooltip, clasesBoton, cx,
+  Boton, Campo, CampoSelect, EsqTarjetaV2, Fieldset, Disclosure, Drawer, FilaTarjetas, FiltroChip, Icono, SegmentedControl, Tarjeta, TablaBase, Tooltip, clasesBoton, cx,
 } from '../../ui-v2/componentes';
 import { BarList, TiraCifras } from '../../ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import { idsSinTextos } from './csv_prospectos';
 import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 import { arrancarLatido, visibilidadDelNavegador } from './latido';
@@ -52,8 +54,27 @@ const Calles = dynamic(() => import('./calles'), { ssr: false });
 
 const ORDEN_EMBUDO = [
   'negociacion', 'proposal', 'pilot', 'demo', 'appointment', 'rescheduled',
-  'no-show', 'cancelled', 'contactado', 'nuevo', 'won', 'cerrado', 'lost', 'perdido',
+  'no-show', 'cancelled', 'contactado', 'nuevo', 'won', 'cerrado', 'perdido',
 ] as const;
+/** Las 13 etapas, en 5 FAMILIAS que se distinguen por la forma de la luz (llena, anillo, discontinua), no solo por el tono: dos grises casi iguales
+ *  no se separan a ojo, un círculo lleno y un anillo sí. La etapa exacta de cada prospecto sigue en su tarjeta y en «El embudo, en luces». */
+const FAMILIAS = ['cierre', 'avanzado', 'contacto', 'nuevo', 'caida'] as const;
+type Familia = (typeof FAMILIAS)[number];
+const FAMILIA_DE: Record<string, Familia> = {
+  won: 'cierre', cerrado: 'cierre',
+  negociacion: 'avanzado', proposal: 'avanzado', pilot: 'avanzado', demo: 'avanzado',
+  appointment: 'contacto', rescheduled: 'contacto', contactado: 'contacto',
+  nuevo: 'nuevo',
+  'no-show': 'caida', cancelled: 'caida', perdido: 'caida', lost: 'caida',
+};
+const familiaDe = (estado: string): Familia => FAMILIA_DE[estado] ?? 'nuevo';
+const rotuloFamilia = (f: Familia, tx: TSistema): string => (
+  f === 'cierre' ? tx('a1r4.familia_cierre') : f === 'avanzado' ? tx('a1r4.familia_avanzado') : f === 'contacto' ? tx('a1r4.familia_contacto')
+    : f === 'caida' ? tx('a1r4.familia_caida') : tx('a1r4.familia_nuevo'));
+
+/** `lost` y `perdido` son el MISMO estado en dos vocabularios (migración del embudo): se rotulan igual, así que en la leyenda, el embudo y los
+ *  filtros salen como UNA etapa («Perdido») que suma las dos. */
+const etapaVisible = (estado: string): string => (estado === 'lost' ? 'perdido' : estado);
 const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'flota_propia', 'logistica', 'otro'];
 const fuentesTr = (tx: TSistema = T_SISTEMA_ES) => ([
   { clave: 'censo', nombre: tx('mapa_prospectos_cerebro.censo_vacantes') },
@@ -647,8 +668,8 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
 
   const porEtapa = useMemo(() => {
     const m = new Map<string, number>();
-    if (listo) for (const p of filtrados) m.set(p.estado, (m.get(p.estado) ?? 0) + 1);
-    else if (resumen) for (const [k, n] of Object.entries(resumen.porEtapa)) m.set(k, n);
+    if (listo) for (const p of filtrados) { const k = etapaVisible(p.estado); m.set(k, (m.get(k) ?? 0) + 1); }
+    else if (resumen) for (const [k0, n] of Object.entries(resumen.porEtapa)) { const k = etapaVisible(k0); m.set(k, (m.get(k) ?? 0) + n); }
     return m;
   }, [listo, filtrados, resumen]);
   const itemsEmbudo = useMemo(() => ORDEN_EMBUDO.map((e) => ({
@@ -658,8 +679,6 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
   const ranking = useMemo(() => [...nPorEstado.entries()]
     .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], 'es'))
     .map(([nombre, n]) => ({ nombre, n, paso: pasoDeRampa(n, maxEstado) })), [nPorEstado, maxEstado]);
-  const itemsPlazas = useMemo(() => ranking.slice(0, 8)
-    .map(({ nombre, n }) => ({ clave: nombre, etiqueta: nombre, valor: n, texto: numero(n, idioma) })), [ranking, idioma]);
   const limites = useMemo(() => limitesRampa(maxEstado), [maxEstado]);
   /** El detalle del estado elegido para el panel lateral: del resumen (instantáneo) y, cuando llegó, de la cartera filtrada. */
   const detalleSeleccion = seleccion
@@ -671,21 +690,46 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
     : null;
   const etapasSeleccion = seleccion
     ? (listo
-      ? ORDEN_EMBUDO.map((e) => [e, listaSeleccion.filter((p) => p.estado === e).length] as const)
-      : ORDEN_EMBUDO.map((e) => [e, resumen?.porEntidad[seleccion.nombre]?.porEtapa[e] ?? 0] as const)).filter(([, n]) => n > 0)
+      ? ORDEN_EMBUDO.map((e) => [e, listaSeleccion.filter((p) => etapaVisible(p.estado) === e).length] as const)
+      : ORDEN_EMBUDO.map((e) => [e, (resumen?.porEntidad[seleccion.nombre]?.porEtapa[e] ?? 0) + (e === 'perdido' ? (resumen?.porEntidad[seleccion.nombre]?.porEtapa.lost ?? 0) : 0)] as const)).filter(([, n]) => n > 0)
     : [];
 
   /** Una cifra de la tira: sin lectura NO es un cero, es «no se pudo leer» (la página ya avisó de la avería). */
   const cifra = (etiqueta: string, valor: number | null) => (valor === null
     ? { etiqueta, valor: null, estado: 'error' as const, mensaje: tr.t('mapa.sinLectura') }
     : { etiqueta, valor, conteo: true as const });
+  // Controles de zoom (Rovaq): + / − acercan al centro del mapa con la misma cámara que la rueda.
+  const zoomPaso = (factor: number) => {
+    const { x, y, k } = cam.current;
+    const px = VIEWBOX_ESTADOS.w / 2;
+    const py = VIEWBOX_ESTADOS.h / 2;
+    const k2 = Math.min(16, Math.max(1, k * factor));
+    if (k2 === k) return;
+    cam.current = k2 === 1 ? { x: 0, y: 0, k: 1 } : { x: px - ((px - x) * k2) / k, y: py - ((py - y) * k2) / k, k: k2 };
+    aplicarCam(true);
+    setCamK(cam.current.k);
+  };
+  /** La tabla equivalente del mapa: el mismo conteo por estado, con teléfono y decisor (del detalle si ya llegó; si no, del resumen del servidor). */
+  const filasEstado = useMemo(() => ranking.map(({ nombre, n }) => {
+    if (listo) {
+      const l = porEstado.get(nombre) ?? [];
+      return { nombre, n, tel: l.filter((p) => p.telefono).length, dec: l.filter((p) => p.contacto).length };
+    }
+    const r = resumen?.porEntidad[nombre];
+    return { nombre, n, tel: r?.conTelefono ?? null, dec: r?.conDecisor ?? null };
+  }), [ranking, listo, porEstado, resumen]);
+  const porFamilia = useMemo(() => {
+    const m = new Map<Familia, number>(FAMILIAS.map((f) => [f, 0]));
+    for (const [e, n] of porEtapa) m.set(familiaDe(e), (m.get(familiaDe(e)) ?? 0) + n);
+    return m;
+  }, [porEtapa]);
   const elegirEstado = (destino: EstadoGeo | null) => { setSeleccion(destino); volarA(destino); };
   const alPais = () => { setSeleccion(null); setCalles(false); volarA(null); };
   const enSeleccion = seleccion ? conCoords.filter((p) => p.entidad === seleccion.nombre).length : conCoords.length;
 
   return (
     <div className="cer-raiz">
-      <TiraCifras etiqueta={tx('mapa_prospectos_cerebro.cartera_filtrada')} items={[
+      <TiraCifras etiqueta={tx('mapa_prospectos_cerebro.cartera_filtrada')} items={observadas(uniformes([
         cifra(tx('mapa_prospectos_cerebro.prospectos'), totalCifra),
         cifra(tx('mapa_prospectos_cerebro.con_telefono'), conTelefono),
         cifra(tx('mapa_prospectos_cerebro.con_decisor'), conDecisor),
@@ -695,10 +739,13 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             ? { valor: calientes, conteo: true as const }
             : { valor: null, estado: 'vacio' as const, mensaje: errorCarga ? tr.t('mapa.errorCarga') : tr.t('mapa.cargando') }),
         },
-      ]} />
+      ]), tx('a1r4.observado'))} />
 
-      {/* ── Herramientas del mapa ───────────────────────────────────────── */}
-      <div className="cer-barra">
+      {/* ── UNA sola tarjeta de mapa (Rovaq, radio 12): cabecera con pista y sello, mapa con controles de zoom y, dentro de la MISMA tarjeta, el ranking. ── */}
+      <section className="rv-tarjeta cer-mapacard" aria-label={tx('mapa_prospectos_cerebro.donde_vive_la_cartera')}>
+      <header className="cer-mapacard__cab">
+        <h2 className="rv-tarjeta__titulo">{tx('mapa_prospectos_cerebro.donde_vive_la_cartera')}</h2>
+        <span className="cer-sello"><i className="rv-kpi__punto" aria-hidden="true" />{tx('a1r4.observado')}</span>
         <p className="cer-barra__resumen" aria-live="polite">
           {seleccion
             ? tx('mapa_prospectos_cerebro.seleccion_prospectos', { nombre: seleccion.nombre, n: numero(detalleSeleccion?.n ?? listaSeleccion.length, idioma) })
@@ -711,22 +758,16 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             </Tooltip>
           )}
           {/* Los dos atajos más pedidos: un clic, sin abrir el cajón. Mismo estado que los criterios de adentro. */}
-          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.soloDecisor} icono={<Icono icono={UserCheck} />} disabled={!listo}
+          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.soloDecisor} icono={<Icono icono={UserCheck} />}
             onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>{tx('mapa_prospectos_cerebro.con_decisor')}</Boton>
-          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.minUrgencia === 70} icono={<Icono icono={Flame} />} disabled={!listo}
+          <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.minUrgencia === 70} icono={<Icono icono={Flame} />}
             onClick={() => setFiltros((f) => ({ ...f, minUrgencia: f.minUrgencia === 70 ? 0 : 70 }))}>{tx('mapa_prospectos_cerebro.urgentes')}</Boton>
-          <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} disabled={!listo} onClick={() => setFiltrosAbiertos(true)}>
+          <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} onClick={() => setFiltrosAbiertos(true)}>
             {tx('mapa_prospectos_cerebro.filtros')}{filtrosActivos ? ` · ${filtrosActivos}` : ''}
           </Boton>
-          <Tooltip texto={tx('mapa_prospectos_cerebro.pantalla_completa')}>
-            <Boton tamano="sm" onClick={alternarPantalla} icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />}>
-              <span className="rv-sr">{tx('mapa_prospectos_cerebro.pantalla_completa')}</span>
-            </Boton>
-          </Tooltip>
         </div>
-      </div>
+      </header>
 
-      {/* ── El mundo: el mapa de color (choropleth secuencial por estado) y, a su lado, el ranking ──────────────── */}
       <div className="cer-cuerpo">
       <section ref={zonaRef} className="cer-zona" aria-label={tx('mapa_prospectos_cerebro.mapa_de_la_cartera')}>
         {/* El ala izquierda: solo en pantallas anchas (1900 px o más); el embudo y los más cerrables VIVEN junto al país, sin taparlo. */}
@@ -752,6 +793,21 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             ))}
           </div>
         </aside>
+
+        {/* Controles +/−/⤢ de 32 px con borde punteado (Rovaq); la pantalla completa vive aquí y no en la barra. */}
+        <div className="cer-zoom" role="group" aria-label={tx('mapa_prospectos_cerebro.mapa_de_la_cartera')}>
+          <Tooltip texto={tx('a1r4.acercar')}>
+            <Boton className="cer-zoom__btn" onClick={() => zoomPaso(1.6)} icono={<Icono icono={Plus} />}><span className="rv-sr">{tx('a1r4.acercar')}</span></Boton>
+          </Tooltip>
+          <Tooltip texto={tx('a1r4.alejar')}>
+            <Boton className="cer-zoom__btn" onClick={() => zoomPaso(1 / 1.6)} icono={<Icono icono={Minus} />}><span className="rv-sr">{tx('a1r4.alejar')}</span></Boton>
+          </Tooltip>
+          <Tooltip texto={tx('mapa_prospectos_cerebro.pantalla_completa')}>
+            <Boton className="cer-zoom__btn" onClick={alternarPantalla} icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />}>
+              <span className="rv-sr">{tx('mapa_prospectos_cerebro.pantalla_completa')}</span>
+            </Boton>
+          </Tooltip>
+        </div>
 
         {/* El país: cámara libre (rueda, arrastre y vuelo) */}
         <svg ref={svgRef} viewBox={`0 0 ${VIEWBOX_ESTADOS.w} ${VIEWBOX_ESTADOS.h}`} className="cer-svg"
@@ -783,25 +839,25 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
                 />
               );
             })}
-            {/* Rótulos: el código del estado y su cifra EXACTA (el color nunca es la única señal); solo donde caben al zoom actual. */}
-            {ESTADOS_GEO.map((e) => {
-              const nEstado = nPorEstado.get(e.nombre) ?? 0;
-              if (nEstado === 0 || seleccion !== null || e.bw * camK < 30 || e.bh * camK < 20) return null;
-              const tam = 11 / camK;
-              return (
-                <text key={e.id} className="cer-rotulo" data-paso={pasoDeRampa(nEstado, maxEstado)} x={e.cx} y={e.cy} fontSize={tam} textAnchor="middle" aria-hidden="true">
-                  <tspan x={e.cx}>{e.id.slice(3)}</tspan>
-                  {e.bh * camK >= 36 && <tspan x={e.cx} dy={tam * 1.2}>{numero(nEstado, idioma)}</tspan>}
-                </text>
-              );
-            })}
             {/* Las luces: cada prospecto con coordenadas reales */}
             {pines.map(({ p, xy }) => (
-              <circle key={p.id} className="cer-pin" data-etapa={p.estado in COLOR_EMBUDO ? p.estado : 'nuevo'}
+              <circle key={p.id} className="cer-pin" data-etapa={p.estado in COLOR_EMBUDO ? p.estado : 'nuevo'} data-familia={familiaDe(p.estado)}
                 data-urgente={p.urgencia >= 70 || undefined} data-nuevo={recientes.has(p.id) || undefined}
                 cx={xy.x} cy={xy.y} r={Math.max(0.5, Math.min(2.4, 2.4 / camK))}
                 strokeWidth={Math.max(0.1, 0.4 / camK)} />
             ))}
+            {/* Rótulos: el código del estado y su cifra EXACTA (el color nunca es la única señal); solo donde caben al zoom actual. Van DESPUÉS de las luces y con halo, para que ningún punto se encime al texto. */}
+            {ESTADOS_GEO.map((e) => {
+              const nEstado = nPorEstado.get(e.nombre) ?? 0;
+              if (nEstado === 0 || seleccion !== null || e.bw * camK < 44 || e.bh * camK < 28) return null;
+              const tam = 11 / camK;
+              return (
+                <text key={e.id} className="cer-rotulo" data-paso={pasoDeRampa(nEstado, maxEstado)} x={e.cx} y={e.cy} fontSize={tam} textAnchor="middle" strokeWidth={2.5 / camK} aria-hidden="true">
+                  <tspan x={e.cx}>{e.id.slice(3)}</tspan>
+                  {e.bh * camK >= 44 && <tspan x={e.cx} dy={tam * 1.2}>{numero(nEstado, idioma)}</tspan>}
+                </text>
+              );
+            })}
           </g>
         </svg>
 
@@ -918,22 +974,34 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
         )}
         <div className="cer-rank__bloque">
           <h3 className="cer-ala__titulo">{tr.t('mapa.lucesTitulo')}</h3>
-          <div className="cer-leyenda" aria-label={tx('mapa_prospectos_cerebro.leyenda_del_embudo')}>
-            {ORDEN_EMBUDO.map((e) => (
-              <span key={e}><i className="cer-punto" data-etapa={e} aria-hidden="true" />{nombreEtapaTr(e, tx)}</span>
+          {/* Cinco familias con su forma (llena, anillo, discontinua) y su conteo real: se distinguen sin depender del tono. */}
+          <ul className="cer-familias" aria-label={tx('mapa_prospectos_cerebro.leyenda_del_embudo')}>
+            {FAMILIAS.map((f) => (
+              <li key={f}><i className="cer-punto" data-familia={f} aria-hidden="true" /><span>{rotuloFamilia(f, tx)}</span><b>{numero(porFamilia.get(f) ?? 0, idioma)}</b></li>
             ))}
-          </div>
+          </ul>
         </div>
       </aside>
       </div>
+      </section>
 
       {/* ── Lo que sigue del mapa ────────────────────────────────────────── */}
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="cer-fila-baja">
         <Tarjeta titulo={tx('mapa_prospectos_cerebro.el_embudo_en_luces')}>
           <BarList etiqueta={tx('mapa_prospectos_cerebro.prospectos_por_etapa_del_embudo')} items={itemsEmbudo} />
         </Tarjeta>
-        <Tarjeta titulo={tx('mapa_prospectos_cerebro.donde_vive_la_cartera')}>
-          <BarList etiqueta={tx('mapa_prospectos_cerebro.prospectos_por_estado')} items={itemsPlazas} />
+        {/* La tabla equivalente del mapa (Rovaq: el mismo dato en filas, para leerlo exacto y con teclado). */}
+        <Tarjeta titulo={tx('mapa_prospectos_cerebro.cobertura_por_estado')} className="cer-tabla-estados">
+          <TablaBase tarjetaMovil
+            etiqueta={tx('mapa_prospectos_cerebro.prospectos_por_estado')} idFila={(f) => f.nombre} filas={filasEstado}
+            vacio={{ titulo: tr.t('mapa.rankingVacio') }}
+            columnas={[
+              { id: 'estado', titulo: tx('a1r4.col_estado'), principal: true, celda: (f) => f.nombre },
+              { id: 'n', titulo: tx('mapa_prospectos_cerebro.prospectos'), alinear: 'der', celda: (f) => numero(f.n, idioma) },
+              { id: 'tel', titulo: tx('mapa_prospectos_cerebro.con_telefono'), alinear: 'der', celda: (f) => (f.tel === null ? '—' : numero(f.tel, idioma)) },
+              { id: 'dec', titulo: tx('mapa_prospectos_cerebro.con_decisor'), alinear: 'der', celda: (f) => (f.dec === null ? '—' : numero(f.dec, idioma)) },
+            ]}
+          />
           <p className="cer-prospecto__tenue">{tr.t('mapa.sinPlaza', { n: numero(sinPlaza, idioma) })}</p>
         </Tarjeta>
       </FilaTarjetas>

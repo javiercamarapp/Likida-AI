@@ -98,18 +98,23 @@ async function fichasDesgloses(tenantId: string): Promise<FichasDesgloses> {
   const hoy = hoyMx();
   const manana = new Date(Date.parse(inicioDiaMx(hoy)) + DIA_MS);
   const hace30 = new Date(Date.parse(inicioDiaMx(hoy)) - 29 * DIA_MS);
-  const [deHoy, de30, retenidos, sinPoliza] = await Promise.all([
+  const [deHoy, de30, listaRetenidos, sinPoliza] = await Promise.all([
     contarParaInsights(tenantId, new Date(inicioDiaMx(hoy)), manana).catch(() => null),
     contarParaInsights(tenantId, hace30, manana).catch(() => null),
-    medir(async () => {
-      const r = await listarDesgloses(tenantId, { soloRetenidos: true, limite: 200 });
-      return r.ok && !r.valor.siguiente ? r.valor.items.length : null;
-    }),
+    // Los retenidos se leen completos (hasta 200, sin «siguiente»): de ahí salen el conteo y cuántos son «póliza provisional». `null` = no se pudo leer.
+    (async () => {
+      try {
+        const r = await listarDesgloses(tenantId, { soloRetenidos: true, limite: 200 });
+        return r.ok && !r.valor.siguiente ? r.valor.items : null;
+      } catch { return null; }
+    })(),
     medir(async () => {
       const r = await listarExcepciones(tenantId, { tipo: 'sin_poliza', limite: 500 });
       return r.ok && r.valor.length < 500 ? r.valor.length : null;
     }),
   ]);
+  const retenidos = listaRetenidos ? listaRetenidos.length : null;
+  const polizaProvisional = listaRetenidos ? listaRetenidos.filter((d) => /^póliza provisional/i.test(d.retenidaMotivo ?? '')).length : null;
   const e = de30 && de30.ok ? de30.valor.entregasPorEstado : null;
   return {
     recibidosHoy: deHoy && deHoy.ok ? deHoy.valor.desgloses : null,
@@ -118,6 +123,7 @@ async function fichasDesgloses(tenantId: string): Promise<FichasDesgloses> {
     rebotados: e ? (e.rebotada ?? 0) + (e.queja ?? 0) + (e.fallida ?? 0) : null,
     retenidos,
     sinPoliza,
+    polizaProvisional,
   };
 }
 

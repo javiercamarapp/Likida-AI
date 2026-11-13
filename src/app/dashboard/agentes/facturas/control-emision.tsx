@@ -90,8 +90,12 @@ function Limites({ c, esDueno, flota }: { c: ControlPantalla | 'sin_fila'; esDue
   const [r, guardar, p] = useActionState(accionCambiarLimites, null);
   useRespuesta(r);
   const v = c === 'sin_fila' ? { maxMontoTicket: 1500, maxTicketsLote: 5, maxTicketsDia: 20, maxMontoDia: 20000 } : c;
+  // Rovaq FM: fila rótulo-control (rótulo a la izquierda, control a la derecha, filete entre filas); el rótulo accesible es el del campo.
   const campo = (name: string, rotulo: string, valor: number) => (
-    <CampoTexto etiqueta={rotulo} name={name} defaultValue={valor} inputMode="decimal" />
+    <div className="rv-fact__ctl-fila">
+      <span className="rv-fact__ctl-etq" aria-hidden="true">{rotulo}</span>
+      <CampoTexto etiqueta={rotulo} etiquetaOculta name={name} defaultValue={valor} inputMode="decimal" className="rv-fact__ctl-campo" />
+    </div>
   );
   if (!esDueno) {
     return (
@@ -99,13 +103,13 @@ function Limites({ c, esDueno, flota }: { c: ControlPantalla | 'sin_fila'; esDue
     );
   }
   return (
-    <form action={guardar} className="rv-fact__tres">
+    <form action={guardar} className="rv-fact__ctl-forma">
       <CampoFlota valor={flota} />
       {campo('maxMontoTicket', tx('rest.monto_max_por_ticket'), v.maxMontoTicket)}
       {campo('maxTicketsLote', 'Tickets por lote', v.maxTicketsLote)}
       {campo('maxTicketsDia', tx('rest.tickets_por_dia'), v.maxTicketsDia)}
       {campo('maxMontoDia', tx('rest.monto_max_por_dia'), v.maxMontoDia)}
-      <Boton pendiente={p}>{tx('rest.guardar_limites')}</Boton>
+      <div className="rv-fact__pie"><Boton pendiente={p}>{tx('rest.guardar_limites')}</Boton></div>
     </form>
   );
 }
@@ -169,19 +173,25 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
   const encendida = control !== null && control !== 'sin_fila' && control.emisionReal;
   return (
     <Tarjeta titulo={tx('rest.emision_real_de_facturas')}>
-      <div className="rv-fact__pila">
+      <div className="rv-fact__emision">
+        <div className="rv-fact__pila rv-fact__emision-col">
         <p className="rv-fact__nota">{ricoT(tx('rest.un_cfdi_emitido_no_se_deshace'), { e0: (c) => <Link className="rv-fact__enlace" href="/dashboard/legal">{c}</Link> })}</p>
         {control === null ? (
           <p role="alert" className="rv-fact__nota" data-tono="bad">{tx('rest.no_se_pudo_leer_el_control')}</p>
         ) : (
           <>
-            <p className="rv-fact__nota">{tx('rest.estado')}{' '}<strong>{encendida ? tx('rest.emision_real_encendida') : tx('rest.ensayo_llena_el_portal_y_no')}</strong>
-            </p>
-            <Interruptor encendida={encendida} esDueno={esDueno} flota={flotaPintada} />
+            <div className="rv-fact__ctl-fila">
+              <span className="rv-fact__ctl-etq">
+                {tx('rest.estado')}{' '}<strong>{encendida ? tx('rest.emision_real_encendida') : tx('rest.ensayo_llena_el_portal_y_no')}</strong>
+              </span>
+              <Interruptor encendida={encendida} esDueno={esDueno} flota={flotaPintada} />
+            </div>
             <Limites c={control} esDueno={esDueno} flota={flotaPintada} />
           </>
         )}
-        <p className="rv-fact__rotulo">{tx('rest.lotes_por_confirmar')}</p>
+        </div>
+        <div className="rv-fact__pila rv-fact__emision-col">
+        <p className="rv-fact__sec">{tx('rest.lotes_por_confirmar')}</p>
         {lotes === null ? (
           <p className="rv-fact__nota" data-tono="bad">{tx('rest.no_se_pudieron_leer_los_lotes')}</p>
         ) : lotes.length === 0 ? (
@@ -189,12 +199,13 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
         ) : (
           <ul className="rv-fact__reglones">{lotes.map((l) => <FilaLote key={l.id} l={l} flota={flotaPintada} />)}</ul>
         )}
-        <p className="rv-fact__rotulo">{tx('rest.portales')}</p>
+        <p className="rv-fact__sec">{tx('rest.portales')}</p>
         {portales.length === 0 ? (
           <p className="rv-fact__nota">{tx('rest.ningun_portal_ha_emitido_todavia')}</p>
         ) : (
           <ul className="rv-fact__reglones">{portales.map((f) => <FilaPortalControl key={f.clave} f={f} minimo={minimoParaAutonoma} esDueno={esDueno} flota={flotaPintada} />)}</ul>
         )}
+        </div>
       </div>
     </Tarjeta>
   );

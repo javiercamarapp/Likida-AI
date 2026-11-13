@@ -1,8 +1,7 @@
 'use client';
 
 import '../vigia.css';
-import { AvisoCompacto, Boton as BotonV2, CampoSelect, CampoFecha, CampoTexto, CampoTextarea, Casilla, Disclosure, Fieldset, FiltroChip, Icono, MarcoPagina, EstadoVacio, StatusChip, Tarjeta, AvisoResultado, type TonoEstado } from '@/app/ui-v2/componentes';
-import Link from 'next/link';
+import { AvisoCompacto, BarraPeriodo, Chip, Boton as BotonV2, CampoSelect, CampoFecha, CampoTexto, CampoTextarea, Casilla, Disclosure, Fieldset, Icono, StatusChip, Tarjeta, AvisoResultado, type TonoEstado } from '@/app/ui-v2/componentes';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Check, ClipboardCopy, Send, Trash2, Truck } from 'lucide-react';
@@ -10,6 +9,8 @@ import type { GrupoDia, TarjetaAviso } from '@/lib/likida/vigia/aviso/bandeja';
 import { AVISO_AUTOMATICO_CONECTADO, TEXTO_AVISO_AUTOMATICO_POR_CONECTAR, VACIO_BANDEJA_POR_CONECTAR } from '@/lib/likida/vigia/aviso/conexion';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { VacioAgente } from '@/app/dashboard/agentes/vacio-agente';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -216,13 +217,15 @@ function TarjetaAvisoViaje({ t, accion, puedeDecidir }: { t: TarjetaAviso; accio
   );
 }
 
-export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPendientes, puedeDecidir, avisoEncendido, errorLectura, sinMigrar, accion }: {
+export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, pendientes, soloPendientes, puedeDecidir, avisoEncendido, errorLectura, sinMigrar, accion }: {
   sufijo: string;
   grupos: GrupoDia[];
   /** Cuántos avisos hay en la lista que se está viendo. */
   total: number;
   /** La lista llegó al tope de la bandeja: puede haber avisos más viejos que no se muestran (A37-S58-07). */
   hayMas?: boolean;
+  /** Cuántos avisos esperan a una persona (`contarPendientes`). `null`/`undefined` = no se pudo contar: «—», nunca un cero. */
+  pendientes?: number | null;
   soloPendientes: boolean;
   /** Solo el dueño y el encargado deciden; el resto mira (sin botones y sin teléfonos completos). */
   puedeDecidir: boolean;
@@ -237,50 +240,85 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
   const { t: tx } = useT('agentes', agentesEs);
   const base = `/dashboard/agentes/vigia/avisos${sufijo}`;
   const conPendientes = `${base}${sufijo ? '&' : '?'}pendientes=1`;
+  const sinLectura = sinMigrar || !!errorLectura;
+  const mas = hayMas ? '+' : '';
+  const nPend = typeof pendientes === 'number' ? pendientes : null;
+  // Bandeja (Rovaq «Avisos»): segmentado Pendientes N / Todos → tira de 2 → UNA tarjeta de lista. Máximo dos avisos arriba:
+  // primero lo que impide leer, luego lo que explica por qué nada sale solo.
+  const avisosArriba: React.ReactNode[] = [];
+  if (sinMigrar) avisosArriba.push(<Aviso key="migrar">{tx('rest.la_base_de_datos_todavia_no')}</Aviso>);
+  if (errorLectura) avisosArriba.push(<Aviso key="error">{errorLectura}</Aviso>);
+  if (!AVISO_AUTOMATICO_CONECTADO) avisosArriba.push(<div key="por-conectar" data-testid="por-conectar"><AvisoCompacto tono="warn" resumen={TEXTO_AVISO_AUTOMATICO_POR_CONECTAR} /></div>);
+  if (avisoEncendido === false) avisosArriba.push(<AvisoCompacto key="apagado" tono="warn" resumen={tx('rest.el_aviso_de_viaje_esta_apagado_4')} />);
   return (
-    <MarcoPagina titulo={tx('vigia.vista.sello_avisos_de_viaje')} apoyo={tx('rest.los_avisos_que_el_vigia_arma')}>
-      <nav aria-label={tx('rest.navegacion')} className="rv-vg__herr">{ricoT(tx('rest.e0_volver_a_servicio_al_cliente'), { e0: (c) => <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">{c}</Link> })}<FiltroChip href={soloPendientes ? base : conPendientes} activo={soloPendientes}>{tx('rest.solo_pendientes')}</FiltroChip>
-      </nav>
+    <EsqueletoTablaMaestra
+      titulo={tx('vigia.vista.sello_avisos_de_viaje')}
+      apoyo={tx('rest.los_avisos_que_el_vigia_arma')}
+      filtros={(
+        <BarraPeriodo
+          etiqueta={tx('f26d2.avisos.filtro')}
+          periodo={{
+            etiqueta: tx('f26d2.avisos.filtro'),
+            valor: soloPendientes ? 'pendientes' : 'todos',
+            opciones: [
+              { valor: 'pendientes', etiqueta: nPend === null ? tx('f26d2.avisos.pendientes') : `${tx('f26d2.avisos.pendientes')} ${nPend}`, href: conPendientes },
+              { valor: 'todos', etiqueta: tx('f26d2.avisos.todos'), href: base },
+            ],
+          }}
+        />
+      )}
+      avisos={avisosArriba.length > 0 ? <>{avisosArriba.slice(0, 2)}</> : undefined}
+      // La tira es de DOS cifras reales: lo que espera a una persona (con «Al día» cuando no hay nada) y lo cargado en la lista.
+      // Sin lectura de la lista, ambas dicen «sin dato»; con el tope de la bandeja la cuenta es parcial y lleva «+».
+      cifras={[
+        sinLectura || nPend === null
+          ? { etiqueta: tx('f26d2.avisos.sin_atender'), valor: null, estado: 'vacio', mensaje: tx('f26d2.avisos.sin_dato') }
+          : { etiqueta: tx('f26d2.avisos.sin_atender'), valor: nPend, tono: nPend === 0 ? 'ok' : 'warn', nota: nPend === 0 ? tx('f26d2.avisos.nadie_espera') : tx('f26d2.avisos.esperan_decision') },
+        sinLectura
+          ? { etiqueta: tx('f26d2.avisos.cargados'), valor: null, estado: 'vacio', mensaje: tx('f26d2.avisos.sin_dato') }
+          : { etiqueta: tx('f26d2.avisos.cargados'), valor: `${total}${mas}`, nota: soloPendientes ? tx('f26d2.avisos.en_vista_pendientes') : tx('f26d2.avisos.en_vista_todos') },
+      ]}
+      etiquetaCifras={tx('vigia.vista.sello_avisos_de_viaje')}
+    >
+      <Tarjeta titulo={tx('f26d2.avisos.tarjeta')} acciones={!sinLectura ? <Chip tono="neutral" tamano="estado">{total}{mas}</Chip> : undefined}>
+        {!sinLectura && total === 0 ? (
+          <div data-testid="vacio"><VacioAgente titulo={tx('rest.sin_avisos_que_revisar')}>{soloPendientes ? vacioPendientes(tx) : vacioTodos(tx)}</VacioAgente></div>
+        ) : null}
+        {sinLectura ? <VacioAgente titulo={tx('f26d2.avisos.sin_lectura')}>{tx('f26d2.avisos.sin_lectura_texto')}</VacioAgente> : null}
 
-      <p className="rv-vg__nota" data-testid="ayuda">{ayudaReglaProvisional(tx)}</p>
+        {hayMas ? (
+          <p className="rv-vg__nota" data-testid="hay-mas">{tx('rest.se_muestran_los_avisos_mas_recientes', { total })}{' '}{soloPendientes ? tx('rest.resuelve_los_pendientes_para_ver_el') : tx('rest.usa_solo_pendientes_para_ver_lo')}
+          </p>
+        ) : null}
 
-      {!AVISO_AUTOMATICO_CONECTADO ? (
-        <div data-testid="por-conectar"><AvisoCompacto tono="warn" resumen={TEXTO_AVISO_AUTOMATICO_POR_CONECTAR} /></div>
-      ) : null}
-      {avisoEncendido === false ? (
-        <AvisoCompacto tono="warn" resumen={tx('rest.el_aviso_de_viaje_esta_apagado_4')} />
-      ) : null}
-      {avisoEncendido === null && !sinMigrar && !errorLectura ? (
-        <p className="rv-vg__nota">{tx('rest.no_pude_confirmar_si_el_aviso')}</p>
-      ) : null}
-      {!puedeDecidir ? (
-        <p className="rv-vg__nota">{tx('rest.solo_el_dueno_o_el_encargado_4')}</p>
-      ) : null}
-
-      {sinMigrar ? <Aviso>{tx('rest.la_base_de_datos_todavia_no')}</Aviso> : null}
-      {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
-
-      {!sinMigrar && !errorLectura && total === 0 ? (
-        <div data-testid="vacio"><EstadoVacio titulo={tx('rest.sin_avisos_que_revisar')} contenido>{soloPendientes ? vacioPendientes(tx) : vacioTodos(tx)}</EstadoVacio></div>
-      ) : null}
-
-      {hayMas ? (
-        <p className="rv-vg__nota" data-testid="hay-mas">{tx('rest.se_muestran_los_avisos_mas_recientes', { total })}{' '}{soloPendientes ? tx('rest.resuelve_los_pendientes_para_ver_el') : tx('rest.usa_solo_pendientes_para_ver_lo')}
-        </p>
-      ) : null}
-
-      {grupos.map((g) => (
-        <Tarjeta key={g.fecha || 'sin-fecha'} titulo={dia(g.fecha)} info="vigia_avisos.dia">
+        {grupos.length > 0 ? (
           <div className="rv-vg__pila">
-            {g.clientes.map((c) => (
-              <div key={c.cliente} className="rv-vg__pila">
-                <p className="rv-vg__rotulo">{c.cliente}</p>
-                {c.tarjetas.map((t) => <TarjetaAvisoViaje key={t.id} t={t} accion={accion} puedeDecidir={puedeDecidir} />)}
-              </div>
+            {grupos.map((g) => (
+              <section key={g.fecha || 'sin-fecha'} className="rv-vg__pila" aria-label={dia(g.fecha)}>
+                {/* sin-info: separador de día de la bandeja, no un recuadro con cifra */}
+                <h3 className="rv-vg__dia">{dia(g.fecha)}</h3>
+                {g.clientes.map((c) => (
+                  <div key={c.cliente} className="rv-vg__pila">
+                    <p className="rv-vg__rotulo">{c.cliente}</p>
+                    {c.tarjetas.map((t) => <TarjetaAvisoViaje key={t.id} t={t} accion={accion} puedeDecidir={puedeDecidir} />)}
+                  </div>
+                ))}
+              </section>
             ))}
           </div>
-        </Tarjeta>
-      ))}
-    </MarcoPagina>
+        ) : null}
+
+        <div className="rv-vg__notas">
+          <p className="rv-vg__nota" data-testid="ayuda">{ayudaReglaProvisional(tx)}</p>
+          {avisoEncendido === null && !sinMigrar && !errorLectura ? (
+            <p className="rv-vg__nota">{tx('rest.no_pude_confirmar_si_el_aviso')}</p>
+          ) : null}
+          {!puedeDecidir ? (
+            <p className="rv-vg__nota">{tx('rest.solo_el_dueno_o_el_encargado_4')}</p>
+          ) : null}
+        </div>
+      </Tarjeta>
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
+    </EsqueletoTablaMaestra>
   );
 }

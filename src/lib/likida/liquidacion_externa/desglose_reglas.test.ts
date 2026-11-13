@@ -3,7 +3,7 @@ import { DESGLOSE_SINTETICO, type RenglonDesglose } from './desglose.fixture';
 import { aCentavos } from './esquema';
 import { validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora } from './desglose_contrato';
 import {
-  aplicarRenombres, colapsarRenglonViaje, guardasPreEnvio, netoEnCentavos, RENOMBRE_EJEMPLO, type Renombre,
+  aplicarRenombres, colapsarRenglonViaje, GUARDAS_DEFECTO, guardasPreEnvio, netoEnCentavos, RENOMBRE_EJEMPLO, type Renombre,
 } from './desglose_reglas';
 
 const reng = (r: RenglonDesglose): RenglonBitacora => ({ concepto: r.descripcion, monto: r.monto, ...(r.vale ? { vale: r.vale } : {}) });
@@ -97,6 +97,17 @@ describe('guardasPreEnvio', () => {
   it('neto negativo calculado de los renglones cuando la fuente no manda neto', () => {
     const d = desglose({ percepciones: [{ concepto: 'Sueldo', monto: 100 }], deducciones: [{ concepto: 'Retención', monto: 220 }] });
     expect(guardasPreEnvio(d).motivos).toEqual(['neto_negativo']);
+  });
+  it('el defecto de tipos_que_reciben no cambia: solo foráneo y local', () => {
+    expect(GUARDAS_DEFECTO.tipos_que_reciben).toEqual(['foraneo', 'local']);
+  });
+  it('rabón, posturero y cargador son tipos válidos pero quedan retenidos con tipo_sin_regla hasta que la flota los habilite', () => {
+    for (const t of ['rabon', 'posturero', 'cargador']) {
+      const d = desglose({ tipoOperador: t });
+      expect(d.tipoOperador).toBe(t);
+      expect(guardasPreEnvio(d)).toMatchObject({ decision: 'retener', motivos: ['tipo_sin_regla'] });
+      expect(guardasPreEnvio(d, { tipos_que_reciben: ['foraneo', 'local', t as never] }).decision).toBe('enviar');
+    }
   });
   it('permisionario → retener por defecto; local y foráneo pasan; tipo ausente se retiene', () => {
     expect(guardasPreEnvio(desglose({ tipoOperador: 'permisionario' }))).toMatchObject({ decision: 'retener', motivos: ['tipo_sin_regla'] });

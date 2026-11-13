@@ -7,7 +7,7 @@ import type {
   FacturacionClientes, RenglonCartera, ClienteCartera, RenglonSinFacturar,
 } from '@/lib/likida/facturacion_clientes';
 import { CUBETAS_AUDITOR, type AuditoriaCobranza, type CubetaAuditor } from '@/lib/likida/auditor_cobranza';
-import { EstadoVacio, EstadoError } from '../estados';
+import { EstadoError } from '../estados';
 
 // El formato de cifras vive SOLO en formato.ts — hay una prueba que falla si
 // otro archivo formatea moneda mexicana por su cuenta. Se usa `fechaMx` (CON
@@ -17,11 +17,15 @@ import { EstadoVacio, EstadoError } from '../estados';
 // enero cruza el año, que es justo cuando el corte importa.
 import { mxn, numero, fechaMx } from '@/lib/formato';
 import {
-  FormaFactura, FormaPago, FormaEmitir, FormaCancelar, type AccionForma,
+  FormaFactura, FormaPago, FormaEmitir, FormaCancelar, VistaRapidaViaje, type AccionForma,
 } from './forma';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { Cifra, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { AvisoCompacto, Chip, MarcoPagina, StatusChip, TablaBase, TituloRecuadro, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraPeriodo, Chip, EstadoVacio as EstadoVacioV2, StatusChip, TablaBase, TabsLinea, TituloRecuadro, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import '../caja-vacia.css';
+import './facturacion.css';
+import type { ReactNode } from 'react';
 
 // Tonos del sistema como clases (sin `style=`): el color sale de los tokens, no de un literal.
 const APAGADO = 'text-[color:var(--muted)]';
@@ -65,12 +69,23 @@ export interface CapturaFacturacion {
  *
  * Pura props a propósito, para poder mirarla con fixtures sin sesión.
  */
-export function VistaFacturacion({ datos, captura = null, auditoria = null, tr = trEs }: {
+export type SeccionFacturacion = 'cartera' | 'mesa' | 'auditor' | 'cobro';
+export const SECCIONES_FACTURACION: readonly SeccionFacturacion[] = ['cartera', 'mesa', 'auditor', 'cobro'];
+
+export function VistaFacturacion({ datos, captura = null, auditoria = null, tr = trEs, seccion = 'cartera', hrefSeccion, extras, sufijo = '' }: {
   datos: FacturacionClientes | null;
   captura?: CapturaFacturacion | null;
   /** El cruce pactado/entregado/facturado/cobrado (auditor_cobranza.ts).
    *  `null` = su lectura falló; la sección pinta el error dicho, no un cero. */
   auditoria?: AuditoriaCobranza | null; tr?: Tr;
+  /** La pestaña vigente (Rovaq: hub con pestañas subrayadas). */
+  seccion?: SeccionFacturacion;
+  /** Enlace de cada pestaña; sin él no se pintan pestañas (fixtures sin sesión). */
+  hrefSeccion?: (s: SeccionFacturacion) => string;
+  /** Estadías y portal de pago: bloques independientes (sus lecturas y su fallo no tocan la cartera ni el auditor) que viven en su pestaña. */
+  extras?: ReactNode;
+  /** `?tenant=`/`?vista=`/`?rol=` que los enlaces internos deben conservar (el «ver como» del superadmin). */
+  sufijo?: string;
 }) {
   // «Registrar factura» es la acción de la pantalla: vive en el encabezado y abre un cajón del sistema (nunca un `<details>` con
   // formulario dentro de la tabla ni de una tarjeta).
@@ -78,35 +93,73 @@ export function VistaFacturacion({ datos, captura = null, auditoria = null, tr =
     <FormaFactura accion={captura.factura} clientes={captura.clientes}
       viajesSinFacturar={datos.enLaMesa.viajes} hoy={captura.hoy} />
   ) : undefined;
+  const vacioTotal = datos !== null && datos.cartera.facturas.length === 0 && datos.viajesLiquidados === 0;
+  // Pestañas con su contador real: solo cuando hay datos que contar (un contador en 0 inventado no se pinta).
+  const pestanas = hrefSeccion && datos !== null && !vacioTotal ? (
+    <TabsLinea
+      etiqueta={tr('facturacion.vista.secciones')}
+      actual={seccion}
+      pestanas={[
+        { clave: 'cartera', etiqueta: tr('facturacion.vista.tab.cartera'), href: hrefSeccion('cartera'), conteo: datos.cartera.facturasTotal },
+        { clave: 'mesa', etiqueta: tr('facturacion.vista.tab.mesa'), href: hrefSeccion('mesa'), conteo: datos.enLaMesa.total, atencion: datos.enLaMesa.total > 0 },
+        { clave: 'auditor', etiqueta: tr('facturacion.vista.tab.auditor'), href: hrefSeccion('auditor'), conteo: auditoria === null ? null : auditoria.cola.length, atencion: (auditoria?.cola.length ?? 0) > 0 },
+        ...(extras ? [{ clave: 'cobro', etiqueta: tr('facturacion.vista.tab.cobro'), href: hrefSeccion('cobro') }] : []),
+      ]}
+    />
+  ) : undefined;
+  // Sin enlaces de pestaña (fixtures sin sesión) se pintan TODAS las secciones, como antes; con ellos, una por pestaña.
+  const todo = !hrefSeccion;
+  const conTitulo = todo;
+  // Con pestañas, las cifras y los avisos suben al esqueleto (avisos ANTES de las cifras, como Rovaq); sin ellas, cada bloque los pinta.
+  const tabulada = !todo;
   return (
-    <MarcoPagina titulo={tr('facturacion.vista.facturacionAClientes')} apoyo={tr('facturacion.vista.facturasEmitidasSusPagos')} acciones={alta}>
+    <EsqueletoTablaMaestra
+      titulo={tr('facturacion.vista.facturacionAClientes')}
+      apoyo={tr('facturacion.vista.facturasEmitidasSusPagos')}
+      acciones={alta ? <div className="rv-fact__alta">{alta}</div> : undefined}
+      filtros={pestanas ? (
+        <>
+          {/* Rovaq (hub): pestañas subrayadas pegadas a la cabecera, y DESPUÉS la barra de alcance y la tira. */}
+          {pestanas}
+          <BarraPeriodo etiqueta={tr('facturacion.vista.facturacionAClientes')} chips={datos ? [{ id: 'alcance', etiqueta: tr('facturacion.vista.alcanceAl', { v: fechaMx(datos.hoy) }) }] : []} />
+        </>
+      ) : undefined}
+      avisos={tabulada && datos !== null && !vacioTotal ? (seccion === 'cartera' ? avisosCartera(datos, tr) : seccion === 'mesa' ? avisosMesa(datos, tr) : undefined) : undefined}
+      cifras={tabulada && datos !== null ? (seccion === 'cartera' ? cifrasCartera(datos, tr) : seccion === 'mesa' && !vacioTotal ? cifrasMesa(datos, tr) : undefined) : undefined}
+      etiquetaCifras={tr('facturacion.vista.facturacionAClientes')}
+      selloCifras={selloHoy(seccion === 'mesa' ? tr('facturacion.vista.selloLiquidadosSinFactura') : tr('facturacion.vista.selloFacturasEmitidas'))}
+    >
       {datos === null ? (
         <EstadoError mensaje={tr('facturacion.vista.noPudeLeerTus')} />
-      ) : datos.cartera.facturas.length === 0 && datos.viajesLiquidados === 0 ? (
+      ) : vacioTotal ? (
         // El estado en el que abre una flota nueva: las tablas de la 0049
         // existen y están vacías. Se dice qué las llena, no se pintan
         // ceros — y desde el hallazgo A1 (auditoría 4), la captura que las
         // llena vive AQUÍ MISMO, no en una promesa.
-        <>
-          <EstadoVacio>
-            {rico(tr('facturacion.vista.estaPantallaTrabajaCon'), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
-          </EstadoVacio>
+        <div className="rv-fact__bloques">
+          <div className="rv-caja-vacia">
+            <EstadoVacioV2 titulo={tr('facturacion.vista.carteraVaciaTitulo')} icono={FileText}>
+              {rico(tr('facturacion.vista.estaPantallaTrabajaCon'), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
+            </EstadoVacioV2>
+          </div>
           {/* Una flota sin facturas puede tener hallazgos IGUAL: el
               entregado-sin-facturar existe justamente antes de la primera
               factura. Si el auditor encontró algo, se enseña aquí también. */}
-          {auditoria !== null && auditoria.cola.length > 0 && <BloqueAuditor tr={tr} auditoria={auditoria} />}
-        </>
+          {auditoria !== null && auditoria.cola.length > 0 && <BloqueAuditor tr={tr} auditoria={auditoria} conTitulo />}
+          {extras}
+        </div>
       ) : (
-        <>
-          <BloqueCartera tr={tr} datos={datos} captura={captura} />
-          <BloqueEnLaMesa tr={tr} datos={datos} />
-          <BloqueAuditor tr={tr} auditoria={auditoria} />
+        <div className="rv-fact__bloques">
+          {(todo || seccion === 'cartera') && <BloqueCartera tr={tr} datos={datos} captura={captura} conTitulo={conTitulo} />}
+          {(todo || seccion === 'mesa') && <BloqueEnLaMesa tr={tr} datos={datos} conTitulo={conTitulo} sufijo={sufijo} />}
+          {(todo || seccion === 'auditor') && <BloqueAuditor tr={tr} auditoria={auditoria} conTitulo={conTitulo} />}
+          {(todo || seccion === 'cobro') && extras}
           <p className={`text-[11px] ${TENUE}`}>
             {rico(tr('facturacion.vista.todoLoDeEsta', { v: fechaMx(datos.hoy) }), { strong: (c) => <strong>{c}</strong> })}
           </p>
-        </>
+        </div>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
@@ -114,6 +167,68 @@ export function VistaFacturacion({ datos, captura = null, auditoria = null, tr =
  *  sin terminar, y esta pantalla la lee un contralor. */
 function plural(n: number, uno: string, varios: string): string {
   return `${numero(n)} ${n === 1 ? uno : varios}`;
+}
+
+/** Las cifras de la CARTERA (se pintan arriba, bajo los avisos, como en Rovaq). Con la cartera vacía no hay ceros: «—» y se dice por qué. */
+function cifrasCartera(datos: FacturacionClientes, tr: Tr): PropsCifra[] {
+  const c = datos.cartera;
+  const sinDato = c.facturas.length === 0;
+  const vacia = (etiqueta: string, info: PropsCifra['info']): PropsCifra => ({ etiqueta, info, valor: null, estado: 'vacio', mensaje: tr('facturacion.vista.carteraSinDato'), matiz: 8 });
+  if (sinDato) {
+    return [
+      vacia(tr('facturacion.vista.facturadoAClientes'), 'facturacion.facturado'), vacia(tr('facturacion.vista.cobrado'), 'facturacion.cobrado'),
+      vacia(tr('facturacion.vista.porCobrar'), 'facturacion.por_cobrar'), vacia(tr('facturacion.vista.vencido'), 'facturacion.vencido'),
+    ];
+  }
+  return [
+    { icono: <FileText width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.facturadoAClientes'), info: 'facturacion.facturado', valor: c.facturado, formato: 'mxn', nota: `De ${plural(c.vivas, tr('facturacion.vista.facturaEmitida'), tr('facturacion.vista.facturasEmitidas'))}`, matiz: 8 },
+    { icono: <HandCoins width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.cobrado'), info: 'facturacion.cobrado', valor: c.cobrado, formato: 'mxn', nota: tr('facturacion.vista.sumaDeLosPagos'), matiz: 8 },
+    { icono: <Wallet width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.porCobrar'), info: 'facturacion.por_cobrar', valor: c.porCobrar, formato: 'mxn', nota: tr('facturacion.vista.saldoVivoNoIncluye'), matiz: 8 },
+    { icono: <CalendarClock width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.vencido'), info: 'facturacion.vencido', valor: c.vencido, formato: 'mxn', nota: c.vencido > 0 ? tr('facturacion.vista.saldoQueYaPaso') : tr('facturacion.vista.nadaHaPasadoDe'), matiz: 8 },
+  ];
+}
+
+function avisosCartera(datos: FacturacionClientes, tr: Tr): ReactNode {
+  const c = datos.cartera;
+  if (c.facturas.length === 0 || c.sinCondiciones === 0) return undefined;
+  return (
+    <AvisoCompacto tono="warn"
+      resumen={c.sinCondiciones === 1 ? tr('facturacion.vista.1FacturaConSaldo') : tr('facturacion.vista.facturasConSaldoNo', { v: numero(c.sinCondiciones) })}
+      mas={tr('facturacion.vista.noEntranALo')} />
+  );
+}
+
+/** Las cifras de «Por facturar». Un ingreso que NINGÚN viaje trae no es $0.00: es «—» (la regla de la pantalla: nunca se pinta un cero que nadie midió). */
+function cifrasMesa(datos: FacturacionClientes, tr: Tr): PropsCifra[] {
+  const m = datos.enLaMesa;
+  if (datos.viajesLiquidados === 0 || m.total === 0) return [];
+  const ingresoSinDato = m.sinIngreso >= m.total;
+  const notaIngreso = m.sinIngreso === 0
+    ? tr('facturacion.vista.todosTraenSuIngreso')
+    : m.sinIngreso === 1 ? tr('facturacion.vista.1ViajeNoTrae') : tr('facturacion.vista.viajesNoTraenIngreso', { v: numero(m.sinIngreso) });
+  return [
+    { icono: <Truck width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.viajesLiquidadosSinFactura'), info: 'facturacion.sin_factura', valor: m.total, formato: 'numero', nota: tr('facturacion.vista.deEnTotal', { v: plural(datos.viajesLiquidados, tr('facturacion.vista.viajeLiquidado'), tr('facturacion.vista.viajesLiquidados')) }), matiz: 8 },
+    {
+      icono: <Banknote width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.ingresoCapturadoSinFacturar'), info: 'facturacion.ingreso_sin_facturar',
+      valor: ingresoSinDato ? null : m.ingresoCapturado, formato: 'mxn', matiz: 8,
+      ...(ingresoSinDato ? { estado: 'vacio' as const, mensaje: notaIngreso } : { nota: notaIngreso }),
+    },
+    m.diasMasViejo === null
+      ? { icono: <CalendarClock width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.elMasViejoSin'), info: 'facturacion.mas_viejo', valor: null, estado: 'vacio' as const, mensaje: tr('facturacion.vista.ningunoDeEstosViajes'), matiz: 8 }
+      : { icono: <CalendarClock width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.elMasViejoSin'), info: 'facturacion.mas_viejo', valor: m.diasMasViejo, formato: 'numero', nota: tr('facturacion.vista.diasDesdeQueSe'), matiz: 8 },
+    // La cuarta celda (Rovaq: tira de 4): cuántos de esos viajes ya tienen una factura sin emitir. Es un conteo medido, también cuando es 0.
+    { icono: <FileText width={14} height={14} strokeWidth={1.75} />, etiqueta: tr('facturacion.vista.conBorradorCifra'), info: 'facturacion.sin_factura', valor: m.conBorrador, formato: 'numero', nota: tr('facturacion.vista.conBorradorNota'), matiz: 8 },
+  ];
+}
+
+function avisosMesa(datos: FacturacionClientes, tr: Tr): ReactNode {
+  const m = datos.enLaMesa;
+  if (datos.viajesLiquidados === 0 || m.total === 0 || m.sinIngreso === 0) return undefined;
+  return (
+    <AvisoCompacto tono="warn"
+      resumen={<>{tr('facturacion.vista.laCifraDeArriba', { v: plural(m.sinIngreso, tr('facturacion.vista.viajeNoTiene'), tr('facturacion.vista.viajesNoTienen')) })}</>}
+      mas={tr('facturacion.vista.unViajeSinEse')} />
+  );
 }
 
 /** Un cero de cubeta se pinta como «—». Es un cero MEDIDO (ese cliente no debe nada en ese tramo), pero nueve columnas de «$0.00»
@@ -124,53 +239,26 @@ function MontoCubeta({ monto, atrasado = false }: { monto: number; atrasado?: bo
 
 // ── La cartera ─────────────────────────────────────────────────────────────
 
-function BloqueCartera({ datos, captura, tr = trEs }: { datos: FacturacionClientes; captura: CapturaFacturacion | null; tr?: Tr }) {
+function BloqueCartera({ datos, captura, conTitulo = true, tr = trEs }: { datos: FacturacionClientes; captura: CapturaFacturacion | null; conTitulo?: boolean; tr?: Tr }) {
   const c = datos.cartera;
 
   return (
     <section className="flex flex-col gap-3">
-      <TituloRecuadro info="facturacion.cartera">{tr('facturacion.vista.loQueFacturasteY')}</TituloRecuadro>
+      {conTitulo && <TituloRecuadro info="facturacion.cartera">{tr('facturacion.vista.loQueFacturasteY')}</TituloRecuadro>}
 
       {c.facturas.length === 0 ? (
-        <EstadoVacio>
-          {tr('facturacion.vista.todaviaNoHayUna')}
-        </EstadoVacio>
+        <div className="rv-caja-vacia">
+          <EstadoVacioV2 titulo={tr('facturacion.vista.carteraVaciaTitulo')} icono={FileText} contenido>
+            {tr('facturacion.vista.todaviaNoHayUna')}
+          </EstadoVacioV2>
+        </div>
       ) : (
         <>
-          <TiraCifras sello={selloHoy(tr('facturacion.vista.selloFacturasEmitidas'))}>
-            <Cifra
-              icono={<FileText width={14} height={14} strokeWidth={1.75} />}
-              etiqueta={tr('facturacion.vista.facturadoAClientes')} info="facturacion.facturado" valor={c.facturado} formato="mxn"
-              nota={`De ${plural(c.vivas, tr('facturacion.vista.facturaEmitida'), tr('facturacion.vista.facturasEmitidas'))}`}
-            />
-            <Cifra
-              icono={<HandCoins width={14} height={14} strokeWidth={1.75} />}
-              etiqueta={tr('facturacion.vista.cobrado')} info="facturacion.cobrado" valor={c.cobrado} formato="mxn"
-              nota={tr('facturacion.vista.sumaDeLosPagos')}
-            />
-            <Cifra
-              icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
-              etiqueta={tr('facturacion.vista.porCobrar')} info="facturacion.por_cobrar" valor={c.porCobrar} formato="mxn"
-              nota={tr('facturacion.vista.saldoVivoNoIncluye')}
-            />
-            <Cifra
-              icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-              etiqueta={tr('facturacion.vista.vencido')} info="facturacion.vencido" valor={c.vencido} formato="mxn"
-              nota={c.vencido > 0
-                ? tr('facturacion.vista.saldoQueYaPaso')
-                : tr('facturacion.vista.nadaHaPasadoDe')}
-            />
-          </TiraCifras>
+          {conTitulo && <TiraCifras items={cifrasCartera(datos, tr)} sello={selloHoy(tr('facturacion.vista.selloFacturasEmitidas'))} />}
 
           <TablaCubetas tr={tr} datos={datos} />
 
-          {c.sinCondiciones > 0 && (
-            <AvisoCompacto tono="warn"
-              resumen={c.sinCondiciones === 1
-                ? tr('facturacion.vista.1FacturaConSaldo')
-                : tr('facturacion.vista.facturasConSaldoNo', { v: numero(c.sinCondiciones) })}
-              mas={tr('facturacion.vista.noEntranALo')} />
-          )}
+          {conTitulo && avisosCartera(datos, tr)}
 
           <TablaClientes tr={tr} clientes={c.clientes} />
           <TablaFacturas tr={tr} facturas={c.facturas} captura={captura} />
@@ -309,7 +397,7 @@ function TablaFacturas({ facturas, captura, tr = trEs }: { facturas: RenglonCart
       id: 'folio', titulo: tr('facturacion.vista.folio'), principal: true,
       celda: (f) => (
         <>
-          <span className="cifra-mono">{f.folio ?? '—'}</span>
+          <span className="rv-cifra">{f.folio ?? '—'}</span>
           {rotuloPill[f.estatus] && <StatusChip tono="muted" className="ml-2 align-middle">{rotuloPill[f.estatus]}</StatusChip>}
         </>
       ),
@@ -345,14 +433,14 @@ function TablaFacturas({ facturas, captura, tr = trEs }: { facturas: RenglonCart
 
 // ── El dinero en la mesa ───────────────────────────────────────────────────
 
-function BloqueEnLaMesa({ datos, tr = trEs }: { datos: FacturacionClientes; tr?: Tr }) {
+function BloqueEnLaMesa({ datos, conTitulo = true, tr = trEs, sufijo = '' }: { datos: FacturacionClientes; conTitulo?: boolean; tr?: Tr; sufijo?: string }) {
   const m = datos.enLaMesa;
   const columnas: ColumnaBase<RenglonSinFacturar>[] = [
     {
       id: 'viaje', titulo: tr('facturacion.vista.viaje'), principal: true,
       celda: (v) => (
         <>
-          <span className="cifra-mono">{v.folio}</span>
+          <span className="rv-cifra">{v.folio}</span>
           {v.soloBorrador && (
             <span className={`flex items-center gap-1 text-[11px] font-normal ${AVISO}`}>
               <TriangleAlert width={11} height={11} strokeWidth={1.75} className="shrink-0" />
@@ -363,7 +451,7 @@ function BloqueEnLaMesa({ datos, tr = trEs }: { datos: FacturacionClientes; tr?:
       ),
     },
     { id: 'ruta', titulo: tr('facturacion.vista.ruta'), celda: (v) => v.ruta ?? <span className={TENUE}>{tr('facturacion.vista.sinRutaCapturada')}</span> },
-    { id: 'cliente', titulo: tr('facturacion.vista.cliente'), celda: (v) => v.cliente ?? <span className={AVISO}>{tr('facturacion.vista.sinAsignar')}</span> },
+    { id: 'cliente', titulo: tr('facturacion.vista.cliente'), celda: (v) => v.cliente ?? <span className="rv-fact__sindato">{tr('facturacion.vista.sinAsignar')}</span> },
     {
       id: 'liquidado', titulo: tr('facturacion.vista.liquidado'),
       celda: (v) => v.liquidadoEn === null
@@ -382,19 +470,35 @@ function BloqueEnLaMesa({ datos, tr = trEs }: { datos: FacturacionClientes; tr?:
     {
       id: 'ingreso', titulo: tr('facturacion.vista.ingreso'), alinear: 'der',
       celda: (v) => v.ingreso === null
-        ? <span className={`text-[11px] font-normal ${AVISO}`}>{tr('facturacion.vista.sinCapturar')}</span>
+        ? <span className="rv-fact__sindato">{tr('facturacion.vista.sinCapturar')}</span>
         : <span className="tabular font-medium">{mxn(v.ingreso)}</span>,
+    },
+    {
+      id: 'vista', titulo: tr('facturacion.vista.vistaRapida'), alinear: 'der',
+      celda: (v) => (
+        <VistaRapidaViaje folio={v.folio} href={`/dashboard/${v.viajeId}${sufijo}`}
+          aviso={v.soloBorrador ? tr('facturacion.vista.tieneFacturaEnBorrador') : null}
+          filas={[
+            { etiqueta: tr('facturacion.vista.ruta'), valor: v.ruta },
+            { etiqueta: tr('facturacion.vista.cliente'), valor: v.cliente },
+            { etiqueta: tr('facturacion.vista.liquidado'), valor: v.liquidadoEn === null ? null : fechaMx(v.liquidadoEn) },
+            { etiqueta: tr('facturacion.vista.sinFacturar'), valor: v.diasSinFacturar === null ? null : tr('facturacion.vista.dias', { v: numero(v.diasSinFacturar) }) },
+            { etiqueta: tr('facturacion.vista.ingreso'), valor: v.ingreso === null ? null : mxn(v.ingreso) },
+          ]} />
+      ),
     },
   ];
 
   return (
     <section className="flex flex-col gap-3">
-      <TituloRecuadro info="facturacion.en_la_mesa">{tr('facturacion.vista.viajesLiquidadosQueNadie')}</TituloRecuadro>
+      {conTitulo && <TituloRecuadro info="facturacion.en_la_mesa">{tr('facturacion.vista.viajesLiquidadosQueNadie')}</TituloRecuadro>}
 
       {datos.viajesLiquidados === 0 ? (
-        <EstadoVacio>
-          {tr('facturacion.vista.todaviaNoHayUn')}
-        </EstadoVacio>
+        <div className="rv-caja-vacia">
+          <EstadoVacioV2 titulo={tr('facturacion.vista.mesaVaciaTitulo')} contenido>
+            {tr('facturacion.vista.todaviaNoHayUn')}
+          </EstadoVacioV2>
+        </div>
       ) : m.total === 0 ? (
         // No es un cero disfrazado: se comprobaron los N liquidados y todos
         // tienen factura viva. Se dice el denominador para que se pueda creer.
@@ -406,44 +510,8 @@ function BloqueEnLaMesa({ datos, tr = trEs }: { datos: FacturacionClientes; tr?:
         </p>
       ) : (
         <>
-          <TiraCifras sello={selloHoy(tr('facturacion.vista.selloLiquidadosSinFactura'))}>
-            <Cifra
-              icono={<Truck width={14} height={14} strokeWidth={1.75} />}
-              etiqueta={tr('facturacion.vista.viajesLiquidadosSinFactura')} info="facturacion.sin_factura" valor={m.total} formato="numero"
-              nota={tr('facturacion.vista.deEnTotal', { v: plural(datos.viajesLiquidados, tr('facturacion.vista.viajeLiquidado'), tr('facturacion.vista.viajesLiquidados')) })}
-            />
-            <Cifra
-              icono={<Banknote width={14} height={14} strokeWidth={1.75} />}
-              etiqueta={tr('facturacion.vista.ingresoCapturadoSinFacturar')} info="facturacion.ingreso_sin_facturar" valor={m.ingresoCapturado} formato="mxn"
-              nota={m.sinIngreso === 0
-                ? tr('facturacion.vista.todosTraenSuIngreso')
-                : m.sinIngreso === 1
-                  ? tr('facturacion.vista.1ViajeNoTrae')
-                  : tr('facturacion.vista.viajesNoTraenIngreso', { v: numero(m.sinIngreso) })}
-            />
-            {/* Sin una sola fecha de cierre NO se pinta un "0" grande con la aclaración abajo: la cifra es lo que se lee, y ese 0
-                diría "se liquidaron hoy". La cifra queda sin dato y lo explica. */}
-            {m.diasMasViejo === null ? (
-              <Cifra
-                icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-                etiqueta={tr('facturacion.vista.elMasViejoSin')} info="facturacion.mas_viejo" valor={null}
-                mensaje={tr('facturacion.vista.ningunoDeEstosViajes')}
-              />
-            ) : (
-              <Cifra
-                icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-                etiqueta={tr('facturacion.vista.elMasViejoSin')} info="facturacion.mas_viejo"
-                valor={m.diasMasViejo} formato="numero"
-                nota={tr('facturacion.vista.diasDesdeQueSe')}
-              />
-            )}
-          </TiraCifras>
-
-          {m.sinIngreso > 0 && (
-            <AvisoCompacto tono="warn"
-              resumen={<>{tr('facturacion.vista.laCifraDeArriba', { v: plural(m.sinIngreso, tr('facturacion.vista.viajeNoTiene'), tr('facturacion.vista.viajesNoTienen')) })}</>}
-              mas={tr('facturacion.vista.unViajeSinEse')} />
-          )}
+          {conTitulo && <TiraCifras items={cifrasMesa(datos, tr)} sello={selloHoy(tr('facturacion.vista.selloLiquidadosSinFactura'))} />}
+          {conTitulo && avisosMesa(datos, tr)}
 
           <TablaBase etiqueta={tr('facturacion.vista.viajesPorFacturar')} columnas={columnas} filas={m.viajes} idFila={(v) => v.viajeId} altoMaximo={false} />
 
@@ -474,19 +542,19 @@ const ROTULO_CUBETA: Record<CubetaAuditor, { rotulo: string; ayuda: string }> = 
   CUBETAS_AUDITOR.map((c) => [c.clave, { rotulo: c.rotulo, ayuda: c.ayuda }]),
 ) as Record<CubetaAuditor, { rotulo: string; ayuda: string }>;
 
-function BloqueAuditor({ auditoria, tr = trEs }: { auditoria: AuditoriaCobranza | null; tr?: Tr }) {
+function BloqueAuditor({ auditoria, conTitulo = true, tr = trEs }: { auditoria: AuditoriaCobranza | null; conTitulo?: boolean; tr?: Tr }) {
   type Hallazgo = AuditoriaCobranza['cola'][number];
   const columnas: ColumnaBase<Hallazgo>[] = [
     {
       id: 'viaje', titulo: tr('facturacion.vista.viaje'), principal: true,
       celda: (h) => (
         <>
-          <span className="cifra-mono">{h.folio}</span>
+          <span className="rv-cifra">{h.folio}</span>
           {h.ruta && <span className={`block text-[11px] font-normal ${TENUE}`}>{h.ruta}</span>}
         </>
       ),
     },
-    { id: 'cliente', titulo: tr('facturacion.vista.cliente'), celda: (h) => h.cliente ?? <span className={AVISO}>{tr('facturacion.vista.sinAsignar')}</span> },
+    { id: 'cliente', titulo: tr('facturacion.vista.cliente'), celda: (h) => h.cliente ?? <span className="rv-fact__sindato">{tr('facturacion.vista.sinAsignar')}</span> },
     { id: 'hallazgo', titulo: tr('facturacion.vista.hallazgo'), celda: (h) => <span className="whitespace-nowrap">{ROTULO_CUBETA[h.cubeta].rotulo}</span> },
     {
       id: 'monto', titulo: tr('facturacion.vista.enJuego'), alinear: 'der',
@@ -497,19 +565,19 @@ function BloqueAuditor({ auditoria, tr = trEs }: { auditoria: AuditoriaCobranza 
   ];
   return (
     <section className="flex flex-col gap-3">
-      <TituloRecuadro info="facturacion.auditor">{tr('facturacion.vista.auditorDeCobranzaLo')}</TituloRecuadro>
+      {conTitulo && <TituloRecuadro info="facturacion.auditor">{tr('facturacion.vista.auditorDeCobranzaLo')}</TituloRecuadro>}
 
       {auditoria === null ? (
         <EstadoError mensaje={tr('facturacion.vista.noPudeCruzarLos')} />
       ) : auditoria.resumen.viajesAuditados === 0 ? (
-        <EstadoVacio>
+        <div className="rv-caja-vacia"><EstadoVacioV2 titulo={tr('facturacion.vista.auditorVaciaTitulo')} contenido>
           {tr('facturacion.vista.noHuboViajesVentana', { desde: fechaMx(auditoria.desde), hasta: fechaMx(auditoria.hasta) })}
           {auditoria.viajesSinFecha > 0 && (
             <>{' '}{auditoria.viajesSinFecha === 1
               ? tr('facturacion.vista.ojoSinFechaUno')
               : tr('facturacion.vista.ojoSinFechaVarios', { n: numero(auditoria.viajesSinFecha) })}</>
           )}
-        </EstadoVacio>
+        </EstadoVacioV2></div>
       ) : (
         <>
           <TiraCifras sello={selloHoy(tr('facturacion.vista.auditoriaDeFacturacion'))}>

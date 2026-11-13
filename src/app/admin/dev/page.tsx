@@ -8,8 +8,9 @@ import { getEventosSeguridad, type FilaSeguridad } from '@/lib/seguridad/eventos
 import { getSLOs, type Slo } from '@/lib/admin/slo';
 import { fechaHoraMx } from '@/lib/formato';
 import { AvisoGitHub } from '../ui/aviso-github';
-import { MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
+import { StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
 import { SelectorVista } from '../selector-vista';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
@@ -85,13 +86,15 @@ export default async function DevPage() {
   // quizá ya existe. `null` viaja como `null` y el selector lo dice.
   const tenants = conteoTenants.error ? null : conteoTenants.count ?? 0;
   return (
-    <MarcoPagina titulo="Desarrollo">
+    <EsqueletoTablaMaestra
+      titulo="Desarrollo"
+      /* Falta de configuración (no corregible por código): UN aviso corto con la variable, no tres vacíos largos. */
+      avisos={(mapa.estado === 'sin_token' || actividad.estado === 'sin_token')
+        ? <AvisoGitHub causa="sin_token" />
+        : (mapa.estado === 'error' || actividad.estado === 'error') ? <AvisoGitHub causa="error" /> : null}
+    >
       {/* "Entrar a los otros paneles" — vivía en el Inicio; Javier lo mandó aquí el 17-ago: es herramienta de desarrollo, no de operación. */}
       <SelectorVista tenants={tenants} />
-
-      {/* Falta de configuración (no corregible por código): UN aviso corto con la variable, no tres vacíos largos. */}
-      {(mapa.estado === 'sin_token' || actividad.estado === 'sin_token') && <AvisoGitHub causa="sin_token" />}
-      {mapa.estado !== 'sin_token' && actividad.estado !== 'sin_token' && (mapa.estado === 'error' || actividad.estado === 'error') && <AvisoGitHub causa="error" />}
 
       {/* ── El mapa de puntos: 26 semanas de pushes, un punto por día. La intensidad es commits/día; GitHub lo precalcula y a veces
             contesta "generando" — se dice. Refresca en cada carga (force-dynamic). ── */}
@@ -144,6 +147,7 @@ export default async function DevPage() {
             filas={slos}
             idFila={(s) => s.clave}
             altoMaximo={false}
+            tarjetaMovil
           />
         )}
       </Tarjeta>
@@ -165,6 +169,7 @@ export default async function DevPage() {
             idFila={(e) => String(e.id)}
             altoMaximo={false}
             densa
+            tarjetaMovil
           />
         )}
       </Tarjeta>
@@ -220,7 +225,7 @@ export default async function DevPage() {
       <Tarjeta titulo={t('dev.lo_que_falta')}>
         <p className="m-0 text-xs text-muted">{t('dev.calendario_de_contribuciones_deploys_de_vercel')}</p>
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

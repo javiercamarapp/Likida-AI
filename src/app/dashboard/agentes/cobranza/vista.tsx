@@ -4,10 +4,15 @@ import type { ConfigCobranza } from '@/lib/likida/agentes/cobranza_pura';
 import { numero, fechaCorta } from '@/lib/formato';
 import { BotonEjecutar, BotonPausa, type AccionSimple, type AccionEjecutar } from './controles';
 import { FormaEstrategia } from './estrategia';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { Disclosure, EstadoVacio, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { CajonEstrategia } from './cajon-estrategia';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import '../proveedores/proveedores.css';
+import { BarraPeriodo, EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, selloHoyTr, rotuloDiasTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
+import '../../estados.css';
+import './cobranza.css';
 
 export interface ExtraAgenteCobranza {
   /** ¿AHORA MISMO está dentro de su ventana de contacto? (calculado en el
@@ -29,7 +34,7 @@ export interface ExtraAgenteCobranza {
  * Sus cifras son días y contactos, todas medidas.
  */
 export function VistaAgenteCobranza({
-  cola, config, bitacora, extra, acciones, notificaciones, porGasto, gastosParaContactar = 0, tr = TR_ES,
+  cola, config, bitacora, extra, acciones, notificaciones, porGasto, configPorGasto, gastosParaContactar = 0, tr = TR_ES,
 }: {
   cola: ColaCobranza;
   config: ConfigCobranza;
@@ -42,6 +47,8 @@ export function VistaAgenteCobranza({
   notificaciones?: React.ReactNode;
   /** La sección de cobranza POR GASTO (0525), ya renderizada en el servidor. */
   porGasto?: React.ReactNode;
+  /** El formulario de la cobranza por gasto, ya renderizado: va en el cajón de configuración, no en la pantalla. */
+  configPorGasto?: React.ReactNode;
   /** Choferes con gastos en tier hoy: «Ejecutar ahora» también los cubre. */
   gastosParaContactar?: number;
   /** El traductor del namespace `agentes` (la página lo arma con `getT`). Sin él, español. */
@@ -51,19 +58,35 @@ export function VistaAgenteCobranza({
   const idioma = tr.idioma;
   const ventana = `${rotuloDiasTr(config.diasSemana, tx)} · ${config.horaInicio}–${config.horaFin} ${tx('comun.horas_sufijo')}`;
 
+  const cifras: PropsCifra[] = ([
+    { info: 'cobranza.para_contactar', etiqueta: tx('cobranza.vista.para_contactar'), valor: numero(cola.paraContactar.length), nota: tx('cobranza.vista.alcanzaron_un_tier_sin_contacto'), tono: cola.paraContactar.length > 0 ? 'warn' : undefined },
+    { info: 'cobranza.no_puede_contactar', etiqueta: tx('cobranza.vista.no_puede_contactar'), valor: numero(cola.sinTelefono.length), nota: tx('cobranza.vista.sin_telefono_capturado'), tono: cola.sinTelefono.length > 0 ? 'warn' : undefined },
+    { info: 'cobranza.viajes_vigilados', etiqueta: tx('cobranza.vista.viajes_vigilados'), valor: numero(cola.vigilados), nota: tx('cobranza.vista.abiertos_o_en_cuadre'), segmentos: segmentosVigilados(cola, tx) },
+    { info: 'cobranza.estado', etiqueta: tx('cobranza.vista.estado'), valor: config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado'), nota: ventana, tono: config.activo ? undefined : 'warn' },
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
+
   return (
-    <MarcoPagina titulo={tx('cobranza.vista.seguimiento_de_comprobantes')} apoyo={tx('cobranza.vista.a_quien_insistira_el_agente')}>
-
-      <TiraCifras sello={selloHoyTr(tr, tx('cobranza.vista.cola_de_seguimiento'))}>
-        <Cifra info="cobranza.para_contactar" etiqueta={tx('cobranza.vista.para_contactar')} valor={numero(cola.paraContactar.length)}
-          nota={tx('cobranza.vista.alcanzaron_un_tier_sin_contacto')} />
-        <Cifra info="cobranza.no_puede_contactar" etiqueta={tx('cobranza.vista.no_puede_contactar')} valor={numero(cola.sinTelefono.length)}
-          nota={tx('cobranza.vista.sin_telefono_capturado')} tono={cola.sinTelefono.length > 0 ? 'warn' : undefined} />
-        <Cifra info="cobranza.viajes_vigilados" etiqueta={tx('cobranza.vista.viajes_vigilados')} valor={numero(cola.vigilados)} nota={tx('cobranza.vista.abiertos_o_en_cuadre')} />
-        <Cifra info="cobranza.estado" etiqueta={tx('cobranza.vista.estado')} valor={config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado')} nota={ventana}
-          tono={config.activo ? undefined : 'warn'} />
-      </TiraCifras>
-
+    <EsqueletoTablaMaestra
+      titulo={tx('cobranza.vista.seguimiento_de_comprobantes')}
+      apoyo={tx('cobranza.vista.a_quien_insistira_el_agente')}
+      // Barra de alcance (Rovaq BF): dice la ventana de contacto y si el agente corre; son datos de su configuración, no filtros inventados.
+      filtros={<BarraPeriodo etiqueta={tx('cobranza.vista.cola_de_seguimiento')} chips={[{ id: 'ventana', etiqueta: ventana }, { id: 'estado', etiqueta: config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado') }]} />}
+      cifras={cifras}
+      etiquetaCifras={tx('cobranza.vista.cola_de_seguimiento')}
+      selloCifras={selloHoyTr(tr, tx('cobranza.vista.cola_de_seguimiento'))}
+      acciones={(
+        <>
+          <BotonPausa alternarPausa={acciones.alternarPausa} activo={config.activo} />
+          <CajonEstrategia id="estrategia" titulo={tx('cobranza.vista.su_estrategia')} descripcion={tx('cobranza.vista.cuando_insiste_en_que_horario')} disparador={tx('cobranza.vista.editar_la_estrategia')}>
+            <section aria-label={tx('cobranza.vista.su_estrategia')}>
+              <FormaEstrategia config={config} ejemplo={extra.ejemplo} guardar={acciones.guardarEstrategia} />
+            </section>
+            {configPorGasto}
+          </CajonEstrategia>
+        </>
+      )}
+    >
+      <div className="rv-ag-pila rv-ag-compacto">
       <FilaTarjetas variante="8-4">
         {/* ── La cola honesta ── */}
         <Tarjeta
@@ -116,6 +139,7 @@ export function VistaAgenteCobranza({
 
       {/* Bitácora — lo que ya hizo, con sus fallos a la vista */}
       <Tarjeta
+        className="rv-tarjeta--tabla"
         titulo={tx('cobranza.vista.bitacora_de_contactos')}
         info="cobranza.bitacora"
         estado={bitacora === null ? 'error' : bitacora.length === 0 ? 'vacio' : 'ok'}
@@ -135,21 +159,23 @@ export function VistaAgenteCobranza({
 
       {porGasto}
 
-      {/* ── La estrategia del cliente, con vista previa (las "Pruebas") ── */}
-      <Tarjeta titulo={tx('cobranza.vista.su_estrategia')} info="cobranza.estrategia" acciones={<BotonPausa alternarPausa={acciones.alternarPausa} activo={config.activo} />}>
-        <p className="rv-ag-notif__nota">{tx('cobranza.vista.cuando_insiste_en_que_horario')}</p>
-        <Disclosure titulo={tx('cobranza.vista.editar_la_estrategia')} resumen={ventana} abierto>
-          <FormaEstrategia
-            config={config}
-            ejemplo={extra.ejemplo}
-            guardar={acciones.guardarEstrategia}
-          />
-        </Disclosure>
-      </Tarjeta>
-
       {notificaciones}
-    </MarcoPagina>
+      </div>
+    </EsqueletoTablaMaestra>
   );
+}
+
+/** La barra de 6 px de «viajes vigilados»: cuántos tocan contacto, cuántos no tienen teléfono y el resto. Solo si las partes caben en el total
+ *  (un conteo que no cuadra no se dibuja como proporción). */
+function segmentosVigilados(cola: ColaCobranza, tx: TAgentes) {
+  const a = cola.paraContactar.length;
+  const b = cola.sinTelefono.length;
+  if (cola.vigilados <= 0 || a + b > cola.vigilados) return undefined;
+  return [
+    { etiqueta: tx('cobranza.vista.para_contactar'), valor: a },
+    { etiqueta: tx('cobranza.vista.no_puede_contactar'), valor: b },
+    { etiqueta: tx('cobranza.vista.viajes_vigilados'), valor: cola.vigilados - a - b },
+  ];
 }
 
 const columnasCola = (tx: TAgentes): readonly ColumnaBase<FilaCola>[] => [

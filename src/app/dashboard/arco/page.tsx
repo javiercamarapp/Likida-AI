@@ -1,6 +1,5 @@
 import { getT } from '@/lib/i18n/servidor';
 import { type Tr } from '@/lib/i18n/dinero_tr';
-import { Clock, CircleAlert, Inbox } from 'lucide-react';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -15,11 +14,12 @@ import { fechaMx, hoyMx } from '@/lib/formato';
 import { venceDentroDe, yaVencio, DIAS_VENCE_PRONTO } from './vencimiento';
 import type { Metadata } from 'next';
 import {
-  CampoTexto, EstadoError, EstadoVacio, FormaConAviso, Icono, MarcoPagina, StatusChip, Tarjeta,
+  CampoTexto, Chip, EstadoError, EstadoVacio, FormaConAviso, InfoTip, StatusChip,
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import './arco.css';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { EsqueletoConfiguracion, FilaConfig } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 export async function generateMetadata(): Promise<Metadata> {
   const { t: tr } = await getT('dinero');
@@ -198,16 +198,36 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   const vencenPronto = pendientes.filter((s) => venceDentroDe(s.venceEn, hoy, DIAS_VENCE_PRONTO));
   const vencidas = pendientes.filter((s) => yaVencio(s.venceEn, hoy));
 
-  return (
-    <MarcoPagina titulo={tr('arco.page.solicitudesArco')} apoyo={tr('arco.page.solicitudesDeTusOperadores2')}>
-      {/* H7 (auditoría 24): las tres cifras salían de `solicitudes`, que es `[]` TANTO si de verdad no hay solicitudes COMO si la lectura de arriba falló (`errorCarga`). Con la base caída, "0 vencidas sin responder" es la mentira que un responsable obligado por el art. 31 no se puede permitir. `null` es NO MEDIBLE ("—", no "0"); el aviso de abajo explica por qué. */}
-      <TiraCifras sello={selloHoy(tr('arco.page.selloArco'))}>
-        <Cifra icono={<Icono icono={Inbox} />} etiqueta={tr('arco.page.porResponder')} info="arco.por_responder" valor={errorCarga ? null : pendientes.length} />
-        <Cifra icono={<Icono icono={Clock} />} etiqueta={tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO })} info="arco.vencen_pronto" valor={errorCarga ? null : vencenPronto.length} />
-        <Cifra icono={<Icono icono={CircleAlert} />} etiqueta={tr('arco.page.vencidasSinResponder')} info="arco.vencidas" valor={errorCarga ? null : vencidas.length} />
-      </TiraCifras>
+  // Una celda de plazo: el número va en un chip (la urgencia es un estado, nunca un filete ni un color en la cifra); `null` = no medible.
+  const plazo = (n: number, tono: 'neutral' | 'warn' | 'bad') => (errorCarga
+    ? <Chip tono="neutral">{tr('e26b.arco_no_medible')}</Chip>
+    : <Chip tono={n > 0 ? tono : 'ok'}>{n}</Chip>);
+  const filaPlazo = (id: string, etiqueta: string, nota: string, info: InfoClave, n: number, tono: 'neutral' | 'warn' | 'bad') => (
+    <FilaConfig key={id} idRotulo={`arco-${id}`} rotulo={etiqueta} ayuda={nota}>
+      <span className="rv-arco__plazo">{plazo(n, tono)}<InfoTip clave={info} /></span>
+    </FilaConfig>
+  );
 
-      <Tarjeta titulo={tr('arco.page.solicitudesDeTusOperadores')} info="arco.solicitudes">
+  return (
+    <EsqueletoConfiguracion
+      titulo={tr('arco.page.solicitudesArco')} apoyo={tr('arco.page.solicitudesDeTusOperadores2')}
+      /* H7 (auditoría 24): la lectura caída es «no medible» (chip neutro), jamás «0 vencidas sin responder»: con la base caída, ese cero es la mentira que un responsable obligado por el art. 31 no se puede permitir. */
+      secciones={[
+        {
+          id: 'plazos', titulo: tr('e26b.arco_plazos'),
+          estado: { texto: selloHoy(tr('arco.page.selloArco')), tono: 'neutral' },
+          contenido: (
+            <>
+              {filaPlazo('por-responder', tr('arco.page.porResponder'), tr('e26b.arco_por_responder_nota'), 'arco.por_responder', pendientes.length, 'warn')}
+              {filaPlazo('pronto', tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO }), tr('e26b.arco_pronto_nota'), 'arco.vencen_pronto', vencenPronto.length, 'warn')}
+              {filaPlazo('vencidas', tr('arco.page.vencidasSinResponder'), tr('e26b.arco_vencidas_nota'), 'arco.vencidas', vencidas.length, 'bad')}
+            </>
+          ),
+        },
+        {
+          id: 'solicitudes', titulo: tr('arco.page.solicitudesDeTusOperadores'),
+          contenido: (
+            <>
         {errorCarga ? (
           <EstadoError reintentar>
             {tr('arco.page.noSePudieronLeer', { v: errorCarga.slice(0, 120) })}
@@ -276,7 +296,10 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
             })}
           </ul>
         )}
-      </Tarjeta>
-    </MarcoPagina>
+            </>
+          ),
+        },
+      ]}
+    />
   );
 }

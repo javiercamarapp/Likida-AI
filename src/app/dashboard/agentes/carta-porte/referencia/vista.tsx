@@ -5,7 +5,8 @@ import { numero } from '@/lib/formato';
 import type { ClienteRef, Tablero } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { REFERENCIA_MAX } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
-import { Aviso, BotonEnlace, CampoTexto, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, CampoTexto, EstadoError, EstadoVacio, Icono, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
@@ -34,9 +35,18 @@ export function VistaReferencia({ tablero, clientes, exigen, folios, truncado, s
 }) {
   const { t: tx } = tr;
   return (
-    <MarcoPagina titulo={tx('rest.referencia_del_cliente')} apoyo={tx('rest.algunos_clientes_necesitan_su_referencia_para')} acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte_2')}</BotonEnlace>}>
-      <Aviso tono="info">{tx('rest.es_un_aviso_para_quien_la')}</Aviso>
-
+    <EsqueletoTablaMaestra
+      titulo={tx('rest.referencia_del_cliente')}
+      apoyo={tx('rest.algunos_clientes_necesitan_su_referencia_para')}
+      acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte_2')}</BotonEnlace>}
+      avisos={<Aviso tono="info">{tx('rest.es_un_aviso_para_quien_la')}</Aviso>}
+      cifras={tablero === null ? undefined : [
+        { etiqueta: tx('f26d.referencia.sin_referencia'), valor: numero(tablero.total), tono: tablero.total > 0 ? 'warn' : undefined },
+        { etiqueta: tx('f26d.referencia.clientes_con_pendientes'), valor: numero(tablero.clientes.length) },
+        { etiqueta: tx('f26d.referencia.clientes_que_exigen'), valor: numero(exigen.size) },
+      ]}
+      etiquetaCifras={tx('rest.referencia_del_cliente')}
+    >
       {tablero === null ? (
         <EstadoError>{tx('rest.no_se_pudieron_leer_los_viajes')}</EstadoError>
       ) : tablero.total === 0 ? (
@@ -81,6 +91,7 @@ export function VistaReferencia({ tablero, clientes, exigen, folios, truncado, s
           ))}
         </ul>
       </Tarjeta>
-    </MarcoPagina>
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
+    </EsqueletoTablaMaestra>
   );
 }

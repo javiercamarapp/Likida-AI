@@ -30,6 +30,8 @@ import { appUrl } from '@/lib/env';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 import { Boton } from '../../ui-v2/componentes/boton';
+import '../../legal/publico-r2.css';
+import '../../legal/flujo-publico.css';
 import { perfilRestringido } from '@/lib/auth/perfil_tenant';
 import { getT } from '@/lib/i18n/servidor';
 import { rico } from '@/lib/i18n/rico';
@@ -65,6 +67,7 @@ function volverA(redirectUri: string, extras: Record<string, string | null>): st
 function Marco({ titulo, rotulo, children }: { titulo: string; rotulo: string; children: ReactNode }) {
   return (
     <MarcoPublico rotulo={rotulo} titulo={titulo} ancho="lectura">
+      <div className="rv-flujo" aria-hidden="true" />
       <div className="rv-pub__prosa">{children}</div>
     </MarcoPublico>
   );

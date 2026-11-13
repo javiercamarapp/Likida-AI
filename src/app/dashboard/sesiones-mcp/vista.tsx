@@ -1,8 +1,8 @@
-import { PlugZap } from 'lucide-react';
+import { Plug } from 'lucide-react';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { ClienteMcpConectado, SesionMcpUsuario } from '@/lib/mcp/sesiones';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
-import { EstadoVacio, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { FormaCortar, type AccionForma } from './forma';
 import './sesiones-mcp.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -38,45 +38,51 @@ const columnas = (t: TResto = T_RESTO_ES): ColumnaBase<ClienteMcpConectado>[] =>
 ]);
 
 export function TablaClientesMcp({ clientes, t = T_RESTO_ES }: { clientes: ClienteMcpConectado[]; t?: TResto }) {
-  return <TablaBase etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={columnas(t)} filas={clientes} idFila={(c) => c.familia} densa altoMaximo={false} tarjetaMovil />;
+  return <TablaBase etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={columnas(t)} filas={clientes} idFila={(c) => c.familia} densa altoMaximo={false} tarjetaMovil className="rv-mcp__tabla" />;
 }
 
 export function ListaSesionesMcp({ sesiones, cortarSesiones, t = T_RESTO_ES }: {
   sesiones: SesionMcpUsuario[];
   cortarSesiones: AccionForma; t?: TResto;
 }) {
+  const cols: ColumnaBase<SesionMcpUsuario>[] = [
+    {
+      id: 'persona', titulo: t('e26.mcp_persona'), principal: true,
+      celda: (s) => (
+        <span className="rv-mcp__persona">
+          <strong>{s.nombre ?? s.email ?? t('cfg.usuario_de_la_flota')}</strong>
+          <span className="rv-mcp__tenue">{s.email ?? t('cfg.sin_correo_en_el_padron')}</span>
+        </span>
+      ),
+    },
+    { id: 'rol', titulo: t('e26.mcp_rol'), celda: (s) => ROL_LABEL[s.rol as RolAppUser] ?? s.rol },
+    {
+      id: 'clientes', titulo: t('e26.mcp_clientes'),
+      celda: (s) => (
+        <span className="rv-mcp__clientes">
+          {s.clientes.map((c) => (
+            <span key={c.familia} className="rv-mcp__cliente">{rotuloCliente(c)} <span className="rv-mcp__tenue">· {t('llaves.vence')} {fechaMx(c.expiraEn)}</span></span>
+          ))}
+        </span>
+      ),
+    },
+    {
+      id: 'uso', titulo: t('e26.mcp_ultimo_uso'),
+      // La verdad, no un guion: «nunca» es la respuesta a «¿lo puedo cortar sin romperle nada a nadie?».
+      celda: (s) => <span className="rv-mcp__tenue">{s.ultimoUsoEn === null ? t('e26.mcp_nunca') : fechaHoraMx(s.ultimoUsoEn)}</span>,
+    },
+    {
+      id: 'accion', titulo: t('e26.mcp_acceso'), alinear: 'der',
+      celda: (s) => <FormaCortar accion={cortarSesiones} usuarioId={s.userId} quien={s.nombre ?? s.email ?? t('cfg.usuario_de_la_flota')} cuantos={s.clientes.length} />,
+    },
+  ];
+  // El vacío vive DENTRO de su tarjeta (Rovaq: nunca suelto sobre el lienzo).
   if (sesiones.length === 0) {
-    return (
-      <EstadoVacio icono={PlugZap} titulo={t('cfg.nadie_tiene_un_cliente_conectado')}>{t('cfg.ni_claude_ni_chatgpt_estan_leyendo')}</EstadoVacio>
-    );
+    return <Tarjeta titulo={t('cfg.sesiones_mcp_conectadas')} estado="vacio" iconoVacio={Plug} mensaje={t('cfg.nadie_tiene_un_cliente_conectado')} detalle={t('cfg.ni_claude_ni_chatgpt_estan_leyendo')} contenida />;
   }
-
   return (
-    <div className="rv-mcp__lista">
-      {sesiones.map((s) => (
-        <TarjetaUsuarioMcp t={t} key={s.userId} s={s} cortarSesiones={cortarSesiones} />
-      ))}
-    </div>
-  );
-}
-
-function TarjetaUsuarioMcp({ s, cortarSesiones, t = T_RESTO_ES }: {
-  s: SesionMcpUsuario;
-  cortarSesiones: AccionForma; t?: TResto;
-}) {
-  const quien = s.nombre ?? s.email ?? t('cfg.usuario_de_la_flota');
-  const rol = ROL_LABEL[s.rol as RolAppUser] ?? s.rol;
-
-  return (
-    <Tarjeta titulo={quien} info="mi_perfil.clientes_mcp">
-      <div className="rv-mcp__cab">
-        <div>
-          <p className="rv-mcp__detalle">{s.email ?? t('cfg.sin_correo_en_el_padron')} · {rol}</p>
-          <p className="rv-mcp__nota">{t('cfg.el_acceso_lee_lo_que_ve', { rol })}</p>
-        </div>
-        <FormaCortar accion={cortarSesiones} usuarioId={s.userId} quien={quien} cuantos={s.clientes.length} />
-      </div>
-      <TablaClientesMcp t={t} clientes={s.clientes} />
-    </Tarjeta>
+    <TablaBase
+      etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={cols} filas={sesiones} idFila={(s) => s.userId} tarjetaMovil altoMaximo={false} className="rv-mcp__tabla"
+    />
   );
 }

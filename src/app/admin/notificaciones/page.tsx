@@ -1,9 +1,15 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { leerAvisosAdmin } from '@/app/ui-v2/avisos/fuente-admin';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { BloqueCifras } from '@/app/ui-v2/esqueletos/comunes';
+import { observadas } from '../sello-observado';
+import { clienteAvisos } from '@/lib/avisos/cliente';
+import { resolverBandeja } from '@/lib/avisos/bandeja';
+import { uniformes } from '../cifras-uniformes';
 import PaginaAvisos from '@/app/ui-v2/avisos/pagina-avisos';
 import { getT } from '@/lib/i18n/servidor';
+import '../resumen.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,11 +26,29 @@ export default async function NotificacionesPage({ searchParams }: { searchParam
   const sp = (await searchParams) ?? {};
   const fuente = await leerAvisosAdmin();
   const { t } = await getT('avisos');
+  const seccion = sp.seccion === 'configuracion' ? 'configuracion' : 'avisos';
+  // Tira de 2 (Rovaq «Avisos»): SIN LEER con el chip «Al día» en cero, y CARGADOS. Salen de la MISMA bandeja que la lista; si el estado de
+  // lectura no se pudo leer, SIN LEER dice «No disponible», nunca 0.
+  const bandeja = seccion === 'avisos' ? await resolverBandeja(clienteAvisos(), { tipo: 'admin' }, s.userId, fuente).catch(() => null) : null;
+  const cifras = seccion === 'avisos' && bandeja
+    ? observadas(uniformes([
+      bandeja.errorLeidas !== null
+        ? { etiqueta: t('notif.sin_leer'), valor: null, estado: 'error' as const }
+        : { etiqueta: t('notif.sin_leer'), valor: bandeja.noLeidos, formato: 'entero' as const, tono: bandeja.noLeidos === 0 ? 'ok' as const : bandeja.hayCritico ? 'bad' as const : 'warn' as const },
+      { etiqueta: t('notif.cargados'), valor: bandeja.avisos.length, formato: 'entero' as const },
+    ]), t('a1r4.observado'))
+    : undefined;
+  // BA de Rovaq: cabecera con «Configurar avisos» → cifras → bandeja. Sin la segunda fila de pestañas (la configuración es una acción de la cabecera).
+  const href = seccion === 'configuracion' ? '/admin/notificaciones' : '/admin/notificaciones?seccion=configuracion';
   return (
-    <MarcoPagina area="Sistema" titulo={t('notif.titulo')} apoyo={t('notif.apoyo')}>
+    <MarcoPagina
+      className="rv-esq rv-esq--tabla adm-notif" area="Sistema" titulo={t('notif.titulo')} apoyo={t('notif.apoyo')}
+      acciones={<BotonEnlace href={href} variante="secondary">{seccion === 'configuracion' ? t('notif.seccion.avisos') : t('notif.seccion.config')}</BotonEnlace>}
+    >
+      <BloqueCifras cifras={cifras} etiqueta={t('notif.resumen')} />
       <PaginaAvisos
         destino={{ panel: 'admin' }} ambito={{ tipo: 'admin' }} userId={s.userId} fuente={fuente}
-        base="/admin/notificaciones" params={{}} sufijo="" seccion={sp.seccion === 'configuracion' ? 'configuracion' : 'avisos'}
+        base="/admin/notificaciones" params={{}} sufijo="" seccion={seccion} conPestanas={false}
       />
     </MarcoPagina>
   );

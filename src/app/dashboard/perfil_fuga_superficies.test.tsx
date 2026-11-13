@@ -49,6 +49,9 @@ vi.mock('@/lib/likida/orquestador/tablero_viajes', () => ({
 }));
 vi.mock('@/lib/saludo', async (orig) => ({ ...(await orig<Record<string, unknown>>()), ahoraMs: () => Date.parse('2026-10-02T18:00:00.000Z') }));
 vi.mock('@/app/ui-v2/avisos/pagina-avisos', () => ({ default: () => null }));
+// La tira de cifras de Notificaciones (F26 B/E) lee la bandeja del cliente de avisos: aquí no es lo que se prueba.
+vi.mock('@/lib/avisos/cliente', () => ({ clienteAvisos: () => ({}) }));
+vi.mock('@/lib/avisos/bandeja', () => ({ resolverBandeja: async () => ({ noLeidos: 0, hayCritico: false, avisos: [] }) }));
 // El Resumen del perfil (v2) lee por estos tres lectores: se sustituyen por datos sintéticos (las corridas siguen saliendo de `dobles.ultimasCorridas`).
 vi.mock('./sin-flota', () => ({ AvisoSinFlota: () => null }));
 vi.mock('./inicio-cinco-lectores', () => ({
@@ -94,8 +97,18 @@ const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script\b[^
 
 /** Lo que la página de Notificaciones le entrega a la pantalla de avisos (el elemento devuelto lleva la fuente de avisos en sus props). */
 async function alertasDeLaPagina(): Promise<Array<{ id: string; href: string }>> {
-  const el = (await PaginaNotificaciones({ searchParams: Promise.resolve({}) })) as { props: { children: { props: { fuente: { avisos: Array<{ clave: string; href: string | null }> } } } } };
-  const avisos = el.props.children.props.fuente.avisos;
+  type Fuente = { avisos: Array<{ clave: string; href: string | null }> };
+  type Nodo = { props?: { fuente?: Fuente; children?: Nodo | Nodo[] } } | null | false | undefined;
+  const el = (await PaginaNotificaciones({ searchParams: Promise.resolve({}) })) as Nodo;
+  // El árbol es MarcoPagina > div > [tira de cifras, PaginaAvisos]: se baja hasta el nodo que lleva la fuente de avisos.
+  const buscar = (n: Nodo): Fuente | undefined => {
+    if (!n || typeof n !== 'object') return undefined;
+    if (n.props?.fuente) return n.props.fuente;
+    const hijos = n.props?.children;
+    for (const h of Array.isArray(hijos) ? hijos : [hijos]) { const f = buscar(h); if (f) return f; }
+    return undefined;
+  };
+  const avisos = buscar(el)?.avisos as Fuente['avisos'];
   expect(Array.isArray(avisos)).toBe(true);
   return avisos.map((a) => ({ id: a.clave.replace(/^flota:/, ''), href: a.href ?? '' }));
 }

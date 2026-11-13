@@ -5,7 +5,11 @@ import type { DestinatariosResumenCrudos } from '../repo';
 import type { AlertaSinAtender } from './motor';
 
 export const MAX_DESTINATARIOS_RESUMEN = 10;
-export interface DestinatarioResumen { nombre: string; correo: string; origen: 'servicio' | 'nivel1' | 'nivel2' }
+/**
+ * `clientes`: los clientes cuyas alertas puede ver. `null` (o ausente) = toda la flota (directores y servicio sin cliente asignado);
+ * una lista = SOLO alertas de esos clientes (servicio al cliente ligado a un cliente). Es lo que impide la fuga entre clientes.
+ */
+export interface DestinatarioResumen { nombre: string; correo: string; origen: 'servicio' | 'nivel1' | 'nivel2'; clientes?: readonly string[] | null }
 
 export interface EntradaDestinatarios {
   crudos: DestinatariosResumenCrudos;
@@ -18,23 +22,32 @@ export interface EntradaDestinatarios {
 
 export function destinatariosDelResumen(e: EntradaDestinatarios): { destinatarios: DestinatarioResumen[]; turno: TurnoActual; cayoATodos: boolean } {
   const { crudos, alertas, ahora } = e;
-  const turno = turnoActual(ahora, crudos.zona, crudos.festivos);
+  const turno = turnoActual(ahora, crudos.zona, crudos.festivos, crudos.noche);
   const clientes = new Set(alertas.map((a) => e.clienteDeChat.get(a.chatId)).filter((x): x is string => !!x));
   const hayAltaCritica = alertas.some((a) => a.nivel === 'alta' && a.critico);
   const salida: DestinatarioResumen[] = [];
-  const vistos = new Set<string>();
-  const agregar = (nombre: string, correo: string, origen: DestinatarioResumen['origen']) => {
+  const vistos = new Map<string, DestinatarioResumen>();
+  const agregar = (nombre: string, correo: string, origen: DestinatarioResumen['origen'], alcance: string | null = null) => {
     const c = correo.trim().toLowerCase();
-    if (c === '' || vistos.has(c) || salida.length >= MAX_DESTINATARIOS_RESUMEN) return;
-    vistos.add(c);
-    salida.push({ nombre, correo: c, origen });
+    if (c === '') return;
+    const previo = vistos.get(c);
+    if (previo) {
+      // Mismo correo repetido: ver toda la flota gana; si no, se juntan los clientes (nunca se pierde cobertura ni se amplía de más).
+      if (previo.clientes === null || alcance === null) previo.clientes = null;
+      else if (!previo.clientes!.includes(alcance)) previo.clientes = [...previo.clientes!, alcance];
+      return;
+    }
+    if (salida.length >= MAX_DESTINATARIOS_RESUMEN) return;
+    const nuevo: DestinatarioResumen = { nombre, correo: c, origen, clientes: alcance === null ? null : [alcance] };
+    vistos.set(c, nuevo);
+    salida.push(nuevo);
   };
-  for (const s of crudos.servicio) if (s.clienteId === null || clientes.has(s.clienteId)) agregar(s.nombre, s.correo, 'servicio');
-  const n1 = filtrarPorTurno(crudos.nivel1, ahora, crudos.zona, crudos.festivos);
+  for (const s of crudos.servicio) if (s.clienteId === null || clientes.has(s.clienteId)) agregar(s.nombre, s.correo, 'servicio', s.clienteId);
+  const n1 = filtrarPorTurno(crudos.nivel1, ahora, crudos.zona, crudos.festivos, crudos.noche);
   for (const d of n1.lista) agregar(d.nombre, d.correo, 'nivel1');
   let cayo = n1.cayoATodos;
   if (hayAltaCritica) {
-    const n2 = filtrarPorTurno(crudos.nivel2, ahora, crudos.zona, crudos.festivos);
+    const n2 = filtrarPorTurno(crudos.nivel2, ahora, crudos.zona, crudos.festivos, crudos.noche);
     cayo = cayo || n2.cayoATodos;
     for (const d of n2.lista) agregar(d.nombre, d.correo, 'nivel2');
   }

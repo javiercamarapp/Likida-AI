@@ -1,0 +1,70 @@
+/* Esqueletos de página F26 (Rovaq → Likida). Archivo propio: solo DISPOSICIÓN (rejillas, anchos, márgenes). Los colores, radios, tipografía,
+   tablas, botones, cajones y estados vienen de las piezas de ui-v2; aquí no hay un solo hex ni movimiento propio (la entrada escalonada y
+   el lift los dan `Tarjeta`/`TiraCifras` con `data-entra` y `data-lift`, que ya viven tras prefers-reduced-motion). Paleta del punto 10: neutra. */
+
+/* Titular de lectura (Rovaq «Brechas»/«Hoy»): una frase en negritas de 13/600 y ≤655 px que responde antes de la cifra. */
+.rv-esq__titular { margin: 0; max-width: 655px; font: 600 var(--t-body)/1.65 var(--font-sans-ui, inherit); color: var(--ink); }
+
+/* Barra de procedencia bajo los filtros (fuentes, corte, avisos): una fila apagada de 12 px. */
+.rv-esq__procedencia { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; padding: 0; list-style: none; font: 400 var(--t-small)/1.4 var(--font-sans-ui, inherit); color: var(--muted); }
+
+/* Hasta DOS avisos apilados (Rovaq «Problemas»): 8 px entre ellos. */
+.rv-esq__avisos { display: grid; gap: 8px; min-width: 0; }
+
+/* Cifras como tarjetas sueltas (Rovaq `.ui-kpi`): cuatro tarjetas con 12 px de separación, cada una con su filete. */
+.rv-esq__cifras-sueltas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-gap, 12px); min-width: 0; }
+@media (max-width: 1023.98px) { .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479.98px) { .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Contenedor de la tabla maestra: la tabla va dentro de una tarjeta sin padding (a sangre), con el pie «25 de N» pegado. */
+.rv-esq__tabla { display: grid; gap: 12px; min-width: 0; }
+.rv-esq__tabla-pie { margin: 8px 2px 0; font: 400 var(--t-small)/1.4 var(--font-sans-ui, inherit); color: var(--muted); }
+
+/* Nota de método bajo la última gráfica: 12 px apagada (Rovaq: «parcial: mes incompleto, no comparable»). */
+.rv-esq__metodo { margin: 0; font: 400 var(--t-small)/1.5 var(--font-sans-ui, inherit); color: var(--muted); max-width: 760px; }
+
+/* Caja «Qué se sabe / Qué no se sabe»: la segunda es gris con borde punteado; lo desconocido se dibuja, no se esconde. */
+.rv-esq__saberes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-gap, 12px); }
+@media (max-width: 767.98px) { .rv-esq__saberes { grid-template-columns: minmax(0, 1fr); } }
+.rv-esq__saber { display: flex; flex-direction: column; gap: 6px; padding: var(--card-pad, 14px); border: 1px solid var(--ui-border); border-radius: var(--r-card, 12px); background: var(--ui-surface); }
+.rv-esq__saber[data-no-sabe] { background: var(--ui-soft); border-style: dashed; border-color: var(--ui-line-strong); }
+.rv-esq__saber h3 { margin: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
+.rv-esq__saber ul { margin: 0; padding-left: 16px; list-style: disc; display: grid; gap: 4px; font: 400 var(--t-body)/1.5 var(--font-sans-ui, inherit); color: var(--ui-secondary); }
+
+/* Ficha: tarjeta de chips (estado, clase de dato) con su línea de descripción. */
+.rv-esq__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.rv-esq__ficha-desc { margin: 8px 0 0; font: 400 var(--t-body)/1.5 var(--font-sans-ui, inherit); color: var(--muted); }
+
+/* Configuración: columna de ≤780 px (Rovaq `/setup`), secciones en tarjetas, filas «rótulo + ayuda | control» con divisor de 1 px. */
+.rv-esq__cfg { display: flex; flex-direction: column; gap: var(--sp-gap, 12px); min-width: 0; max-width: 780px; }
+.rv-esq__fila { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); align-items: center; gap: 8px 16px; padding: 12px 0; border-top: 1px solid var(--ui-border); }
+.rv-esq__fila:first-child { border-top-width: 0; padding-top: 0; }
+.rv-esq__fila:last-child { padding-bottom: 0; }
+.rv-esq__fila-rotulo { margin: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
+.rv-esq__fila-ayuda { margin: 2px 0 0; font: 400 var(--t-small)/1.4 var(--font-sans-ui, inherit); color: var(--muted); }
+.rv-esq__fila-control { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+@media (max-width: 599.98px) { .rv-esq__fila { grid-template-columns: minmax(0, 1fr); } .rv-esq__fila-control { justify-content: flex-start; } }
+.rv-esq__seccion-pie { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ui-border); }
+
+/* Progreso de configuración: barra fina de 6 px (nativa, con valor accesible) y su leyenda de 12 px. */
+.rv-esq__progreso { display: flex; align-items: center; gap: 10px; font: 500 var(--t-small)/1.4 var(--font-sans-ui, inherit); color: var(--muted); }
+.rv-esq__progreso progress { appearance: none; -webkit-appearance: none; width: 140px; height: 6px; border: 0; border-radius: var(--r-pill, 999px); background: var(--ui-soft); overflow: hidden; }
+.rv-esq__progreso progress::-webkit-progress-bar { background: var(--ui-soft); }
+.rv-esq__progreso progress::-webkit-progress-value { background: var(--ink); border-radius: var(--r-pill, 999px); }
+.rv-esq__progreso progress::-moz-progress-bar { background: var(--ink); border-radius: var(--r-pill, 999px); }
+
+/* Tarjeta de paso (Rovaq `.setup-paso`): radio 12, padding 14/16; el paso ACTUAL lleva borde de 1 px en tinta (decisión 10: sin azul). */
+.rv-esq__paso { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--ui-border); border-radius: var(--r-card, 12px); background: var(--ui-surface); }
+.rv-esq__paso[data-actual] { border-color: var(--ink); }
+.rv-esq__paso-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rv-esq__paso h2 { margin: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
+.rv-esq__paso-quien { margin: 0; font: 400 var(--t-small)/1.4 var(--font-sans-ui, inherit); color: var(--muted); }
+.rv-esq__paso-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Cuadrícula 2×2 de cifras del cajón de Vista rápida: borde de 1 px con divisores internos (se hace con el fondo y un hueco de 1 px). */
+.rv-esq__vr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; border: 1px solid var(--ui-border); border-radius: var(--r-control, 8px); background: var(--ui-border); overflow: hidden; }
+.rv-esq__vr > div { display: flex; flex-direction: column-reverse; gap: 2px; padding: 10px 12px; background: var(--ui-surface); min-width: 0; }
+.rv-esq__vr dt { font: 500 var(--t-small)/1.4 var(--font-sans-ui, inherit); color: var(--muted); }
+.rv-esq__vr dd { margin: 0; font: 600 var(--t-section)/1.3 var(--font-sans-ui, inherit); font-variant-numeric: tabular-nums; color: var(--ink); overflow-wrap: anywhere; }
+.rv-esq__vr-cuerpo { display: grid; gap: 12px; }
+.rv-esq__vr-pie { display: flex; justify-content: flex-end; gap: 8px; width: 100%; }

@@ -108,4 +108,13 @@ export const avisos = {
   'gen.fuente_ilegible': 'No se pudo leer una fuente de la bandeja de escalaciones.',
   'gen.extras_ilegibles': 'No se pudieron leer las alertas de sistema (crons, IA, webhook): no se sabe si algo está caído.',
   'gen.resumen_ilegible': 'No se pudo leer el resumen del negocio (costo de IA y flotas): las señales que dependen de él no se están evaluando.',
+  'notif.sin_leer': 'Sin leer',
+  'notif.cargados': 'Cargados',
+  'notif.resumen': 'Resumen de avisos',
+  'e26b.avisos_configurar': 'Configurar avisos',
+  'e26b.avisos_sin_leer': 'Sin leer',
+  'e26b.avisos_sin_leer_nota': 'avisos sin leer',
+  'e26b.avisos_cargados': 'Cargados',
+  'e26b.avisos_cargados_nota': 'avisos que entran a la lista',
+  'a1r4.observado': 'Observado',
 } as const;

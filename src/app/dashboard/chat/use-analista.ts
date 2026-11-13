@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { DashboardKpis } from '@/lib/likida/analytics';
 import type { AcreditablesOFuera } from './respuestas';
@@ -57,15 +57,20 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
   const control = useRef<AbortController | null>(null);
   const detenido = useRef(false);
 
-  // La lista del panel Historial — se carga al montar para que el botón traiga su conteo real.
-  useEffect(() => {
-    let vivo = true;
+  // La lista del panel Historial — se carga al montar para que el botón traiga su conteo real, y se vuelve a leer al terminar cada
+  // pregunta (ronda 7: el conteo se quedaba en 0 después de preguntar). Una lectura que falla NO borra una lista ya cargada.
+  const vivo = useRef(true);
+  const cargarLista = useCallback(() => {
     fetch(`/api/dashboard/conversaciones${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => { if (vivo) setConvs(Array.isArray(d?.conversaciones) ? d.conversaciones : 'error'); })
-      .catch(() => { if (vivo) setConvs('error'); });
-    return () => { vivo = false; };
+      .then((d) => { if (vivo.current) setConvs(Array.isArray(d?.conversaciones) ? d.conversaciones : 'error'); })
+      .catch(() => { if (vivo.current) setConvs((previa) => (Array.isArray(previa) ? previa : 'error')); });
   }, [tenant]);
+  useEffect(() => {
+    vivo.current = true;
+    cargarLista();
+    return () => { vivo.current = false; };
+  }, [cargarLista]);
 
   const agregar = (q: string, r: Respuesta) => setHistorial((h) => [...h, { id: nuevoId(), q, r, nuevo: true }]);
 
@@ -292,6 +297,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
       setPasosVivos([]);
       setGenerando(false);
       setOcupado(false);
+      cargarLista();
     }
   }
 

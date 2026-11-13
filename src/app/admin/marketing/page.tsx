@@ -10,7 +10,10 @@ import {
 } from '@/lib/likida/marketing/estudio';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { fechaHoraMx, hoyMx } from '@/lib/formato';
-import { Aviso, AvisoCompacto, Disclosure, EstadoError, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import { Aviso, AvisoCompacto, Disclosure, EstadoError, FilaTarjetas, Tarjeta } from '../../ui-v2/componentes';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
+import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import '../dinero.css';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { SubirHook, type ResultadoFirmaHook, type ResultadoGuardar } from './subir-hook';
@@ -155,19 +158,60 @@ export default async function EstudioMarketingPage() {
   const masReciente = pendientes && pendientes.length > 0 ? pendientes.map((p) => p.creadoEn).sort().at(-1)! : null;
   const diasSinPiezas = masReciente ? Math.floor((Date.parse(`${hoyMx()}T00:00:00Z`) - Date.parse(`${masReciente.slice(0, 10)}T00:00:00Z`)) / 86_400_000) : null;
 
+  // Cada cifra es un conteo de lo que se leyó; una lectura caída es «No disponible», nunca 0.
+  const conteo = (etiqueta: string, lista: readonly unknown[] | null) =>
+    lista === null ? { etiqueta, valor: null, estado: 'error' as const, mensaje: t('marketing.no_se_pudo_leer'), reintentar: true } : { etiqueta, valor: lista.length, formato: 'entero' as const };
+  const cifras = [
+    conteo(t('marketing.k_hooks'), hooks),
+    conteo(t('marketing.k_referencias'), referencias),
+    conteo(t('marketing.k_pendientes'), pendientes),
+    conteo(t('marketing.k_publicadas'), aprobadas),
+  ];
+
   return (
-    <MarcoPagina titulo={t('marketing.crecimiento')} apoyo={t('marketing.estudio_de_marketing_los')}>
-      {diasSinPiezas !== null && diasSinPiezas >= DIAS_ESTANCADA ? (
-        <Aviso tono="warn" titulo={t('marketing.la_pieza_pendiente_mas', { diasSinPiezas })}>
+    <EsqueletoPanelCifras
+      titulo={t('marketing.crecimiento')} apoyo={t('marketing.estudio_de_marketing_los')}
+      etiquetaCifras={t('marketing.k_etiqueta')} cifras={observadas(uniformes(cifras), t('a1r4.observado'))}
+      avisos={(
+        <>
+          {diasSinPiezas !== null && diasSinPiezas >= DIAS_ESTANCADA ? (
+            <Aviso tono="warn" titulo={t('marketing.la_pieza_pendiente_mas', { diasSinPiezas })}>
+              {t('marketing.no_han_llegado_piezas')}
+            </Aviso>
+          ) : null}
+          <AvisoCompacto
+            tono="info"
+            resumen="Entre más insumo le das, mejor salen las piezas. Ninguna se genera sola; publicar sigue siendo tu aprobación."
+            mas="Sube el video que te gustó o la foto del chofer o del patio, y abajo lees el guion, el carrusel, la promo del día y los encargos de imagen y video. No hay render en el servidor."
+          />
+        </>
+      )}
+    >
+      {/* Plantilla PC (Rovaq): cifras → bloques de trabajo en 6-6 → el formulario ancho a todo el ancho de su tarjeta → lo que no se hace. */}
+<FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
+      <Tarjeta titulo={t('marketing.piezas_del_dia', { pendientes: pendientes !== null ? ` (${pendientes.length})` : '' })}>
+        <p className="adm-din-nota">
           
-          {t('marketing.no_han_llegado_piezas')}
-        </Aviso>
-      ) : null}
-      <AvisoCompacto
-        tono="info"
-        resumen="Entre más insumo le das, mejor salen las piezas. Ninguna se genera sola; publicar sigue siendo tu aprobación."
-        mas="Sube el video que te gustó o la foto del chofer o del patio, y abajo lees el guion, el carrusel, la promo del día y los encargos de imagen y video. No hay render en el servidor."
-      />
+          {t('marketing.lo_que_el_agente')} <a href="/admin/aprobaciones">Aprobaciones</a>.
+        </p>
+        {pendientes === null ? (
+          <EstadoError compacto>{t('marketing.no_se_pudieron_leer')}</EstadoError>
+        ) : pendientes.length === 0 ? (
+          <p className="adm-vacio-linea">{t('marketing.nada_pendiente_ahora_mismo')}</p>
+        ) : (
+          <div className="adm-din-rejilla adm-din-rejilla--compacta">
+            {pendientes.map((p) => <TarjetaPieza key={p.id} pieza={p} publicar={accionPublicarPieza} rechazar={accionRechazarPieza} />)}
+          </div>
+        )}
+        {aprobadas !== null && aprobadas.length > 0 ? (
+          <>
+            <p className="adm-din-nota">{t('marketing.ya_publicadas')}</p>
+            <ul className="adm-din-lista">
+              {aprobadas.map((p) => <li key={p.id}>{p.titulo} <span>{p.agente}</span></li>)}
+            </ul>
+          </>
+        ) : null}
+      </Tarjeta>
 
       <Tarjeta titulo={t('marketing.banco_de_hooks', { hooks: hooks !== null ? ` (${hooks.length})` : '' })}>
         <p className="adm-din-nota">{t('marketing.sube_un_video_que')}</p>
@@ -175,9 +219,9 @@ export default async function EstudioMarketingPage() {
         {hooks === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudo_leer')}</EstadoError>
         ) : hooks.length === 0 ? (
-          <p className="adm-din-nota">{t('marketing.sin_hooks_guardados_todavia')}</p>
+          <p className="adm-vacio-linea">{t('marketing.sin_hooks_guardados_todavia')}</p>
         ) : (
-          <div className="adm-din-rejilla">
+          <div className="adm-din-rejilla adm-din-rejilla--compacta">
             {hooks.map((h) => (
               <div key={h.id} className="adm-din-plan">
                 {h.videoUrl ? <video src={h.videoUrl} controls className="adm-din-video" /> : <Aviso tono="error">{t('marketing.no_se_pudo_firmar')}</Aviso>}
@@ -189,15 +233,17 @@ export default async function EstudioMarketingPage() {
         )}
       </Tarjeta>
 
+      </FilaTarjetas>
+
       <Tarjeta titulo={t('marketing.personajes_y_lugares', { referencias: referencias !== null ? ` (${referencias.length})` : '' })}>
         <p className="adm-din-nota">{t('marketing.el_pipeline_de_video')}</p>
         <SubirReferencia accion={accionSubirReferencia} />
         {referencias === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudo_leer_2')}</EstadoError>
         ) : referencias.length === 0 ? (
-          <p className="adm-din-nota">{t('marketing.sin_personajes_ni_lugares')}</p>
+          <p className="adm-vacio-linea">{t('marketing.sin_personajes_ni_lugares')}</p>
         ) : (
-          <div className="adm-din-rejilla">
+          <div className="adm-din-rejilla adm-din-rejilla--compacta">
             {referencias.map((r) => (
               <div key={r.id} className="adm-din-plan">
                 {r.fotoUrl ? (
@@ -220,37 +266,13 @@ export default async function EstudioMarketingPage() {
         )}
       </Tarjeta>
 
-      <Tarjeta titulo={t('marketing.piezas_del_dia', { pendientes: pendientes !== null ? ` (${pendientes.length})` : '' })}>
-        <p className="adm-din-nota">
-          
-          {t('marketing.lo_que_el_agente')} <a href="/admin/aprobaciones">Aprobaciones</a>.
-        </p>
-        {pendientes === null ? (
-          <EstadoError compacto>{t('marketing.no_se_pudieron_leer')}</EstadoError>
-        ) : pendientes.length === 0 ? (
-          <p className="adm-din-nota">{t('marketing.nada_pendiente_ahora_mismo')}</p>
-        ) : (
-          <div className="adm-din-rejilla">
-            {pendientes.map((p) => <TarjetaPieza key={p.id} pieza={p} publicar={accionPublicarPieza} rechazar={accionRechazarPieza} />)}
-          </div>
-        )}
-        {aprobadas !== null && aprobadas.length > 0 ? (
-          <>
-            <p className="adm-din-nota">{t('marketing.ya_publicadas')}</p>
-            <ul className="adm-din-lista">
-              {aprobadas.map((p) => <li key={p.id}>{p.titulo} <span>{p.agente}</span></li>)}
-            </ul>
-          </>
-        ) : null}
-      </Tarjeta>
-
       <Disclosure titulo={t('marketing.que_no_hace_el')} resumen="Generación de imagen y video">
         <p className="adm-din-nota">
           
           {t('marketing.la_generacion_real_de')}
         </p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

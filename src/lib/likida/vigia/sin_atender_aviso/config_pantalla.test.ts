@@ -59,6 +59,26 @@ describe('formulario de la configuración de la flota', () => {
       palabrasClave: ['retraso', 'embarque'], palabrasUrgentes: ['choque'], equipoNombres: ['Operador 1', 'Operador 2'], resumenCorreoHabilitado: true,
     });
   });
+  it('1005: arma plazos propios y noche; vacío = null (se usa vigia_config y 20 a 7)', () => {
+    const r = configGuardadaDeFormulario(fd({ umbralMin: '45', umbralCriticoMin: '15', nocheDesdeHora: '21', nocheHastaHora: '6' }));
+    expect(r.ok && r.valor).toMatchObject({ umbralMin: 45, umbralCriticoMin: 15, nocheDesdeHora: 21, nocheHastaHora: 6 });
+    const v = configGuardadaDeFormulario(fd({}));
+    expect(v.ok && v.valor).toMatchObject({ umbralMin: null, umbralCriticoMin: null, nocheDesdeHora: null, nocheHastaHora: null });
+  });
+  it('1005: rechaza plazo ilegible, crítico mayor que normal, noche a medias o fuera de rango', () => {
+    expect(configGuardadaDeFormulario(fd({ umbralMin: '1x' })).ok).toBe(false);
+    expect(configGuardadaDeFormulario(fd({ umbralMin: '30', umbralCriticoMin: '31' })).ok).toBe(false);
+    expect(configGuardadaDeFormulario(fd({ nocheDesdeHora: '20' })).ok).toBe(false);
+    expect(configGuardadaDeFormulario(fd({ nocheDesdeHora: '24', nocheHastaHora: '6' })).ok).toBe(false);
+    expect(configGuardadaDeFormulario(fd({ umbralCriticoMin: '0' })).ok).toBe(false);
+  });
+  it('1005: los plazos y la noche guardados llegan a la configuración efectiva y ganan a vigia_config', () => {
+    const g = { ...copiaConfigGuardadaPorOmision(), umbralMin: 60, umbralCriticoMin: 20, nocheDesdeHora: 21, nocheHastaHora: 6 };
+    const a = configEfectiva({ ...entrada, guardada: g });
+    expect(a.ok && a.config).toMatchObject({ umbralMin: 60, umbralCriticoMin: 20, noche: { desdeHora: 21, hastaHora: 6 } });
+    const b = configEfectiva({ ...entrada, guardada: copiaConfigGuardadaPorOmision() });
+    expect(b.ok && b.config).toMatchObject({ umbralMin: 45, umbralCriticoMin: 15, noche: { desdeHora: 20, hastaHora: 7 } });
+  });
   it('sin marcar «horario», las horas escritas se ignoran: no hay horario', () => {
     const r = configGuardadaDeFormulario(fd({ desdeHora: '8', hastaHora: '18' }));
     expect(r.ok && r.valor.horarioAtencion).toBeNull();

@@ -11,7 +11,7 @@ import {
   type OrdenTaller, type PropuestaRutina,
 } from '@/lib/likida/mantenimiento';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { FormaConAviso, CampoTexto, Tarjeta, Disclosure, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import { FormaConAviso, CampoTexto, Tarjeta, Disclosure, EstadoVacio, type ResultadoAccion } from '@/app/ui-v2/componentes';
 import './unidades.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -162,7 +162,7 @@ export async function BloqueTaller({
       {/* ── Órdenes abiertas ── */}
       <Tarjeta titulo={t('op.taller_ordenes_abiertas', { length: taller.ordenesAbiertas.length })}>
         {taller.ordenesAbiertas.length === 0 ? (
-          <p className="rv-un__nota">{t('op.sin_ordenes_abiertas_las_averias_que')}</p>
+          <VacioPartido texto={t('op.sin_ordenes_abiertas_las_averias_que')} />
         ) : (
           <div className="rv-un__bloque">
             {taller.ordenesAbiertas.map((o) => (
@@ -188,9 +188,9 @@ export async function BloqueTaller({
       {/* ── Propuestas de las rutinas ── */}
       <Tarjeta titulo={`Rutinas preventivas: propuestas (${taller.propuestas.length})`}>
         {taller.rutinas.length === 0 ? (
-          <p className="rv-un__nota">{t('op.sin_rutinas_declaradas_declara_abajo_la')}</p>
+          <VacioPartido texto={t('op.sin_rutinas_declaradas_declara_abajo_la')} />
         ) : taller.propuestas.length === 0 ? (
-          <p className="rv-un__nota">{t('op.ninguna_rutina_vencida_en_las_unidades')}</p>
+          <VacioPartido texto={t('op.ninguna_rutina_vencida_en_las_unidades')} />
         ) : (
           <div className="rv-un__bloque">
             {taller.propuestas.map((p) => (
@@ -229,4 +229,12 @@ export async function BloqueTaller({
       )}
     </section>
   );
+}
+
+/** Vacío con jerarquía (Rovaq): lo que va hasta el primer punto o coma es el título corto; el resto, la nota centrada en varias líneas. */
+function VacioPartido({ texto }: { texto: string }) {
+  const corte = texto.search(/[.,] /);
+  const titulo = corte > 0 ? texto.slice(0, corte) : texto;
+  const resto = corte > 0 ? texto.slice(corte + 2).replace(/^./, (c) => c.toUpperCase()) : '';
+  return <EstadoVacio contenido titulo={titulo}>{resto || undefined}</EstadoVacio>;
 }

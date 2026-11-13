@@ -13,3 +13,22 @@
 
 /* Nombres de persona: una línea con elipsis (el completo va en el title) y un mínimo que impide la columna angosta que los partía en dos renglones. */
 .rv-reg__nombre { display: block; min-width: 140px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Cajón de vista rápida: aviso del viaje y, solo con permiso de dinero, las tres cifras de la liquidación. */
+.rv-reg__vr-extra { display: grid; gap: 10px; justify-items: start; }
+.rv-reg__vr-dinero { display: grid; gap: 0; width: 100%; margin: 0; border-top: 1px solid var(--line); }
+.rv-reg__vr-dinero > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--t-body); }
+.rv-reg__vr-dinero dt { color: var(--muted); }
+.rv-reg__vr-dinero dd { margin: 0; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Sin la nota de diferencias (jefe de tráfico) la línea de procedencia es lo último de la tarjeta: no queda pegada al borde inferior. */
+[data-ui="v2"] .rv-tl__sellos:last-child { padding-bottom: 10px; }
+
+/* Ronda 7 (móvil 412): el buscador del registro ocupa todo el ancho de la barra y su placeholder cabe completo («Folio, origen o destino»). */
+@media (max-width: 767px) {
+  [data-ui="v2"] .rv-filtros .rv-fl--buscar { flex: 1 1 100%; width: 100%; min-width: 0; }
+  [data-ui="v2"] .rv-filtros .rv-fl--buscar input[type="search"] { width: 100%; min-width: 0; }
+}
+
+/* Ronda 8 (Rovaq tabla 2.7: 40-41 px con una línea, 49-64 px con dos): la celda con segunda línea (folio + ruta) respira 8 px arriba y abajo; el alto de 40 es mínimo, no tope. */
+[data-ui="v2"] .rv-tl__td:has(> .rv-tl__sub) { padding-block: 8px; }

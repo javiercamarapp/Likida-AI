@@ -23,6 +23,19 @@ function Enviar({ children, Ic, peligro }: { children: React.ReactNode; Ic: type
   );
 }
 
+/** Alta rápida de cliente (solo el nombre): lo demás se completa después en la pantalla de clientes. */
+export function FormaAltaCliente({ accion }: { accion: AccionGrupos }) {
+  const { t: tx } = useT('agentes', agentesEs);
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="rv-vg__pila">
+      <CampoTexto etiqueta={tx('rest.nombre_del_cliente_nuevo')} name="nombre" required minLength={3} maxLength={120} ayuda={tx('rest.solo_el_nombre_lo_demas_se')} />
+      <div><Enviar Ic={Save}>{tx('rest.agregar_cliente')}</Enviar></div>
+      <AvisoResultado estado={estado} />
+    </form>
+  );
+}
+
 export function FormaAltaGrupo({ accion, clientes }: { accion: AccionGrupos; clientes: Array<{ id: string; nombre: string }> }) {
   const { t: tx } = useT('agentes', agentesEs);
   const [estado, despachar] = useActionState(accion, null);

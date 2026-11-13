@@ -7,3 +7,18 @@
 .rv-pt__bloque { display: grid; gap: 2px; }
 .rv-pt__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .rv-pt__selector { min-width: 224px; }
+
+/* Cabecera y cifra de las columnas numéricas del registro van a la derecha las dos (tabular), no solo la cifra. */
+[data-ui="v2"] .rv-tb table th.num { text-align: right; }
+
+/* Ronda 6: la nota de método vive dentro de la tarjeta de la tabla, bajo ella, con su filete (Rovaq). */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-pt__nota { padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+
+/* Ronda 7: la tabla va a sangre dentro de la tarjeta (sin borde propio: ya no hay doble filete en los lados). */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-pt__tabla { border: 0; border-radius: 0; box-shadow: none; background: transparent; margin: 0; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-pt__tabla .rv-tb__region { border-top: 1px solid var(--line); }
+
+/* Ronda 8 (Rovaq `overlay-foot`): el primario del cajón de alta va en un pie pegado al fondo (padding 12x16, acciones a la derecha), no suelto bajo los campos. */
+.rv-pt__pie { position: sticky; bottom: -16px; z-index: 1; display: flex; justify-content: flex-end; gap: 8px; margin: 8px -16px -16px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-pt__pie) { display: flex; flex-direction: column; min-height: 100%; }
+[data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-pt__pie) > .rv-pt__pie { margin-top: auto; }

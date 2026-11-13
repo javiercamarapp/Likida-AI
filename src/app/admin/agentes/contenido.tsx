@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import {
   listarAgentes, DEPARTAMENTOS, DISPARADORES, ESTADOS_AGENTE, type AgenteDefinido,
 } from '@/lib/likida/agentes/definiciones';
@@ -13,10 +14,11 @@ import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  Aviso, Chip, Disclosure, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
-  type ResultadoAccion, type TonoEstado,
+  Aviso, BarraFiltros, BotonEnlace, Chip, Disclosure, FiltroOpciones, FormaEnCajon, StatusChip, Tarjeta, CampoTexto, CampoSelect,
+  type OpcionFiltro, type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { AccionesAgente } from './acciones-agente';
 import { getT } from '@/lib/i18n/servidor';
 import { corridaDe, haceTiempo, leerCorridas, resultadoCorrida } from './corrida-visual';
@@ -62,8 +64,10 @@ type Corrida = { inicio: string; estado: string } | null | 'error';
 interface Fila { a: AgenteDefinido; real: EstadoReal; motivo: string | null; corrida: Corrida; apagado: boolean | null | undefined }
 
 /** El contenido REAL del panel, exportado aparte: la puerta vive en page.tsx y el preview monta ESTO. Las server actions llegan por props. */
-export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionConfig }: {
+export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionConfig, params = {} }: {
   accionAlta: AccionAlta; accionPalanca: AccionPalanca; accionConfig: AccionConfig;
+  /** Los parámetros de la URL: `pag` (página de 25), `ver` (el agente del cajón de vista rápida), `estado` y `depto` (los filtros). */
+  params?: { pag?: string; ver?: string; estado?: string; depto?: string };
 }) {
   const { t } = await getT('admin_agentes');
   const { t: ts } = await getT('admin_sistema');
@@ -107,7 +111,22 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   const rotuloDepto = new Map<string, string>(DEPARTAMENTOS.map((d) => [d.valor, d.rotulo]));
   const estadosRotulo = ESTADOS_AGENTE.map((e) => ({ valor: e.valor as string, rotulo: e.rotulo as string }));
 
-  const columnas: ColumnaBase<Fila>[] = [
+  // Filtros (barra BF de la plantilla TM): estado real y departamento, por la URL. Un valor que no existe no filtra (cae a «Todos»).
+  const estadoFiltro = (Object.keys(TONO_ESTADO_REAL) as EstadoReal[]).find((e) => e === params.estado) ?? '';
+  const deptoFiltro = DEPARTAMENTOS.find((d) => d.valor === params.depto)?.valor ?? '';
+  const opcionesEstado: OpcionFiltro[] = [
+    { valor: '', rotulo: t('agentes_contenido.bf_todos') },
+    ...(Object.keys(TONO_ESTADO_REAL) as EstadoReal[]).filter((e) => filas.some((f) => f.real === e)).map((e) => ({ valor: e, rotulo: rotuloEstadoRealTr(e, ts) })),
+  ];
+  const opcionesDepto: OpcionFiltro[] = [
+    { valor: '', rotulo: t('agentes_contenido.bf_todos_d') },
+    ...DEPARTAMENTOS.filter((d) => filas.some((f) => f.a.departamento === d.valor)).map((d) => ({ valor: d.valor as string, rotulo: d.rotulo as string })),
+  ];
+  const nFiltros = (estadoFiltro ? 1 : 0) + (deptoFiltro ? 1 : 0);
+  const filasVista = filas.filter((f) => (!estadoFiltro || f.real === estadoFiltro) && (!deptoFiltro || f.a.departamento === deptoFiltro));
+  const paramsUrl = { pag: params.pag, estado: estadoFiltro || undefined, depto: deptoFiltro || undefined };
+
+  const columnas: ColumnaTabla<Fila>[] = [
     {
       id: 'agente', titulo: t('agentes_contenido.agente'), principal: true,
       celda: ({ a }) => {
@@ -175,68 +194,45 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
             : <StatusChip tono={apagado ? 'bad' : 'ok'}>{apagado ? 'Apagado' : 'Encendido'}</StatusChip>,
     },
     {
-      id: 'acciones', titulo: t('agentes_contenido.acciones'),
+      id: 'acciones', titulo: t('agentes_contenido.acciones'), alinear: 'der', tituloOculto: true,
       celda: ({ a, apagado }) => (
-        <AccionesAgente
-          id={a.id} nombre={a.nombre} palanca={`agente:${a.id}`}
-          apagado={a.estado === 'vivo' && typeof apagado === 'boolean' ? apagado : null}
-          accionPalanca={accionPalanca} accionConfig={accionConfig} estados={estadosRotulo}
-          actual={{
-            estado: a.estado, runnerHabilitado: a.runnerHabilitado,
-            presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
-          }}
-          etiquetaInsumos={insumosPendientes === null ? t('agentes_contenido.insumos_2') : (insumosPendientes.get(a.id) ?? 0) > 0 ? t('agentes_contenido.insumos', { insumosPendientes: insumosPendientes.get(a.id) ?? 0 }) : t('agentes_contenido.insumos_2')}
-        />
+        <span className="rv-agente-acciones">
+          <BotonEnlace href={`/admin/agentes?${new URLSearchParams({ ...(params.pag ? { pag: params.pag } : {}), ...(estadoFiltro ? { estado: estadoFiltro } : {}), ...(deptoFiltro ? { depto: deptoFiltro } : {}), ver: a.id })}`} variante="ghost" tamano="sm">{t('agentes_contenido.vista_rapida')}</BotonEnlace>
+          <AccionesAgente
+            id={a.id} nombre={a.nombre} palanca={`agente:${a.id}`}
+            apagado={a.estado === 'vivo' && typeof apagado === 'boolean' ? apagado : null}
+            accionPalanca={accionPalanca} accionConfig={accionConfig} estados={estadosRotulo}
+            actual={{
+              estado: a.estado, runnerHabilitado: a.runnerHabilitado,
+              presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
+            }}
+            etiquetaInsumos={insumosPendientes === null ? t('agentes_contenido.insumos_2') : (insumosPendientes.get(a.id) ?? 0) > 0 ? t('agentes_contenido.insumos', { insumosPendientes: insumosPendientes.get(a.id) ?? 0 }) : t('agentes_contenido.insumos_2')}
+          />
+        </span>
       ),
     },
   ];
 
+  const posicion = params.ver ? filasVista.findIndex((f) => f.a.id === params.ver) : -1;
+  const sel = posicion >= 0 ? filasVista[posicion] : null;
+  const qCerrar = new URLSearchParams({ ...(params.pag ? { pag: params.pag } : {}), ...(estadoFiltro ? { estado: estadoFiltro } : {}), ...(deptoFiltro ? { depto: deptoFiltro } : {}) }).toString();
+  const hrefCerrar = qCerrar ? `/admin/agentes?${qCerrar}` : '/admin/agentes';
+  const exitoSel = sel ? exito?.get(sel.a.id) : undefined;
+
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
       area="Agentes"
+      filtros={(
+        <BarraFiltros accion="/admin/agentes" enLinea etiqueta={t('agentes_contenido.bf_filtros')} nActivos={nFiltros} limpiarHref="/admin/agentes">
+          <FiltroOpciones etiqueta={t('agentes_contenido.bf_estado')} nombre="estado" valor={estadoFiltro} opciones={opcionesEstado} />
+          <FiltroOpciones etiqueta={t('agentes_contenido.bf_depto')} nombre="depto" valor={deptoFiltro} opciones={opcionesDepto} />
+        </BarraFiltros>
+      )}
       titulo={t('agentes_contenido.agentes')}
       apoyo={t('agentes_contenido.que_agentes_hay_cuales')}
-    >
-      {parados === null ? (
-        <Aviso tono="warn">{t('agentes_contenido.no_se_pudo_leer_2')}</Aviso>
-      ) : bloqueados + parados72 > 0 ? (
-        <Aviso tono="warn">
-          {bloqueados + parados72} agentes vivos llevan {parados.umbralHoras}  {t('agentes_contenido.horas_o_mas_sin')}
-          {bloqueados > 0 ? `; ${bloqueados} por la bandeja de aprobaciones llena` : ''}. Vaciar la bandeja los destraba; no se reabren por sí solos.
-        </Aviso>
-      ) : null}
-
-      <TiraCifras
-        etiqueta={t('agentes_contenido.estado_de_los_agentes')}
-        items={[
-          { etiqueta: t('agentes_contenido.agentes_vivos'), valor: vivos.length, estado: 'ok', nota: t('agentes_contenido.en_el_catalogo', { length: agentes.length }) },
-          { etiqueta: t('agentes_contenido.corriendo_de_verdad'), valor: parados === null || interruptores === null ? null : corriendo, estado: parados === null || interruptores === null ? 'error' : 'ok', nota: t('agentes_contenido.con_corrida_reciente_y') },
-          { etiqueta: t('agentes_contenido.bloqueados_o_parados'), valor: parados === null ? null : bloqueados + parados72, estado: parados === null ? 'error' : 'ok', tono: parados !== null && bloqueados + parados72 > 0 ? 'warn' : undefined, nota: t('agentes_contenido.h_sin_correr_o', { umbralHoras: parados?.umbralHoras ?? 72 }) },
-          { etiqueta: t('agentes_contenido.apagados'), valor: apagados, estado: apagados === null ? 'error' : 'ok', tono: apagados ? 'bad' : undefined, nota: t('agentes_contenido.con_el_kill_switch') },
-          { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: costo30 === null ? null : usd(costo30), estado: costo30 === null ? 'error' : 'ok', nota: t('agentes_contenido.suma_de_los_agentes') },
-        ]}
-      />
-
-      <Tarjeta
-        titulo={t('agentes_contenido.catalogo_de_agentes')}
-        estado={agentes.length === 0 ? 'vacio' : 'ok'}
-        mensaje={t('agentes_contenido.el_catalogo_esta_vacio')}
-        detalle={t('agentes_contenido.da_de_alta_un')}
-      >
-        <TablaBase
-          etiqueta={t('agentes_contenido.agentes_del_catalogo')}
-          columnas={columnas}
-          filas={filas}
-          idFila={(f) => f.a.id}
-          tarjetaMovil
-          altoMaximo={false}
-          vacio={{ titulo: t('agentes_contenido.sin_agentes') }}
-        />
-      </Tarjeta>
-
-      <Disclosure titulo={t('agentes_contenido.dar_de_alta_un')} resumen="Nace diseñado, nunca vivo">
-        <FormaConAviso accion={accionAlta} boton="Dar de alta" columnas="md:grid-cols-1">
-          <div className="rv-agente-alta">
+      acciones={(
+        <FormaEnCajon id="alta-agente" titulo={t('agentes_contenido.dar_de_alta_un')} descripcion={t('agentes_contenido.un_agente_nuevo_nace')} accion={accionAlta} boton={t('agentes_contenido.dar_de_alta')} disparador={t('agentes_contenido.dar_de_alta')} tamano="m">
+          <div className="rv-agente-forma">
             <CampoTexto etiqueta={t('agentes_contenido.id_tecnico')} name="id" required obligatorio placeholder="cazador_censo" ayuda={t('agentes_contenido.minusculas_numeros_y_guion')} />
             <CampoTexto etiqueta={t('agentes_contenido.nombre')} name="nombre" required obligatorio placeholder={t('agentes_contenido.cazador_de_censo')} />
             <CampoSelect etiqueta={t('agentes_contenido.departamento')} name="departamento" defaultValue="leads">
@@ -249,9 +245,60 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
             <CampoTexto etiqueta={t('agentes_contenido.donde_vive_su_prompt')} name="promptRef" placeholder="13-Agentes-de-AI/…/prompts/x.md" />
             <CampoTexto etiqueta={t('agentes_contenido.presupuesto_por_dia_usd')} name="presupuestoDiaUsd" placeholder={t('agentes_contenido.vacio_sin_tope_declarado')} ayuda={t('agentes_contenido.el_tope_se_declara')} />
           </div>
-        </FormaConAviso>
-        <p className="rv-agente-sub">{t('agentes_contenido.un_agente_nuevo_nace')}</p>
-      </Disclosure>
+        </FormaEnCajon>
+      )}
+      vistaRapida={sel ? (
+        <CajonVistaRapida
+          titulo={sel.a.nombre} subtitulo={t('agentes_contenido.vr_subtitulo', { n: posicion + 1, total: filasVista.length })} hrefCerrar={hrefCerrar}
+          cifras={[
+            { etiqueta: t('agentes_contenido.estado_real'), valor: rotuloEstadoRealTr(sel.real, ts) },
+            { etiqueta: t('agentes_contenido.autonomia'), valor: `${autonomiaDe(sel.a.id).nivel}` },
+            { etiqueta: t('agentes_contenido.vr_exito'), valor: exitoSel && exitoSel.total > 0 ? `${Math.round((exitoSel.ok / exitoSel.total) * 100)} %` : '—' },
+            { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: consumo === null ? '—' : usd(costoDe.get(sel.a.id) ?? 0) },
+          ]}
+          pie={<BotonEnlace variante="primary" href={`/admin/agentes/${sel.a.id}/insumos`}>{t('agentes_contenido.vr_abrir')}</BotonEnlace>}
+        >
+          <p className="rv-agente-sub">{sel.a.descripcion || t('agentes_contenido.vr_sin_descripcion')}</p>
+          <p className="rv-agente-sub">{sel.a.modeloRol ?? t('agentes_contenido.vr_modelo_sin_declarar')} · {sel.a.presupuestoDiaUsd === null ? t('agentes_contenido.sin_tope_declarado') : t('agentes_contenido.dia', { presupuestoDiaUsd: usd(sel.a.presupuestoDiaUsd) })}</p>
+        </CajonVistaRapida>
+      ) : null}
+      avisos={parados === null ? (
+        <Aviso tono="warn">{t('agentes_contenido.no_se_pudo_leer_2')}</Aviso>
+      ) : bloqueados + parados72 > 0 ? (
+        <Aviso tono="warn">
+          {bloqueados + parados72} agentes vivos llevan {parados.umbralHoras}  {t('agentes_contenido.horas_o_mas_sin')}
+          {bloqueados > 0 ? `; ${bloqueados} por la bandeja de aprobaciones llena` : ''}. Vaciar la bandeja los destraba; no se reabren por sí solos.
+        </Aviso>
+      ) : null}
+      etiquetaCifras={t('agentes_contenido.estado_de_los_agentes')}
+      cifras={uniformes([
+          { etiqueta: t('agentes_contenido.agentes_vivos'), valor: vivos.length, estado: 'ok', nota: t('agentes_contenido.en_el_catalogo', { length: agentes.length }) },
+          { etiqueta: t('agentes_contenido.corriendo_de_verdad'), valor: parados === null || interruptores === null ? null : corriendo, estado: parados === null || interruptores === null ? 'error' : 'ok', nota: t('agentes_contenido.con_corrida_reciente_y') },
+          { etiqueta: t('agentes_contenido.bloqueados_o_parados'), valor: parados === null ? null : bloqueados + parados72, estado: parados === null ? 'error' : 'ok', tono: parados !== null && bloqueados + parados72 > 0 ? 'warn' : undefined, nota: t('agentes_contenido.h_sin_correr_o', { umbralHoras: parados?.umbralHoras ?? 72 }) },
+          { etiqueta: t('agentes_contenido.apagados'), valor: apagados, estado: apagados === null ? 'error' : 'ok', tono: apagados ? 'bad' : undefined, nota: t('agentes_contenido.con_el_kill_switch') },
+          { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: costo30 === null ? null : usd(costo30), estado: costo30 === null ? 'error' : 'ok', nota: t('agentes_contenido.suma_de_los_agentes') },
+      ])}
+    >
+
+      <Tarjeta
+        titulo={t('agentes_contenido.catalogo_de_agentes')}
+        estado={agentes.length === 0 ? 'vacio' : 'ok'}
+        mensaje={t('agentes_contenido.el_catalogo_esta_vacio')}
+        detalle={t('agentes_contenido.da_de_alta_un')}
+      >
+        <TablaLista
+          etiqueta={t('agentes_contenido.agentes_del_catalogo')}
+          columnas={columnas}
+          filas={filasVista}
+          idFila={(f) => f.a.id}
+          base="/admin/agentes"
+          params={paramsUrl}
+          paginacion={{ tamano: 25 }}
+          vacio={nFiltros > 0
+            ? { titulo: t('agentes_contenido.bf_ninguno'), texto: t('agentes_contenido.bf_quita') }
+            : { titulo: t('agentes_contenido.sin_agentes') }}
+        />
+      </Tarjeta>
 
       <Disclosure titulo={t('agentes_contenido.como_se_lee_el')} resumen="Qué significa cada rótulo">
         <ul>
@@ -263,6 +310,6 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
         </ul>
         <p className="rv-agente-sub">{t('agentes_contenido.la_autonomia_es_el')}</p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

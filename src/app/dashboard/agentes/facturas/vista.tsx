@@ -1,5 +1,7 @@
 import { CheckCircle2 } from 'lucide-react';
+import '../agentes.css';
 import './facturas.css';
+import '../proveedores/proveedores.css';
 import type { TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { enrutar, type Ruta } from '@/lib/likida/facturacion/enrutar';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
@@ -8,8 +10,9 @@ import { ColaJefe, type FilaJefe, type AccionMarcarFacturada } from './cola-jefe
 import { SeccionPortales, type FilaPortal } from './portales-vinculo';
 import type { AccionRelogin } from './relogin-controles';
 import { SeccionControlEmision, type DatosControl } from './control-emision';
-import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { AvisoCompacto, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { BarList, type PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { AvisoCompacto, BarraPeriodo, FilaTarjetas, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, type TrAgentes, selloHoyTr } from '../i18n-agentes';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
@@ -115,22 +118,34 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   // rindió A PROPÓSITO (captcha, emisión sin confirmar) y dejó el porqué.
   const bloqueados = teToca.filter((x) => (x.r as Extract<Ruta, { via: 'mensaje' }>).motivo === 'bloqueado');
 
+  const cifras: PropsCifra[] = ([
+    { info: 'facturas.por_facturar', etiqueta: tx('facturas.vista.por_facturar'), valor: numero(ordenados.length), nota: tx('facturas.vista.tickets_sin_cfdi_hoy'),
+      // Barra de 6 px (Rovaq pc-kpis): vencidos, urgentes y el resto de la cola; conjuntos disjuntos, suman el total.
+      segmentos: ordenados.length > 0 ? [
+        { etiqueta: tx('facturas.vista.vencidos'), valor: vencidos.length },
+        { etiqueta: tx('facturas.vista.urgentes_2_dias'), valor: urgentes.length },
+        { etiqueta: tx('facturas.vista.por_facturar'), valor: ordenados.length - vencidos.length - urgentes.length },
+      ] : undefined },
+    { info: 'facturas.monto_sin_factura', etiqueta: tx('facturas.vista.monto_sin_factura'), valor: mxn(montoSinFactura, tr.idioma) },
+    { info: 'facturas.urgentes', etiqueta: tx('facturas.vista.urgentes_2_dias'), valor: numero(urgentes.length), tono: urgentes.length > 0 ? 'warn' : undefined },
+    { info: 'facturas.vencidos', etiqueta: tx('facturas.vista.vencidos'), valor: numero(vencidos.length), tono: vencidos.length > 0 ? 'bad' : undefined },
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
+
   return (
-    <MarcoPagina titulo={tx('facturas.vista.facturas_en_automatico')} apoyo={tx('facturas.vista.tickets_sin_cfdi_lo_que')}>
-
-      <TiraCifras sello={selloHoyTr(tr, tx('facturas.vista.sello_tickets_sin_cfdi'))}>
-        <Cifra info="facturas.por_facturar" etiqueta={tx('facturas.vista.por_facturar')} valor={numero(ordenados.length)} nota={tx('facturas.vista.tickets_sin_cfdi_hoy')} />
-        <Cifra info="facturas.monto_sin_factura" etiqueta={tx('facturas.vista.monto_sin_factura')} valor={mxn(montoSinFactura, tr.idioma)} />
-        <Cifra info="facturas.urgentes" etiqueta={tx('facturas.vista.urgentes_2_dias')} valor={numero(urgentes.length)} tono={urgentes.length > 0 ? 'warn' : undefined} />
-        <Cifra info="facturas.vencidos" etiqueta={tx('facturas.vista.vencidos')} valor={numero(vencidos.length)} tono={vencidos.length > 0 ? 'bad' : undefined} />
-      </TiraCifras>
-
-      {/* En ensayo no se promete emisión: el aviso va arriba, a la vista, no escondido en un párrafo. */}
-      {!extra.emite && (
-        <AvisoCompacto tono="warn" resumen={tx('facturas.vista.la_emision_automatica_hoy_esta')}
+    <EsqueletoTablaMaestra
+      titulo={tx('facturas.vista.facturas_en_automatico')}
+      apoyo={tx('facturas.vista.tickets_sin_cfdi_lo_que')}
+      filtros={<BarraPeriodo etiqueta={tx('facturas.vista.sello_tickets_sin_cfdi')} chips={[{ id: 'alcance', etiqueta: tx('facturas.vista.tickets_sin_cfdi_hoy') }]} />}
+      cifras={cifras}
+      etiquetaCifras={tx('facturas.vista.sello_tickets_sin_cfdi')}
+      selloCifras={selloHoyTr(tr, tx('facturas.vista.sello_tickets_sin_cfdi'))}
+      // En ensayo no se promete emisión: el aviso va arriba, a la vista, no escondido en un párrafo.
+      avisos={!extra.emite ? (
+        <AvisoCompacto tono="warn" className="rv-fact__aviso" resumen={tx('facturas.vista.la_emision_automatica_hoy_esta')}
           mas={tx('facturas.vista.si_tu_empresa_aun_no')} />
-      )}
-
+      ) : undefined}
+    >
+      <div className="rv-ag-pila rv-ag-compacto">
       <FilaTarjetas variante="8-4">
         {/* ── TU COLA: lo único de esta página que espera una acción tuya ── */}
         <Tarjeta titulo={tx('facturas.vista.te_toca_a_ti')} info="facturas.te_toca"
@@ -138,7 +153,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
           mensaje={tx('facturas.vista.hoy_no_te_toca_capturar')}
           detalle={tx('facturas.vista.lo_demas_lo_trae_la')}>
           <p className="rv-fact__nota">
-            {rico(tx('facturas.vista.portales_que_piden_tu_cuenta'), { monto: monto(teToca) > 0 && <> · <span className="cifra-mono">{mxn(monto(teToca), tr.idioma)}</span></> })}
+            {rico(tx('facturas.vista.portales_que_piden_tu_cuenta'), { monto: monto(teToca) > 0 && <> · <span className="rv-cifra">{mxn(monto(teToca), tr.idioma)}</span></> })}
           </p>
           <ColaJefe
             filas={teToca.slice(0, MAX_TE_TOCA).map(({ t, r }): FilaJefe => {
@@ -169,7 +184,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
           mensaje={tx('facturas.vista.no_se_pudo_leer_el')}>
           {extra.conCfdi !== null && (
             <p className="rv-fact__nota">
-              {rico(tx('facturas.vista.tickets_con_factura_ya_amarrada'), { span: <span className="cifra-mono rv-fact__grande">{numero(extra.conCfdi)}</span> })}
+              {rico(tx('facturas.vista.tickets_con_factura_ya_amarrada'), { span: <span className="rv-cifra rv-fact__grande">{numero(extra.conCfdi)}</span> })}
             </p>
           )}
           {bloqueados.slice(0, MAX_MINI).map(({ t, r }) => (
@@ -199,12 +214,12 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
               ? tx('facturas.vista.sin_cuenta_y_con_todo')
               : tx('facturas.vista.hoy_en_ensayo_puedes_capturarlos')}
           </p>
-          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(maquina.length)} · {mxn(monto(maquina), tr.idioma)}</span></p>
+          <p className="rv-fact__nota"><span className="rv-cifra rv-fact__grande">{numero(maquina.length)} · {mxn(monto(maquina), tr.idioma)}</span></p>
           <ul className="rv-fact__lista">
             {maquina.slice(0, MAX_MINI).map(({ t }) => (
               <li key={t.gastoId}>
                 <span>{t.comercio?.nombre} · {etiquetaConcepto(t.concepto)}</span>
-                <span className="cifra-mono">{mxn(t.monto, tr.idioma)}</span>
+                <span className="rv-cifra">{mxn(t.monto, tr.idioma)}</span>
               </li>
             ))}
           </ul>
@@ -217,10 +232,10 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
         <Tarjeta titulo={tx('facturas.vista.incompletos')} info="facturas.incompletos"
           estado={incompletos.length === 0 ? 'vacio' : 'ok'} mensaje={tx('facturas.vista.ninguno_incompleto')} detalle={tx('facturas.vista.todo_ticket_sin_factura_tiene')}>
           <p className="rv-fact__nota">{tx('facturas.vista.ni_tu_ni_la_maquina')}</p>
-          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(incompletos.length)} · {mxn(monto(incompletos), tr.idioma)}</span></p>
+          <p className="rv-fact__nota"><span className="rv-cifra rv-fact__grande">{numero(incompletos.length)} · {mxn(monto(incompletos), tr.idioma)}</span></p>
           <ul className="rv-fact__lista">
             {faltasTop.map(([f, n]) => (
-              <li key={f}><span>{f}</span><span className="cifra-mono">{numero(n)}</span></li>
+              <li key={f}><span>{f}</span><span className="rv-cifra">{numero(n)}</span></li>
             ))}
           </ul>
         </Tarjeta>
@@ -235,6 +250,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
       </FilaTarjetas>
 
       {notificaciones}
-    </MarcoPagina>
+      </div>
+    </EsqueletoTablaMaestra>
   );
 }

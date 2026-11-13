@@ -1,9 +1,10 @@
-import { ChevronLeft, Download, MessageCircle } from 'lucide-react';
+import { Download, MessageCircle } from 'lucide-react';
 import {
-  Aviso, BotonEnlace, CamposSistema, Casilla, EstadoVacio, FilaTarjetas, FormaConAviso, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  Aviso, BotonEnlace, CamposSistema, Casilla, EstadoVacio, FormaConAviso, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import type { LiquidacionDetalle } from '@/lib/likida/analytics';
 import type { ResumenLaboral } from '@/lib/likida/laboral/pagadero';
 import { filasDeducibilidad } from '@/lib/likida/liquidacion/deducibilidad';
@@ -12,13 +13,14 @@ import { mxn, litros, fechaMx, fechaCorta } from '@/lib/formato';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import type { BuscarCatalogo } from '../combo-catalogo';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { PanelRevision, type GastoAjustable } from './revision-panel';
 import { FormaReasignar } from './reasignar-forma';
+import { ReabrirForma } from './reabrir-forma';
 import type { RevisionDetalle } from '@/lib/likida/revision';
 import {
   Diferencia, LineaDeTiempo, PillRenglon, estadoRenglon, etiquetaFormaPago, plural, TIPOS_TOPE, type Hito,
 } from './vista';
+import '../caja-vacia.css';
 import './liquidacion.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -38,6 +40,8 @@ export interface PropsDetalle {
   d: LiquidacionDetalle;
   /** `?tenant=`/`?vista=`/`?rol=` para los links de vuelta (sufijo.ts). */
   sufijo: string;
+  /** A dónde vuelve «Volver»: `viajes` solo si el rol ve el área de operación; el contador no la tiene y esa ruta lo redirigía al Resumen. */
+  volverA?: 'viajes' | 'contador';
   /** Estatus de la liquidación ya resuelto por `dashboard/estatus.ts`. */
   estatus: { label: string; estado: TonoEstado };
   /** La etiqueta del renglón (la del motor, igual que el PDF) — vive en la
@@ -88,7 +92,7 @@ export interface PropsDetalle {
 
 type Gasto = LiquidacionDetalle['gastos'][number];
 
-export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revisionIlegible, reintentarPdf, wa, reasignar, reabrir, revision, tr = trEs }: PropsDetalle) {
+export function DetalleLiquidacion({ d, sufijo, volverA, estatus, etiqueta, pdfHref, revisionIlegible, reintentarPdf, wa, reasignar, reabrir, revision, tr = trEs }: PropsDetalle) {
   // LA FOTO DEL TICKET SE GUARDA (CFF art. 30, conservación 5 años) PERO NO SE
   // ENSEÑA AQUÍ. El aviso de privacidad (privacidad.ts:498) le promete al
   // operador que un dato sensible que aparezca por accidente en su ticket "no
@@ -191,36 +195,159 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
     { id: 'estado', titulo: tr('liquidacion.detalle.colEstado'), celda: (g) => <PillRenglon tr={tr} e={estadoRenglon(g, g.id ? (tiposPorGasto.get(g.id) ?? []) : [])} /> },
   ];
 
+  // Las cifras de la tira: valor en texto ya formateado (`mxn`), «—» cuando no se puede cruzar. Nada se rellena con un cero que nadie midió.
+  const cifras: PropsCifra[] = ([
+    { etiqueta: tr('liquidacion.detalle.anticipo'), valor: mxn(d.totalAnticipo), nota: tr('liquidacion.detalle.anticipoNota'), info: 'liquidacion_detalle.anticipo' },
+    {
+      etiqueta: tr('liquidacion.detalle.comprobado'), valor: mxn(d.totalComprobado), info: 'liquidacion_detalle.comprobado',
+      nota: d.comprobantesCuadran ? plural(tr, 'liquidacion.detalle.comprobadoValidos', d.gastos.length) : tr('liquidacion.detalle.comprobadoPersistido'),
+    },
+    {
+      etiqueta: tr('liquidacion.detalle.diferencia'),
+      valor: d.diferencia === 0 ? tr('liquidacion.detalle.cuadraExacto') : mxn(Math.abs(d.diferencia)),
+      tono: d.diferencia === 0 ? 'ok' : d.diferencia > 0 ? 'warn' : 'bad',
+      nota: d.diferencia === 0 ? tr('liquidacion.detalle.cuadraNota') : d.diferencia > 0 ? tr('liquidacion.detalle.sobranteNota') : tr('liquidacion.detalle.faltanteNota'),
+      info: 'liquidacion_detalle.diferencia',
+    },
+    {
+      etiqueta: tr('liquidacion.detalle.sinCfdi'),
+      valor: difsSinCfdi.length === 0 ? mxn(0) : sinCfdiCruzable ? mxn(montoSinCfdi) : '—',
+      tono: difsSinCfdi.length > 0 ? 'warn' : undefined,
+      info: 'liquidacion_detalle.sin_cfdi',
+      nota: difsSinCfdi.length === 0 ? tr('liquidacion.detalle.sinCfdiTodoTrae') : sinCfdiCruzable ? plural(tr, 'liquidacion.detalle.sinCfdiNota', idsSinCfdi.size) : plural(tr, 'liquidacion.detalle.sinCfdiNoCruzable', difsSinCfdi.length),
+    },
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 })); // filete en TODAS las celdas (Rovaq: tira de 4 con filete)
+
   return (
-    <MarcoPagina
+    <EsqueletoFicha
       area={tr('liquidacion.detalle.area')}
       titulo={tr('liquidacion.detalle.titulo', { folio: d.folio })}
       apoyo={tr('liquidacion.detalle.apoyo')}
+      volver={volverA === 'contador'
+        ? { href: `/dashboard/contador${sufijo}`, etiqueta: tr('liquidacion.detalle.volverContador') }
+        : { href: `/dashboard/viajes${sufijo}`, etiqueta: tr('liquidacion.detalle.volverViajes') }}
       acciones={(
         <>
-          <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/viajes${sufijo}`} icono={<Icono icono={ChevronLeft} />}>{tr('liquidacion.detalle.volverViajes')}</BotonEnlace>
           {wa && (
-            <BotonEnlace tamano="sm" variante="secondary" href={wa} target="_blank" rel="noopener noreferrer" icono={<Icono icono={MessageCircle} />}>
+            <BotonEnlace variante="secondary" href={wa} target="_blank" rel="noopener noreferrer" icono={<Icono icono={MessageCircle} />}>
               {tr('liquidacion.detalle.verWhatsapp')}
             </BotonEnlace>
           )}
           {/* El PDF existía, estaba autenticado y no había forma de llegar a
               él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5). */}
           {pdfHref && (
-            <BotonEnlace tamano="sm" variante="primary" href={pdfHref} icono={<Icono icono={Download} />}>
+            <BotonEnlace variante="primary" href={pdfHref} icono={<Icono icono={Download} />}>
               {tr('liquidacion.detalle.descargarPdf')}
             </BotonEnlace>
           )}
         </>
       )}
-    >
-      {/* No se pudo leer el estado de revisión (BE-A1/FE-M2): esta pantalla
-          NO puede afirmar que la liquidación está vigente, porque podría
-          estar rechazada y no lo sabemos. Va PRIMERO — antes que cualquier
-          otro aviso — porque pone en duda todo lo que sigue. */}
-      {revisionIlegible && (
-        <Aviso tono="error" titulo={tr('liquidacion.detalle.revisionIlegibleTitulo')}>{tr('liquidacion.detalle.revisionIlegibleCuerpo')}</Aviso>
+      etiquetaResumen={tr('liquidacion.detalle.fichaTitulo')}
+      chips={(
+        <>
+          <li><StatusChip tono={estatus.estado}>{estatus.label}</StatusChip></li>
+          {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
+          <li className="rv-liq__nota">{tr('liquidacion.detalle.cerradaEl', { fecha: fechaMx(d.creadoEn) })}</li>
+          {/* «Sobre tope» sale de la tira (Rovaq: tira de 4) y se dice aquí, con el excedente real y cuántos comprobantes lo causan. */}
+          {difsTope.length > 0 && (
+            <li><StatusChip tono="warn">{tr('liquidacion.detalle.sobreTope')}: {mxn(excedenteTope)} · {plural(tr, 'liquidacion.detalle.sobreTopeNota', difsTope.length)}</StatusChip></li>
+          )}
+        </>
       )}
+      avisos={(
+        <>
+          {/* No se pudo leer el estado de revisión (BE-A1/FE-M2): esta pantalla NO puede afirmar que la liquidación está vigente, porque
+              podría estar rechazada y no lo sabemos. Va PRIMERO — antes que cualquier otro aviso — porque pone en duda todo lo que sigue. */}
+          {revisionIlegible && (
+            <Aviso tono="error" titulo={tr('liquidacion.detalle.revisionIlegibleTitulo')}>{tr('liquidacion.detalle.revisionIlegibleCuerpo')}</Aviso>
+          )}
+        </>
+      )}
+      cifras={cifras}
+      etiquetaCifras={tr('liquidacion.detalle.titulo', { folio: d.folio })}
+      variante="6-6"
+      bloques={[
+        <Tarjeta key="ficha" className="rv-liq__ficha" titulo={tr('liquidacion.detalle.fichaTitulo')}>
+          <CamposSistema className="rv-liq__datos"
+            etiqueta={tr('liquidacion.detalle.fichaTitulo')}
+            campos={[
+              { etiqueta: tr('liquidacion.detalle.inicio'), valor: d.viaje.fechaInicio ? fechaMx(d.viaje.fechaInicio) : '—' },
+              { etiqueta: tr('liquidacion.detalle.ruta'), valor: ruta ?? <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinRuta')}</span> },
+              { etiqueta: tr('liquidacion.detalle.operador'), valor: d.operadorNombre },
+              {
+                etiqueta: tr('liquidacion.detalle.unidad'),
+                valor: d.viaje.unidadEco
+                  ? <>{d.viaje.unidadEco}{d.viaje.unidadPlacas && <span className="rv-liq__sub-celda"> · {d.viaje.unidadPlacas}</span>}</>
+                  : <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinUnidad')}</span>,
+              },
+              { etiqueta: tr('liquidacion.detalle.cliente'), valor: d.viaje.clienteNombre ?? <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinCliente')}</span> },
+              { etiqueta: tr('liquidacion.detalle.comprobantes'), valor: d.comprobantesEntre.n > 0 ? comprobantes(d.comprobantesEntre.n) : '—' },
+            ]}
+          />
+          {/* ── Chofer asignado / reasignar ──
+              Solo dueño/encargado (permisos.ts: puedeAsignar) — un contador o un superadmin de paso por el tenant demo no mueve viajes de chofer. */}
+          {reasignar && (
+            <div className="rv-liq__reasignar">
+              <FormaReasignar accion={reasignar.accion} buscar={reasignar.buscar}
+                actual={reasignar.actual} actualNombre={reasignar.actualNombre} total={reasignar.total} />
+            </div>
+          )}
+        </Tarjeta>,
+        /* ── Línea de tiempo ──
+            Dos columnas PAREJAS (Rovaq, ficha de problema): ficha y línea de tiempo, de alto parecido, lado a lado y estiradas a la misma altura.
+            El bloque fiscal (largo, variable) va a todo el ancho debajo: nunca queda una columna con un hueco de cientos de px. */
+          <Tarjeta key="linea" titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo">
+            <LineaDeTiempo hitos={hitos} tr={tr} />
+            <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
+        </Tarjeta>,
+      ]}
+    >
+      {/* ── Acreditable / recuperable ──
+          Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF × litros y esa cuota no la tenemos. `ieps` solo puede venir de
+          filas viejas escritas antes del cambio; se conserva para no ocultarlas. */}
+      <Tarjeta className="rv-liq__acred" titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
+        <div className="rv-liq__acred-datos">
+          {/* Sin nada acreditable no se pintan cuatro filas de «—»: la nota de abajo ya lo dice (Rovaq: lo vacío es una línea, no una tabla). */}
+          {hayAcred && <CamposSistema className="rv-liq__datos"
+          etiqueta={tr('liquidacion.detalle.acreditableTabla')}
+          campos={[
+            { etiqueta: tr('liquidacion.detalle.dieselElegible'), valor: d.litrosDiesel > 0 ? litros(d.litrosDiesel) : '—' },
+            { etiqueta: tr('liquidacion.detalle.iepsDiesel'), valor: d.ieps > 0 ? mxn(d.ieps) : '—' },
+            { etiqueta: tr('liquidacion.detalle.ivaAcreditable'), valor: d.iva > 0 ? mxn(d.iva) : '—' },
+            { etiqueta: tr('liquidacion.detalle.peaje50'), valor: d.peaje > 0 ? mxn(d.peaje) : '—' },
+          ]}
+        />}
+        {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático — el motor no verifica ninguna de las condiciones de la ficha
+            (ingresos < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
+        <p className="rv-liq__tenue">{hayAcred ? tr('liquidacion.detalle.acreditableNota') : tr('liquidacion.detalle.acreditableNada')}</p>
+          </div>
+
+        {/* ── De lo comprobado, cuánto sobrevive al SAT ──
+            Este reparto es la razón por la que el contralor compra, y hasta hoy solo existía en el PDF (auditoría 5, frontend, ALTO 2). */}
+        {deducibilidad && (
+          <div className="rv-liq__sub">
+            <p className="rv-liq__sub-titulo">{tr('liquidacion.detalle.deducibleTitulo')}</p>
+            <ul className="rv-liq__lista">
+              {deducibilidad.map((f) => (
+                <li key={f.label} className="rv-liq__fila" data-tono={f.tono === 'malo' ? 'bad' : undefined}>
+                  <span className="rv-liq__fila-etq">
+                    {f.label}
+                    {f.pie && <span className="rv-liq__fila-pie">{f.pie}</span>}
+                  </span>
+                  <span className="rv-liq__cifra">{mxn(f.monto)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="rv-liq__tenue">{tr('liquidacion.detalle.deducibleNota')}</p>
+          </div>
+        )}
+
+        {/* ── DEDUCIBLE ≠ PAGADERO (tableros al día, 28-ago-2026) ──
+            El mismo resumen que el PDF imprime desde el 1-ago, con las MISMAS funciones. La decisión se toma aquí; la advertencia (LFT
+            110/111/263: «no deducible» NO autoriza descontárselo al operador) va aquí. */}
+        {d.laboral && <SeccionLaboral laboral={d.laboral} tr={tr} />}
+      </Tarjeta>
+
       {reintentarPdf && (
         <Tarjeta titulo={tr('liquidacion.detalle.pdfPendienteTitulo')}>
           <p className="rv-liq__nota">{tr('liquidacion.detalle.pdfPendienteTexto')}</p>
@@ -229,128 +356,6 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           </FormaConAviso>
         </Tarjeta>
       )}
-
-      {/* ── Ficha: folio, estatus y los datos del viaje ── */}
-      <Tarjeta titulo={tr('liquidacion.detalle.fichaTitulo')}>
-        <div className="rv-liq__ficha-cab">
-          <StatusChip tono={estatus.estado}>{estatus.label}</StatusChip>
-          {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una
-              liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
-          <p className="rv-liq__nota">{tr('liquidacion.detalle.cerradaEl', { fecha: fechaMx(d.creadoEn) })}</p>
-        </div>
-        <CamposSistema
-          etiqueta={tr('liquidacion.detalle.fichaTitulo')}
-          campos={[
-            { etiqueta: tr('liquidacion.detalle.inicio'), valor: d.viaje.fechaInicio ? fechaMx(d.viaje.fechaInicio) : '—' },
-            { etiqueta: tr('liquidacion.detalle.ruta'), valor: ruta ?? <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinRuta')}</span> },
-            { etiqueta: tr('liquidacion.detalle.operador'), valor: d.operadorNombre },
-            {
-              etiqueta: tr('liquidacion.detalle.unidad'),
-              valor: d.viaje.unidadEco
-                ? <>{d.viaje.unidadEco}{d.viaje.unidadPlacas && <span className="rv-liq__sub-celda"> · {d.viaje.unidadPlacas}</span>}</>
-                : <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinUnidad')}</span>,
-            },
-            { etiqueta: tr('liquidacion.detalle.cliente'), valor: d.viaje.clienteNombre ?? <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinCliente')}</span> },
-            { etiqueta: tr('liquidacion.detalle.comprobantes'), valor: d.comprobantesEntre.n > 0 ? comprobantes(d.comprobantesEntre.n) : '—' },
-          ]}
-        />
-        {/* ── Chofer asignado / reasignar ──
-            Solo dueño/encargado (permisos.ts: puedeAsignar) — un contador o un
-            superadmin de paso por el tenant demo no mueve viajes de chofer. */}
-        {reasignar && (
-          <div className="rv-liq__reasignar">
-            <FormaReasignar accion={reasignar.accion} buscar={reasignar.buscar}
-              actual={reasignar.actual} actualNombre={reasignar.actualNombre} total={reasignar.total} />
-          </div>
-        )}
-      </Tarjeta>
-
-      {/* ── KPIs ── */}
-      <TiraCifras etiqueta={tr('liquidacion.detalle.titulo', { folio: d.folio })} sello={selloHoy(tr('liquidacion.detalle.selloFuente'))}>
-        <Cifra etiqueta={tr('liquidacion.detalle.anticipo')} valor={mxn(d.totalAnticipo)} nota={tr('liquidacion.detalle.anticipoNota')} info="liquidacion_detalle.anticipo" />
-        <Cifra etiqueta={tr('liquidacion.detalle.comprobado')} valor={mxn(d.totalComprobado)}
-          nota={d.comprobantesCuadran ? plural(tr, 'liquidacion.detalle.comprobadoValidos', d.gastos.length) : tr('liquidacion.detalle.comprobadoPersistido')} info="liquidacion_detalle.comprobado" />
-        <Cifra
-          etiqueta={tr('liquidacion.detalle.diferencia')}
-          valor={d.diferencia === 0 ? tr('liquidacion.detalle.cuadraExacto') : mxn(Math.abs(d.diferencia))}
-          tono={d.diferencia === 0 ? 'ok' : d.diferencia > 0 ? 'warn' : 'bad'}
-          nota={d.diferencia === 0 ? tr('liquidacion.detalle.cuadraNota') : d.diferencia > 0 ? tr('liquidacion.detalle.sobranteNota') : tr('liquidacion.detalle.faltanteNota')}
-          info="liquidacion_detalle.diferencia"
-        />
-        <Cifra
-          etiqueta={tr('liquidacion.detalle.sinCfdi')}
-          valor={difsSinCfdi.length === 0 ? mxn(0) : sinCfdiCruzable ? mxn(montoSinCfdi) : '—'}
-          tono={difsSinCfdi.length > 0 ? 'warn' : undefined}
-          info="liquidacion_detalle.sin_cfdi"
-          nota={difsSinCfdi.length === 0 ? tr('liquidacion.detalle.sinCfdiTodoTrae') : sinCfdiCruzable ? plural(tr, 'liquidacion.detalle.sinCfdiNota', idsSinCfdi.size) : plural(tr, 'liquidacion.detalle.sinCfdiNoCruzable', difsSinCfdi.length)}
-        />
-        <Cifra
-          etiqueta={tr('liquidacion.detalle.sobreTope')}
-          valor={mxn(excedenteTope)}
-          tono={difsTope.length > 0 ? 'warn' : undefined}
-          info="liquidacion_detalle.sobre_tope"
-          nota={difsTope.length === 0 ? tr('liquidacion.detalle.sobreTopeNada') : plural(tr, 'liquidacion.detalle.sobreTopeNota', difsTope.length)}
-        />
-      </TiraCifras>
-
-      <FilaTarjetas variante="8-4">
-        {/* ── Acreditable / recuperable ──
-            Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF
-            × litros y esa cuota no la tenemos. `ieps` solo puede venir de filas
-            viejas escritas antes del cambio; se conserva para no ocultarlas. */}
-        <Tarjeta titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
-          <CamposSistema
-            etiqueta={tr('liquidacion.detalle.acreditableTabla')}
-            campos={[
-              { etiqueta: tr('liquidacion.detalle.dieselElegible'), valor: d.litrosDiesel > 0 ? litros(d.litrosDiesel) : '—' },
-              { etiqueta: tr('liquidacion.detalle.iepsDiesel'), valor: d.ieps > 0 ? mxn(d.ieps) : '—' },
-              { etiqueta: tr('liquidacion.detalle.ivaAcreditable'), valor: d.iva > 0 ? mxn(d.iva) : '—' },
-              { etiqueta: tr('liquidacion.detalle.peaje50'), valor: d.peaje > 0 ? mxn(d.peaje) : '—' },
-            ]}
-          />
-          {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático —
-              el motor no verifica ninguna de las condiciones de la ficha (ingresos
-              < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
-          <p className="rv-liq__tenue">{hayAcred ? tr('liquidacion.detalle.acreditableNota') : tr('liquidacion.detalle.acreditableNada')}</p>
-
-          {/* ── De lo comprobado, cuánto sobrevive al SAT ──
-              Este reparto es la razón por la que el contralor compra, y hasta hoy
-              solo existía en el PDF (auditoría 5, frontend, ALTO 2). */}
-          {deducibilidad && (
-            <div className="rv-liq__sub">
-              <p className="rv-liq__sub-titulo">{tr('liquidacion.detalle.deducibleTitulo')}</p>
-              <ul className="rv-liq__lista">
-                {deducibilidad.map((f) => (
-                  <li key={f.label} className="rv-liq__fila" data-tono={f.tono === 'malo' ? 'bad' : undefined}>
-                    <span className="rv-liq__fila-etq">
-                      {f.label}
-                      {f.pie && <span className="rv-liq__fila-pie">{f.pie}</span>}
-                    </span>
-                    <span className="rv-liq__cifra">{mxn(f.monto)}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="rv-liq__tenue">{tr('liquidacion.detalle.deducibleNota')}</p>
-            </div>
-          )}
-
-          {/* ── DEDUCIBLE ≠ PAGADERO (tableros al día, 28-ago-2026) ──
-              El mismo resumen que el PDF imprime desde el 1-ago, con las
-              MISMAS funciones (analytics lo calcula junto a las cubetas).
-              Hasta hoy el contralor decidía el neto EN ESTA PANTALLA
-              viendo solo la deducibilidad — y la advertencia de que «no
-              deducible» NO autoriza descontárselo al operador (LFT
-              110/111/263) solo aparecía en el PDF ya generado. La
-              decisión se toma aquí; la advertencia va aquí. */}
-          {d.laboral && <SeccionLaboral laboral={d.laboral} tr={tr} />}
-        </Tarjeta>
-
-        {/* ── Línea de tiempo ── */}
-        <Tarjeta titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo" contenida>
-          <LineaDeTiempo hitos={hitos} tr={tr} />
-          <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
-        </Tarjeta>
-      </FilaTarjetas>
 
       {/* ── Diferencias en lenguaje humano ── */}
       {d.diferencias.length > 0 && (
@@ -375,7 +380,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           // guardado y cero filas en `gasto`. Una tabla con encabezados y nada
           // debajo se lee como "se perdieron los comprobantes"; esto dice qué
           // pasó y a dónde ir.
-          <EstadoVacio titulo={tr('liquidacion.detalle.sinRenglonesTitulo')}>{tr('liquidacion.detalle.sinRenglones', { total: mxn(d.totalComprobado) })}</EstadoVacio>
+          <div className="rv-caja-vacia"><EstadoVacio titulo={tr('liquidacion.detalle.sinRenglonesTitulo')}>{tr('liquidacion.detalle.sinRenglones', { total: mxn(d.totalComprobado) })}</EstadoVacio></div>
         ) : (
           <>
             <TablaBase
@@ -411,14 +416,28 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           <p className="rv-liq__nota">
             {rico(tr('liquidacion.detalle.reabrirTexto'), { strong: (c) => <strong>{c}</strong> })}
           </p>
-          <FormaConAviso accion={reabrir} boton={tr('liquidacion.detalle.reabrirBoton')} columnas="md:grid-cols-1">
+          <ReabrirForma accion={reabrir} boton={tr('liquidacion.detalle.reabrirBoton')}>
             <Casilla name="confirmar" etiqueta={tr('liquidacion.detalle.reabrirEntiendo', { folio: d.folio })} />
-          </FormaConAviso>
+          </ReabrirForma>
         </Tarjeta>
       )}
 
+      {/* Rovaq 06d cierra la ficha con «Qué se sabe / Qué no se sabe»: lo desconocido se dibuja, no se omite. */}
+      <div className="rv-esq__saberes">
+        <section className="rv-esq__saber" aria-labelledby="liq-saber-si">
+          {/* sin-info: encabezado de lista «lo que sí sabemos», no un recuadro con cifra */}
+          <h3 id="liq-saber-si">{tr('liquidacion.detalle.saberSiTitulo')}</h3>
+          <ul>{(['saberSi1', 'saberSi2', 'saberSi3'] as const).map((k) => <li key={k}>{tr(`liquidacion.detalle.${k}`)}</li>)}</ul>
+        </section>
+        <section className="rv-esq__saber" data-no-sabe="" aria-labelledby="liq-saber-no">
+          {/* sin-info: encabezado de lista «lo que no sabemos», no un recuadro con cifra */}
+          <h3 id="liq-saber-no">{tr('liquidacion.detalle.saberNoTitulo')}</h3>
+          <ul>{(['saberNo1', 'saberNo2', 'saberNo3'] as const).map((k) => <li key={k}>{tr(`liquidacion.detalle.${k}`)}</li>)}</ul>
+        </section>
+      </div>
+
       <p className="rv-liq__cierre">{LEYENDA_CORTA}</p>
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }
 

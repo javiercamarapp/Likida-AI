@@ -2,7 +2,8 @@ import { Upload, Trash2 } from 'lucide-react';
 import { numero } from '@/lib/formato';
 // SOLO tipos: el módulo de datos importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ReglaCasetaVista, TagBajaVista, ExcepcionUnidadVista } from '@/lib/likida/peajes/revision_cobros';
-import { Tarjeta, Icono, Boton } from '@/app/ui-v2/componentes';
+import { Tarjeta, Icono, Boton, CampoArchivo } from '@/app/ui-v2/componentes';
+import { ZonaSoltar } from '@/app/dashboard/agentes/zona-soltar';
 import '../peajes.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -57,7 +58,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
             <form key={c.id} action={acciones.guardarReglaCaseta} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12px]">
               <input type="hidden" name="nombre" value={c.nombre} />
               <span className="font-medium min-w-[170px]">{c.nombre}</span>
-              <span className="text-[11px] cifra-mono rv-pj-c-faint">{numero(c.crucesVistos)} cruces{c.lat !== null && c.lng !== null ? ` · ${c.lat}, ${c.lng}` : ''}</span>
+              <span className="text-[11px] rv-ag-num rv-pj-c-faint">{numero(c.crucesVistos)} cruces{c.lat !== null && c.lng !== null ? ` · ${c.lat}, ${c.lng}` : ''}</span>
               <label className="flex items-center gap-1.5 ml-auto">{ricoT(tx('rest.e0_clases_validas_extra_e0'), { e0: (c) => <span className="text-[11px] rv-pj-c-muted">{c}</span> })}<input name="clases" defaultValue={c.clasesPermitidas.join(', ')} placeholder="1" maxLength={60} aria-label={tx('rest.clases_validas_extra_en', { nombre: c.nombre })}
                   className="w-[80px] rv-ctl" />
               </label>
@@ -69,7 +70,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
           {ordenadas.length > MAX_CASETAS_VISIBLES && <p className="text-[11px] rv-pj-c-faint">{tx('rest.se_muestran_de', { maxCasetasVisibles: MAX_CASETAS_VISIBLES, length: ordenadas.length })}</p>}
         </div>
       )}
-      <p className="text-[11px] mb-3 rv-pj-c-faint">{ricoT(tx('rest.clases_validas_extra_son_clases_que'), { e0: (c) => <span className="cifra-mono">{c}</span> })}</p>
+      <p className="text-[11px] mb-3 rv-pj-c-faint">{ricoT(tx('rest.clases_validas_extra_son_clases_que'), { e0: (c) => <span className="rv-ag-num">{c}</span> })}</p>
 
       {excepciones !== undefined && acciones.guardarExcepcionUnidad && acciones.quitarExcepcionUnidad && (
         <div className="mb-4" id="excepciones-unidad">
@@ -84,7 +85,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
             <div className="space-y-1.5 mb-2">
               {excepciones.map((e) => (
                 <div key={e.id} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12px]">
-                  <span className="font-medium cifra-mono">{e.unidad}</span>{ricoT(tx('rest.e0_puede_cruzar_e0', { v: nombrePorNorm.get(e.casetaNorm) ?? e.casetaNorm }), { e0: (c) => <span>{c}</span> })}{e.nota && <span className="rv-pj-c-muted">· {e.nota}</span>}
+                  <span className="font-medium rv-ag-num">{e.unidad}</span>{ricoT(tx('rest.e0_puede_cruzar_e0', { v: nombrePorNorm.get(e.casetaNorm) ?? e.casetaNorm }), { e0: (c) => <span>{c}</span> })}{e.nota && <span className="rv-pj-c-muted">· {e.nota}</span>}
                   <form action={acciones.quitarExcepcionUnidad} className="ml-auto">
                     <input type="hidden" name="excepcion" value={e.id} />
                     <Boton type="submit" aria-label={tx('rest.quitar_la_excepcion_de', { unidad: e.unidad })} variante="secondary" tamano="sm"><Icono icono={Trash2} /></Boton>
@@ -109,10 +110,9 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
       )}
 
       <form action={acciones.cargarCoordenadas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap mb-4">
-        <input type="file" name="archivo" accept=".csv,.tsv" required aria-label={tx('rest.csv_de_coordenadas_de_casetas')}
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
+        <ZonaSoltar><CampoArchivo etiqueta={tx('rest.csv_de_coordenadas_de_casetas')} etiquetaOculta name="archivo" accept=".csv,.tsv" required /></ZonaSoltar>
         <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Upload} />{' '}{tx('rest.cargar_coordenadas')}</Boton>
-        <span className="text-[11px] rv-pj-c-faint">{ricoT(tx('rest.opcional_csv_e0_nombre_lat_lng'), { e0: (c) => <span className="cifra-mono">{c}</span> })}</span>
+        <span className="text-[11px] rv-pj-c-faint">{ricoT(tx('rest.opcional_csv_e0_nombre_lat_lng'), { e0: (c) => <span className="rv-ag-num">{c}</span> })}</span>
       </form>
 
       {/* sin-info: rótulo de un bloque dentro de la tarjeta */}
@@ -125,7 +125,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
         <div className="space-y-1.5 mb-3">
           {bajas.map((b) => (
             <div key={b.id} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12px]">
-              <span className="font-medium cifra-mono">{b.tagOriginal ?? b.tag}</span>{ricoT(tx('rest.e0_de_baja_desde_el_e0', { bajaEn: b.bajaEn }), { e0: (c) => <span>{c}</span> })}{b.motivo && <span className="rv-pj-c-muted">· {b.motivo}</span>}
+              <span className="font-medium rv-ag-num">{b.tagOriginal ?? b.tag}</span>{ricoT(tx('rest.e0_de_baja_desde_el_e0', { bajaEn: b.bajaEn }), { e0: (c) => <span>{c}</span> })}{b.motivo && <span className="rv-pj-c-muted">· {b.motivo}</span>}
               <form action={acciones.quitarBajaTag} className="ml-auto">
                 <input type="hidden" name="baja" value={b.id} />
                 <Boton type="submit" aria-label={tx('rest.quitar_la_baja_de', { v: b.tagOriginal ?? b.tag })} variante="secondary" tamano="sm"><Icono icono={Trash2} /></Boton>

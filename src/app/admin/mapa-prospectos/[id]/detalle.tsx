@@ -8,13 +8,15 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useState } from 'react';
-import { Link2, Mail, MessageCircle, Phone, RefreshCw, Sparkles, Undo2 } from 'lucide-react';
+import { Link2, Mail, MessageCircle, Phone, RefreshCw, Sparkles } from 'lucide-react';
 import type { DetalleProspecto } from '@/lib/admin/prospectos-mapa-client';
 import { COLOR_EMBUDO, esProspectoTerminal } from '@/lib/admin/prospectos-mapa-client';
 import { leerRespuestaMensaje } from '../respuesta_mensaje';
 import { hrefWa, hrefCorreo, mensajeWa, correoProspecto } from '../mensajes';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { Boton, BotonEnlace, Chip, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, clasesBoton } from '../../../ui-v2/componentes';
+import { Boton, Chip, FilaTarjetas, Icono, StatusChip, Tarjeta, clasesBoton } from '../../../ui-v2/componentes';
+import { EsqueletoFicha } from '../../../ui-v2/esqueletos';
+import { observadas } from '../../sello-observado';
 import { BarraPct } from '../cerebro';
 import '../cerebro.css';
 import { useT } from '@/lib/i18n/proveedor';
@@ -81,32 +83,37 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
     .filter(Boolean).join(' · ');
 
   return (
-    <MarcoPagina area={t('mapa_prospectos.ventas')} titulo={p.empresa} apoyo={p.vacante ? t('mapa_prospectos_detalle.vacante_publicada', { vacante: p.vacante }) : resumen}
-      acciones={<BotonEnlace href="/admin/mapa-prospectos" icono={<Icono icono={Undo2} />}>{t('mapa_prospectos_detalle.volver_al_cerebro_de_ventas')}</BotonEnlace>}>
-      <div className="cer-ficha__etapa">
-        <i className="cer-punto" data-etapa={etapa} aria-hidden="true" />
-        <Chip>{nombreEtapaTr(p.estado in COLOR_EMBUDO ? p.estado : 'nuevo', t)}</Chip>
-        {p.vacante && resumen ? <span className="cer-prospecto__tenue">{resumen}</span> : null}
-      </div>
-
-      {/* ── Los cinco porcentajes ──────────────────────────────────────── */}
-      <FilaTarjetas variante="6-6">
-        <Tarjeta titulo={t('mapa_prospectos_detalle.del_mapa_cerebro')}>
-          <BarraPct etiqueta={t('mapa_prospectos_detalle.urgencia')} pct={p.urgencia} serie="urgencia" />
-          <BarraPct etiqueta={t('mapa_prospectos_detalle.cierre')} pct={p.cierre} serie="cierre" />
-          <BarraPct etiqueta={t('mapa_prospectos_detalle.datos')} pct={p.completitud} serie="datos" />
-        </Tarjeta>
-        <Tarjeta titulo={t('mapa_prospectos_detalle.de_investigacion_calculadas')}>
+    <EsqueletoFicha
+      area={t('mapa_prospectos_detalle.eyebrow')} titulo={p.empresa} apoyo={p.vacante ? [t('mapa_prospectos_detalle.vacante_publicada', { vacante: p.vacante }), resumen].filter(Boolean).join(' · ') : resumen}
+      volver={{ href: '/admin/mapa-prospectos', etiqueta: t('mapa_prospectos_detalle.volver_al_cerebro_de_ventas') }}
+            etiquetaCifras={t('mapa_prospectos_detalle.etiqueta_cifras')}
+      cifras={observadas([
+        // Los tres % son estimaciones deterministas (el pie de la lista de prospectos enseña el criterio): se sellan «Estimado», no «Observado».
+        { etiqueta: t('mapa_prospectos_detalle.urgencia'), valor: `${numero(p.urgencia, idioma)} %`, tipo: 'estimado' },
+        { etiqueta: t('mapa_prospectos_detalle.cierre'), valor: `${numero(p.cierre, idioma)} %`, tipo: 'estimado' },
+        { etiqueta: t('mapa_prospectos_detalle.datos'), valor: `${numero(p.completitud, idioma)} %`, tipo: 'estimado' },
+        { etiqueta: t('mapa_prospectos_detalle.ultimo_toque'), valor: p.ultimoToque ? fechaHoraMx(p.ultimoToque, idioma) : null },
+      ], t('a1r4.observado'))}
+      variante="12"
+      bloques={[
+        <Tarjeta key="inv" titulo={t('mapa_prospectos_detalle.de_investigacion_calculadas')}
+          acciones={<Chip><i className="cer-punto" data-etapa={etapa} aria-hidden="true" />{nombreEtapaTr(etapa, t)}</Chip>}>
           <BarraPct etiqueta="ICP" pct={p.similitudIcpPct} serie="icp" />
           <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.similitud_con_el_icp_giro_correcto')}</p>
           <BarraPct etiqueta={t('mapa_prospectos_detalle.necesid')} pct={p.necesidadPct} serie="necesidad" />
           <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.necesidad_vacante_de_liquidacion_cuadre_50')}</p>
-        </Tarjeta>
-      </FilaTarjetas>
-
+        </Tarjeta>,
+      ]}
+    >
+      {/* Decisor(es) y ficha en una fila 6-6 (Rovaq FI: bloques a dos columnas que llenan la fila; antes el decisor quedaba solo en 1/3). */}
+      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
       {/* ── Decisores ──────────────────────────────────────────────────── */}
       <Tarjeta titulo={p.personas.length > 0 ? t(p.personas.length > 1 ? 'mapa_prospectos_detalle.decisores_investigados' : 'mapa_prospectos_detalle.decisor_investigado') : t('mapa_prospectos_detalle.decisor')}
-        estado={p.personas.length === 0 && !p.contacto ? 'vacio' : 'ok'} mensaje={t('mapa_prospectos_detalle.sin_decisor_confirmado')} detalle={t('mapa_prospectos_detalle.ningun_agente_ha_encontrado_un_decisor')}>
+        >
+        {/* Vacío de una línea (Rovaq ac-vacio: caja punteada compacta), no una tarjeta alta de ~300 px junto a «Ficha». */}
+        {p.personas.length === 0 && !p.contacto && (
+          <p className="adm-vacio-linea"><strong>{t('mapa_prospectos_detalle.sin_decisor_confirmado')}</strong> {t('mapa_prospectos_detalle.ningun_agente_ha_encontrado_un_decisor')}</p>
+        )}
         {p.personas.length === 0 && p.contacto && <p className="cer-prospecto__contacto">{p.contacto}</p>}
         {p.personas.length > 0 && (
           <div className="cer-personas">
@@ -150,6 +157,7 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
           <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.estimado_no_medido_unidades_18_viajes', { numero: numero(p.numUnidades ?? 0, idioma) })}</p>
         )}
       </Tarjeta>
+      </FilaTarjetas>
 
       {p.historia && (
         <Tarjeta titulo={t('mapa_prospectos_detalle.historia')}><p className="cer-mensaje__texto">{p.historia}</p></Tarjeta>
@@ -191,6 +199,6 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
         </div>
         <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.nada_se_manda_solo_los_botones')}</p>
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }

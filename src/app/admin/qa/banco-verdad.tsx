@@ -25,12 +25,14 @@
 // Todo el formato de moneda, fecha y número sale de lib/formato.ts.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { usdCorto } from './usd-corto';
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import { useMemo, useState } from 'react';
 import { Camera, ScanLine } from 'lucide-react';
 import { Aviso, Boton, Casilla, Disclosure, Icono, StatusChip, Tarjeta, TablaBase, Tooltip, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import './qa.css';
-import { mxn, numero, porcentaje, usd4, fechaCorta, fechaHoraMx } from '@/lib/formato';
+import { mxn, numero, porcentaje, fechaCorta, fechaHoraMx } from '@/lib/formato';
 import {
   validarLoteOcr, MAX_FOTOS_OCR, CLAVES_VERDAD, NOMBRE_CLAVE_VERDAD,
   type ClaveVerdad, type VerdadTerreno,
@@ -155,7 +157,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
         {/* ── Los números de arriba ──────────────────────────────────────────── */}
         <TiraCifras
           etiqueta={t('qa_banco_verdad.banco_de_comprobantes_reales_verdad_de')}
-          items={[
+          items={uniformes([
             { etiqueta: t('qa_banco_verdad.fotos_en_el_banco'), valor: numero(fotos.length, idioma), nota: t('qa_banco_verdad.listadas_todas_sin_recorte') },
             {
               etiqueta: t('qa_banco_verdad.con_verdad_de_terreno'),
@@ -177,7 +179,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
                 ? t('qa_banco_verdad.no_hay_ni_un_campo_medido')
                 : t('qa_banco_verdad.sobre_campos_con_valor', { n: numero(resumen.medidos, idioma) }),
             },
-          ]}
+          ])}
         />
 
         {lecturasError !== null && (
@@ -186,7 +188,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
 
         {/* ── El botón ───────────────────────────────────────────────────────── */}
         <div className="rv-qa-acciones">
-          <Boton variante="primary" onClick={() => void correrOcr()} disabled={Boolean(motivoBloqueo)} loading={corriendo}
+          <Boton variante="primary" tamano="sm" onClick={() => void correrOcr()} disabled={Boolean(motivoBloqueo)} loading={corriendo}
             icono={corriendo ? undefined : <Icono icono={ScanLine} tam={14} />}>
             {corriendo ? t('qa_banco_verdad.corriendo_el_ocr_real') : tp('qa_banco_verdad.correr_el_ocr_contra', seleccion.size)}
           </Boton>
@@ -324,10 +326,10 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
             ? <span className="rv-qa-warn">{t('qa_banco_verdad.fuera_del_catalogo_comercios_hallazgo_no')}</span>
             : <span className="rv-qa-mono">{verdad.comercioClave}</span>}
         </span>{rico(t('qa_banco_verdad.e0_clase_e0', { claseEs: claseEs(t)[verdad.clase] }), { e0: (c) => <span>{c}</span> })}{confirmadoEn && <span>{t('qa_banco_verdad.etiquetada_el')}{' '}{fechaCorta(confirmadoEn, idioma)}</span>}
-        {lectura && <span>{t('qa_banco_verdad.ultimo_ocr', { fechaHoraMx: fechaHoraMx(lectura.corridaEn, idioma), modelo: lectura.modelo })}{' '}{usd4(lectura.costoUsd)}</span>}
+        {lectura && <span>{t('qa_banco_verdad.ultimo_ocr', { fechaHoraMx: fechaHoraMx(lectura.corridaEn, idioma), modelo: lectura.modelo })}{' '}{usdCorto(lectura.costoUsd)}</span>}
       </div>
 
-      <TablaBase etiqueta={t('qa_banco_verdad.campo_esperado_contra_campo_leido_por')} columnas={columnas} filas={CLAVES_VERDAD} idFila={(c) => c} densa altoMaximo={false} />
+      <TablaBase etiqueta={t('qa_banco_verdad.campo_esperado_contra_campo_leido_por')} columnas={columnas} filas={CLAVES_VERDAD} idFila={(c) => c} densa altoMaximo={false} tarjetaMovil />
 
       {verdad.notas && (
         <p className="rv-qa-nota">{t('qa_banco_verdad.notas_de_quien_etiqueto')}{' '}{verdad.notas}</p>

@@ -3,6 +3,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { puedeAdministrar } from '@/lib/auth/permisos';
+import { crearCliente, validarCliente } from '@/lib/likida/clientes';
 import { leerExportWhatsapp, MAX_MENSAJES_IMPORTACION, salDeFlota, type MensajeHistorial } from './export_whatsapp';
 import { esZip, textoDeZip } from './zip_lector';
 import { AVISO_SOLO_TEXTO, claveNombre, MAX_ARCHIVOS_LOTE, nombreGrupoDeArchivo, textoAdjuntosSinTexto, type EstadoArchivoLote, type ResultadoArchivoLote, type ResultadoLote } from './lote_nombres';
@@ -26,6 +27,8 @@ export type ResultadoGrupos = { ok: true; mensaje: string; sinAtender?: ResumenG
 export interface ContextoGrupos { tenantId: string; rol: string; usuarioId: string | null; email: string | null }
 
 export interface DepsGrupos {
+  /** Alta rápida de cliente (solo el nombre): el mismo `crearCliente` de la pantalla de clientes, que ya asienta la bitácora. */
+  crearCliente: typeof crearCliente;
   crearGrupo: typeof crearGrupo;
   marcarCritico: typeof marcarGrupoCritico;
   grupoDeFlota: typeof grupoDeFlota;
@@ -36,7 +39,7 @@ export interface DepsGrupos {
   sinAtenderDeGrupo?: (tenantId: string, grupoId: string, equipo: readonly string[]) => Promise<ResumenGrupoSinAtender | null>;
 }
 export const depsGruposReales: DepsGrupos = {
-  crearGrupo, marcarCritico: marcarGrupoCritico, grupoDeFlota, guardarImportacion, borrarGrupo, bitacora: anotarBitacora,
+  crearCliente, crearGrupo, marcarCritico: marcarGrupoCritico, grupoDeFlota, guardarImportacion, borrarGrupo, bitacora: anotarBitacora,
   sinAtenderDeGrupo: (t, g, e) => resumenSinAtenderDeGrupo(t, g, e),
 };
 
@@ -50,6 +53,23 @@ const SIN_PERMISO = { ok: false as const, error: 'Solo el dueño de la flota adm
 export const MAX_ARCHIVO_BYTES = 4 * 1024 * 1024;
 
 const texto = (fd: FormData, k: string): string => String(fd.get(k) ?? '').trim();
+
+/**
+ * Alta rápida de cliente desde esta pantalla (A1): solo el nombre, para poder crear grupos y subir chats sin pasar por la pantalla de
+ * clientes. Mismo permiso (`puedeAdministrar`) y misma validación (`validarCliente`) que el alta completa; el tenant sale de la sesión.
+ * Los demás datos (RFC, crédito, contacto) quedan vacíos y se completan después en clientes. La bitácora la asienta `crearCliente`.
+ */
+export async function altaClienteRapidaPanel(ctx: ContextoGrupos, fd: FormData, d: DepsGrupos = depsGruposReales): Promise<ResultadoGrupos> {
+  if (!puedeAdministrar(ctx.rol)) return SIN_PERMISO;
+  try {
+    const valores = validarCliente({ nombre: texto(fd, 'nombre').replace(/\s+/g, ' '), rfc: '', contacto: '', correo: '', telefono: '', diasCredito: '', activo: true });
+    await d.crearCliente(ctx.tenantId, valores, { id: ctx.usuarioId ?? undefined, email: ctx.email ?? undefined });
+    return { ok: true, mensaje: `Cliente «${valores.nombre}» agregado. Ya puedes elegirlo al agregar un grupo.` };
+  } catch (e) {
+    logger.error('vigia.cliente_alta_rapida_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: mensajeParaPantalla(e, 'agregar el cliente') };
+  }
+}
 
 export async function altaGrupoPanel(ctx: ContextoGrupos, fd: FormData, d: DepsGrupos = depsGruposReales): Promise<ResultadoGrupos> {
   if (!puedeAdministrar(ctx.rol)) return SIN_PERMISO;

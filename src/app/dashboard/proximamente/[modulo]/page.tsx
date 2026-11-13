@@ -27,6 +27,7 @@ export default async function PaginaProximamente({
 }) {
   const [{ modulo }, sp] = await Promise.all([params, searchParams]);
   const contenido = CONTENIDO_PROXIMAMENTE[modulo as ModuloPerfil];
+  // Un módulo sin anuncio es una ruta que no existe: 404 de verdad (igual que cualquier otra URL desconocida del panel), no un 200 con un vacío.
   if (!contenido) notFound();
 
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard', sp);

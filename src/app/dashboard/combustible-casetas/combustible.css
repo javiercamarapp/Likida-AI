@@ -10,3 +10,30 @@
 .rv-comb__linea { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--line); }
 .rv-comb__linea:first-child { border-top: 0; }
 .rv-comb__forma { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 4px; }
+
+/* CFDI consolidado: tres datos en lista de definición, sin tira anidada dentro de una tarjeta. */
+.rv-comb__datos { display: grid; gap: 10px; margin: 0; }
+.rv-comb__datos > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.rv-comb__datos > div:first-child { padding-top: 0; border-top-width: 0; }
+.rv-comb__datos dt { font-size: var(--t-body); color: var(--ink); }
+.rv-comb__datos dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rv-comb__datos dd.rv-comb__tenue { grid-column: 1 / -1; text-align: left; font-weight: 400; font-size: var(--t-small); color: var(--muted); }
+
+/* Vacío de Rovaq dentro de una tarjeta (`ac-vacio`): caja punteada de 1 px, radio 8, padding 20/14 (igual que en los demás vacíos de la página). */
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line); border-radius: 8px; padding: 20px 14px; max-height: none; }
+/* «Qué se sabe / Qué no se sabe»: cada caja a su alto, sin estirar la corta a la altura de la larga. */
+[data-ui="v2"] .rv-esq--panel .rv-esq__saberes { align-items: start; }
+
+/* Dona legible en la paleta monocroma: el segundo gajo es gris MEDIO (no casi negro) y a plena opacidad, para separarlo del negro. */
+[data-ui="v2"] .rv-comb__dona .rv-dona__gajo.rv-tono-1 { stroke-opacity: 1; }
+[data-ui="v2"] .rv-comb__dona .rv-tono-1 { --tono: color-mix(in srgb, var(--ink) 38%, var(--surface)); }
+/* «Cargas y casetas»: la tabla llega a sangre dentro de su tarjeta, sin un segundo marco (el filete la separa del encabezado). */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-comb__nota { margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); }
+
+/* «Qué se sabe / Qué no se sabe»: las listas llevan sus marcas (viñetas), no solo sangría. */
+[data-ui="v2"] .rv-esq__saber ul { list-style: disc; }
+[data-ui="v2"] .rv-esq__saber li::marker { color: var(--muted); }
+/* Reparto del gasto (Rovaq «Por canal»): la dona lleva UNA sola lista, la de barras de 6 px de abajo; su leyenda propia repetía los montos. */
+[data-ui="v2"] .rv-comb__dona { display: flex; justify-content: center; }
+[data-ui="v2"] .rv-comb__dona .rv-dona__leyenda { display: none; }

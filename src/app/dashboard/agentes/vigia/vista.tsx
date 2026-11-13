@@ -9,8 +9,9 @@ import { Bloque } from '../../bloque';
 import {
   FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, FormaServicio, AccionesContacto, type AccionVigia,
 } from './controles';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { AvisoCompacto, Chip as ChipV2, Disclosure, EsqCifrasV2, EsqTablaV2, FilaTarjetas, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { TiraCifras } from '@/app/ui-v2/graficas';
+import { VacioAgente } from '../vacio-agente';
+import { AvisoCompacto, Chip as ChipV2, Disclosure, EsqCifrasV2, EsqTablaV2, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 import { TR_ES, type TrAgentes, type TAgentes, selloHoyTr } from '../i18n-agentes';
 import { getT } from '@/lib/i18n/servidor';
 
@@ -131,52 +132,48 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
         <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
       </Bloque>
 
+      {/* Las cuatro tarjetas de atención diaria: si TODAS están vacías se dicen una sola vez en una caja punteada (Rovaq: un solo `ac-vacio`),
+          no cuatro tarjetas altas con el mismo vacío. Si alguna tiene datos, cada una conserva su tarjeta. */}
       <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la')} esqueleto={<EsqTablaV2 />}>
-        <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
+        <BloqueActividad datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
       </Bloque>
 
-      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_las')} esqueleto={<EsqTablaV2 />}>
-        <BloqueExcepciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
-      </Bloque>
+      {/* A quién avisa, correos de respaldo, clientes autorizados y límites: se configuran una vez, así que van plegados y la página no pasa
+          de dos pantallas de lo que se atiende cada día. Todo sigue en la página (no se quita nada, solo se pliega). */}
+      <Disclosure titulo={tx('f26d2.vigia.avisos_y_limites')} resumen={tx('f26d2.vigia.avisos_y_limites_resumen')}>
+        <div className="rv-vg__pila">
+          {/* El formulario de Configuración y SLA (≈900 px) vive aquí, no en una fila 6/6 con la bitácora: se llena una vez y no deja huecos. */}
+          <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_2')} esqueleto={<EsqTablaV2 />}>
+            <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
+          </Bloque>
 
-      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_las_2')} esqueleto={<EsqTablaV2 />}>
-        <BloqueConversaciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
-      </Bloque>
+          <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_4')} esqueleto={<EsqTablaV2 />}>
+            <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+          </Bloque>
 
-      <FilaTarjetas variante="6-6">
-        <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_2')} esqueleto={<EsqTablaV2 />}>
-          <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
-        </Bloque>
-        <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_3')} esqueleto={<EsqTablaV2 />}>
-          <BloqueBitacora datos={datos} />
-        </Bloque>
-      </FilaTarjetas>
+          <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_5')} esqueleto={<EsqTablaV2 />}>
+            <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+          </Bloque>
 
-      <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_4')} esqueleto={<EsqTablaV2 />}>
-        <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-      </Bloque>
+          <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_los')} esqueleto={<EsqTablaV2 />}>
+            <BloqueCorreos datos={datos} />
+          </Bloque>
 
-      <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_5')} esqueleto={<EsqTablaV2 />}>
-        <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-      </Bloque>
+          <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_los_2')} esqueleto={<EsqTablaV2 />}>
+            <BloqueContactos datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+          </Bloque>
 
-      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_los')} esqueleto={<EsqTablaV2 />}>
-        <BloqueCorreos datos={datos} />
-      </Bloque>
-
-      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_los_2')} esqueleto={<EsqTablaV2 />}>
-        <BloqueContactos datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-      </Bloque>
-
-      <Tarjeta titulo={tx('vigia.vista.los_limites_del_vigia')} info="vigia.limites">
-        <ul className="rv-vg__bullets">
-          <li>{tx('vigia.vista.solo_contesta_a_clientes_que')}</li>
-          <li>{tx('vigia.vista.cada_cifra_de_una_respuesta')}</li>
-          <li>{tx('vigia.vista.un_cliente_jamas_ve_datos')}</li>
-          <li>{tx('vigia.vista.fuera_de_las_24_h')}</li>
-          <li>{tx('vigia.vista.baja_corta_los_mensajes_de')}</li>
-        </ul>
-      </Tarjeta>
+          <Tarjeta titulo={tx('vigia.vista.los_limites_del_vigia')} info="vigia.limites">
+            <ul className="rv-vg__bullets">
+              <li>{tx('vigia.vista.solo_contesta_a_clientes_que')}</li>
+              <li>{tx('vigia.vista.cada_cifra_de_una_respuesta')}</li>
+              <li>{tx('vigia.vista.un_cliente_jamas_ve_datos')}</li>
+              <li>{tx('vigia.vista.fuera_de_las_24_h')}</li>
+              <li>{tx('vigia.vista.baja_corta_los_mensajes_de')}</li>
+            </ul>
+          </Tarjeta>
+        </div>
+      </Disclosure>
     </MarcoPagina>
   );
 }
@@ -193,22 +190,51 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
   const vencidas = d.conversaciones.filter((c) => c.sinRespuestaDesde && minutosDeEspera(c.sinRespuestaDesde, ahoraMs) >= sla).length;
   const molestasOEscaladas = d.conversaciones.filter((c) => c.molestiaNivel >= 2 || c.escalamientoNivel > 0).length;
   return (
-    <div className="rv-vg__pila">
+    <div className="rv-vg__pila rv-ag-sin-filete">
       {!d.config.habilitado && (
-        <AvisoCompacto tono="warn" resumen={tx('vigia.vista.el_vigia_esta_apagado_para')} />
+        <AvisoCompacto tono="warn" resumen={<>{tx('vigia.vista.el_vigia_esta_apagado_para')}{' '}<a href="#vg-config" className="rv-vg__enlace">{tx('f26d2.vigia.ir_a_configuracion')}</a></>} />
       )}
-      <TiraCifras sello={selloHoyTr(tr, tx('vigia.vista.sello_avisos_de_viaje'))}>
-        <Cifra etiqueta={tx('vigia.vista.conversaciones_activas')} info="vigia.conversaciones_activas" valor={numero(d.conversaciones.length)} nota={tx('vigia.vista.clientes_con_un_hilo_abierto')} />
-        <Cifra etiqueta={tx('vigia.vista.por_aprobar')} info="vigia.por_aprobar" valor={numero(d.pendientes.length)} nota={tx('vigia.vista.respuestas_que_esperan_tu_toque')} tono={d.pendientes.length > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta={tx('vigia.vista.sin_respuesta_sla_min', { sla: numero(sla) })} info="vigia.sin_respuesta" valor={numero(vencidas)} nota={tx('vigia.vista.esperan_mas_de_lo_permitido')} tono={vencidas > 0 ? 'bad' : undefined} />
-        <Cifra etiqueta={tx('vigia.vista.molestos_o_escalados')} info="vigia.molestos_escalados" valor={numero(molestasOEscaladas)} nota={tx('vigia.vista.requieren_a_una_persona')} tono={molestasOEscaladas > 0 ? 'bad' : undefined} />
-      </TiraCifras>
-      <p className="rv-vg__nota">
-        {tx('vigia.vista.tiempo_de_primera_respuesta', { v0: ' ', v1: d.respuesta.muestra === 0
-          ? tx('vigia.vista.sin_datos_todavia_aun_no')
-          : tx('vigia.vista.mediana_y_promedio_medido_sobre', { v0: duracion(d.respuesta.medianaMin ?? 0), v1: duracion(d.respuesta.promedioMin ?? 0), muestra: numero(d.respuesta.muestra) }) })}
-      </p>
+      <TiraCifras sello={selloHoyTr(tr, tx('vigia.vista.sello_avisos_de_viaje'))} items={([
+        { etiqueta: tx('vigia.vista.conversaciones_activas'), info: 'vigia.conversaciones_activas', valor: numero(d.conversaciones.length), nota: tx('vigia.vista.clientes_con_un_hilo_abierto') },
+        { etiqueta: tx('vigia.vista.por_aprobar'), info: 'vigia.por_aprobar', valor: numero(d.pendientes.length), nota: tx('vigia.vista.respuestas_que_esperan_tu_toque'), tono: d.pendientes.length > 0 ? 'warn' : undefined },
+        { etiqueta: tx('vigia.vista.sin_respuesta_sla_min', { sla: numero(sla) }), info: 'vigia.sin_respuesta', valor: numero(vencidas), nota: tx('vigia.vista.esperan_mas_de_lo_permitido'), tono: vencidas > 0 ? 'bad' : undefined },
+        { etiqueta: tx('vigia.vista.molestos_o_escalados'), info: 'vigia.molestos_escalados', valor: numero(molestasOEscaladas), nota: tx('vigia.vista.requieren_a_una_persona'), tono: molestasOEscaladas > 0 ? 'bad' : undefined },
+      ])} />
+      {d.respuesta.muestra > 0 && (
+        <p className="rv-vg__nota">
+          {tx('vigia.vista.tiempo_de_primera_respuesta', { v0: ' ', v1: tx('vigia.vista.mediana_y_promedio_medido_sobre', { v0: duracion(d.respuesta.medianaMin ?? 0), v1: duracion(d.respuesta.promedioMin ?? 0), muestra: numero(d.respuesta.muestra) }) })}
+        </p>
+      )}
     </div>
+  );
+}
+
+/** ¿Están vacías las cuatro tarjetas de atención diaria? PURA: la misma condición que usa cada bloque para pintar su vacío. */
+export function actividadVacia(d: Pick<DatosTablero, 'pendientes' | 'conversaciones' | 'fallidos' | 'eventos'>, slaMin: number, ahoraMs: number): boolean {
+  const sinExcepciones = d.fallidos.length === 0 && !d.conversaciones.some((c) => motivosDeExcepcion(c, slaMin, ahoraMs).length > 0);
+  return d.pendientes.length === 0 && sinExcepciones && d.conversaciones.length === 0 && d.eventos.length === 0;
+}
+
+export async function BloqueActividad({ datos: p, ahoraMs, puedeDecidir, acciones, standby = false }: { datos: Promise<DatosTablero>; ahoraMs: number; puedeDecidir: boolean; acciones: AccionesVigia; standby?: boolean }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
+  const d = await p;
+  if (actividadVacia(d, d.config.slaRespuestaMin, ahoraMs)) {
+    return (
+      <Tarjeta titulo={tx('f26d4.vigia.atencion_del_dia')} info="vigia.cola_aprobacion">
+        <VacioAgente icono={Inbox} titulo={tx('f26d4.vigia.sin_nada_que_atender')}>
+          {tx('f26d4.vigia.sin_nada_que_atender_detalle')}{d.respuesta.muestra === 0 ? ` ${tx('f26d4.vigia.sin_tiempo_de_respuesta')}` : ''}
+        </VacioAgente>
+      </Tarjeta>
+    );
+  }
+  return (
+    <>
+      <BloqueAprobacion datos={p} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
+      <BloqueExcepciones datos={p} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
+      <BloqueConversaciones datos={p} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
+      <BloqueBitacora datos={p} />
+    </>
   );
 }
 
@@ -217,8 +243,10 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, stand
   const { t: tx } = tr;
   const d = await p;
   return (
-    <Tarjeta titulo={tx('vigia.vista.cola_de_aprobacion')} info="vigia.cola_aprobacion" estado={d.pendientes.length === 0 ? 'vacio' : 'ok'} iconoVacio={Inbox}
-      mensaje={tx('vigia.vista.nada_por_aprobar')} detalle={tx('vigia.vista.nada_por_aprobar_cada_respuesta')}>
+    <Tarjeta titulo={tx('vigia.vista.cola_de_aprobacion')} info="vigia.cola_aprobacion">
+      {d.pendientes.length === 0 ? (
+        <VacioAgente icono={Inbox} titulo={tx('vigia.vista.nada_por_aprobar')}>{tx('vigia.vista.nada_por_aprobar_cada_respuesta')}</VacioAgente>
+      ) : (
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
           {tx('vigia.vista.las_respuestas_que_redacto_el')}
@@ -243,6 +271,7 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, stand
           </article>
         ))}
       </div>
+      )}
     </Tarjeta>
   );
 }
@@ -258,8 +287,10 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
     .filter((x) => x.motivos.length > 0);
   const vacio = filas.length === 0 && d.fallidos.length === 0;
   return (
-    <Tarjeta titulo={tx('vigia.vista.excepciones')} info="vigia.excepciones" estado={vacio ? 'vacio' : 'ok'} iconoVacio={Flame}
-      mensaje={tx('vigia.vista.sin_excepciones')} detalle={tx('vigia.vista.sin_excepciones_nadie_espera_de')}>
+    <Tarjeta titulo={tx('vigia.vista.excepciones')} info="vigia.excepciones">
+      {vacio ? (
+        <VacioAgente icono={Flame} titulo={tx('vigia.vista.sin_excepciones')}>{tx('vigia.vista.sin_excepciones_nadie_espera_de')}</VacioAgente>
+      ) : (
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
           {tx('vigia.vista.clientes_molestos_sin_respuesta_pasa')}
@@ -286,6 +317,7 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
           ))}
         </ul>
       </div>
+      )}
     </Tarjeta>
   );
 }
@@ -297,8 +329,10 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
   const { t: tx } = tr;
   const d = await p;
   return (
-    <Tarjeta titulo={tx('vigia.vista.conversaciones_activas')} info="vigia.conversaciones" estado={d.conversaciones.length === 0 ? 'vacio' : 'ok'} iconoVacio={Hand}
-      mensaje={tx('vigia.vista.sin_hilos_abiertos')} detalle={tx('vigia.vista.ningun_cliente_tiene_un_hilo')}>
+    <Tarjeta titulo={tx('vigia.vista.conversaciones_activas')} info="vigia.conversaciones">
+      {d.conversaciones.length === 0 ? (
+        <VacioAgente icono={Hand} titulo={tx('vigia.vista.sin_hilos_abiertos')}>{tx('vigia.vista.ningun_cliente_tiene_un_hilo')}</VacioAgente>
+      ) : (
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
           {tx('vigia.vista.al_tomar_un_hilo_el')}
@@ -333,6 +367,7 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
           );
         })}
       </div>
+      )}
     </Tarjeta>
   );
 }
@@ -342,6 +377,7 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
   const { t: tx } = tr;
   const { config } = await p;
   return (
+    <div id="vg-config">
     <Tarjeta titulo={tx('vigia.vista.configuracion_y_sla')} info="vigia.configuracion">
       {puedeAdministrar ? (
         <FormaConfig accion={acciones.config} valores={config} standby={standby} />
@@ -355,6 +391,7 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
         </ul>
       )}
     </Tarjeta>
+    </div>
   );
 }
 
@@ -363,8 +400,10 @@ export async function BloqueBitacora({ datos: p }: { datos: Promise<DatosTablero
   const { t: tx } = tr;
   const { eventos } = await p;
   return (
-    <Tarjeta titulo={tx('vigia.vista.bitacora')} info="vigia.bitacora" estado={eventos.length === 0 ? 'vacio' : 'ok'} iconoVacio={History}
-      mensaje={tx('vigia.vista.aun_sin_actividad')} detalle={tx('vigia.vista.aun_sin_actividad_2')}>
+    <Tarjeta titulo={tx('vigia.vista.bitacora')} info="vigia.bitacora">
+      {eventos.length === 0 ? (
+        <VacioAgente icono={History} titulo={tx('vigia.vista.aun_sin_actividad')}>{tx('vigia.vista.aun_sin_actividad_2')}</VacioAgente>
+      ) : (
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">{tx('vigia.vista.lo_ultimo_que_hizo_el')}</p>
         <ul className="rv-vg__lista">
@@ -379,6 +418,7 @@ export async function BloqueBitacora({ datos: p }: { datos: Promise<DatosTablero
           ))}
         </ul>
       </div>
+      )}
     </Tarjeta>
   );
 }
@@ -537,8 +577,10 @@ export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero>
   const { t: tx } = tr;
   const { correos = [] } = await p;
   return (
-    <Tarjeta titulo={tx('vigia.vista.avisos_por_correo_respaldo')} info="vigia.correos" estado={correos.length === 0 ? 'vacio' : 'ok'} iconoVacio={Mail}
-      mensaje={tx('vigia.vista.ningun_aviso_por_correo')} detalle={tx('vigia.vista.ningun_aviso_ha_necesitado_el')}>
+    <Tarjeta titulo={tx('vigia.vista.avisos_por_correo_respaldo')} info="vigia.correos">
+      {correos.length === 0 ? (
+        <VacioAgente icono={Mail} titulo={tx('vigia.vista.ningun_aviso_por_correo')}>{tx('vigia.vista.ningun_aviso_ha_necesitado_el')}</VacioAgente>
+      ) : (
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
           {tx('vigia.vista.los_ultimos_avisos_que_se')}
@@ -553,6 +595,7 @@ export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero>
           ))}
         </ul>
       </div>
+      )}
     </Tarjeta>
   );
 }
@@ -575,7 +618,7 @@ export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntr
           {tarjetas.map((t) => (
             <article key={t.id} className="rv-vg__tarjeta" data-tarjeta={t.id}>
               <p className="rv-vg__rotulo">{t.titulo}</p>
-              <div className="rv-vg__cifra cifra-mono">{t.valor}</div>
+              <div className="rv-vg__cifra rv-ag-num">{t.valor}</div>
               {t.rotulo && <div><Chip tono="warn">{t.rotulo}</Chip></div>}
               <dl className="rv-vg__pila--s">
                 <div><dt className="rv-vg__medio">{tx('vigia.vista.que_paso')} </dt><dd className="rv-vg__nota">{t.quePaso}</dd></div>

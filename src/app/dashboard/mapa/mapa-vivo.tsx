@@ -3,7 +3,11 @@
 import { nivelDePosicion, ROTULO_FRESCURA, type NivelFrescura } from '@/lib/likida/gps_salud';
 import { useState } from 'react';
 import { numero } from '@/lib/formato';
-import { Boton, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Boton, Disclosure, EstadoVacio, SegmentedControl, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
+import { KindBadge } from '@/app/ui-v2/graficas';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
+import '../estados.css';
 import { VIEWBOX, TRAZO_MEXICO, PUNTOS_MEXICO } from './mexico-geo';
 import './mapa.css';
 
@@ -87,21 +91,84 @@ function arcoDe(v: ViajeEnMapa): string | null {
  *
  * `prefers-reduced-motion` apaga todas las animaciones vía CSS.
  */
-export function MapaVivo({ viajes, pines = [] }: {
+/** Cuántos viajes dibujados hay por lugar (medido, no estimado); los 8 con más concentración. */
+function rankingDe(viajes: ViajeEnMapa[], eje: 'destino' | 'origen'): Array<{ nombre: string; cuenta: number }> {
+  const cuentas = new Map<string, number>();
+  for (const v of viajes) {
+    const n = eje === 'destino' ? v.destinoNombre : v.origenNombre;
+    cuentas.set(n, (cuentas.get(n) ?? 0) + 1);
+  }
+  return [...cuentas.entries()].map(([nombre, cuenta]) => ({ nombre, cuenta }))
+    .sort((a, b) => b.cuenta - a.cuenta || a.nombre.localeCompare(b.nombre)).slice(0, 8);
+}
+
+export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0, nota }: {
   viajes: ViajeEnMapa[];
+  /** Viajes en curso que NO se pudieron dibujar (origen o destino fuera del catálogo): el rótulo del vacío tiene que decirlo, no afirmar «sin viajes». */
+  sinUbicar?: number;
   /** Posiciones medidas por unidad. Vacío = la flota no tiene GPS todavía. */
   pines?: PinUnidad[];
+  /** Viajes en curso que existen en la base pero el tablero del conductor aún no sigue (En vivo): el vacío dice «sin seguimiento», no «sin viajes». */
+  sinSeguimiento?: number;
+  /** Nota de método o procedencia: va DENTRO de la tarjeta, bajo el mapa (Rovaq), no suelta sobre el lienzo. */
+  nota?: import('react').ReactNode;
 }) {
   const [fijo, setFijo] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
-  const activoId = hover ?? fijo ?? viajes[0]?.id ?? null;
+  const { t } = useT('operacion', operacionEs);
+  // Zoom del lienzo (1 a 3): recorta el viewBox alrededor del viaje activo (o del centro). Solo cambia el encuadre, nunca los datos.
+  const [zoom, setZoom] = useState(1);
+  // Ranking del panel (Rovaq: «mayor concentración · elige otro»): cuenta MEDIDA de los viajes dibujados por destino u origen.
+  const [eje, setEje] = useState<'destino' | 'origen'>('destino');
+  const [lugar, setLugar] = useState<string | null>(null);
+  const ranking = rankingDe(viajes, eje);
+  const visibles = lugar ? viajes.filter((v) => (eje === 'destino' ? v.destinoNombre : v.origenNombre) === lugar) : viajes;
+  const activoId = hover ?? fijo ?? visibles[0]?.id ?? viajes[0]?.id ?? null;
   const activo = viajes.find((v) => v.id === activoId) ?? null;
 
+  const ancho = VIEWBOX.w / zoom, alto = VIEWBOX.h / zoom;
+  const cx = activo ? (activo.ox + activo.dx) / 2 : VIEWBOX.w / 2;
+  const cy = activo ? (activo.oy + activo.dy) / 2 : VIEWBOX.h / 2;
+  const vx = Math.min(Math.max(cx - ancho / 2, 0), VIEWBOX.w - ancho);
+  const vy = Math.min(Math.max(cy - alto / 2, 0), VIEWBOX.h - alto);
+
+  const vacioPanel = sinUbicar > 0
+    ? <EstadoVacio contenido titulo={t('mapa.panel.sin_ubicar', { n: numero(sinUbicar) })}>{t('mapa.panel.sin_ubicar.nota')}</EstadoVacio>
+    : sinSeguimiento > 0
+      ? <EstadoVacio contenido titulo={t('mapa.panel.sin_seguimiento', { n: numero(sinSeguimiento) })}>{t('mapa.panel.sin_seguimiento.nota')}</EstadoVacio>
+      : <EstadoVacio contenido titulo={t('mapa.panel.vacio')}>{t('mapa.panel.vacio.nota')}</EstadoVacio>;
+
+  // Ronda 8 (Rovaq 09: el estado sin dato se dibuja compacto): sin un solo viaje dibujable ni una posición medida NO se pinta un mapa de 470 px vacío con un panel
+  // de 160 px al lado; la tarjeta dice lo que falta, en una sola caja, y conserva su nota de método.
+  if (viajes.length === 0 && pines.length === 0) {
+    return (
+      <Tarjeta titulo={t('mapa.card.titulo')} info="mapa.en_el_mapa" className="rv-mp__tarjeta" acciones={<KindBadge tipo="observado" />}>
+        {vacioPanel}
+        {nota ? <p className="rv-mp__nota rv-mp__nota--pie">{nota}</p> : null}
+      </Tarjeta>
+    );
+  }
+
   return (
-    <Tarjeta titulo="Viajes en curso sobre México" info="mapa.en_el_mapa">
+    <Tarjeta titulo={t('mapa.card.titulo')} info="mapa.en_el_mapa" className="rv-mp__tarjeta"
+      acciones={(
+        <span className="rv-mp__cab">
+          {viajes.length > 0 ? (
+            <SegmentedControl<'destino' | 'origen'> etiqueta={t('mapa.panel.eje')} tamano="sm" valor={eje}
+              onChange={(v) => { setEje(v); setLugar(null); setFijo(null); }}
+              opciones={[{ valor: 'destino', etiqueta: t('mapa.panel.por_destino') }, { valor: 'origen', etiqueta: t('mapa.panel.por_origen') }]} />
+          ) : null}
+          <KindBadge tipo="observado" />
+        </span>
+      )}>
       <div className="rv-mp__rejilla">
         <div className="rv-mp__lienzo">
-          <svg viewBox={`0 0 ${VIEWBOX.w} ${VIEWBOX.h}`} className="rv-mp__svg" role="img"
+          <div className="rv-mp__zoom" role="group" aria-label={t('mapa.zoom')}>
+            <button type="button" className="rv-mp__zbtn" onClick={() => setZoom((z) => Math.min(3, z + 0.5))} disabled={zoom >= 3} aria-label={t('mapa.zoom.mas')}>+</button>
+            <button type="button" className="rv-mp__zbtn" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} disabled={zoom <= 1} aria-label={t('mapa.zoom.menos')}>−</button>
+            <button type="button" className="rv-mp__zbtn" onClick={() => setZoom(1)} disabled={zoom === 1} aria-label={t('mapa.zoom.reset')}>⤢</button>
+          </div>
+          <svg viewBox={`${vx.toFixed(1)} ${vy.toFixed(1)} ${ancho.toFixed(1)} ${alto.toFixed(1)}`} className="rv-mp__svg" role="img"
             aria-label="Mapa de México con los viajes en curso">
             {/* La tierra: trazo tenue + la matriz de puntos */}
             <path d={TRAZO_MEXICO} fillRule="evenodd" fill="var(--g1)" stroke="var(--line2)" strokeWidth={0.7} />
@@ -172,12 +239,17 @@ export function MapaVivo({ viajes, pines = [] }: {
             })}
           </svg>
 
-          {viajes.length === 0 && pines.length === 0 && (
-            <div className="rv-mp__vacio">
-              <p>Sin viajes en curso ahora mismo — el próximo que despaches se dibuja aquí.</p>
-            </div>
-          )}
+          {/* El vacío («sin viajes», «sin ubicar», «sin seguimiento») se dice UNA sola vez, en el panel lateral: antes salía también sobre el mapa. */}
 
+          {/* Leyenda de clases bajo el mapa (Rovaq): qué es cada marca. */}
+          <ul className="rv-mp__leyenda" aria-label={t('mapa.leyenda')}>
+            <li><svg width="22" height="8" aria-hidden="true"><path d="M1 6 Q11 -2 21 6" fill="none" stroke="var(--ink)" strokeWidth="1.6" /></svg>{t('mapa.leyenda.arco')}</li>
+            <li><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="3.4" fill="none" stroke="var(--ink)" strokeWidth="1.4" /></svg>{t('mapa.leyenda.origen')}</li>
+            <li><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="3.4" fill="var(--ink)" /></svg>{t('mapa.leyenda.destino')}</li>
+            <li><svg width="10" height="10" aria-hidden="true"><rect x="2" y="2" width="6" height="6" transform="rotate(45 5 5)" fill="var(--ok)" /></svg>{t('mapa.leyenda.envivo')}</li>
+            <li><svg width="10" height="10" aria-hidden="true"><rect x="2" y="2" width="6" height="6" transform="rotate(45 5 5)" fill="var(--warn)" /></svg>{t('mapa.leyenda.atrasada')}</li>
+            <li><svg width="10" height="10" aria-hidden="true"><rect x="2" y="2" width="6" height="6" transform="rotate(45 5 5)" fill="var(--faint)" /></svg>{t('mapa.leyenda.obsoleta')}</li>
+          </ul>
           {/* AUDITORÍA 20 (H5): esta leyenda decía «Likida no rastrea GPS» y dejó de ser verdad — `posicion` tiene escritores y los
               pines de arriba salen de ahí. Lo ilustrativo sigue siendo el ARCO, y eso es lo que la leyenda tiene que decir ahora. */}
           <p className="rv-mp__nota">
@@ -189,10 +261,30 @@ export function MapaVivo({ viajes, pines = [] }: {
         </div>
 
         {/* Las cards de los viajes — hover ilumina, clic fija */}
-        <div className="rv-mp__cards">
+        <aside className="rv-mp__panel" aria-label={t('mapa.panel.titulo')}>
+          {ranking.length > 0 ? (
+            <section className="rv-mp__rank-bloque">
+              <p className="rv-mp__eyebrow">{t('mapa.panel.concentracion')}</p>
+              <ol className="rv-mp__rank">
+                {ranking.map((r, i) => (
+                  <li key={r.nombre}>
+                    <button type="button" className="rv-mp__rank-fila" data-activo={r.nombre === lugar || undefined} aria-pressed={r.nombre === lugar}
+                      onClick={() => { setLugar((l) => (l === r.nombre ? null : r.nombre)); setFijo(null); }}>
+                      <span className="rv-mp__rank-n">{i + 1}</span>
+                      <span className="rv-mp__rank-nombre">{r.nombre}</span>
+                      <span className="rv-mp__rank-cuenta">{numero(r.cuenta)}</span>
+                      <svg className="rv-mp__rank-barra" aria-hidden="true" height="4" width="100%"><rect width="100%" height="4" rx="2" className="rv-mp__rank-pista" /><rect width={`${Math.max(6, Math.round((r.cuenta / ranking[0].cuenta) * 100))}%`} height="4" rx="2" className="rv-mp__rank-valor" /></svg>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
+          {ranking.length > 0 ? <p className="rv-mp__eyebrow">{lugar ? t('mapa.panel.viajes_en', { lugar }) : t('mapa.panel.viajes')}</p> : null}
+          <div className="rv-mp__cards">
           {viajes.length === 0 ? (
-            <p className="rv-mp__nota">Aquí van las tarjetas de cada viaje en curso, con sus días en ruta y sus fotos recibidas.</p>
-          ) : viajes.map((v) => {
+            vacioPanel
+          ) : visibles.map((v) => {
             const esActivo = v.id === activoId;
             return (
               <Boton key={v.id} variante="ghost"
@@ -216,7 +308,23 @@ export function MapaVivo({ viajes, pines = [] }: {
             );
           })}
         </div>
+          <p className="rv-mp__nota">{t('mapa.panel.nota')}</p>
+        </aside>
       </div>
+      {nota ? <p className="rv-mp__nota rv-mp__nota--pie">{nota}</p> : null}
+      {viajes.length > 0 ? (
+        <Disclosure variante="linea" titulo={t('mapa.tabla.eq')}>
+          <TablaBase<ViajeEnMapa> etiqueta={t('mapa.tabla.eq')} densa altoMaximo={false} tarjetaMovil filas={viajes} idFila={(v) => v.id}
+            columnas={[
+              { id: 'folio', titulo: t('mapa.tabla.folio'), principal: true, celda: (v) => v.folio },
+              { id: 'ruta', titulo: t('mapa.tabla.ruta'), celda: (v) => `${v.origenNombre} → ${v.destinoNombre}` },
+              { id: 'operador', titulo: t('mapa.tabla.operador'), celda: (v) => v.operadorNombre ?? '—' },
+              { id: 'dias', titulo: t('mapa.tabla.dias'), celda: (v) => (v.dias === null ? '—' : numero(v.dias)) },
+              { id: 'km', titulo: t('mapa.tabla.km'), celda: (v) => numero(v.kmRecta) },
+              { id: 'estado', titulo: t('mapa.tabla.estado'), celda: (v) => (v.escalado ? <StatusChip tono="bad">Escalado</StatusChip> : <StatusChip tono="ok">En ruta</StatusChip>) },
+            ]} />
+        </Disclosure>
+      ) : null}
     </Tarjeta>
   );
 }

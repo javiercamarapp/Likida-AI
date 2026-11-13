@@ -16,7 +16,7 @@
 .rv-cp__frase { margin: 0; font-size: var(--t-small, 12px); font-weight: 500; color: var(--ink); }
 .rv-cp__grupo { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
 .rv-cp__grupo-t { margin: 0; font-size: var(--t-body, 13px); font-weight: 600; }
-.rv-cp__quepaso { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: var(--t-small, 12px); }
+.rv-cp__quepaso { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: var(--t-small, 12px); }
 .rv-cp__quepaso[data-tono="bad"] { border-left: 3px solid var(--bad); }
 .rv-cp__quepaso[data-tono="warn"] { border-left: 3px solid var(--warn); }
 .rv-cp__quepaso[data-tono="info"] { border-left: 3px solid var(--line); }
@@ -33,5 +33,25 @@
 .rv-cp__ok { font-size: var(--t-small, 12px); color: var(--ok); }
 .rv-cp__tenue { color: var(--muted); font-weight: 400; }
 .rv-cp__filas { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.rv-cp__bloque { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-cp__bloque { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .rv-cp__romper { overflow-wrap: anywhere; }
+
+/* Cifras de tabla y de texto: numerales tabulares en la tipografía de la interfaz (Rovaq usa monoespaciada solo en los rótulos del menú). */
+.rv-ag-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Rovaq: los bloques de una tabla maestra se apilan a 12 px (el contenedor no los separaba y las tarjetas quedaban pegadas) y el vacío de una tarjeta
+   es la caja punteada de `ac-vacio` (1 px, radio 8, padding 20/14), no un hueco alto sin borde. Se repite en el CSS de cada agente para que lo
+   cargue su ruta (pedido_compartido: llevarlo a esqueletos.css y a EstadoVacio). */
+[data-ui="v2"] .rv-esq--tabla > .rv-esq__tabla { display: grid; gap: var(--sp-gap, 12px); }
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
+
+/* Columnas iguales en tarjeta (Rovaq): cada una es una ficha de la MISMA altura, no un bloque suelto de alto desigual. */
+.rv-cp__tres { align-items: stretch; }
+.rv-cp__tres > .rv-cp__col { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+/* La nota de método al pie de la página (12 px, apagada): lo que antes eran párrafos sueltos entre tarjetas. */
+.rv-cp__metodo { display: grid; gap: 4px; margin: 0; }
+
+/* Botones del ancho de su contenido (32 px), alineados al pie de la sección: dentro de una pila (grid) un botón se estiraba a todo el ancho. */
+.rv-cp__pila > .rv-btn, .rv-cp__pila > button[type="submit"], .rv-cp__bloque .rv-cp__pila > .rv-btn { justify-self: start; width: auto; }
+/* Las columnas de «Cómo mandarme documentos» miden lo que mide su contenido (no se estiran a la del buzón). */
+.rv-cp__tres { align-items: start; }

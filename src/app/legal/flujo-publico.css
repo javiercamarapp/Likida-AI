@@ -1,0 +1,11 @@
+/* Pantallas de flujo de las públicas (sin-acceso, cuenta, pago, mcp/autorizar, 404, demo, estado) como `access-flow` de Rovaq: la tarjeta SIEMPRE arriba, a unos 167 px bajo
+ * la cabecera de sitio (nunca centrada en vertical: lado a lado, cada flujo cae en el mismo sitio), y las dos que traen contenido ancho (demo, estado) también dentro de la tarjeta
+ * blanca de radio 12 y borde de 1 px, no sueltas sobre el lienzo. Solo disposición; sin `content`. Va DESPUÉS de publico-r2.css. */
+[data-ui="v2"] .rv-pub__cuerpo:has(> .rv-pub__main > .rv-flujo) { padding-top: clamp(28px, 7vw, 106px); }
+/* La tabla de estado ya vive en una tarjeta: sin segundo borde ni fondo propios. */
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla { border: 0; border-radius: 0; background: transparent; }
+/* Estado dentro de la tarjeta de 640: cada servicio es una fila con divisor (no una tarjeta dentro de la tarjeta). */
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla tr { margin: 0; padding: 10px 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla tr:first-child { border-top: 0; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla th[scope="row"],
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-estado__tabla td { padding-inline: 0; }

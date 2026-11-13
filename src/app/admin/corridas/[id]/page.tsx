@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { notFound } from 'next/navigation';
@@ -5,14 +6,14 @@ import { trazaDeCorrida, type TrazaCorrida } from '@/lib/admin/corridas-cruzadas
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { usd } from '@/lib/utils';
 import { valorLegible } from '../../valor-legible';
-import { Aviso, BotonEnlace, EstadoError, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '../../../ui-v2/componentes';
-import { TiraCifras } from '../../../ui-v2/graficas';
+import { Aviso, BotonEnlace, EstadoError, StatusChip, Tarjeta, type TonoEstado } from '../../../ui-v2/componentes';
+import type { ComponentProps } from 'react';
+import { EsqueletoFicha } from '../../../ui-v2/esqueletos';
 import { etiquetaContadorVigia, etiquetaInterruptor } from '../../observabilidad/etiquetas';
 import '../../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
-import type { Idioma } from '@/lib/i18n/idioma';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,80 +71,75 @@ export default async function TrazaCorridaPage({
   }
   if (traza === null) notFound();
 
-  const volver = <BotonEnlace href="/admin/corridas" variante="ghost" tamano="sm">{t('corridas_id.volver_a_corridas')}</BotonEnlace>;
   const c = traza?.corrida;
   const chip = c ? (chipTr(t)[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }) : null;
   const flota = c ? (c.tenantNombre ?? (c.tenantId === null ? t('observabilidad.likida_negocio') : '—')) : '—';
+  const volver = { href: '/admin/corridas', etiqueta: t('corridas_id.volver_a_corridas') };
+  const titulo = c ? t('corridas_id.traza', { agente: etiquetaInterruptor(`agente:${c.agente}`, t) }) : t('corridas_id.traza_de_la_corrida');
+  const apoyo = c ? `${flota} · ${fechaHoraMx(c.inicio, idioma)}` : undefined;
 
-  // UN solo marco para los dos casos (lectura caída o traza): cambian el título y el cuerpo, el marco no se duplica.
-  return (
-    <MarcoPagina
-      titulo={c ? t('corridas_id.traza', { agente: etiquetaInterruptor(`agente:${c.agente}`, t) }) : t('corridas_id.traza_de_la_corrida')}
-      apoyo={c ? `${flota} · ${fechaHoraMx(c.inicio, idioma)}` : undefined}
-      acciones={<>{chip ? <StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip> : null}{volver}</>}
-    >
-      {traza === undefined ? (
+  // Lectura caída: el MISMO esqueleto, sin cifras ni bloques (la lectura caída se dice, no se pinta como una traza vacía).
+  if (traza === undefined || !c) {
+    return (
+      <PantallaCorrida titulo={titulo} apoyo={apoyo} volver={volver}>
         <EstadoError reintentar>{t('corridas_id.no_se_pudo_leer_la_corrida')}</EstadoError>
-      ) : (
-        <CuerpoTraza t={t} idioma={idioma} traza={traza as TrazaCorrida} flota={flota} />
-      )}
-    </MarcoPagina>
-  );
-}
+      </PantallaCorrida>
+    );
+  }
 
-/** Todo lo que se sabe de una corrida. */
-function CuerpoTraza({ traza, flota, t = T_SISTEMA_ES, idioma }: { traza: TrazaCorrida; flota: string; t?: TSistema; idioma?: Idioma }) {
-  const { corrida: c, costo, costoNoDisponible } = traza;
+  const { costo, costoNoDisponible } = traza;
   const resumen = c.resumen ? Object.entries(c.resumen).map(([k, v]) => [etiquetaContadorVigia(k, t), valorLegible(v)] as const).filter((p): p is readonly [string, string] => p[1] !== null) : [];
   return (
-    <>
-      <TiraCifras etiqueta={t('corridas_id.la_corrida_en_cifras')} items={[
+    <PantallaCorrida
+      titulo={titulo}
+      apoyo={apoyo}
+      volver={volver}
+      chips={chip ? <li><StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip></li> : null}
+      etiquetaCifras={t('corridas_id.la_corrida_en_cifras')}
+      cifras={uniformes([
         // NULL ≠ 0: una corrida que no se mide en tareas dice «—», no 0/0.
         { etiqueta: t('observabilidad.tareas'), valor: c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : null, estado: c.tareasHechas !== null && c.tareasTotal !== null ? 'ok' : 'vacio', mensaje: t('corridas_id.esta_corrida_no_mide_tareas') },
         { etiqueta: t('observabilidad.duracion'), valor: c.fin === null ? null : duracion(c.duracionMs), estado: c.fin === null ? 'vacio' : 'ok', mensaje: t('corridas_id.sin_fin_registrado') },
         costo
           ? { etiqueta: t('corridas_id.costo_de_ia_en_la_ventana'), valor: usd(costo.costoUsd), nota: t('corridas_id.correlacion_por_tiempo_no_un_cruce') }
           : { etiqueta: t('corridas_id.costo_de_ia_en_la_ventana'), valor: null, estado: 'vacio', mensaje: t('corridas_id.no_se_puede_correlacionar') },
-      ]} />
-
-      {c.error ? (
-        // El motivo YA redactado para una persona — nunca el stack.
-        <Aviso tono="error" titulo={t('corridas_id.por_que_fallo')}>{c.error}</Aviso>
-      ) : null}
-
-      <Tarjeta titulo={t('corridas_id.la_corrida')}>
-        <ul className="adm-sis-lista">
-          <li>{rico(t('corridas_id.e0_agente_e0'), { e0: (c) => <span>{c}</span> })}<span>{etiquetaInterruptor(`agente:${c.agente}`, t)}</span></li>
-          <li>{rico(t('corridas_id.e0_flota_e0'), { e0: (c) => <span>{c}</span> })}<span>{flota}</span></li>
-          <li>{rico(t('corridas_id.e0_disparo_e0'), { e0: (c) => <span>{c}</span> })}<span>{disparo(t)[c.disparo] ?? c.disparo}</span></li>
-          <li>{rico(t('corridas_id.e0_inicio_e0'), { e0: (c) => <span>{c}</span> })}<span>{fechaHoraMx(c.inicio, idioma)}</span></li>
-          <li><span>{t('corridas_id.fin')}</span><span>{c.fin ? fechaHoraMx(c.fin, idioma) : t('corridas_id.sin_fin_registrado_2')}</span></li>
-        </ul>
-        {resumen.length > 0 ? (
-          <>
-            <h3 className="adm-sis-titulo">{t('corridas_id.resumen_de_la_corrida')}</h3>
-            <ul className="adm-sis-lista">
-              {resumen.map(([k, v]) => <li key={k}><span>{k}</span><span className="adm-sis-dato">{v}</span></li>)}
-            </ul>
-          </>
-        ) : null}
-      </Tarjeta>
-
-      {/* ── El costo de IA, con su supuesto a la vista ─────────────────────── */}
-      <Tarjeta titulo={t('corridas_id.costo_de_ia_en_la_ventana_2')} estado={costo ? 'ok' : 'vacio'} mensaje={t('corridas_id.no_se_puede_correlacionar_2')} detalle={costoNoDisponible ?? t('corridas_id.el_costo_de_esta_corrida_no')}>
-        {costo ? (
-          <>
-            <ul className="adm-sis-lista">
-              <li>{rico(t('corridas_id.e0_llamadas_al_modelo_e0'), { e0: (c) => <span>{c}</span> })}<span>{numero(costo.llamadas, idioma)}</span></li>
-              <li>{rico(t('corridas_id.e0_tokens_entrada_salida_e0_e1', { numero: numero(costo.tokensIn, idioma), numero2: numero(costo.tokensOut, idioma) }), { e0: (c) => <span>{c}</span>, e1: (c) => <span>{c}</span> })}</li>
-              <li>{rico(t('corridas_id.e0_costo_e0'), { e0: (c) => <span>{c}</span> })}<span>{usd(costo.costoUsd)}</span></li>
-            </ul>
-            <p className="adm-sis-nota">{t('corridas_id.cifra_honesta_con_su_supuesto_son')}</p>
-          </>
-        ) : null}
-      </Tarjeta>
-
-      {/* ── A dónde seguir desde aquí ──────────────────────────────────────── */}
+      ])}
+      /* El motivo YA redactado para una persona — nunca el stack. */
+      avisos={c.error ? <Aviso tono="error" titulo={t('corridas_id.por_que_fallo')}>{c.error}</Aviso> : null}
+      bloques={[
+        <Tarjeta key="corrida" titulo={t('corridas_id.la_corrida')}>
+          <ul className="adm-sis-lista">
+            <li>{rico(t('corridas_id.e0_agente_e0'), { e0: (x) => <span>{x}</span> })}<span>{etiquetaInterruptor(`agente:${c.agente}`, t)}</span></li>
+            <li>{rico(t('corridas_id.e0_flota_e0'), { e0: (x) => <span>{x}</span> })}<span>{flota}</span></li>
+            <li>{rico(t('corridas_id.e0_disparo_e0'), { e0: (x) => <span>{x}</span> })}<span>{disparo(t)[c.disparo] ?? c.disparo}</span></li>
+            <li>{rico(t('corridas_id.e0_inicio_e0'), { e0: (x) => <span>{x}</span> })}<span>{fechaHoraMx(c.inicio, idioma)}</span></li>
+            <li><span>{t('corridas_id.fin')}</span><span>{c.fin ? fechaHoraMx(c.fin, idioma) : t('corridas_id.sin_fin_registrado_2')}</span></li>
+          </ul>
+          {resumen.length > 0 ? (
+            <>
+              <h3 className="adm-sis-titulo">{t('corridas_id.resumen_de_la_corrida')}</h3>
+              <ul className="adm-sis-lista">
+                {resumen.map(([k, v]) => <li key={k}><span>{k}</span><span className="adm-sis-dato">{v}</span></li>)}
+              </ul>
+            </>
+          ) : null}
+        </Tarjeta>,
+        /* ── El costo de IA, con su supuesto a la vista ── */
+        <Tarjeta key="costo" titulo={t('corridas_id.costo_de_ia_en_la_ventana_2')} estado={costo ? 'ok' : 'vacio'} mensaje={t('corridas_id.no_se_puede_correlacionar_2')} detalle={costoNoDisponible ?? t('corridas_id.el_costo_de_esta_corrida_no')}>
+          {costo ? (
+            <>
+              <ul className="adm-sis-lista">
+                <li>{rico(t('corridas_id.e0_llamadas_al_modelo_e0'), { e0: (x) => <span>{x}</span> })}<span>{numero(costo.llamadas, idioma)}</span></li>
+                <li>{rico(t('corridas_id.e0_tokens_entrada_salida_e0_e1', { numero: numero(costo.tokensIn, idioma), numero2: numero(costo.tokensOut, idioma) }), { e0: (x) => <span>{x}</span>, e1: (x) => <span>{x}</span> })}</li>
+                <li>{rico(t('corridas_id.e0_costo_e0'), { e0: (x) => <span>{x}</span> })}<span>{usd(costo.costoUsd)}</span></li>
+              </ul>
+              <p className="adm-sis-nota">{t('corridas_id.cifra_honesta_con_su_supuesto_son')}</p>
+            </>
+          ) : null}
+        </Tarjeta>,
+      ]}
+    >
+      {/* ── A dónde seguir desde aquí ── */}
       <Tarjeta titulo={t('corridas_id.seguir_la_pista')}>
         <div className="adm-sis-acciones">
           {c.tenantId !== null ? (
@@ -153,8 +149,13 @@ function CuerpoTraza({ traza, flota, t = T_SISTEMA_ES, idioma }: { traza: TrazaC
         </div>
         <p className="adm-sis-nota">{t('corridas_id.abrir_el_panel_de_una_flota', { flota })}</p>
       </Tarjeta>
-    </>
+    </PantallaCorrida>
   );
+}
+
+function PantallaCorrida(props: ComponentProps<typeof EsqueletoFicha>) {
+  // La cifra sin dato conserva la escala de la tira (26/700), como Rovaq: `adm-escala-kpi` (sistema.css) solo cambia el tamaño del «—».
+  return <div className="adm-escala-kpi"><EsqueletoFicha {...props} /></div>;
 }
 
 export async function generateMetadata(): Promise<Metadata> {

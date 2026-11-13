@@ -35,4 +35,6 @@ export const login: Record<keyof typeof loginEs, string> = {
   'error.caducado_reciente': 'That link was already used or has expired, and we sent you a new one a few minutes ago. Open the most recent email.',
   'error.navegador': 'That link was requested from another browser. Open it in the browser where you typed your email, or request a new one from here.',
   'error.generico': 'Something went wrong. Please try again.',
+  'idioma.titulo': 'Language',
+  'idioma.pronto': 'English: coming soon',
 };

@@ -7,21 +7,24 @@
   --etapa: var(--muted);
 }
 
-/* ── El color de cada etapa del embudo (los mismos 14 estados que COLOR_EMBUDO; la prueba `cerebro_piel.test.ts` los cruza) ── */
-[data-etapa="nuevo"], .cer-e-nuevo { --etapa: var(--muted); }
-[data-etapa="contactado"], .cer-e-contactado { --etapa: var(--chart-4, var(--muted)); }
-[data-etapa="demo"], .cer-e-demo { --etapa: var(--chart-7, var(--muted)); }
-[data-etapa="negociacion"], .cer-e-negociacion { --etapa: var(--chart-2, var(--muted)); }
-[data-etapa="cerrado"], .cer-e-cerrado { --etapa: var(--chart-3, var(--muted)); }
-[data-etapa="perdido"], .cer-e-perdido { --etapa: var(--faint); }
-[data-etapa="appointment"], .cer-e-appointment { --etapa: var(--chart-1, var(--muted)); }
-[data-etapa="rescheduled"], .cer-e-rescheduled { --etapa: var(--chart-5, var(--muted)); }
-[data-etapa="cancelled"], .cer-e-cancelled { --etapa: var(--chart-6, var(--muted)); }
-[data-etapa="no-show"], .cer-e-no-show { --etapa: var(--chart-6, var(--muted)); }
-[data-etapa="proposal"], .cer-e-proposal { --etapa: var(--chart-7, var(--muted)); }
-[data-etapa="pilot"], .cer-e-pilot { --etapa: var(--chart-5, var(--muted)); }
-[data-etapa="won"], .cer-e-won { --etapa: var(--chart-3, var(--muted)); }
-[data-etapa="lost"], .cer-e-lost { --etapa: var(--faint); }
+/* Paleta monocroma (decisión 10): las etapas se distinguen por la TINTA, de la más avanzada (negro) a la recién llegada (gris claro), y «Perdido» va
+   hueco. El orden es el del embudo (ORDEN_EMBUDO); la etiqueta de texto siempre acompaña al punto. */
+[data-etapa="negociacion"], .cer-e-negociacion { --etapa: color-mix(in srgb, var(--ink) 100%, var(--surface)); }
+[data-etapa="proposal"], .cer-e-proposal { --etapa: color-mix(in srgb, var(--ink) 93%, var(--surface)); }
+[data-etapa="pilot"], .cer-e-pilot { --etapa: color-mix(in srgb, var(--ink) 86%, var(--surface)); }
+[data-etapa="demo"], .cer-e-demo { --etapa: color-mix(in srgb, var(--ink) 79%, var(--surface)); }
+[data-etapa="appointment"], .cer-e-appointment { --etapa: color-mix(in srgb, var(--ink) 72%, var(--surface)); }
+[data-etapa="rescheduled"], .cer-e-rescheduled { --etapa: color-mix(in srgb, var(--ink) 65%, var(--surface)); }
+[data-etapa="no-show"], .cer-e-no-show { --etapa: color-mix(in srgb, var(--ink) 58%, var(--surface)); }
+[data-etapa="cancelled"], .cer-e-cancelled { --etapa: color-mix(in srgb, var(--ink) 51%, var(--surface)); }
+[data-etapa="contactado"], .cer-e-contactado { --etapa: color-mix(in srgb, var(--ink) 44%, var(--surface)); }
+[data-etapa="nuevo"], .cer-e-nuevo { --etapa: color-mix(in srgb, var(--ink) 37%, var(--surface)); }
+[data-etapa="won"], .cer-e-won { --etapa: color-mix(in srgb, var(--ink) 30%, var(--surface)); }
+[data-etapa="cerrado"], .cer-e-cerrado { --etapa: color-mix(in srgb, var(--ink) 23%, var(--surface)); }
+[data-etapa="perdido"], .cer-e-perdido, [data-etapa="lost"], .cer-e-lost { --etapa: var(--surface); }
+.cer-punto[data-etapa="perdido"], .cer-punto[data-etapa="lost"] { box-shadow: inset 0 0 0 1.5px var(--muted); }
+.cer-pin[data-etapa="perdido"], .cer-pin[data-etapa="lost"] { stroke: var(--muted); stroke-width: 1.2px; }
+/* ── (historial) El color de cada etapa del embudo (los mismos 14 estados que COLOR_EMBUDO; la prueba `cerebro_piel.test.ts` los cruza) ── */
 
 .cer-raiz { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
 
@@ -80,12 +83,13 @@
 .cer-punto { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: var(--etapa); flex: none; }
 
 /* Rótulos del mapa: código del estado y cifra, con el color de texto que le toca a cada paso de la rampa. */
-.cer-rotulo { font-weight: 600; fill: var(--ink); pointer-events: none; font-variant-numeric: tabular-nums; }
-.cer-rotulo[data-paso="4"], .cer-rotulo[data-paso="5"] { fill: var(--surface); }
+.cer-rotulo { font-weight: 600; fill: var(--ink); stroke: var(--surface); paint-order: stroke; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
+.cer-rotulo[data-paso="4"], .cer-rotulo[data-paso="5"] { fill: var(--surface); stroke: var(--ink); }
 
 /* El ranking lateral */
 .cer-rank { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
 @media (min-width: 1100px) { .cer-rank { height: calc(100dvh - 17rem); min-height: 480px; overflow-y: auto; } }
+.cer-rank > .cer-rank__bloque:last-child { flex: 1 1 auto; align-content: flex-start; }
 .cer-rank__bloque { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .cer-rank__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 [data-ui="v2"] .rv-btn.cer-rank__fila::after { content: none; }
@@ -117,8 +121,8 @@
 @media (min-width: 1900px) { .cer-tip { left: 332px; } }
 .cer-tip strong { display: block; font-size: var(--t-body); font-weight: 600; }
 .cer-tip span { font-size: var(--t-small); color: var(--muted); }
-.cer-nota-sin-punto { position: absolute; left: 16px; top: 16px; z-index: 10; max-width: min(92vw, 420px); margin: 0; padding: 6px 12px; border-radius: 12px; font-size: var(--t-micro); color: var(--muted); }
-@media (min-width: 1900px) { .cer-nota-sin-punto { left: 332px; } }
+.cer-nota-sin-punto { position: absolute; left: 56px; top: 12px; z-index: 10; max-width: min(calc(100% - 72px), 420px); margin: 0; padding: 6px 12px; border-radius: 12px; font-size: var(--t-micro); color: var(--muted); }
+@media (min-width: 1900px) { .cer-nota-sin-punto { left: 376px; } }
 .cer-nota-luces { position: absolute; right: 16px; bottom: 64px; z-index: 10; max-width: min(92vw, 420px); margin: 0; padding: 6px 12px; border-radius: 12px; font-size: var(--t-micro); color: var(--muted); }
 
 /* ── El panel de leads del estado (flota al lateral del país) ── */
@@ -240,3 +244,53 @@
 /* Popups de Leaflet: el cromo del popup toma las superficies del sistema (claro y oscuro) en vez del blanco de la librería. */
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
 .cer-pop .cer-punto { background: var(--etapa); }
+
+/* ═══ Ronda 4 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   UNA tarjeta de mapa (radio 12): cabecera con pista y sello, mapa con +/−/⤢ y, dentro de la misma tarjeta, el ranking. */
+.cer-mapacard { padding: 0; gap: 0; overflow: hidden; }
+.cer-mapacard__cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.cer-sello { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-micro); color: var(--muted); }
+.cer-sello .rv-kpi__punto { margin-right: 0; }
+.cer-mapacard .cer-barra__resumen { flex: 1 1 200px; }
+.cer-mapacard .cer-cuerpo { gap: 0; }
+.cer-mapacard .cer-zona { border: 0; border-radius: 0; height: calc(100dvh - 20rem); min-height: 440px; }
+.cer-mapacard .cer-zona:fullscreen { height: 100vh; }
+.cer-mapacard .cer-rank { padding: 14px; gap: 0; border-left: 1px solid var(--line); }
+@media (max-width: 1099px) { .cer-mapacard .cer-rank { border-left: 0; border-top: 1px solid var(--line); } .cer-mapacard .cer-zona { min-height: 360px; height: 60dvh; } }
+@media (min-width: 1100px) { .cer-mapacard .cer-rank { height: calc(100dvh - 20rem); min-height: 440px; } }
+/* Los bloques del ranking ya no son tarjetas dentro de la tarjeta: se separan con un filete. */
+.cer-mapacard .cer-rank__bloque { background: transparent; border: 0; border-radius: 0; padding: 0 0 14px; }
+.cer-mapacard .cer-rank__bloque + .cer-rank__bloque { padding-top: 14px; border-top: 1px solid var(--line); }
+/* Controles de zoom: 32 px, borde punteado, esquina superior izquierda del mapa. */
+.cer-zoom { position: absolute; left: 12px; top: 12px; z-index: 15; display: flex; flex-direction: column; gap: 6px; }
+@media (min-width: 1900px) { .cer-zoom { left: 332px; } }
+[data-ui="v2"] .rv-btn.cer-zoom__btn { width: 32px; min-height: 32px; height: 32px; padding: 0; justify-content: center; background: var(--surface); border: 1px dotted var(--input); border-radius: 8px; }
+[data-ui="v2"] .rv-btn.cer-zoom__btn:hover { background: var(--canvas); }
+/* Familias de luces: la FORMA (llena, anillo, discontinua) distingue lo que dos grises no separan. */
+.cer-pin[data-familia="cierre"] { fill: var(--ink); }
+.cer-pin[data-familia="avanzado"] { fill: color-mix(in srgb, var(--ink) 62%, var(--surface)); }
+.cer-pin[data-familia="contacto"] { fill: var(--surface); stroke: var(--ink); }
+.cer-pin[data-familia="nuevo"] { fill: color-mix(in srgb, var(--ink) 24%, var(--surface)); }
+.cer-pin[data-familia="caida"] { fill: var(--surface); stroke: var(--muted); stroke-dasharray: 1.2 0.9; }
+.cer-punto[data-familia="cierre"] { background: var(--ink); }
+.cer-punto[data-familia="avanzado"] { background: color-mix(in srgb, var(--ink) 62%, var(--surface)); }
+.cer-punto[data-familia="contacto"] { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.cer-punto[data-familia="nuevo"] { background: color-mix(in srgb, var(--ink) 24%, var(--surface)); }
+.cer-punto[data-familia="caida"] { background: var(--surface); box-shadow: none; border: 1.5px dashed var(--muted); }
+.cer-familias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cer-familias li { display: flex; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); }
+.cer-familias li span { flex: 1; min-width: 0; }
+.cer-familias li b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Segunda fila: embudo y tabla equivalente con el mismo alto (la tabla desplaza dentro de su tarjeta). */
+.cer-fila-baja { align-items: stretch; }
+.cer-fila-baja > .rv-tarjeta { height: 100%; }
+.cer-tabla-estados .rv-tabla { max-height: 340px; }
+/* Vacío dentro de una tarjeta (Rovaq ac-vacio): borde punteado de 1 px, radio 8, relleno 20×14; nunca sin borde dentro de una tarjeta alta. */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* Ronda 7 — Ficha de prospecto (Rovaq FI): la tira de cifras lleva el MISMO filete superior de 3 px negro que las demás tiras; solo la Ficha 360
+   de flotas (pf-tile) va sin filete. Se acota por la tarjeta «Ficha» del prospecto (.cer-ficha__datos). */
+[data-ui="v2"] .rv-esq--ficha:has(.cer-ficha__datos) .rv-esq__cifras-sueltas .rv-kpi { border-top: 3px solid var(--ink); }
+
+/* Vacío de una línea (Rovaq ac-vacio): caja punteada, radio 8, relleno 20×14. */
+[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }

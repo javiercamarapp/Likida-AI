@@ -43,11 +43,17 @@ export function contarPorCausa(parados: ReadonlyArray<AgenteParado>): { causa: s
  * saltados del último latido del runner). Lectura caída = se dice, NO «ningún agente parado». NO toca `LIKIDA_RUNNER_TOPE_BANDEJA_GLOBAL`:
  * la contrapresión es un freno correcto y aquí solo se hace visible, con la salida legítima (resolver la bandeja) enlazada.
  */
-export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs }: { datos: AgentesParados | null; cola: ResumenBandejaCola | null; t?: TrDe<'admin_inicio'> }) {
+export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, resumen = false, tope = TOPE_PARADOS }: {
+  datos: AgentesParados | null; cola: ResumenBandejaCola | null; t?: TrDe<'admin_inicio'>;
+  /** Solo el aviso con el conteo por causa y la salida a Escalaciones: la tabla completa vive en una sola página (no se repite en tres). */
+  resumen?: boolean;
+  /** Cuántas filas se listan en la tabla (el conteo sigue siendo de todos los parados y se dice). */
+  tope?: number;
+}) {
   const titulo = <h2 className="bj-titulo" id="agentes-parados">{t('escalaciones_agentes_parados.agentes_que_no_corrieron')}</h2>;
   if (datos === null) {
     return (
-      <section className="bj-bloque" aria-labelledby="agentes-parados">
+      <section className="bj-bloque bj-caja" aria-labelledby="agentes-parados">
         {titulo}
         <Aviso tono="warn">
           
@@ -59,7 +65,7 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs }: { dat
   const { parados, habilitados, umbralHoras } = datos;
   if (parados.length === 0) {
     return (
-      <section className="bj-bloque" aria-labelledby="agentes-parados">
+      <section className="bj-bloque bj-caja" aria-labelledby="agentes-parados">
         {titulo}
         <EstadoVacio titulo={t('escalaciones_agentes_parados.ningun_agente_parado')}>
           {habilitados === 0
@@ -69,7 +75,7 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs }: { dat
       </section>
     );
   }
-  const filas = parados.slice(0, TOPE_PARADOS);
+  const filas = parados.slice(0, tope);
   const columnas: ColumnaBase<AgenteParado>[] = [
     { id: 'agente', titulo: t('escalaciones_agentes_parados.agente'), principal: true, celda: (p) => p.nombre ?? p.agente },
     {
@@ -87,7 +93,7 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs }: { dat
   ];
   const porCausa = contarPorCausa(parados);
   return (
-    <section className="bj-bloque" aria-labelledby="agentes-parados">
+    <section className="bj-bloque bj-caja" aria-labelledby="agentes-parados">
       {titulo}
       <Aviso tono="warn">
         {t('parados.resumen_llevan', { n: numero(parados.length), habilitados: numero(habilitados), umbral: numero(umbralHoras) })}{' '}
@@ -104,13 +110,21 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs }: { dat
           {t('parados.tope_runner')}
         </Aviso>
       )}
-      <TablaBase etiqueta="Agentes que no corrieron" columnas={columnas} filas={filas} idFila={(p) => p.agente} densa />
-      <p className="bj-nota">
-        {parados.length > TOPE_PARADOS
-          ? t('parados.se_listan', { tope: numero(TOPE_PARADOS), total: numero(parados.length) })
+      {resumen ? (
+        <p className="bj-nota">
+          <BotonEnlace href="/admin/escalaciones#agentes-parados" variante="ghost" tamano="sm">{t('parados.ver_todos_en_escalaciones')}</BotonEnlace>
+        </p>
+      ) : (
+        <>
+          <TablaBase etiqueta="Agentes que no corrieron" columnas={columnas} filas={filas} idFila={(p) => p.agente} densa tarjetaMovil />
+          <p className="bj-nota">
+        {parados.length > tope
+          ? t('parados.se_listan', { tope: numero(tope), total: numero(parados.length) })
           : ''}
         {t('parados.motivo_ultima_vuelta', { latido: datos.latidoDelRunner ? ` (${fechaHoraMx(datos.latidoDelRunner)})` : '' })}
-      </p>
+          </p>
+        </>
+      )}
     </section>
   );
 }

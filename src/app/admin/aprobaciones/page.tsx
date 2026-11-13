@@ -1,4 +1,6 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
@@ -13,11 +15,12 @@ import {
   contarVencidas, vaciarVencidas, leerResumenBandeja, normalizarParametros,
 } from '@/lib/admin/cola-aprobacion';
 import { ahoraMs } from '@/lib/saludo';
-import { Aviso, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { Aviso, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FormaPieza, FormaEnvio, FormaLiberarAmbiguo, type ResultadoPieza } from './forma-pieza';
 import { RebotesYBajas } from './rebotes';
 import { LimpiezaLote, type ResultadoConteo, type ResultadoVaciado } from './lote';
-import { VistasAprobaciones, type VistaAprobaciones } from './vistas';
+import { BarraVistasAprobaciones, PanelesAprobaciones, ProveedorVistas, type VistaAprobaciones } from './vistas';
 import { leerEsperadas, leerParametrosLote } from './lote-parametros';
 import '../bandeja.css';
 
@@ -147,25 +150,25 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
     }
   }
 
-  function bandeja(titulo: string, r: { ok: PiezaEnCola[] | null; error: string | null }, urgenteBandeja: boolean) {
+  const decidir = urgente.ok !== null && normal.ok !== null ? urgente.ok.length + normal.ok.length : null;
+
+  // UNA sola tarjeta «Por decidir» (Rovaq): las dos colas son subsecciones y un único vacío cuando ninguna tiene piezas.
+  function grupo(titulo: string, r: { ok: PiezaEnCola[] | null; error: string | null }, vacioTexto: string, extra?: ReactNode) {
     return (
-      <Tarjeta
-        titulo={r.ok !== null ? `${titulo} (${r.ok.length})` : titulo}
-        estado={r.error !== null ? 'error' : r.ok !== null && r.ok.length === 0 ? 'vacio' : 'ok'}
-        mensaje={r.error !== null
-          ? t('aprobaciones.no_se_pudo_leer')
-          : urgenteBandeja ? t('aprobaciones.nada_urgente_esperando') : t('aprobaciones.nada_pendiente')}
-        detalle={urgenteBandeja
-          ? t('aprobaciones.asi_debe_verse_casi')
-          : t('aprobaciones.las_piezas_llegan_aqui')}
-        acciones={urgenteBandeja ? <StatusChip tono="warn">{t('aprobaciones.sla_en_minutos')}</StatusChip> : undefined}
-      >
-        <div className="bj-cola">
-          {r.ok?.map((p) => <FormaPieza key={p.id} pieza={p} accion={accionResolver} />)}
+      <section className="bj-grupo" aria-label={titulo}>
+        <div className="bj-grupo__cab">
+          <h3 className="bj-grupo__titulo">{r.ok !== null ? `${titulo} (${r.ok.length})` : titulo}</h3>
+          {extra}
         </div>
-      </Tarjeta>
+        {r.error !== null
+          ? <p className="bj-grupo__nota" data-tono="bad">{t('aprobaciones.no_se_pudo_leer')}</p>
+          : r.ok !== null && r.ok.length === 0
+            ? <p className="bj-grupo__nota">{vacioTexto}</p>
+            : <div className="bj-cola">{r.ok?.map((p) => <FormaPieza key={p.id} pieza={p} accion={accionResolver} />)}</div>}
+      </section>
     );
   }
+  const ambasVacias = urgente.ok !== null && normal.ok !== null && urgente.ok.length === 0 && normal.ok.length === 0;
 
   const porAprobar = (
     <>
@@ -174,8 +177,17 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
           Con {estadoBandeja.pendientes}  {t('aprobaciones.piezas_pendientes_el_runner')}
         </Aviso>
       )}
-      {bandeja(t('aprobaciones.urgente_respuesta_a_ads'), urgente, true)}
-      {bandeja(t('aprobaciones.normal_prospeccion_y_contenido'), normal, false)}
+      <Tarjeta
+        titulo={decidir !== null ? t('aprobaciones.por_decidir_n', { n: decidir }) : t('aprobaciones.kpi_por_decidir')}
+        estado={ambasVacias ? 'vacio' : 'ok'}
+        mensaje={t('aprobaciones.nada_pendiente')}
+        detalle={t('aprobaciones.las_piezas_llegan_aqui')}
+      >
+        <div className="bj-grupos">
+          {grupo(t('aprobaciones.urgente_respuesta_a_ads'), urgente, t('aprobaciones.nada_urgente_esperando'), <StatusChip tono="warn">{t('aprobaciones.sla_en_minutos')}</StatusChip>)}
+          {grupo(t('aprobaciones.normal_prospeccion_y_contenido'), normal, t('aprobaciones.nada_pendiente'))}
+        </div>
+      </Tarjeta>
       <LimpiezaLote contar={accionContarLote} vaciar={accionVaciarLote} bandeja={estadoBandeja} />
     </>
   );
@@ -238,23 +250,42 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
     </>
   );
 
+  const conteos = {
+    aprobar: urgente.ok !== null && normal.ok !== null ? urgente.ok.length + normal.ok.length : null,
+    enviar: porEnviar !== null ? porEnviar.length : null,
+  };
+
   return (
-    <MarcoPagina titulo={t('aprobaciones.aprobaciones')} apoyo={t('aprobaciones.lo_que_los_agentes')}>
-      <VistasAprobaciones
-        inicial={inicial}
-        conteos={{
-          aprobar: urgente.ok !== null && normal.ok !== null ? urgente.ok.length + normal.ok.length : null,
-          enviar: porEnviar !== null ? porEnviar.length : null,
-        }}
-        porAprobar={porAprobar}
-        porEnviar={paraEnviar}
-        historial={historial}
-      />
-      <Aviso tono="info">
-        
-        {t('aprobaciones.el_candado_es_de')}
-      </Aviso>
-    </MarcoPagina>
+    <ProveedorVistas inicial={inicial}>
+    <EsqueletoTablaMaestra
+      filtros={<BarraVistasAprobaciones conteos={conteos} />}
+      titulo={t('aprobaciones.aprobaciones')}
+      apoyo={t('aprobaciones.lo_que_los_agentes')}
+      avisos={<Aviso tono="info">{t('aprobaciones.el_candado_es_de')}</Aviso>}
+      etiquetaCifras={t('aprobaciones.kpi_etiqueta')}
+      cifras={uniformes([
+        decidir === null
+          ? { etiqueta: t('aprobaciones.kpi_por_decidir'), valor: null, estado: 'error', reintentar: true }
+          : {
+            etiqueta: t('aprobaciones.kpi_por_decidir'), valor: decidir, formato: 'entero',
+            segmentos: [{ etiqueta: t('aprobaciones.kpi_urgentes'), valor: urgente.ok!.length }, { etiqueta: t('aprobaciones.kpi_normales'), valor: normal.ok!.length }],
+            tono: urgente.ok!.length > 0 ? 'warn' : undefined,
+            nota: urgente.ok!.length > 0 ? t('aprobaciones.kpi_n_urgentes', { n: urgente.ok!.length }) : undefined,
+          },
+        porEnviar === null
+          ? { etiqueta: t('aprobaciones.kpi_por_enviar'), valor: null, estado: 'error', reintentar: true }
+          : { etiqueta: t('aprobaciones.kpi_por_enviar'), valor: porEnviar.length, formato: 'entero' },
+        estadoBandeja === null || estadoBandeja === undefined || estadoBandeja.diasMasVieja === null
+          ? { etiqueta: t('aprobaciones.kpi_mas_vieja'), valor: null, estado: estadoBandeja ? 'vacio' : 'error', reintentar: true, mensaje: estadoBandeja ? t('aprobaciones.kpi_sin_pendientes') : undefined }
+          : { etiqueta: t('aprobaciones.kpi_mas_vieja'), valor: t('aprobaciones.kpi_dias', { n: estadoBandeja.diasMasVieja }), tono: estadoBandeja.diasMasVieja >= estadoBandeja.diasVencimiento ? 'warn' : undefined },
+        estadoBandeja === null || estadoBandeja === undefined
+          ? { etiqueta: t('aprobaciones.kpi_bandeja'), valor: null, estado: 'error', reintentar: true }
+          : { etiqueta: t('aprobaciones.kpi_bandeja'), valor: estadoBandeja.frenaAlRunner ? t('aprobaciones.kpi_frena') : t('aprobaciones.kpi_libre'), tono: estadoBandeja.frenaAlRunner ? 'bad' : 'ok' },
+      ])}
+    >
+      <PanelesAprobaciones conteos={conteos} porAprobar={porAprobar} porEnviar={paraEnviar} historial={historial} />
+    </EsqueletoTablaMaestra>
+    </ProveedorVistas>
   );
 }
 

@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { useActionState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, Upload } from 'lucide-react';
 import '../carta-porte.css';
 import { numero as fmtNumero } from '@/lib/formato';
 import { llaveTexto } from '@/lib/likida/carta_porte_docs/catalogos';
@@ -13,11 +13,13 @@ import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDe
 import { Aviso, BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
 import {
-  Aviso as AvisoV2, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, Tarjeta,
+  Aviso as AvisoV2, BarraFiltros, Boton, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, clasesBoton, Disclosure, Drawer, EstadoError, Icono, Tarjeta, useAbrirPorUrl,
 } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { VacioAgente } from '../../vacio-agente';
 
 /**
  * LA PANTALLA «CATÁLOGO DEL CLIENTE» (T-A3-22): lo que el agente aprende UNA vez de cada cliente y usa en cada documento.
@@ -117,9 +119,9 @@ function FormaFila({ tipo, clienteId, ver, accion, fila, modo }: {
 }
 
 function resumen(tipo: TipoPlantilla, f: Registro, tx: TAgentes = TR_ES.t): ReactNode {
-  if (tipo === 'producto') return <><strong className="cifra-mono">{textoDe(f.sku)}</strong><span className="rv-cp__tenue"> · {textoDe(f.bienes_transp)} · {textoDe(f.clave_unidad)}{f.embalaje ? ` · ${textoDe(f.embalaje)}` : ''}</span></>;
+  if (tipo === 'producto') return <><strong className="rv-ag-num">{textoDe(f.sku)}</strong><span className="rv-cp__tenue"> · {textoDe(f.bienes_transp)} · {textoDe(f.clave_unidad)}{f.embalaje ? ` · ${textoDe(f.embalaje)}` : ''}</span></>;
   if (tipo === 'parte') return <><span className="rv-cp__tenue">{textoDe(f.rol)}</span> <strong>{textoDe(f.alias)}</strong><span className="rv-cp__tenue">{f.rfc ? ` · ${textoDe(f.rfc)}` : ' · sin RFC'}{f.cp ? ` · CP ${textoDe(f.cp)}` : ''}</span></>;
-  return <><strong className="cifra-mono">{textoDe(f.numero_interno)}</strong>{f.activo === false && <span className="rv-cp__nota" data-tono="warn">{tx('rest.inactivo')}</span>}</>;
+  return <><strong className="rv-ag-num">{textoDe(f.numero_interno)}</strong>{f.activo === false && <span className="rv-cp__nota" data-tono="warn">{tx('rest.inactivo')}</span>}</>;
 }
 
 const COLUMNAS_FILTRO: Record<TipoPlantilla, string[]> = {
@@ -139,9 +141,9 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
       ) : undefined}>
       <div className="rv-cp__pila">
         {filas.length === 0 ? (
-          <p className="rv-cp__nota">{tx('rest.todavia_no_hay_nada_aqui')}</p>
+          <VacioAgente titulo={tx('rest.todavia_no_hay_nada_aqui')} />
         ) : visibles.length === 0 ? (
-          <p className="rv-cp__nota">{tx('rest.ninguna_fila_coincide_con', { filtro })}</p>
+          <VacioAgente titulo={tx('rest.ninguna_fila_coincide_con', { filtro })} />
         ) : (
           <ul className="rv-cp__filas">
             {visibles.slice(0, FILAS_VISIBLES).map((f, i) => (
@@ -183,7 +185,7 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
   const [tipo, setTipo] = useState<TipoPlantilla>('producto');
   const [archivo, setArchivo] = useState<File | null>(null);
   return (
-    <Tarjeta titulo={tx('rest.importar_un_csv')} info="carta_porte_catalogo.importar">
+    <>
       <div className="rv-cp__pila">
         <p className="rv-cp__nota">{tx('rest.descarga_la_plantilla_llenala_una_fila')}</p>
         <ul className="rv-cp__acciones" aria-label={tx('rest.plantillas')}>
@@ -212,7 +214,21 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
         </form>
         <ResultadoImportar estado={estado} />
       </div>
-    </Tarjeta>
+    </>
+  );
+}
+
+/** «Importar CSV» como en Rovaq: un botón secundario en la cabecera que abre un cajón (la carga no ocupa una tarjeta larga de la página). La acción de servidor es la misma. */
+function CajonImportador({ ver, importar }: { ver: VerComo; importar: AccionesCatalogo['importar'] }) {
+  const { t: tx } = useT('agentes', agentesEs);
+  const { abierto, abrir, cerrar } = useAbrirPorUrl({ id: 'importar' });
+  return (
+    <>
+      <Boton type="button" variante="secondary" tamano="sm" icono={<Icono icono={Upload} tam={14} />} aria-haspopup="dialog" onClick={abrir}>{tx('rest.importar_un_csv')}</Boton>
+      <Drawer abierto={abierto} onCerrar={cerrar} titulo={tx('rest.importar_un_csv')}>
+        <Importador ver={ver} importar={importar} />
+      </Drawer>
+    </>
   );
 }
 
@@ -251,46 +267,70 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
   const clientesVisibles = k === '' ? clientes : clientes.filter((c) => llaveTexto(c.nombre).includes(k));
   const vacio = catalogo !== null && catalogo.numero === null && catalogo.productos.length === 0 && catalogo.partes.length === 0;
   return (
-    <MarcoPagina titulo={tx('rest.catalogo_del_cliente')} apoyo={tx('rest.lo_que_el_agente_aprende_una')} acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte')}</BotonEnlace>}>
-      <AvisoV2 tono="info">{tx('rest.un_dato_del_catalogo_nunca_pisa')}</AvisoV2>
-
-      <Importador ver={ver} importar={acciones.importar} />
-
-      <Tarjeta titulo={tx('vigia.vista.cliente')} info="carta_porte_catalogo.cliente" estado={clientes.length === 0 ? 'vacio' : 'ok'} mensaje={tx('rest.aun_no_hay_clientes_en_tu')}
-        detalle={tx('rest.aun_no_hay_clientes_en_tu_2')}>
-        <div className="rv-cp__pila">
+    <EsqueletoTablaMaestra
+      titulo={tx('rest.catalogo_del_cliente')}
+      apoyo={tx('rest.lo_que_el_agente_aprende_una')}
+      acciones={(
+        <>
+          <CajonImportador ver={ver} importar={acciones.importar} />
+          <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.volver_al_agente_de_carta_porte')}</BotonEnlace>
+        </>
+      )}
+      filtros={clientes.length === 0 ? undefined : (
+        <div className="rv-cp__pila" role="group" aria-label={tx('vigia.vista.cliente')}>
           {clientes.length > 8 && (
             <div className="rv-cp__form">
               <CampoTexto id="cat-buscar-cliente" etiqueta={tx('rest.buscar_cliente')} value={buscar} onChange={(e) => setBuscar(e.target.value)} autoComplete="off" />
             </div>
           )}
-          <ul className="rv-cp__acciones">
-            {clientesVisibles.map((c) => (
-              <li key={c.id}>
-                <Link href={hrefDe(sufijo, c.id)} aria-current={c.id === clienteId ? 'true' : undefined} className={clasesBoton(c.id === clienteId ? 'primary' : 'secondary', 'sm')}>
-                  {c.nombre}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {(
+            <ul className="rv-cp__acciones">
+              {clientesVisibles.map((c) => (
+                <li key={c.id}>
+                  <Link href={hrefDe(sufijo, c.id)} aria-current={c.id === clienteId ? 'true' : undefined} className={clasesBoton(c.id === clienteId ? 'primary' : 'secondary', 'sm')}>
+                    {c.nombre}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      </Tarjeta>
-
+      )}
+      avisos={(
+        <>
+          <AvisoV2 tono="info">{tx('rest.un_dato_del_catalogo_nunca_pisa')}</AvisoV2>
+          {elegido !== null && catalogo?.truncado ? <AvisoV2 tono="warn">{tx('rest.el_catalogo_de_este_cliente_es')}</AvisoV2> : null}
+        </>
+      )}
+      cifras={elegido !== null && !lecturaFallida && catalogo !== null ? [
+        { etiqueta: tx('f26d.catalogo.productos'), valor: `${fmtNumero(catalogo.productos.length)}${catalogo.truncado ? '+' : ''}` },
+        { etiqueta: tx('f26d.catalogo.partes'), valor: `${fmtNumero(catalogo.partes.length)}${catalogo.truncado ? '+' : ''}` },
+      ] : undefined}
+      etiquetaCifras={tx('rest.catalogo_del_cliente')}
+    >
+      {/* Rovaq: el vacío es la caja punteada DENTRO de una tarjeta, nunca una línea suelta. */}
+      {clientes.length === 0 && (
+        <Tarjeta titulo={tx('rest.catalogo_del_cliente')} info="carta_porte_catalogo.productos">
+          <VacioAgente titulo={tx('rest.aun_no_hay_clientes_en_tu')} />
+        </Tarjeta>
+      )}
       {elegido === null ? (
-        clientes.length > 0 && <p className="rv-cp__nota">{tx('rest.elige_un_cliente_para_ver_y')}</p>
+        clientes.length > 0 && (
+          <Tarjeta titulo={tx('rest.catalogo_del_cliente')} info="carta_porte_catalogo.productos">
+            <VacioAgente titulo={tx('rest.elige_un_cliente_para_ver_y')} />
+          </Tarjeta>
+        )
       ) : lecturaFallida || catalogo === null ? (
         <EstadoError reintentar>{tx('rest.no_se_pudo_leer_el_catalogo', { nombre: elegido.nombre })}</EstadoError>
       ) : (
         <>
-          {vacio && <EstadoVacio titulo={tx('rest.aun_sin_catalogo')} contenido>{fraseSinCatalogo(tx)}</EstadoVacio>}
-          {catalogo.truncado && (
-            <AvisoV2 tono="warn">{tx('rest.el_catalogo_de_este_cliente_es')}</AvisoV2>
-          )}
+          {vacio && <VacioAgente titulo={tx('rest.aun_sin_catalogo')}>{fraseSinCatalogo(tx)}</VacioAgente>}
           <Numero fila={catalogo.numero} clienteId={elegido.id} ver={ver} acciones={acciones} />
           <Tabla tipo="producto" titulo={tx('rest.productos')} filas={catalogo.productos} clienteId={elegido.id} ver={ver} acciones={acciones} />
           <Tabla tipo="parte" titulo={tx('rest.remitentes_y_destinatarios')} filas={catalogo.partes} clienteId={elegido.id} ver={ver} acciones={acciones} />
         </>
       )}
-    </MarcoPagina>
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
+    </EsqueletoTablaMaestra>
   );
 }

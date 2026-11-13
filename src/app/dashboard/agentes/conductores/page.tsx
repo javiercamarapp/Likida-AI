@@ -308,11 +308,13 @@ export default async function PaginaAgenteConductores({
   return (
     <VistaAgenteConductores
       tr={tr}
+      avisos={
+        <Bloque mensaje={tx('rest.no_se_pudo_revisar_si_la_2')} esqueleto={<EsqTarjetaV2 alto={60} />}>
+          <BloqueBannerPreflight pPreflight={pPreflight} sufijo={sufijoTenant(sp)} />
+        </Bloque>
+      }
       tablero={
         <>
-          <Bloque mensaje={tx('rest.no_se_pudo_revisar_si_la_2')} esqueleto={<EsqTarjetaV2 alto={60} />}>
-            <BloqueBannerPreflight pPreflight={pPreflight} sufijo={sufijoTenant(sp)} />
-          </Bloque>
           <Bloque mensaje={tx('rest.no_se_pudieron_leer_los_insights')} esqueleto={<EsqTarjetaV2 alto={160} />}>
             <BloqueInsights pInsights={pInsights} pIndicadores={pIndicadores} dias={filtrosVista.dias} />
           </Bloque>

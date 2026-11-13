@@ -15,10 +15,13 @@
 // muerto sin escribir su aborto — nunca un spinner eterno con cara de avance.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { usdCorto } from '../usd-corto';
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, FileText, MessageCircle } from 'lucide-react';
-import { fechaHoraMx, usd4 } from '@/lib/formato';
-import { Aviso, BotonEnlace, Disclosure, EstadoError, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { fechaHoraMx } from '@/lib/formato';
+import { Aviso, BotonEnlace, Disclosure, EstadoError, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import '../qa.css';
 import { pillCorrida } from '../pantalla';
@@ -193,7 +196,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
       id: 'paso', titulo: tx('qa_corrida_viva.la_corrida_paso_a_paso'),
       celda: (p) => (<>{p.nombre}{p.detalle && <span className="rv-qa-detalle">{p.detalle}</span>}</>),
     },
-    { id: 'costo', titulo: tx('qa_pantalla.costo_real'), alinear: 'der', celda: (p) => (p.costoUsd > 0 ? usd4(p.costoUsd) : '—') },
+    { id: 'costo', titulo: tx('qa_pantalla.costo_real'), alinear: 'der', celda: (p) => (p.costoUsd > 0 ? usdCorto(p.costoUsd) : '—') },
     {
       id: 'estado', titulo: tx('salud_sistema.estado'),
       celda: (p) => { const pp = pillPaso(tx)[p.estado] ?? pillPaso(tx).pendiente; return <StatusChip tono={pp.estado}>{pp.etiqueta}</StatusChip>; },
@@ -232,7 +235,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
       {/* ── El renglón resumen ────────────────────────────────────────── */}
       <TiraCifras
         etiqueta={tx('qa_corrida_viva.calidad')}
-        items={[
+        items={uniformes([
           {
             etiqueta: tx('salud_sistema.estado'), valor: pill.etiqueta, nota: corrida.motivo ?? undefined,
             tono: pill.estado === 'ok' || pill.estado === 'warn' || pill.estado === 'bad' ? pill.estado : undefined,
@@ -244,12 +247,12 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
               ? `${tx('qa_corrida_viva.pasada', { pasadas: corrida.pasadas })} ${enPasada ? tx('qa_corrida_viva.trabajando_ahora') : viva ? tx('qa_corrida_viva.pausada_entre_pasadas') : 'terminada'}`
               : undefined,
           },
-          { etiqueta: tx('qa_corrida_viva.costo_hasta_ahora_real'), valor: usd4(corrida.costoUsdTotal ?? 0), nota: tx('qa_corrida_viva.costo_registrado_nunca_estimado') },
+          { etiqueta: tx('qa_corrida_viva.costo_hasta_ahora_real'), valor: usdCorto(corrida.costoUsdTotal ?? 0), nota: tx('qa_corrida_viva.costo_registrado_nunca_estimado') },
           {
             etiqueta: tx('qa_corrida_viva.flota_de_prueba'), valor: corrida.tenantNombre,
             nota: `${corrida.inicio ? tx('qa_corrida_viva.inicio', { v: fechaHoraMx(corrida.inicio, idioma) }) : tx('qa_corrida_viva.sin_arrancar')}${corrida.fin ? ` · ${tx('qa_corrida_viva.fin', { v: fechaHoraMx(corrida.fin, idioma) })}` : ''}`,
           },
-        ]}
+        ])}
       />
 
       {/* ── EL AVANCE DEL CARRIL COMPLETO ─────────────────────────────
@@ -302,7 +305,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
         mensaje={tx('qa_corrida_viva.todavia_no_arranca_el_primer_paso')}
         detalle={viva ? tx('qa_corrida_viva.esta_pantalla_se_actualiza_sola_cada') : undefined}
       >
-        <TablaBase etiqueta={tx('qa_corrida_viva.la_corrida_paso_a_paso')} columnas={columnasPasos} filas={corrida.pasos} idFila={(p) => String(p.n)} densa altoMaximo={false} />
+        <TablaBase etiqueta={tx('qa_corrida_viva.la_corrida_paso_a_paso')} columnas={columnasPasos} filas={corrida.pasos} idFila={(p) => String(p.n)} densa altoMaximo={false} tarjetaMovil />
       </Tarjeta>
 
       {/* ── El veredicto ──────────────────────────────────────────────── */}
@@ -312,7 +315,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
         mensaje={viva ? tx('qa_corrida_viva.los_oraculos_corren_al_final_de') : tx('qa_corrida_viva.esta_corrida_termino_sin_veredicto_los')}
       >
         {corrida.veredicto !== null && (
-          <TablaBase etiqueta={tx('qa_corrida_viva.veredicto_por_invariante')} columnas={columnasVeredicto} filas={corrida.veredicto} idFila={(v) => v.invariante} altoMaximo={false} />
+          <TablaBase etiqueta={tx('qa_corrida_viva.veredicto_por_invariante')} columnas={columnasVeredicto} filas={corrida.veredicto} idFila={(v) => v.invariante} altoMaximo={false} tarjetaMovil />
         )}
       </Tarjeta>
 
@@ -380,7 +383,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
   );
 }
 
-/** La pantalla de una corrida: UN solo MarcoPagina. Si la lectura de la corrida falló (`errorLectura`), lo dice en lugar del cuerpo: no es que no exista, es que no se pudo mirar. */
+/** La pantalla de una corrida: UN solo marco (esqueleto de ficha). Si la lectura de la corrida falló (`errorLectura`), lo dice en lugar del cuerpo: no es que no exista, es que no se pudo mirar. */
 export function CorridaViva({ corridaInicial = null, errorLectura = null, ...resto }: {
   corridaInicial?: CorridaQA | null;
   errorLectura?: string | null;
@@ -391,19 +394,19 @@ export function CorridaViva({ corridaInicial = null, errorLectura = null, ...res
 }) {
   const { t: tx } = useT('admin_sistema', admin_sistemaEs);
   return (
-    <MarcoPagina
+    <EsqueletoFicha
       area={tx('qa_corrida_viva.calidad')}
+      volver={{ href: '/admin/qa', etiqueta: tx('qa_corrida_viva.volver_a_pruebas_reales') }}
       titulo={corridaInicial ? tx('qa_corrida_viva.corrida', { v: corridaInicial.id.slice(0, 8) }) : tx('qa_corrida_viva.calidad')}
       apoyo={corridaInicial
         ? tx('qa_corrida_viva.escenario_el_avance_el_veredicto_y', { v: escenarioPorId(corridaInicial.escenario)?.nombre ?? corridaInicial.escenario })
         : tx('qa_corrida_viva.la_corrida_de_pruebas_reales_no')}
-      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{tx('qa_corrida_viva.volver_a_pruebas_reales')}</BotonEnlace>}
     >
       {corridaInicial ? (
         <CuerpoCorrida corridaInicial={corridaInicial} fotosIniciales={resto.fotosIniciales ?? []} pdfsIniciales={resto.pdfsIniciales ?? []} medicionInicial={resto.medicionInicial} medicionErrorInicial={resto.medicionErrorInicial} />
       ) : (
         <EstadoError reintentar>{tx('qa_corrida_viva.no_se_pudo_leer_la_corrida', { v: errorLectura ?? '' })}</EstadoError>
       )}
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }

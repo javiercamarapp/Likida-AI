@@ -1,6 +1,7 @@
 import { Suspense, type ReactNode } from 'react';
 import { LimiteError } from './limite-error';
-import { EsqCifrasV2, EsqTablaV2, EsqTarjetaV2 } from '../ui-v2/componentes';
+import { EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, Tarjeta } from '../ui-v2/componentes';
+import './estados.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-14 — STREAMING POR TARJETA.
@@ -95,4 +96,29 @@ export function EsqCifras({ n = 3 }: { n?: number; rejilla?: string; alto?: numb
 /** Una tabla con su encabezado (36 px) y N filas parejas (40 px) — la forma de "Viajes recientes", "Esperan tu revisión" y "Últimos cierres". */
 export function EsqTabla({ filas = 6 }: { filas?: number; titulo?: boolean }) {
   return <EsqTablaV2 filas={filas} />;
+}
+
+/** La tabla maestra DENTRO de una tarjeta blanca (Rovaq «Problemas»: radio 12, borde 1 px, título + contador a la derecha). El cuerpo va sin relleno
+ *  para que la cabecera de 36 px y las filas de 40 lleguen al borde de la tarjeta. Nunca una tabla suelta sobre el lienzo. */
+export function TarjetaTabla({ titulo, contador, acciones, children }: { titulo: string; contador?: string; acciones?: ReactNode; children: ReactNode }) {
+  return (
+    <Tarjeta
+      titulo={titulo}
+      className="rv-tarjeta--tabla"
+      acciones={contador || acciones ? <>{contador ? <span className="rv-tarjeta__contador">{contador}</span> : null}{acciones}</> : undefined}
+    >
+      {children}
+    </Tarjeta>
+  );
+}
+
+/** Acción bloqueada por una precondición (p. ej. exportar sin documentos aprobados): botón de contorno punteado que dice «No disponible ahora»
+ *  y el motivo en su título. No es un enlace ni un botón activo: nadie descarga un archivo vacío. Su caja es la del botón `sm` del kit (28 px). */
+export function DescargaNoDisponible({ rotulo, motivo }: { rotulo: string; motivo: string }) {
+  return (
+    <span className="rv-nd" title={motivo}>
+      <span className="rv-nd__rotulo">{rotulo}</span>
+      <span className="rv-nd__motivo">{motivo}</span>
+    </span>
+  );
 }

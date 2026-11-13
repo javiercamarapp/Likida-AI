@@ -12,3 +12,33 @@
 [data-ui="v2"] .vnd-comision { display: flex; align-items: flex-start; gap: 12px; color: var(--muted); }
 [data-ui="v2"] .vnd-comision__regla { margin: 0 0 4px; font-size: 13px; font-weight: 500; color: var(--ink); }
 [data-ui="v2"] .vnd-comision__nota { margin: 0; font-size: 12px; color: var(--muted); }
+
+/* El caparazón completo (sidebar 232 + marco flotante): la fila ocupa el alto y el contenido no se pega a la cabecera móvil. */
+[data-ui="v2"] .vnd-fila { min-height: 0; }
+
+/* Tira de cifras como la `pc-kpi` de Rovaq: rótulo, cifra, PISTA punteada de 6 px (solo forma; no mide nada) y nota. Sin ella cada celda dejaba ~45 px vacíos. */
+[data-ui="v2"] .vnd-fila .rv-kpi { min-height: 0; border-top-width: 0; }
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__cab { order: 1; }
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__fila { order: 2; }
+[data-ui="v2"] .vnd-fila .rv-kpi:not([data-estado])::after {
+  content: ''; order: 3; display: block; height: 6px; margin: 4px 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
+}
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__nota { order: 4; }
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; min-height: 0; }
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__pie:not(:has(*)) { display: none; }
+
+/* Vista rápida del prospecto como la de Rovaq (06c): el cuerpo ocupa el alto del cajón y el PIE queda fijo abajo (padding 12×16, acciones a la derecha, primario de 32 px);
+   ningún botón mide todo el ancho. El pie y el cuerpo los pinta el tablero compartido (admin/vendedores/tablero.tsx); aquí solo se acomoda su disposición dentro del cajón. */
+[data-ui="v2"] .vnd-fila .rv-ov__cuerpo:has(.ven-detalle__pie) { display: flex; flex-direction: column; padding: 0; }
+[data-ui="v2"] .vnd-fila .rv-ov__cuerpo:has(.ven-detalle__pie) > .ven-detalle { flex: 1 1 auto; padding: 16px; }
+[data-ui="v2"] .vnd-fila .ven-detalle__pie { flex: none; margin-top: 0; padding: 12px 16px; gap: 8px; border-top: 1px solid var(--borde-reposo, var(--line)); }
+[data-ui="v2"] .vnd-fila .ven-detalle__pie .rv-btn { min-height: 32px; }
+[data-ui="v2"] .vnd-fila .ven-nota .rv-btn { align-self: flex-end; width: auto; }
+
+/* El tablero va a sangre dentro de su tarjeta (Rovaq: tabla con padding 0, cabecera de 36 y filas de 40): sin el marco propio de la tabla, que hacía un doble marco. */
+[data-ui="v2"] .rv-tarjeta:has(.ven-tablero) { overflow: hidden; }
+[data-ui="v2"] .ven-tablero { gap: 0; }
+[data-ui="v2"] .vnd-fila .ven-tablero > .card { margin: 4px calc(-1 * var(--ui-pad)) 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+[data-ui="v2"] .vnd-fila .ven-tablero:not(:has(.ven-recortes)) > .card { margin-bottom: calc(-1 * var(--ui-pad)); }
+[data-ui="v2"] .vnd-fila .ven-recortes { padding: 8px 0 0; }

@@ -1,18 +1,22 @@
+import { TarjetaTabla } from '../bloque';
+import { cifrasUniformes } from '../formato';
 import { Phone, PhoneOff, IdCard, UserPlus } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
 import type { ConteosOperadores } from '@/lib/likida/administracion';
 import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
-import { FiltroRegistro } from '../registro-filtro';
+import { FiltroRegistro, PieRegistro } from '../registro-filtro';
 import { FormaOperador, FormaAltaOperador, type AccionForma, type PatioOpcion } from './forma';
 import { InvitarPendientes, InvitarUno, type AccionInvitar } from './invitaciones';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import type { InvitacionDeOperador } from '@/lib/likida/invitacion_operador';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
-  AvisoCompacto, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, BotonEnlace, type ColumnaBase,
+  AvisoCompacto, EstadoError, EstadoVacio, Icono, StatusChip, TablaBase, BotonEnlace, type ColumnaBase,
 } from '@/app/ui-v2/componentes';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { CajonAlta } from '../cajon-alta';
 import './operadores.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
@@ -118,8 +122,6 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
   // `null` NO se convierte en 0: `—` dice «no lo sé», un 0 dice «no hay».
   const kpi = (v: number | undefined) => (v === undefined ? '—' : numero(v, idioma));
   const hayFiltro = pag.q !== '';
-  // Sin operadores el alta es lo único útil: se abre sola; con datos, la lista va primero y las altas quedan plegadas debajo.
-  const sinOperadores = !ilegible && pag.filtrados === 0 && !hayFiltro;
 
   const editado = pag.editando ? filas.find((f) => f.operadorId === pag.editando) : undefined;
   const hrefDe = (f: FilaOperador) => urlRegistro('/dashboard/operadores', sufijo, {
@@ -157,110 +159,128 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
       ),
     },
   ];
-  if (puedeEditar) {
+  {
     columnas.push({
       id: 'acciones', titulo: t('op.col.acciones'), alinear: 'der',
-      celda: (f) => (f.editable ? (
+      celda: (f) => (
         <span className="rv-eq__acciones">
-          <BotonEnlace href={hrefDe(f)} variante="ghost" tamano="sm">{pag.editando === f.operadorId ? t('op.cerrar') : t('op.editar')}</BotonEnlace>
-          {f.activo && f.telefono && f.invitacion && f.invitacion.estado !== 'enviada' && (
+          <BotonEnlace href={hrefDe(f)} variante="ghost" tamano="sm">{t('op.vr.ver')}</BotonEnlace>
+          {f.editable && f.activo && f.telefono && f.invitacion && f.invitacion.estado !== 'enviada' && (
             <InvitarUno operadorId={f.operadorId} nombre={f.nombre} reintento={f.invitacion.estado === 'fallo'} accion={invitar} />
           )}
         </span>
-      ) : null),
+      ),
     });
   }
 
+  // Con las vigencias SIN REGISTRAR, «0 vencidas» no es una medición: nadie las ha capturado. Solo se puede afirmar cuando toda la flota cabe
+  // en esta página (una sola) y ninguna tiene fecha; con varias páginas el conteo de la base manda (no se inventa un «sin dato» parcial).
+  const sinVigencias = pag.paginas <= 1 && filas.length > 0 && filas.every((f) => !f.licenciaVence);
+  const vigencia = (v: number | undefined, tono: 'bad' | 'warn') => (sinVigencias
+    ? { valor: null, estado: 'vacio' as const, mensaje: t('op.cifra.sin_vigencias') }
+    : { valor: kpi(v), tono: v !== undefined && v > 0 ? tono : undefined });
+  const cifras: PropsCifra[] = [
+    { etiqueta: t('op.cifra.activos'), valor: kpi(conteos?.activos), nota: conteos ? t('op.cifra.total', { n: numero(conteos.total, idioma) }) : t('op.nocontar'), info: 'operadores.activos' },
+    { etiqueta: t('op.cifra.sintel'), valor: kpi(conteos?.sinTelefono), nota: t('op.cifra.sintel.nota'), tono: conteos && conteos.sinTelefono > 0 ? 'warn' : undefined, info: 'operadores.sin_telefono' },
+    { etiqueta: t('op.cifra.vencidas'), ...vigencia(conteos?.licenciasVencidas, 'bad'), info: 'operadores.licencias_vencidas' },
+    { etiqueta: t('op.cifra.vencen', { n: DIAS_AVISO }), ...vigencia(conteos?.licenciasPorVencer, 'warn'), info: 'operadores.licencias_por_vencer' },
+  ];
+
   return (
-    <MarcoPagina titulo={t('op.titulo')} apoyo={t('op.apoyo')}>
-
-      <TiraCifras sello={selloHoy(t('op.sello'))}>
-        <Cifra etiqueta={t('op.cifra.activos')} valor={kpi(conteos?.activos)}
-          nota={conteos ? t('op.cifra.total', { n: numero(conteos.total, idioma) }) : t('op.nocontar')} info="operadores.activos" />
-        <Cifra etiqueta={t('op.cifra.sintel')} valor={kpi(conteos?.sinTelefono)} nota={t('op.cifra.sintel.nota')}
-          tono={conteos && conteos.sinTelefono > 0 ? 'warn' : undefined} info="operadores.sin_telefono" />
-        <Cifra etiqueta={t('op.cifra.vencidas')} valor={kpi(conteos?.licenciasVencidas)}
-          tono={conteos && conteos.licenciasVencidas > 0 ? 'bad' : undefined} info="operadores.licencias_vencidas" />
-        <Cifra etiqueta={t('op.cifra.vencen', { n: DIAS_AVISO })} valor={kpi(conteos?.licenciasPorVencer)}
-          tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} info="operadores.licencias_por_vencer" />
-      </TiraCifras>
-
-      {puedeEditar && invitaciones && (
-        <InvitarPendientes pendientes={invitaciones.pendientes} conFallo={invitaciones.conFallo}
-          accion={invitar} hrefGuia={hrefGuia} />
-      )}
-
-      {puedeEditar && editado && editado.editable && (
-        <Tarjeta titulo={t('op.corregir', { nombre: editado.nombre })}>
-          <div className="rv-eq__editor">
-            <FormaOperador
-              accion={guardarOperador}
-              operadorId={editado.operadorId}
-              idPrefijo={`operador-${editado.operadorId}`}
-              // La fila COMPLETA, no solo lo que se ve en la tabla: `actualizarOperador` reemplaza los campos que reciba, y un
-              // formulario que no trajera el nombre lo dejaría vacío si alguien lo borra sin querer del campo.
-              inicial={{
-                nombre: editado.nombre,
-                telefono: editado.telefono ?? '',
-                numeroEmpleado: editado.numeroEmpleado ?? '',
-                licencia: editado.licencia ?? '',
-                licenciaTipo: editado.licenciaTipo ?? '',
-                licenciaVence: editado.licenciaVence ?? '',
-                rfc: editado.rfc ?? '',
-                activo: editado.activo,
-                terminalId: editado.terminalId ?? '',
-              }}
-              patios={patios}
-              patioFijo={patioDelJefe !== null}
-            />
-            <BotonEnlace href={hrefDe(editado)} variante="ghost" tamano="sm">{t('op.cerrar')}</BotonEnlace>
-          </div>
-        </Tarjeta>
-      )}
-
-      <Tarjeta titulo={t('op.registro')} info="operadores.registro">
-        {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
-          <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
-            sustantivo="operadores" camposOcultos={camposOcultos} />
-        )}
-        {!ilegible && hayFiltro && !totalConocido && (
-          // No se pudo contar el padrón entero, así que el «de N» del pie sería un número inventado. Se dice.
-          <AvisoCompacto tono="warn" resumen={t('op.aviso.padron')} />
-        )}
-        {ilegible ? (
-          <EstadoError reintentar>{t('op.error')}</EstadoError>
-        ) : pag.filtrados === 0 && !hayFiltro ? (
-          <EstadoVacio pantalla contenido icono={UserPlus} titulo={t('op.vacio.titulo')}
-            accion={puedeEditar ? <BotonEnlace tamano="sm" href="#alta">{t('op.vacio.alta')}</BotonEnlace> : undefined}>
-            {puedeEditar
-              ? t('op.vacio.admin')
-              : t('op.vacio.otro')}
-          </EstadoVacio>
-        ) : (
-          <TablaBase<FilaOperador> etiqueta={t('op.tabla.etiqueta')} columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
-            vacio={{ titulo: t('op.vacio.sincoincidencias'), texto: t('op.vacio.busqueda', { q: pag.q }) }} />
-        )}
-      </Tarjeta>
-
-      {puedeEditar && (
+    <EsqueletoTablaMaestra
+      titulo={t('op.titulo')}
+      apoyo={t('op.apoyo')}
+      acciones={puedeEditar ? (
         <>
-          <Disclosure variante="tarjeta" titulo={t('op.alta.titulo')} abierto={sinOperadores}>
-            <div id="alta" className="rv-eq__bloque">
-              <p className="rv-eq__texto">{t('op.alta.nota')}</p>
-              <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
-            </div>
-          </Disclosure>
-          <Disclosure variante="tarjeta" titulo={t('op.carga.titulo')} abierto={sinOperadores}>
+          <CajonAlta id="carga" titulo={t('op.carga.titulo')} disparador={t('op.carga.titulo')} tamano="xl">
             <ImportadorMasivo
               entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
               archivoPlantilla="plantilla-operadores.csv"
               columnas={sinWhatsApp ? t('op.carga.cols.sinwa') : t('op.carga.cols.wa')}
               hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
             />
-          </Disclosure>
+          </CajonAlta>
+          <CajonAlta id="alta" titulo={t('op.alta.titulo')} descripcion={t('op.alta.nota')} disparador={t('op.alta.titulo')} primario>
+            <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
+          </CajonAlta>
+        </>
+      ) : undefined}
+      cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy(t('op.sello'))}
+      filtros={!ilegible && (pag.filtrados > 0 || hayFiltro) ? (
+        <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
+          sustantivo="operadores" camposOcultos={camposOcultos} conteoEnPie />
+      ) : undefined}
+      avisos={(
+        <>
+          {puedeEditar && invitaciones && (
+            <InvitarPendientes pendientes={invitaciones.pendientes} conFallo={invitaciones.conFallo}
+              accion={invitar} hrefGuia={hrefGuia} />
+          )}
+          {!ilegible && hayFiltro && !totalConocido && (
+            // No se pudo contar el padrón entero, así que el «de N» del pie sería un número inventado. Se dice.
+            <AvisoCompacto tono="warn" resumen={t('op.aviso.padron')} />
+          )}
         </>
       )}
-    </MarcoPagina>
+      vistaRapida={editado ? (
+        <CajonVistaRapida
+          titulo={editado.nombre}
+          subtitulo={editado.telefono ?? t('op.sintelefono')}
+          hrefCerrar={urlRegistro('/dashboard/operadores', sufijo, { q: pag.q || null, p: pag.pagina, editar: null })}
+          aviso={<AvisoCompacto tono="info" resumen={t('op.vr.aviso')} />}
+          cifras={[
+            { etiqueta: t('op.col.patio'), valor: editado.terminalNombre ?? '—' },
+            { etiqueta: t('op.col.viajes'), valor: numero(editado.viajes, idioma) },
+            { etiqueta: t('op.col.licencia'), valor: editado.licenciaVence ? fechaCorta(editado.licenciaVence, idioma) : t('op.lic.sinregistrar') },
+            { etiqueta: t('op.col.estado'), valor: editado.activo ? t('op.activo') : t('op.inactivo') },
+          ]}
+          // La vista rápida es de LECTURA (2x2 y pie). Editar es otro cajón que se abre desde el pie: la forma completa no se mezcla con el resumen.
+          pie={puedeEditar && editado.editable ? (
+            <CajonAlta id={`editar-${editado.operadorId}`} titulo={t('op.editar')} descripcion={t('op.corregir', { nombre: editado.nombre })} disparador={t('op.editar')} primario tamano="xl">
+              <FormaOperador
+                accion={guardarOperador}
+                operadorId={editado.operadorId}
+                idPrefijo={`operador-${editado.operadorId}`}
+                // La fila COMPLETA, no solo lo que se ve en la tabla: `actualizarOperador` reemplaza los campos que reciba, y un
+                // formulario que no trajera el nombre lo dejaría vacío si alguien lo borra sin querer del campo.
+                inicial={{
+                  nombre: editado.nombre,
+                  telefono: editado.telefono ?? '',
+                  numeroEmpleado: editado.numeroEmpleado ?? '',
+                  licencia: editado.licencia ?? '',
+                  licenciaTipo: editado.licenciaTipo ?? '',
+                  licenciaVence: editado.licenciaVence ?? '',
+                  rfc: editado.rfc ?? '',
+                  activo: editado.activo,
+                  terminalId: editado.terminalId ?? '',
+                }}
+                patios={patios}
+                patioFijo={patioDelJefe !== null}
+              />
+            </CajonAlta>
+          ) : undefined}
+        />
+      ) : null}
+    >
+      {ilegible ? (
+        <EstadoError reintentar>{t('op.error')}</EstadoError>
+      ) : pag.filtrados === 0 && !hayFiltro ? (
+        <EstadoVacio pantalla contenido icono={UserPlus} titulo={t('op.vacio.titulo')}
+          accion={puedeEditar ? <BotonEnlace tamano="sm" href={urlRegistro('/dashboard/operadores', sufijo, { abrir: 'alta' })}>{t('op.vacio.alta')}</BotonEnlace> : undefined}>
+          {puedeEditar
+            ? t('op.vacio.admin')
+            : t('op.vacio.otro')}
+        </EstadoVacio>
+      ) : (
+        <TarjetaTabla titulo={t('op.registro')}>
+          <TablaBase<FilaOperador> etiqueta={t('op.tabla.etiqueta')} columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
+            vacio={{ titulo: t('op.vacio.sincoincidencias'), texto: t('op.vacio.busqueda', { q: pag.q }) }} />
+          {/* «25 de N» y la paginación van en el pie de la tabla (Rovaq), una sola vez: antes se repetían arriba a la derecha y en la cabecera de la tarjeta. */}
+          <PieRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag} sustantivo="operadores" />
+        </TarjetaTabla>
+      )}
+    </EsqueletoTablaMaestra>
   );
 }
 

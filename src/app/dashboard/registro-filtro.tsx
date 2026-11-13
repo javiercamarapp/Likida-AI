@@ -16,7 +16,7 @@ import { urlRegistro, type PaginaRegistroUI } from './paginar-registro';
  * cuántas es la forma en que un tope se lee como un total.
  */
 export function FiltroRegistro<T>({
-  ruta, sufijo, pagina, sustantivo, camposOcultos = [], nombreQ = 'q', nombreP = 'p', nombreEditar = 'editar',
+  ruta, sufijo, pagina, sustantivo, camposOcultos = [], nombreQ = 'q', nombreP = 'p', nombreEditar = 'editar', conteoEnPie = false,
 }: {
   ruta: string;
   /** `?tenant=`/`?vista=`/`?rol=` del superadmin (sufijoTenant). */
@@ -33,37 +33,55 @@ export function FiltroRegistro<T>({
   nombreQ?: string;
   nombreP?: string;
   nombreEditar?: string;
+  /** El conteo («25 de N») y la paginación se pintan en el pie de la tabla con `PieRegistro` (Rovaq), no arriba a la derecha. */
+  conteoEnPie?: boolean;
 }) {
-  const { q, paginas } = pagina;
+  const { q } = pagina;
   const hayFiltro = q !== '';
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div className="flex flex-wrap items-center justify-between gap-3">
       <BarraFiltros buscar accion={ruta} enLinea etiqueta={`Buscar en ${sustantivo}`} ocultos={camposOcultos} nActivos={hayFiltro ? 1 : 0}
         limpiarHref={urlRegistro(ruta, sufijo, { [nombreQ]: null, [nombreP]: null, [nombreEditar]: null })}>
         <FiltroBusqueda nombre={nombreQ} valor={q} placeholder={`Buscar en ${sustantivo}…`} etiqueta={`Buscar en ${sustantivo}`} />
       </BarraFiltros>
 
-      <div className="flex items-center gap-3 text-[12px] text-[var(--muted)]">
-        <span>
-          {hayFiltro
-            ? `${numero(pagina.filtrados)} ${pagina.filtrados === 1 ? 'coincide' : 'coinciden'} de ${numero(pagina.total)}`
-            : `${numero(pagina.filas.length)} de ${numero(pagina.total)} ${sustantivo}`}
-        </span>
-        {paginas > 1 && (
-          <span className="flex items-center gap-2">
-            {pagina.pagina > 1 ? (
-              <BotonEnlace href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina - 1, [nombreEditar]: null })}
-                variante="ghost" tamano="sm" rel="prev" icono={<Icono icono={ChevronLeft} tam={14} />}>Anterior</BotonEnlace>
-            ) : <span className="inline-flex items-center gap-1 px-2.5 text-[var(--faint)]"><Icono icono={ChevronLeft} tam={14} />Anterior</span>}
-            <span className="tabular">Página {numero(pagina.pagina)} de {numero(paginas)}</span>
-            {pagina.pagina < paginas ? (
-              <BotonEnlace href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina + 1, [nombreEditar]: null })}
-                variante="ghost" tamano="sm" rel="next">Siguiente<Icono icono={ChevronRight} tam={14} /></BotonEnlace>
-            ) : <span className="inline-flex items-center gap-1 px-2.5 text-[var(--faint)]">Siguiente<Icono icono={ChevronRight} tam={14} /></span>}
-          </span>
-        )}
-      </div>
+      {conteoEnPie ? null : <ConteoRegistro ruta={ruta} sufijo={sufijo} pagina={pagina} sustantivo={sustantivo} nombreQ={nombreQ} nombreP={nombreP} nombreEditar={nombreEditar} />}
     </div>
   );
+}
+
+type PropsConteo<T> = { ruta: string; sufijo: string; pagina: PaginaRegistroUI<T>; sustantivo: string; nombreQ?: string; nombreP?: string; nombreEditar?: string };
+
+/** El texto «25 de N» + la paginación Anterior / Siguiente. Una sola pieza para el encabezado (modo clásico) y el pie de la tabla. */
+function ConteoRegistro<T>({ ruta, sufijo, pagina, sustantivo, nombreQ = 'q', nombreP = 'p', nombreEditar = 'editar' }: PropsConteo<T>) {
+  const { q, paginas } = pagina;
+  const hayFiltro = q !== '';
+  return (
+  <div className="flex items-center gap-3 text-[12px] text-[var(--muted)]">
+    <span>
+      {hayFiltro
+        ? `${numero(pagina.filtrados)} ${pagina.filtrados === 1 ? 'coincide' : 'coinciden'} de ${numero(pagina.total)}`
+        : `${numero(pagina.filas.length)} de ${numero(pagina.total)} ${sustantivo}`}
+    </span>
+    {paginas > 1 && (
+      <span className="flex items-center gap-2">
+        {pagina.pagina > 1 ? (
+          <BotonEnlace href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina - 1, [nombreEditar]: null })}
+            variante="ghost" tamano="sm" rel="prev" icono={<Icono icono={ChevronLeft} tam={14} />}>Anterior</BotonEnlace>
+        ) : <span className="inline-flex items-center gap-1 px-2.5 text-[var(--faint)]"><Icono icono={ChevronLeft} tam={14} />Anterior</span>}
+        <span className="tabular">Página {numero(pagina.pagina)} de {numero(paginas)}</span>
+        {pagina.pagina < paginas ? (
+          <BotonEnlace href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina + 1, [nombreEditar]: null })}
+            variante="ghost" tamano="sm" rel="next">Siguiente<Icono icono={ChevronRight} tam={14} /></BotonEnlace>
+        ) : <span className="inline-flex items-center gap-1 px-2.5 text-[var(--faint)]">Siguiente<Icono icono={ChevronRight} tam={14} /></span>}
+      </span>
+    )}
+  </div>
+  );
+}
+
+/** El pie de la tabla maestra (Rovaq): «25 de N» a la izquierda y la paginación a la derecha, dentro de la tarjeta. */
+export function PieRegistro<T>(props: PropsConteo<T>) {
+  return <div className="rv-reg__pie-tabla"><ConteoRegistro {...props} /></div>;
 }

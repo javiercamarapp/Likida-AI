@@ -5,7 +5,7 @@ import { type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
-import { CloudDownload, FileQuestion } from 'lucide-react';
+import { FileQuestion } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
@@ -21,10 +21,13 @@ import {
   ligarComprobante, ignorarComprobante, revertirResolucion,
 } from '@/lib/likida/sat_descarga/resolucion';
 import { numero } from '@/lib/formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { sufijoTenant } from '../../sufijo';
 import { FilaComprobante, type ResultadoFila } from './fila';
 import { EnlacePagina, NavPaginas } from '../../paginador';
-import { Aviso, AvisoCompacto, BotonEnlace, Chip, EstadoVacio, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BarraPeriodo, Chip, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import '../descarga-sat.css';
 
 /**
@@ -190,39 +193,10 @@ export async function PanelBandeja({
     : Math.min(Math.max(1, Math.ceil(bandeja.total / bandeja.porPagina)), PAGINA_MAX);
   const cola = colas(tr)[estatus];
 
-  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
-  return (
-    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
-    <MarcoPagina titulo="SAT" apoyo={tr('descargaSat.bandeja.vista.loQueBajoDel')}>
-      {/* ── LAS CUATRO COLAS, con su conteo EXACTO de la base ──────── */}
-      <Tarjeta titulo={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}>
-        <div className="rv-sat__cola">
-          {ESTATUS_CFDI.map((e) => {
-            const activo = e === estatus;
-            // `null` = la consulta de conteos se cayó. La cola no pinta un 0 que nadie midió: pinta un guion.
-            const n = c === null ? null
-              : e === 'ambiguo' ? c.ambiguos
-                : e === 'disponible' ? c.disponibles
-                  : e === 'casado' ? c.casados : c.ignorados;
-            return (
-              <BotonEnlace key={e} href={enlace(searchParams, { estatus: e, pag: null, buscar: null })}
-                aria-current={activo ? 'page' : undefined}
-                variante={activo ? 'primary' : 'secondary'} tamano="sm">
-                {colas(tr)[e].titulo} {n === null ? '—' : numero(n)}
-              </BotonEnlace>
-            );
-          })}
-        </div>
-        {c === null && (
-          <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.losConteosDeArriba')} />
-        )}
-        <p className="rv-sat__texto">{cola.explica}</p>
-      </Tarjeta>
-
-      {/* ── QUÉ FALTA PARA QUE HAYA ALGO QUE CONCILIAR ─────────────── */}
-      {(!proveedor.configurado || datos.config === null) && (
+  const avisoFalta = (!proveedor.configurado || datos.config === null) ? (
         <Aviso tono="warn" titulo={tr('descargaSat.bandeja.vista.todaviaNoHayDe')}>
-          {!proveedor.configurado && <>{tr('descargaSat.bandeja.vista.loDestrabaLikidaNo', { motivo: proveedor.motivo ?? '' })} </>}
+          {/* Solo el estado: el motivo técnico (variables de entorno, quién lo destraba) es del equipo de Likida, no del contador. */}
+          {!proveedor.configurado && <>{tr('descargaSat.panel.proveedorPendiente')} </>}
           {datos.config === null && (
             <>{rico(tr('descargaSat.bandeja.vista.noHasDeclaradoDe'), { link: (c) => <Link href={`/dashboard/descarga-sat${sufijoTenant(searchParams)}`} className="rv-sat__enlace">{c}</Link> })} </>
           )}
@@ -232,10 +206,48 @@ export async function PanelBandeja({
               : tr('descargaSat.bandeja.vista.tuEFirmaNo')
           )}
         </Aviso>
-      )}
+      ) : null;
 
+  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
+  return (
+    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
+    <EsqueletoTablaMaestra
+      titulo="SAT"
+      apoyo={tr('descargaSat.bandeja.vista.loQueBajoDel')}
+      filtros={(
+        <BarraPeriodo
+          etiqueta={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}
+          periodo={{
+            etiqueta: tr('descargaSat.bandeja.vista.queBajoDelBuzon'),
+            valor: estatus,
+            opciones: ESTATUS_CFDI.map((e) => ({ valor: e, etiqueta: colas(tr)[e].titulo, href: enlace(searchParams, { estatus: e, pag: null, buscar: null }) })),
+          }}
+        />
+      )}
+      avisos={(
+        <>
+          {c === null && <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.losConteosDeArriba')} />}
+          {avisoFalta}
+        </>
+      )}
+      // Misma tira que la pestaña hermana «Descarga» (rótulo, cifra, nota, ⓘ y procedencia), en 4 celdas: lo bajado, las dos colas que esperan una decisión
+      // (por separado, como allá) y lo ya resuelto. Cuatro celdas también parejan la rejilla de 2 columnas del móvil (con 3 quedaba una celda vacía).
+      // `null` = la consulta de conteos se cayó: «—», nunca un 0 que nadie midió.
+      cifras={([
+        { etiqueta: tr('descargaSat.bandeja.vista.cifraDescargados'), info: 'descarga_sat.bajados', valor: c === null ? null : c.descargados, nota: tr('descargaSat.bandeja.vista.cifraDescargadosNota') },
+        { etiqueta: tr('descargaSat.vista.esperanQueTuDecidas'), info: 'descarga_sat.ambiguos', valor: c === null ? null : c.ambiguos, nota: tr('descargaSat.vista.variosGastosEmpatanLikida') },
+        { etiqueta: tr('descargaSat.vista.sinGastoQueLes'), info: 'descarga_sat.disponibles', valor: c === null ? null : c.disponibles, nota: tr('descargaSat.vista.puedeSerUnGasto') },
+        { etiqueta: tr('descargaSat.bandeja.vista.cifraResueltos'), info: 'descarga_sat.casados', valor: c === null ? null : c.casados + c.ignorados, nota: tr('descargaSat.bandeja.vista.cifraResueltosNota') },
+      ] as PropsCifra[]).map((x): PropsCifra => ({
+        ...x, formato: 'entero', matiz: 8,
+        ...(x.valor === null ? { estado: 'vacio' as const, mensaje: tr('descargaSat.bandeja.vista.noSePudoLeer', { error: '' }) } : {}),
+      }))}
+      etiquetaCifras={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}
+      selloCifras={selloHoy(tr('descargaSat.vista.buzonDelSat'))}
+    >
       {/* ── LA LISTA ───────────────────────────────────────────────── */}
       <Tarjeta titulo={cola.titulo} acciones={bandeja.total !== null ? <Chip>{numero(bandeja.total)}</Chip> : undefined}>
+        <p className="rv-sat__texto">{cola.explica}</p>
         {bandeja.incompleta && (
           <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.losComprobantesEstanPero')} />
         )}
@@ -292,12 +304,9 @@ export async function PanelBandeja({
             )}
           </>
         )}
+        <p className="rv-sat__nota"><strong>{tr('descargaSat.bandeja.vista.nadaDeEstoBorra')}.</strong> {tr('descargaSat.bandeja.vista.archivarYDeshacerDejan')}</p>
       </Tarjeta>
-
-      <EstadoVacio titulo={tr('descargaSat.bandeja.vista.nadaDeEstoBorra')} icono={CloudDownload} contenido>
-        {tr('descargaSat.bandeja.vista.archivarYDeshacerDejan')}
-      </EstadoVacio>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
     </IdiomaProvider>
   );
 }

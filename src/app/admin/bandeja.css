@@ -58,7 +58,8 @@
 
 /* Vistas de Aprobaciones: los paneles inactivos se ocultan, todos quedan en el documento. */
 .bj-vistas { display: flex; flex-direction: column; gap: 12px; }
-.bj-vistas > [hidden] { display: none; }
+.bj-vistas .rv-tabs__panel { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.bj-vistas .rv-tabs__panel[hidden] { display: none; }
 .bj-panel { display: flex; flex-direction: column; gap: 12px; }
 
 @media (max-width: 767px) {
@@ -69,3 +70,62 @@
 /* Fuente de una escalación: el icono va a la IZQUIERDA del nombre (antes se apilaba encima cuando el nombre envolvía). */
 .bj-fuente { display: inline-flex; align-items: flex-start; gap: 6px; }
 .bj-fuente > svg { flex: none; margin-top: 3px; }
+
+/* ── F26 ronda 2: Tu turno. Piezas compactas dentro de la tarjeta 8-4 (miniatura a la izquierda, sin blanco); siguiente acción; vistas de Aprobaciones como pestañas subrayadas. ── */
+.bj-piezas--compacta { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.bj-piezas--compacta .bj-pieza { flex-direction: row; border-radius: 8px; }
+.bj-piezas--compacta .bj-pieza__marco { width: 96px; flex: none; aspect-ratio: 1; max-height: none; }
+.bj-piezas--compacta .bj-pieza__cuerpo { padding: 8px 10px; gap: 6px; }
+.bj-piezas--compacta .bj-pieza__titulo { min-height: 0; }
+.bj-siguiente { margin: 0; font: 600 13px/1.4 var(--font-sans-ui, inherit); color: var(--ink); }
+@media (max-width: 479px) { .bj-piezas--compacta .bj-pieza__marco { width: 72px; } }
+
+/* F26 ronda 4: las vistas de la pantalla son el SEGMENTADO de la barra de filtros (Rovaq BF: segmentado · Filtros · responsable) con contador, de 28 px; el único nivel de pestañas subrayadas es el del grupo (barra automática). */
+[data-ui="v2"] .bj-vistas > .rv-seg { width: fit-content; max-width: 100%; overflow-x: auto; }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 28px; font-size: 13px; font-weight: 500; }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn[aria-checked="true"] { font-weight: 600; }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__conteo { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); color: var(--ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 819px) { [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 36px; } }
+
+/* Botones de fila: una línea y 28 px; un rótulo largo no parte el botón en dos (antes 39 px). */
+.bj-nowrap { white-space: nowrap; flex: none; }
+/* La barra de vistas va sola arriba de la tira: sin hueco de más contra ella, y los paneles sin separación de la barra. */
+.bj-vistas--barra { gap: 0; }
+
+/* F26 ronda 4: tabla y avisos dentro de una tarjeta (radio 12, borde 1 px, padding 14); el vacío, punteado dentro de ella (Rovaq `ac-vacio`). */
+.bj-caja { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.bj-caja .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.bj-caja .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; background: transparent; }
+
+/* F26 ronda 4: el vacío dentro de una tarjeta va punteado (Rovaq `ac-vacio`: 1 px, radio 8, 20×14). */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* F26 ronda 5 · Aprobaciones: UNA tarjeta «Por decidir» con las dos colas como subsecciones (antes dos tarjetas con vacío completo cada una). */
+.bj-grupos { display: flex; flex-direction: column; gap: 12px; }
+.bj-grupo { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bj-grupo + .bj-grupo { padding-top: 12px; border-top: 1px solid var(--line); }
+.bj-grupo__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+.bj-grupo__titulo { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--ink); }
+.bj-grupo__nota { margin: 0; font-size: 12px; color: var(--muted); }
+.bj-grupo__nota[data-tono="bad"] { color: var(--bad); }
+
+/* F26 ronda 5 · Escalaciones: los seis conteos por fuente como una fila de chips sobre la cola (la tira de arriba quedó en 4 celdas). */
+.bj-chips-fuente { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.bj-chips-fuente > li { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font-size: 12px; color: var(--ink2, var(--muted)); }
+.bj-chips-fuente > li b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* F26 ronda 5 · Tu turno: «Siguiente mejor acción» destacada (Rovaq `hoy-sig`): filete izquierdo de 3 px (negro en monocromo), título 16/600 y la acción primaria a la vista. */
+[data-ui="v2"] .rv-tarjeta.bj-sig { border-left: 3px solid var(--ink); }
+[data-ui="v2"] .rv-tarjeta.bj-sig .rv-tarjeta__titulo { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+[data-ui="v2"] .rv-tarjeta.bj-sig .bj-siguiente { font-size: 14px; line-height: 1.45; font-weight: 500; }
+/* Ronda 7: la tarjeta lateral se estira a la altura de «Piezas para tu tap» (no `align-self: start`) y el cuerpo la llena: la acción arriba,
+   el conteo REAL de cada fuente al pie, sin hueco. */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.bj-sig { align-self: stretch; }
+[data-ui="v2"] .rv-tarjeta.bj-sig > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; }
+.bj-sig__resumen { margin-top: auto; padding-top: 12px; }
+
+/* F26 ronda 8: segmentado móvil de 36 px visibles con zona táctil de 44 px por ::after invisible (Rovaq CATALOGO §4). */
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn { position: relative; min-height: 36px; }
+  [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
+}

@@ -15,6 +15,8 @@ export interface EntradaResumenCorreo {
   resultado: ResultadoSinAtender;
   destinatarios: readonly DestinatarioResumen[];
   liga: string;
+  /** grupo (chatId) -> cliente dueño. Con él, quien está ligado a un cliente solo recibe SUS alertas; sin él (o sin el grupo) no recibe ninguna. */
+  clienteDeChat?: ReadonlyMap<string, string>;
   /** Turno y día local del ENVÍO: junto con el contenido forman la clave de idempotencia. */
   turno: TurnoActual;
   fechaLocal: string;
@@ -61,6 +63,38 @@ export function parrafosDelResumen(r: ResultadoSinAtender): string[] {
   return [encabezado, ...bloques, pie];
 }
 
+/** El mismo resultado con solo las alertas dadas y el resumen recontado (sin texto de mensajes). */
+export function acotarResultado(r: ResultadoSinAtender, alertas: readonly AlertaSinAtender[]): ResultadoSinAtender {
+  const porTurno = { dia: 0, noche: 0, festivo: 0 };
+  for (const a of alertas) porTurno[a.turno]++;
+  return {
+    ...r, alertas: [...alertas],
+    resumen: {
+      ...r.resumen, alertas: alertas.length, chatsConAlerta: new Set(alertas.map((a) => a.chatId)).size,
+      altas: alertas.filter((a) => a.nivel === 'alta').length, normales: alertas.filter((a) => a.nivel === 'normal').length,
+      masAntiguaMin: alertas.length ? Math.max(...alertas.map((a) => a.antiguedadMin)) : null, porTurno,
+    },
+  };
+}
+
+/**
+ * Reparte a los destinatarios por lo que PUEDEN ver (A2): quien está ligado a uno o más clientes solo ve las alertas de esos clientes; un
+ * grupo sin cliente conocido no se le muestra (falla cerrado). Quien ve toda la flota ve todo. Quienes ven exactamente las mismas alertas
+ * comparten un correo; sin alertas visibles, no se manda. Cada grupo lleva otra clave porque la clave sale de sus alertas.
+ */
+export function repartirPorAlcance(r: ResultadoSinAtender, destinatarios: readonly DestinatarioResumen[], clienteDeChat: ReadonlyMap<string, string> | undefined): Array<{ resultado: ResultadoSinAtender; destinatarios: DestinatarioResumen[] }> {
+  const grupos = new Map<string, { alertas: AlertaSinAtender[]; destinatarios: DestinatarioResumen[] }>();
+  for (const d of destinatarios) {
+    const alertas = d.clientes == null ? r.alertas : r.alertas.filter((a) => { const c = clienteDeChat?.get(a.chatId); return c !== undefined && d.clientes!.includes(c); });
+    if (alertas.length === 0) continue;
+    const firma = alertas.map((a) => a.clave).sort().join('\u0000');
+    const g = grupos.get(firma) ?? { alertas: [...alertas], destinatarios: [] };
+    g.destinatarios.push(d);
+    grupos.set(firma, g);
+  }
+  return [...grupos.values()].map((g) => ({ resultado: g.alertas.length === r.alertas.length ? r : acotarResultado(r, g.alertas), destinatarios: g.destinatarios }));
+}
+
 export async function enviarResumenSinAtender(e: EntradaResumenCorreo, deps: DepsResumen = {}): Promise<ResultadoEnvioResumen> {
   try {
     if (e.resultado.alertas.length === 0) return { ok: false, motivo: 'sin_alertas' };
@@ -71,15 +105,26 @@ export async function enviarResumenSinAtender(e: EntradaResumenCorreo, deps: Dep
       return resumenHabilitadoParaFlota(e.tenantId, async (id) => (await leerConfigSinAtender(id)).resumenCorreoHabilitado);
     }))();
     if (!estado.ok) return { ok: false, motivo: estado.motivo };
-    const clave = claveDelResumen(e.turno, e.fechaLocal, e.resultado.alertas);
-    const aviso: AvisoCorreo = {
-      tenantId: e.tenantId, agente: 'vigia', tipo: 'sin_atender', asunto: ASUNTO_RESUMEN, titulo: 'Conversaciones sin atender',
-      parrafos: parrafosDelResumen(e.resultado), referencia: clave.slice(0, 8), liga: e.liga, para: e.destinatarios.map((d) => d.correo), clave,
-    };
-    const r = await (deps.enviar ?? enviarAvisoCorreo)(aviso);
-    if (r.ok) return { ok: true, destinatarios: r.destinatarios, alertas: e.resultado.alertas.length, clave };
-    const m = r.motivo;
-    return { ok: false, motivo: m === 'sin_configurar' ? 'sin_configurar' : m === 'red' ? 'red' : m === 'sin_destinatarios' ? 'sin_destinatarios' : 'rechazado' };
+    const grupos = repartirPorAlcance(e.resultado, e.destinatarios, e.clienteDeChat);
+    if (grupos.length === 0) return { ok: false, motivo: 'sin_destinatarios' };
+    // Un correo por grupo de alcance. Si uno falla se corta y se reporta; los ya enviados llevan clave propia, así que reintentar no los duplica.
+    let enviados = 0;
+    let claveTotal = '';
+    for (const g of grupos) {
+      const clave = claveDelResumen(e.turno, e.fechaLocal, g.resultado.alertas);
+      claveTotal = claveTotal === '' ? clave : claveTotal;
+      const aviso: AvisoCorreo = {
+        tenantId: e.tenantId, agente: 'vigia', tipo: 'sin_atender', asunto: ASUNTO_RESUMEN, titulo: 'Conversaciones sin atender',
+        parrafos: parrafosDelResumen(g.resultado), referencia: clave.slice(0, 8), liga: e.liga, para: g.destinatarios.map((d) => d.correo), clave,
+      };
+      const r = await (deps.enviar ?? enviarAvisoCorreo)(aviso);
+      if (!r.ok) {
+        const m = r.motivo;
+        return { ok: false, motivo: m === 'sin_configurar' ? 'sin_configurar' : m === 'red' ? 'red' : m === 'sin_destinatarios' ? 'sin_destinatarios' : 'rechazado' };
+      }
+      enviados += r.destinatarios;
+    }
+    return { ok: true, destinatarios: enviados, alertas: e.resultado.alertas.length, clave: claveTotal };
   } catch {
     return { ok: false, motivo: 'red' };
   }

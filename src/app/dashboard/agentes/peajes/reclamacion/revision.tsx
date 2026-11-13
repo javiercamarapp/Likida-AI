@@ -64,8 +64,8 @@ function FilasCandidatos({ candidatos, justificar, desglose, tr = TR_ES }: { can
           { id: 'fecha', titulo: tx('rest.fecha_y_hora'), principal: true, celda: (c) => <>{c.fecha ?? '—'}{c.hora && <span className="rv-pj-nota">{c.hora}</span>}</> },
           { id: 'caseta', titulo: tx('rest.caseta'), celda: (c) => c.caseta ?? '—' },
           { id: 'tag', titulo: tx('rest.tag_unidad'), celda: (c) => <>{c.tag ?? '—'}{c.unidad && <span className="rv-pj-nota">{c.unidad}</span>}</> },
-          { id: 'clase', titulo: tx('rest.clase'), alinear: 'der', celda: (c) => <span className="cifra-mono">{c.clase ?? '—'}</span> },
-          { id: 'importe', titulo: tx('rest.importe'), alinear: 'der', celda: (c) => <span className="cifra-mono">{mxn(c.monto)}</span> },
+          { id: 'clase', titulo: tx('rest.clase'), alinear: 'der', celda: (c) => <span className="rv-ag-num">{c.clase ?? '—'}</span> },
+          { id: 'importe', titulo: tx('rest.importe'), alinear: 'der', celda: (c) => <span className="rv-ag-num">{mxn(c.monto)}</span> },
           {
             id: 'quepaso', titulo: tx('rest.que_paso_que_significa_que_hacer'),
             celda: (c) => (
@@ -120,7 +120,7 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
     <Tarjeta
       titulo={tx('rest.revision_de_cobros_del_archivo')}
       acciones={(
-        <span className="rv-pj-total">{ricoT(tx('rest.e0_cruces_con_algun_candidato_e0'), { e0: (c) => <span className="rv-pj-rotulo">{c}</span> })}<strong className="cifra-mono rv-pj-total__valor">{numero(r.lineasConCandidato)}</strong>
+        <span className="rv-pj-total">{ricoT(tx('rest.e0_cruces_con_algun_candidato_e0'), { e0: (c) => <span className="rv-pj-rotulo">{c}</span> })}<strong className="rv-ag-num rv-pj-total__valor">{numero(r.lineasConCandidato)}</strong>
           <span className="rv-pj-nota">{mxn(r.montoConCandidato)}</span>
         </span>
       )}
@@ -146,7 +146,7 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
         {CATEGORIAS_COBRO.map((c) => (
           <a key={c} href={`#cat-${c}`} className="rv-pj-caja rv-pj-caja--enlace">
             <span className="rv-pj-rotulo">{ETIQUETA_CATEGORIA_COBRO[c]}</span>
-            <span className="rv-pj-caja__monto cifra-mono">{numero(r.porCategoria[c].n)}</span>
+            <span className="rv-pj-caja__monto rv-ag-num">{numero(r.porCategoria[c].n)}</span>
             <span className="rv-pj-nota">{mxn(r.porCategoria[c].monto)}</span>
           </a>
         ))}
@@ -240,7 +240,7 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
       <p className="rv-pj-sub">{tx('rest.junta_las_tres_decenas_de_un')}</p>
       <BarraFiltros accion="?" etiqueta={tx('rest.periodo_del_cierre_mensual')} ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ...(desglose ? [['desglose', desglose] as const] : [])]}>
         {lista.length > 0 ? (
-          <FiltroOpciones nombre="mes" etiqueta="Mes" valor={mes ?? lista[0]} porDefecto="" opciones={lista.map((m) => ({ valor: m, rotulo: m }))} />
+          <FiltroOpciones nombre="mes" etiqueta="Mes" valor={mes ?? lista[0]} porDefecto={lista[0]} opciones={lista.map((m) => ({ valor: m, rotulo: m }))} />
         ) : (
           <FiltroCampo etiqueta="Mes"><input className="border-0 bg-transparent" name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required data-anillo="envolvente" /></FiltroCampo>
         )}
@@ -257,7 +257,7 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
               <StatusChip tono={cierre.completo ? 'ok' : 'warn'}>{cierre.completo ? tx('rest.mes_completo') : tx('rest.mes_incompleto')}</StatusChip>
             </div>
             <div className="rv-pj-der">
-              <strong className="cifra-mono rv-pj-caja__monto">{numero(cierre.cruces)}</strong>{' '}{tx('rest.cruces_2')}{' '}<span className="cifra-mono">{mxn(cierre.monto)}</span>
+              <strong className="rv-ag-num rv-pj-caja__monto">{numero(cierre.cruces)}</strong>{' '}{tx('rest.cruces_2')}{' '}<span className="rv-ag-num">{mxn(cierre.monto)}</span>
             </div>
           </div>
           <div className="rv-pj-decenas">
@@ -279,7 +279,7 @@ function TarjetaDecena({ d, tr = TR_ES }: { d: CierreMensual['decenas'][number];
   const { t: tx } = tr;
   return (
     <div className="rv-pj-caja">{ricoT(tx('rest.e0_decena_e0', { etiqueta: d.etiqueta }), { e0: (c) => <span className="rv-pj-rotulo">{c}</span> })}{d.cubierta
-        ? <span><strong className="rv-pj-caja__monto cifra-mono">{numero(d.cruces)}</strong> <span className="rv-pj-nota">{mxn(d.monto)}</span></span>
+        ? <span><strong className="rv-pj-caja__monto rv-ag-num">{numero(d.cruces)}</strong> <span className="rv-pj-nota">{mxn(d.monto)}</span></span>
         : <span className="rv-pj-sub rv-pj-malo">{tx('rest.falta_el_archivo_2')}</span>}
     </div>
   );
@@ -295,7 +295,7 @@ function CierreDosMesesVista({ c, tr = TR_ES }: { c: CierreDosMeses; tr?: TrAgen
           <StatusChip tono={c.completo ? 'ok' : 'warn'}>{c.completo ? tx('rest.dos_meses_completos') : tx('rest.ventana_incompleta')}</StatusChip>
         </div>
         <div className="rv-pj-der">
-          <strong className="cifra-mono rv-pj-caja__monto">{numero(c.cruces)}</strong>{' '}{tx('rest.cruces_2')}{' '}<span className="cifra-mono">{mxn(c.monto)}</span>
+          <strong className="rv-ag-num rv-pj-caja__monto">{numero(c.cruces)}</strong>{' '}{tx('rest.cruces_2')}{' '}<span className="rv-ag-num">{mxn(c.monto)}</span>
         </div>
       </div>
       <div className="rv-pj-decenas">
@@ -411,7 +411,7 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                 <strong>{(CATEGORIAS_COBRO as readonly string[]).includes(r.categoria) ? ETIQUETA_CATEGORIA_COBRO[r.categoria as CategoriaCobro] : r.categoria}</strong>
                 <StatusChip tono={TONO_ALERTA[r.evaluacion.alerta]}>{ROTULO_ALERTA[r.evaluacion.alerta]}</StatusChip>
                 <span className="rv-pj-apagado">{ETIQUETA_ESTADO_RECLAMO[r.estado]}</span>
-                {r.referenciaPortal && <span className="cifra-mono rv-pj-nota">{tx('rest.folio')}{' '}{r.referenciaPortal}</span>}
+                {r.referenciaPortal && <span className="rv-ag-num rv-pj-nota">{tx('rest.folio')}{' '}{r.referenciaPortal}</span>}
               </div>
               <p className="rv-pj-texto">{tx('rest.cruces_reclamado_acreditado', { numero: numero(r.nCruces), mxn: mxn(r.montoReclamado), mxn2: mxn(r.montoAcreditado) })}{r.evaluacion.pctAcreditado !== null && ` (${r.evaluacion.pctAcreditado}%)`}{' '}{tx('rest.cobro_mas_antiguo_vence', { fechaCobroMasAntiguo: r.fechaCobroMasAntiguo, fechaLimite: r.evaluacion.fechaLimite })}</p>
               <p className="rv-pj-sub">{r.evaluacion.mensaje}</p>

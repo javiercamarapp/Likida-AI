@@ -11,7 +11,7 @@ import { crearRepoVigia } from '@/lib/likida/vigia/repo';
 import { analizarHistorial } from '@/lib/likida/vigia/historial/analisis';
 import { pendientesDeHistorial } from '@/lib/likida/vigia/historial/pendientes';
 import { leerClientesParaGrupo, leerGrupos, leerMensajesHistorial, leerRespuestasRapidas } from '@/lib/likida/vigia/historial/repo';
-import { altaGrupoPanel, aprobarRespuestaRapidaPanel, borrarGrupoPanel, criticoGrupoPanel, importarLotePanel, retirarRespuestaRapidaPanel, type EntradaLote } from '@/lib/likida/vigia/historial/acciones';
+import { altaClienteRapidaPanel, altaGrupoPanel, aprobarRespuestaRapidaPanel, borrarGrupoPanel, criticoGrupoPanel, importarLotePanel, retirarRespuestaRapidaPanel, type EntradaLote } from '@/lib/likida/vigia/historial/acciones';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaHistorialVigia } from './vista';
 import type { ResultadoGrupos } from './formas';
@@ -67,6 +67,15 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   // taparía el pendiente de otro.
   const pendientes = datos && grupoElegido ? pendientesDeHistorial(datos.mensajes) : null;
 
+  async function altaCliente(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
+    'use server';
+    const { t: tx } = await getT('agentes');
+    const c = await contexto(sp, tenantId);
+    if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
+    const r = await altaClienteRapidaPanel(c, fd);
+    if (r.ok) revalidatePath(RUTA);
+    return r;
+  }
   async function alta(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
     const { t: tx } = await getT('agentes');
@@ -137,7 +146,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
     <VistaHistorialVigia
       sufijo={sufijoTenant(sp)} grupos={grupos} clientes={clientes} reporte={reporte} pendientes={pendientes} grupoElegido={grupoElegido} truncado={datos?.truncado ?? false}
       umbralMin={umbralMin} puedeEditar={puedeAdministrar(rol)} puedeAprobar={['superadmin', 'flota_admin', 'encargado'].includes(rol)} rapidas={rapidas} standby={standby}
-      acciones={{ alta, critico, borrar, importar, aprobarRapida, retirarRapida }}
+      acciones={{ altaCliente, alta, critico, borrar, importar, aprobarRapida, retirarRapida }}
     />
   );
 }

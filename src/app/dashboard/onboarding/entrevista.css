@@ -1,8 +1,8 @@
 /* Perfil de la flota (entrevista) · solo lo que las piezas del sistema no traen. Colores de tokens; sin sombra en flujo. */
 .rv-ob { position: relative; display: flex; flex-direction: column; min-height: 520px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
-.rv-ob__lienzo { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.rv-ob__lienzo { position: static; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
 .rv-ob__pospuesto { margin: 0; padding: 12px 16px 0; font-size: var(--t-small); color: var(--muted); }
-.rv-ob__listo { position: absolute; top: 12px; right: 16px; z-index: 2; }
+.rv-ob__listo { position: relative; z-index: 2; display: flex; justify-content: center; margin: 0 0 12px; }
 .rv-ob__portada { position: relative; z-index: 1; display: flex; flex: 1 1 auto; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; }
 .rv-ob__columna { width: 100%; max-width: 42rem; display: flex; flex-direction: column; align-items: center; }
 .rv-ob__lead { margin: 8px 0 24px; max-width: 28rem; text-align: center; font-size: var(--t-body); color: var(--muted); }
@@ -56,3 +56,66 @@
 .rv-ob__form-apoyo { margin: 8px 0 16px; font-size: var(--t-micro); color: var(--muted); }
 .rv-ob__form-enlace { text-decoration: underline; text-underline-offset: 2px; }
 .rv-ob__forma { display: grid; gap: 16px; text-align: left; }
+
+/* Compositor como `agente-composer` de Rovaq: caja de ≤650 px (radio 12, sombra suave) con UN solo botón primario (el envío circular); «Consulta» pasa a secundario. */
+.rv-ob__caja { max-width: 650px; min-height: 58px; margin-inline: auto; box-shadow: 0 1px 3px rgba(14, 14, 16, .08); }
+
+/* Ronda 3 — compositor de UNA sola fila (Rovaq 650x58): [Consulta] [clip] [campo de 15 px] [enviar], sin segunda barra ni doble borde.
+   El adjunto, si lo hay, ocupa su propio renglón arriba. */
+.rv-ob__caja { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; }
+.rv-ob__caja > .rv-ob__adjunto { flex: 0 0 auto; margin-bottom: 0; order: -1; }
+.rv-ob__caja .rv-ob__barra, .rv-ob__caja .rv-ob__herramientas { display: contents; }
+.rv-ob__caja .rv-ob__barra > .rv-btn { order: 1; }
+.rv-ob__caja .rv-ob__clip { order: 2; }
+.rv-ob__caja .rv-ob__campo { order: 3; flex: 1 1 0; min-width: 120px; width: auto; height: 40px; font-size: 15px; }
+.rv-ob__caja .rv-ob__enviar { order: 4; }
+@media (max-width: 480px) { .rv-ob__caja .rv-ob__barra > .rv-btn { order: 5; flex: 1 1 100%; } }
+/* Preguntas sugeridas: blancas con borde neutro (ctl-q), nunca el aspecto de seleccionado. */
+.rv-ob__chip { min-height: 32px; background: var(--surface); border: 1px solid var(--line2); font-weight: 400; }
+.rv-ob__chip:hover:not(:disabled) { background: var(--canvas); }
+
+/* Ronda 4 — compositor como `agente-composer` de Rovaq: UN solo campo de 650x58 (radio 12, borde neutro), clip a la izquierda y enviar circular a la derecha,
+   sin segundo borde en el input, sin tarjeta contenedora alrededor del perfil y «Consulta» fuera de la caja (ghost, arriba a la derecha). */
+.rv-ob { border: 0; border-radius: 0; background: transparent; }
+.rv-ob__pie { background: transparent; }
+[data-ui="v2"] .rv-ob__caja { border-color: var(--line2); }
+[data-ui="v2"] .rv-ob__caja:focus-within { border-color: var(--ink); }
+[data-ui="v2"] .rv-ob__caja .rv-ob__campo,
+[data-ui="v2"] .rv-ob__caja .rv-ob__campo:focus,
+[data-ui="v2"] .rv-ob__caja .rv-ob__campo:focus-visible { border: 0; box-shadow: none; outline: none; background: transparent; border-radius: 0; padding: 0; }
+.rv-ob__caja .rv-ob__clip { order: 0; }
+.rv-ob__caja .rv-ob__barra > .rv-btn { position: static; order: 0; flex: none; background: transparent; border-color: transparent; }
+@media (max-width: 480px) { .rv-ob__caja .rv-ob__barra > .rv-btn { position: static; order: 0; flex: none; } }
+
+/* Ronda 6: indicador de avance del perfil (barra de 6 px + «N de M»), centrado sobre el compositor de 650 px. */
+.rv-ob__avance { display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 650px; margin: 0 auto 12px; }
+.rv-ob__avance-barra { flex: none; width: 160px; height: 6px; appearance: none; border: 0; border-radius: 999px; background: var(--line); overflow: hidden; }
+.rv-ob__avance-barra::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
+.rv-ob__avance-barra::-webkit-progress-value { background: var(--ink); border-radius: 999px; }
+.rv-ob__avance-barra::-moz-progress-bar { background: var(--ink); border-radius: 999px; }
+.rv-ob__avance-txt { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Un solo borde: la caja de 650 px; el campo de 15 px no lleva borde, fondo ni anillo propios (mayor especificidad que el campo genérico de 32 px). */
+[data-ui="v2"] .rv-ob__caja input.rv-ob__campo, [data-ui="v2"] .rv-ob__caja input.rv-ob__campo:hover, [data-ui="v2"] .rv-ob__caja input.rv-ob__campo:focus-visible { height: 40px; min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: 0; padding: 0; }
+
+/* Ronda 7: composición con UN eje central y el fondo de puntos a todo el marco (el lienzo ya no es el ancestro posicionado: el campo cubre el marco entero,
+   no un rectángulo de bordes irregulares). «Consulta» vive dentro del compositor (ya no flota encima), «Ir al panel» va centrado en la columna y
+   «Prefiero el formulario» se centra con el resto. Pasos de la entrevista como tarjetas con chip de estado (plantilla FL de Rovaq). */
+.rv-ob__avance, .rv-ob__pospuesto, .rv-ob__pasos-fl { position: relative; z-index: 1; }
+.rv-ob__pospuesto { text-align: center; }
+.rv-ob__formulario > .rv-disc--linea > .rv-disc__cab { margin-inline: auto; }
+.rv-ob__pasos-fl { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin: 0 0 12px; padding: 0; }
+.rv-ob__paso-fl { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: var(--t-small); }
+.rv-ob__paso-fl[data-estado="actual"] { border-color: var(--ink); }
+.rv-ob__paso-fl-n { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 999px; background: var(--canvas); color: var(--muted); font-size: var(--t-micro); font-variant-numeric: tabular-nums; }
+.rv-ob__paso-fl-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.rv-ob__paso-fl .rv-estado { flex: none; }
+
+/* Ronda 8: plantilla FL de Rovaq (/setup): UNA columna de <=780 px con la barra de avance a todo el ancho y tarjetas de paso de 14x16 con el título COMPLETO (14/600)
+   y el chip a la derecha. La columna lleva fondo de lienzo: el campo de puntos queda detrás del compositor, nunca debajo de la lista. */
+.rv-ob__fl { position: relative; z-index: 1; width: 100%; max-width: 780px; margin: 0 auto 12px; padding: 12px 0 0; background: var(--canvas); }
+.rv-ob__fl .rv-ob__avance { max-width: none; width: 100%; margin: 0 0 12px; }
+.rv-ob__fl .rv-ob__avance-barra { flex: 1 1 auto; width: auto; }
+.rv-ob__fl .rv-ob__pasos-fl { grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); margin: 0; }
+.rv-ob__fl .rv-ob__paso-fl { align-items: center; min-height: 0; padding: 14px 16px; font-size: 14px; border-radius: 12px; }
+.rv-ob__fl .rv-ob__paso-fl-t { white-space: normal; overflow: visible; text-overflow: clip; font-weight: 600; line-height: 1.3; }
+.rv-ob__fl .rv-ob__avance-txt { flex: none; }

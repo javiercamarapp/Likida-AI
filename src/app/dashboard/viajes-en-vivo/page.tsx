@@ -13,6 +13,9 @@ import { armarTableroViajes } from '@/lib/likida/orquestador/tablero_viajes';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
 import { Bloque, EsqTabla } from '../bloque';
+import { contarViajesEnCurso } from '../viajes-en-curso';
+import { MapaVivo } from '../mapa/mapa-vivo';
+import { mapaDelTablero } from './mapa-del-tablero';
 import { SeccionNotificaciones } from '../agentes/seccion-notificaciones';
 import { PreguntaAlAsistente } from './pregunta';
 import { TareasAbiertas, VistaViajesEnVivo } from './vista';
@@ -60,6 +63,11 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
       return { tareas: null, conError: true };
     });
 
+  const totalEnCurso = await contarViajesEnCurso(tenantId, 'viajes_en_vivo.contarEnCurso');
+  const dibujo = mapaDelTablero(tablero.filas);
+  // Viajes en curso que existen pero el tablero del conductor aún no sigue: el mapa y la tabla lo dicen, no niegan el viaje. Con filtros activos no se afirma.
+  const sinSeguimiento = !terminalId && !clienteId && !soloExcepciones && typeof totalEnCurso === 'number' ? Math.max(0, totalEnCurso - tablero.filas.length) : 0;
+
   const ocultos: Record<string, string> = {};
   if (sp.tenant) ocultos.tenant = sp.tenant;
   if (sp.rol) ocultos.rol = sp.rol;
@@ -91,7 +99,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
   }
 
   return (
-    <main className="p-4 md:p-6">
+    <>
       <VistaViajesEnVivo t={tx}
         tablero={tablero}
         filtros={{ terminalId, clienteId, soloExcepciones }}
@@ -99,6 +107,11 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         accionUrl={RUTA}
         ocultos={ocultos}
         hrefMapa="/dashboard/mapa"
+        sinSeguimiento={sinSeguimiento}
+        totalEnCurso={totalEnCurso}
+        // La tarjeta de mapa con su panel va SIEMPRE (plantilla MP): sin viajes dibuja su propio estado vacío, no desaparece.
+        mapa={<MapaVivo viajes={dibujo.viajes} pines={dibujo.pines} sinUbicar={dibujo.sinUbicar} sinSeguimiento={sinSeguimiento}
+          nota={tx('op.mapa_nota_en_vivo')} />}
         pregunta={conChat ? <PreguntaAlAsistente tenantParam={sp.tenant ?? null} /> : null}
         tareas={<TareasAbiertas t={tx} tareas={tareas} errorLectura={tareasConError} aviso={sp.atencion ?? null} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
         // A quién le llega el aviso de una tarea nueva (apagado por defecto): solo el dueño decide quién recibe los correos de la flota.
@@ -108,6 +121,6 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
           </Bloque>
         ) : null}
       />
-    </main>
+    </>
   );
 }

@@ -29,7 +29,7 @@ import { matrizDeArchivoCatalogo } from '../peajes/archivo';
 import { decodificarTexto } from '../peajes/csv';
 import { fechaDeCelda } from './liquidacion_csv';
 import {
-  TIPOS_OPERADOR, claveDeBitacora, claveDeLiquidacion, validarDesgloseBitacora,
+  TIPOS_OPERADOR, claveDeBitacora, claveDeLiquidacion, normalizarTipoOperador, validarDesgloseBitacora,
   type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose,
 } from './desglose_contrato';
 import type { ResultadoDesglose } from './desglose_recibir';
@@ -200,8 +200,8 @@ export function desglosesDeMatriz(matriz: readonly (readonly string[])[], decima
     }
     let tipoOperador: TipoOperadorDesglose | undefined;
     if (tipoOpT !== '') {
-      if ((TIPOS_OPERADOR as readonly string[]).includes(tipoOpT)) tipoOperador = tipoOpT as TipoOperadorDesglose;
-      else err(`tipo_operador «${tipoOpT}» no es ${TIPOS_OPERADOR.join(' | ')}`);
+      tipoOperador = normalizarTipoOperador(tipoOpT);
+      if (tipoOperador === undefined) err(`tipo_operador «${tipoOpT}» no es ${TIPOS_OPERADOR.join(' | ')}`);
     }
 
     const percepciones: RenglonBitacora[] = []; const deducciones: RenglonBitacora[] = [];

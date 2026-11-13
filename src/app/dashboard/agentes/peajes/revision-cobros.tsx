@@ -7,7 +7,8 @@ import { resumirAcreditacion } from '@/lib/likida/peajes/notas_credito';
 import { ETIQUETA_ESTADO_RECLAMO } from '@/lib/likida/peajes/reclamos_seguimiento';
 // SOLO tipos: estos módulos importan supabaseAdmin y no deben entrar al bundle de la vista.
 import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
-import { AvisoCompacto, EstadoVacio, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
+import { VacioAgente } from '../vacio-agente';
+import { AvisoCompacto, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import './peajes.css';
@@ -199,7 +200,7 @@ export function RevisionCobros({ estado, tr = TR_ES }: { estado: EstadoRevisionC
         <p className="rv-pj-nota">{ROTULO_CANDIDATO}{tx('rest.lo_que_el_sistema_marca_son')}</p>
 
         {estado.tipo === 'sin_archivo' && (
-          <EstadoVacio titulo={tx('rest.aun_nada_que_revisar')}>{tx('rest.aun_no_hay_nada_que_revisar')}</EstadoVacio>
+          <VacioAgente titulo={tx('rest.aun_nada_que_revisar')}>{tx('rest.aun_no_hay_nada_que_revisar')}</VacioAgente>
         )}
 
         {estado.tipo === 'error' && (
@@ -230,7 +231,7 @@ function CuerpoRevision({ estado, tr = TR_ES }: { estado: Extract<EstadoRevision
           {r.tarjetas.map((t) => (
             <article key={t.id} className="rv-pj-caja" aria-labelledby={`cobro-${t.id}`}>
               <h4 id={`cobro-${t.id}`} className="rv-pj-caja__titulo">{t.titulo}</h4>
-              <div className="cifra-mono rv-pj-caja__monto">{mxn(t.monto)}</div>
+              <div className="rv-ag-num rv-pj-caja__monto">{mxn(t.monto)}</div>
               <div className="rv-pj-nota">{numero(t.n)} {t.n === 1 ? 'cruce' : 'cruces'}</div>
               {t.id !== 'sin_candidatos' && (
                 <div className="rv-pj-nota">{tx('rest.reclamo')}{' '}{estadoReclamo[t.id] ?? SIN_RECLAMAR}</div>
@@ -285,8 +286,8 @@ function TablaCategorias({ r, estadoReclamo, tr = TR_ES }: { r: ResultadoInsight
       tarjetaMovil
       columnas={[
         { id: 'categoria', titulo: tx('rest.categoria_2'), principal: true, celda: (t) => ETIQUETA_CATEGORIA_INSIGHT[t.id as CategoriaInsight] ?? t.titulo },
-        { id: 'cruces', titulo: tx('rest.cruces_3'), alinear: 'der', celda: (t) => <span className="cifra-mono">{numero(t.n)}</span> },
-        { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (t) => <span className="cifra-mono">{mxn(t.monto)}</span> },
+        { id: 'cruces', titulo: tx('rest.cruces_3'), alinear: 'der', celda: (t) => <span className="rv-ag-num">{numero(t.n)}</span> },
+        { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (t) => <span className="rv-ag-num">{mxn(t.monto)}</span> },
         { id: 'estado', titulo: tx('rest.estado_del_reclamo'), celda: (t) => <StatusChip tono={(estadoReclamo[t.id] ?? SIN_RECLAMAR) === SIN_RECLAMAR ? 'muted' : 'info'}>{estadoReclamo[t.id] ?? SIN_RECLAMAR}</StatusChip> },
       ]}
     />

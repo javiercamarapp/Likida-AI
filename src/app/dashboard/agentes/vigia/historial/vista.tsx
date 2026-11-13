@@ -1,3 +1,4 @@
+import { VacioAgente } from '../../vacio-agente';
 import Link from 'next/link';
 
 import { numero, fechaHoraMx } from '@/lib/formato';
@@ -5,15 +6,16 @@ import type { GrupoVigia } from '@/lib/likida/vigia/historial/repo';
 import type { ReporteHistorial } from '@/lib/likida/vigia/historial/analisis';
 import type { ResultadoPendientes } from '@/lib/likida/vigia/historial/pendientes';
 import type { RespuestaRapidaFila } from '@/lib/likida/vigia/historial/repo';
-import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos, type AccionLote } from './formas';
+import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaCliente, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos, type AccionLote } from './formas';
 import '../vigia.css';
-import { Aviso, BotonEnlace, StatusChip, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { BarList } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
-export interface AccionesGrupos { alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionLote; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
+export interface AccionesGrupos { altaCliente: AccionGrupos; alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionLote; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
 
 function Seccion({ titulo, info, children }: { id?: string; titulo: string; info: InfoClave; children: React.ReactNode }) {
   return (
@@ -72,16 +74,30 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
     { id: 'delta', titulo: tx('rest.cambio'), alinear: 'der', celda: (t) => (t.delta === null ? tx('rest.historico_corto') : `${t.delta > 0 ? '+' : ''}${numero(t.delta)}`) },
   ];
   return (
-    <MarcoPagina titulo={tx('rest.grupos_de_clientes_e_historico')} apoyo={tx('rest.marca_los_grupos_de_whatsapp_de')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
-      <Aviso tono="info">{tx('rest.sube_el_chat_exportado_para_ver')}</Aviso>
-
-      {grupos === null ? (
-        <Aviso tono="error">{tx('rest.los_grupos_de_clientes_todavia_no')}</Aviso>
-      ) : (
+    <EsqueletoTablaMaestra
+      titulo={tx('rest.grupos_de_clientes_e_historico')}
+      apoyo={tx('rest.marca_los_grupos_de_whatsapp_de')}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}
+      avisos={(
+        <>
+          <Aviso tono="info">{tx('rest.sube_el_chat_exportado_para_ver')}</Aviso>
+          {grupos === null ? <Aviso tono="error">{tx('rest.los_grupos_de_clientes_todavia_no')}</Aviso> : null}
+        </>
+      )}
+      // Tira de cifras solo con histórico real subido: sin él no se pinta ninguna (nunca ceros que parezcan medición).
+      cifras={grupos !== null && reporte !== null && reporte.mensajes > 0 ? [
+        { etiqueta: tx('f26d.historial.mensajes'), valor: numero(reporte.mensajes) },
+        { etiqueta: tx('f26d.historial.de_clientes'), valor: numero(reporte.mensajesCliente) },
+        { etiqueta: tx('f26d.historial.del_equipo'), valor: numero(reporte.mensajesEquipo) },
+        { etiqueta: tx('f26d.historial.mediana'), valor: duracion(reporte.tiempos.medianaMin) },
+      ] : undefined}
+      etiquetaCifras={tx('rest.grupos_de_clientes_e_historico')}
+    >
+      {grupos !== null && (
         <>
           <Seccion id="grupos" titulo={tx('rest.grupos')} info="vigia_historial.grupos">
             {grupos.length === 0 ? (
-              <p className="rv-vg__nota">{tx('rest.aun_no_hay_grupos_agrega_el')}</p>
+              <VacioAgente titulo={tx('rest.aun_no_hay_grupos_agrega_el')} />
             ) : (
               <TablaBase etiqueta={tx('rest.grupos_del_vigia')} columnas={columnasGrupos} filas={grupos} idFila={(g) => g.id} densa tarjetaMovil />
             )}
@@ -89,6 +105,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
           {puedeEditar ? (
             <>
+              <Seccion id="alta-cliente" titulo={tx('rest.agregar_un_cliente')} info="vigia_historial.alta"><FormaAltaCliente accion={acciones.altaCliente} /></Seccion>
               <Seccion id="alta" titulo={tx('rest.agregar_un_grupo')} info="vigia_historial.alta"><FormaAltaGrupo accion={acciones.alta} clientes={clientes} /></Seccion>
               {grupos.length > 0 && (
                 <Seccion id="importar" titulo={tx('rest.subir_el_chat_exportado')} info="vigia_historial.importar">
@@ -108,7 +125,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
               <>
                 <p className="rv-vg__nota">{tx('rest.cuando_un_cliente_escribe_algo_que')}</p>
                 {rapidas.length === 0 ? (
-                  <p className="rv-vg__nota">{tx('rest.aun_no_hay_respuestas_rapidas_aprobadas')}</p>
+                  <VacioAgente titulo={tx('rest.aun_no_hay_respuestas_rapidas_aprobadas')} />
                 ) : (
                   <ul className="rv-vg__lista">
                     {rapidas.map((r) => (
@@ -128,7 +145,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
           <Seccion id="reporte" titulo={grupoElegido ? tx('rest.reporte_del_grupo_elegido') : tx('rest.reporte_de_todos_los_grupos')} info="vigia_historial.reporte">
             {reporte === null || reporte.mensajes === 0 ? (
-              <p className="rv-vg__nota">{tx('rest.todavia_no_hay_historico_subido_sube')}</p>
+              <VacioAgente titulo={tx('rest.todavia_no_hay_historico_subido_sube')} />
             ) : (
               <div className="rv-vg__pila">
                 <p className="rv-vg__linea rv-vg__nota">{ricoT(tx('rest.e0_descargar_el_reporte_de_preguntas'), { e0: (c) => <span>{c}</span>, e1: (c) => <a href={`/api/export/vigia-faqs?${qExport}formato=xlsx${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">{c}</a>, e2: (c) => <a href={`/api/export/vigia-faqs?${qExport}formato=pdf${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">{c}</a> })}</p>
@@ -140,7 +157,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                     <div className="rv-vg__pila">
                       <p className="rv-vg__micro">{tx('rest.foto_del_momento_de_la_exportacion')}{pendientes.fotoEn ? ` (${fechaHoraMx(pendientes.fotoEn)})` : ''}{tx('rest.no_en_vivo_el_vigia_no')}</p>
                       {pendientes.pendientes.length === 0 ? (
-                        <p className="rv-vg__nota">{tx('rest.no_quedo_ningun_mensaje_de_cliente')}</p>
+                        <VacioAgente titulo={tx('rest.no_quedo_ningun_mensaje_de_cliente')} />
                       ) : (
                         <ul className="rv-vg__lista">
                           {pendientes.pendientes.map((p) => (
@@ -192,6 +209,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
           </Seccion>
         </>
       )}
-    </MarcoPagina>
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
+    </EsqueletoTablaMaestra>
   );
 }

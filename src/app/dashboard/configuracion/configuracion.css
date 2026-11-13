@@ -5,8 +5,14 @@
 .rv-cfg__nota { margin: 4px 0 0; font-size: var(--t-small); color: var(--muted); }
 .rv-cfg__apoyo { margin: 0 0 12px; font-size: var(--t-small); color: var(--muted); }
 .rv-cfg__tenue { color: var(--muted); }
-.rv-cfg__split { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-@media (max-width: 1023px) { .rv-cfg__split { grid-template-columns: minmax(0, 1fr); } }
+/* Plantilla CF (Rovaq): UNA columna de ≤780 px, el mismo ancho que Políticas de gasto (pestañas hermanas: el contenido no salta de ancho y no quedan huecos junto a tarjetas de distinta altura). */
+.rv-cfg__split { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.rv-cfg__rejilla { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; max-width: 780px; }
+/* Grupos de la forma de ajustes: subtítulo 13/600 sobre sus filas, sin caja ni leyenda incrustada en el borde (no hay fieldset con marco en Rovaq). */
+.rv-cfg__grupo { display: grid; gap: 4px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.rv-cfg__grupo + .rv-cfg__grupo { padding-top: 12px; border-top: 1px solid var(--line); }
+.rv-cfg__grupo-tit { margin: 0 0 4px; font-size: var(--t-body); font-weight: 600; color: var(--ink); }
+.rv-cfg__filas { display: grid; }
 .rv-cfg__forma { display: grid; gap: 12px; }
 .rv-cfg__lateral { display: grid; gap: 12px; }
 .rv-cfg__lineas { display: grid; gap: 6px; margin-top: 10px; }
@@ -16,3 +22,5 @@
 .rv-cfg__linea span:last-child { font-weight: 500; }
 .rv-cfg__pie { margin: 10px 0 0; font-size: var(--t-micro); color: var(--faint); }
 .rv-cfg__texto { margin: 0; font-size: var(--t-small); color: var(--muted); }
+/* Botón de envío de las formas de esta pantalla a la medida de Rovaq (32 px, 13/500, padding 6x12, radio 8): el de `FormaConAviso` trae text-sm de Tailwind (36 px). */
+[data-ui="v2"] form button[type="submit"].px-4.py-2.text-sm { min-height: 32px; padding: 6px 12px; font-size: var(--t-body, 13px); font-weight: 500; line-height: 1.3; border-radius: 8px; }

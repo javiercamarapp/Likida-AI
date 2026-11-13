@@ -42,3 +42,60 @@
   @keyframes rv-mp-flujo { to { stroke-dashoffset: -44; } }
   @keyframes rv-mp-pulso { 0%, 100% { transform: scale(1); opacity: .35; } 50% { transform: scale(2.1); opacity: 0; } }
 }
+
+/* Contenedor del mapa como Rovaq: borde, radio 12 y relleno de 8; controles +/−/⤢ de 32 px con borde punteado en la esquina. */
+.rv-mp__lienzo { padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.rv-mp__zoom { position: absolute; top: 16px; right: 16px; z-index: 1; display: grid; gap: 4px; }
+.rv-mp__zbtn { width: 32px; height: 32px; display: grid; place-items: center; font: 500 16px/1 var(--font-sans-ui, inherit); color: var(--ink); background: var(--surface); border: 1px dashed var(--line2); border-radius: 8px; cursor: pointer; }
+.rv-mp__zbtn:hover:not(:disabled) { background: var(--canvas); border-style: solid; }
+.rv-mp__zbtn:disabled { opacity: .45; cursor: default; }
+.rv-mp__zbtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-mp__svg { transition: none; }
+
+/* Ronda 3 — panel lateral como Rovaq: borde y radio 12, ranking 1-8 con barras, desglose de viajes debajo y leyenda bajo el mapa. */
+.rv-mp__cab { display: inline-flex; align-items: center; gap: 8px; }
+.rv-mp__rejilla { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+@media (max-width: 1023.98px) { .rv-mp__rejilla { grid-template-columns: minmax(0, 1fr); } }
+.rv-mp__panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-mp__eyebrow { margin: 0; font-size: var(--t-micro); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rv-mp__rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rv-mp__rank-fila { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; grid-template-rows: auto 4px; column-gap: 8px; row-gap: 4px; align-items: center; width: 100%; padding: 6px 8px; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; border-radius: 8px; cursor: pointer; }
+.rv-mp__rank-fila:hover, .rv-mp__rank-fila[data-activo] { background: var(--canvas); }
+.rv-mp__rank-fila[data-activo] { box-shadow: inset 2px 0 0 var(--ink); }
+.rv-mp__rank-fila:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-mp__rank-n { font-size: var(--t-micro); color: var(--faint); font-variant-numeric: tabular-nums; }
+.rv-mp__rank-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); font-weight: 500; }
+.rv-mp__rank-cuenta { font-size: var(--t-small); font-variant-numeric: tabular-nums; color: var(--muted); }
+.rv-mp__rank-barra { grid-column: 2 / -1; display: block; }
+.rv-mp__rank-pista { fill: var(--line); }
+.rv-mp__rank-valor { fill: var(--ink); }
+.rv-mp__panel .rv-mp__cards { max-height: 320px; }
+.rv-mp__leyenda { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--t-micro); color: var(--muted); }
+.rv-mp__leyenda li { display: inline-flex; align-items: center; gap: 6px; }
+.rv-mp__leyenda svg { flex: none; }
+
+/* Ronda 5: el panel lateral ocupa la altura del mapa (Rovaq 09). Las tarjetas de viaje se reparten el alto que sobra y la nota de privacidad queda abajo. */
+@media (min-width: 1024px) {
+  .rv-mp__panel .rv-mp__cards { flex: 1 1 auto; min-height: 0; max-height: 520px; align-content: start; }
+  .rv-mp__panel > .rv-mp__nota { margin-top: auto; }
+}
+
+/* Ronda 6: cabecera de la tarjeta del mapa que se ajusta (título en una línea, el segmentado baja si no cabe), vacío del panel centrado
+   en el alto del mapa (no pegado arriba con el resto en blanco) y nota de método dentro de la tarjeta. */
+.rv-mp__tarjeta .rv-tarjeta__cab { height: auto; min-height: 32px; flex-wrap: wrap; row-gap: 6px; }
+.rv-mp__tarjeta .rv-tarjeta__titulo { white-space: nowrap; }
+.rv-mp__nota--pie { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+@media (min-width: 1024px) {
+  .rv-mp__panel .rv-mp__cards { display: flex; flex-direction: column; gap: 8px; }
+  .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: auto 0; }
+}
+
+/* Ronda 8 (Rovaq 09): el panel lateral ocupa la ALTURA del mapa (la ronda 7 lo soltó a su contenido y dejaba una columna vacía). Las tarjetas de viaje se reparten el alto y la
+   nota queda abajo; sin viajes ni posiciones ya no se dibuja el mapa (ver MapaVivo), así que no hay panel corto junto a un lienzo vacío. */
+.rv-mp__rejilla { align-items: stretch; }
+@media (min-width: 1024px) {
+  .rv-mp__panel .rv-mp__cards { flex: 1 1 auto; min-height: 0; max-height: 520px; }
+  .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: auto 0; }
+  .rv-mp__panel > .rv-mp__nota { margin-top: auto; }
+}
+.rv-mp__panel .rv-vacio { padding: 14px 20px; min-height: 0; border: 1px dashed var(--line2); border-radius: 8px; box-shadow: none; }

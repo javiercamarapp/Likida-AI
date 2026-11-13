@@ -19,8 +19,8 @@ import { rico } from '@/lib/i18n/rico';
 
 /** Barra de periodo del Resumen (R8, patrón Rovaq): segmentado 7 días / 30 días / Todo + chip de cobertura de fuentes. Mueve todas las cifras de abajo:
  *  el estado vive en la URL (`?rango=7|30|todo`, como siempre) y cada opción es un enlace que conserva los demás parámetros (tenant, vista, rol…).
- *  No hay moneda ni «Filtros»: el Resumen no tiene otros criterios y no se inventan. */
-export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuentes: string }) {
+ *  El chip dice el periodo vigente (las fuentes leídas viven en la barra de procedencia). No hay moneda ni botón «Filtros»: el Resumen no tiene otros criterios y no se inventan. */
+export function FiltrosResumen({ rango, periodoTexto }: { rango: RangoResumen; periodoTexto?: string }) {
   const { t } = useT('resto', restoEs);
   const ruta = usePathname();
   const params = useSearchParams();
@@ -30,7 +30,17 @@ export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuente
     <BarraPeriodo
       etiqueta={t('op.periodo_del_resumen')}
       periodo={{ etiqueta: t('op.periodo_de_las_cifras'), valor: rango, opciones: RANGOS.map((r) => ({ valor: r, etiqueta: ROTULO_RANGO[r], href: hrefConParams(ruta ?? '', actuales, { rango: r }) })) }}
-      chips={[{ id: 'fuentes', etiqueta: fuentes }]}
+      cajon={{
+        accion: ruta ?? '/dashboard',
+        ocultos: Object.entries(actuales).filter(([k]) => k !== 'rango'),
+        limpiarHref: hrefConParams(ruta ?? '', actuales, { rango: null }),
+        nActivos: rango === '30' ? 0 : 1,
+        resumen: periodoTexto,
+        titulo: t('op.res.filtros_titulo'),
+        descripcion: t('op.res.filtros_descripcion'),
+        campos: { titulo: t('op.periodo_de_las_cifras'), items: [{ tipo: 'select', nombre: 'rango', etiqueta: t('op.periodo_de_las_cifras'), valor: rango, opciones: RANGOS.map((r) => ({ valor: r, rotulo: ROTULO_RANGO[r] })) }] },
+      }}
+      chips={periodoTexto ? [{ id: 'periodo', etiqueta: periodoTexto.charAt(0).toUpperCase() + periodoTexto.slice(1) }] : []}
     />
   );
 }
@@ -134,7 +144,7 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo, a
         <div className="rv-sig">
           <p className="rv-sig__titulo">{principal.titulo}</p>
           <p className="rv-sig__porque">{principal.porQue}</p>
-          <BotonEnlace variante="primary" href={principal.href} icono={<ArrowRight />}>{principal.textoBoton}</BotonEnlace>
+          {principal.href ? <BotonEnlace variante="primary" tamano="sm" href={principal.href} icono={<ArrowRight />}>{principal.textoBoton}</BotonEnlace> : null}
         </div>
       ) : (
         <div className="rv-sig">
@@ -142,9 +152,9 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo, a
           <p className="rv-sig__porque">{t('op.no_hay_pasos_pendientes_ni_alertas')}</p>
         </div>
       )}
-      {despues.length > 0 || atajos.length > 0 ? <ul className="rv-atajos" aria-label={despues.length ? t('op.despues_y_atajos') : t('op.atajos')}>
-        {despues.slice(0, 2).map((a) => <li key={a.id}><Link href={a.href} className="rv-atajos__fila">{rico(t('op.e0_despues_e0', { titulo: a.titulo }), { e0: (c) => <span>{c}</span> })}<ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
-        {atajos.slice(0, Math.max(0, 2 - despues.length)).map((a) => (
+      {despues.some((a) => a.href) || atajos.length > 0 ? <ul className="rv-atajos" aria-label={despues.some((a) => a.href) ? t('op.despues_y_atajos') : t('op.atajos')}>
+        {despues.filter((a) => a.href).slice(0, 2).map((a) => <li key={a.id}><Link href={a.href!} className="rv-atajos__fila">{rico(t('op.e0_despues_e0', { titulo: a.titulo }), { e0: (c) => <span>{c}</span> })}<ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
+        {atajos.slice(0, Math.max(0, 2 - despues.filter((a) => a.href).length)).map((a) => (
           <li key={a.href}><Link href={`${a.href}${sufijo}`} className="rv-atajos__fila"><span>{a.nombre}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>
         ))}
       </ul> : null}

@@ -1,0 +1,39 @@
+/* Avisos del cliente (BA de Rovaq): cabecera con «Configurar avisos» → segmentado → tira de 2 → tarjeta. Solo tokens del sistema.
+ * Las piezas del panel (ui-v2/avisos) son compartidas con /admin/notificaciones: aquí solo se reordenan para esta ruta. */
+[data-ui="v2"] .rv-notif { display: flex; flex-direction: column; gap: 12px; }
+/* La pila del panel se «abre» para que la tira de cifras quede ENTRE el segmentado y la tarjeta de la lista. */
+[data-ui="v2"] .rv-notif .av-pila { display: contents; }
+[data-ui="v2"] .rv-notif .av-barra { order: 0; margin-bottom: 0; }
+[data-ui="v2"] .rv-notif > .rv-kpis { order: 1; }
+[data-ui="v2"] .rv-notif .av-pila > .rv-tarjeta { order: 2; }
+/* El cambio de sección vive en la cabecera de la página, no en una fila propia. */
+[data-ui="v2"] .rv-notif .av-cambio { display: none; }
+/* «Requiere acción» (decisión 12): el punto de no leído es el único uso de --senal. */
+[data-ui="v2"] .rv-notif .av-fila[data-leido="no"] .av-punto { background: var(--senal); }
+/* Móvil: el punto no queda solo en un renglón; el cuerpo comparte fila con él y las acciones bajan. */
+[data-ui="v2"] .rv-notif .av-cuerpo { flex: 1 1 0; }
+@media (max-width: 640px) {
+  [data-ui="v2"] .rv-notif .av-acciones { padding-left: 20px; }
+}
+/* UNA sola barra de una fila (Rovaq): segmentado a la izquierda y, a la derecha, los filtros con su rótulo EN LÍNEA (no encima) a 32 px. */
+[data-ui="v2"] .rv-notif .av-barra { align-items: center; margin-bottom: 0; }
+[data-ui="v2"] .rv-notif .av-filtros { align-items: center; gap: 8px; }
+[data-ui="v2"] .rv-notif .av-filtros .rv-campo { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
+[data-ui="v2"] .rv-notif .av-filtros .rv-campo__etq { margin: 0; font-size: var(--t-small, 12px); font-weight: 500; color: var(--muted); white-space: nowrap; }
+[data-ui="v2"] .rv-notif .av-filtros .rv-ctl { min-width: 0; min-height: 32px; height: 32px; }
+[data-ui="v2"] .rv-notif .av-filtros .rv-btn { min-height: 32px; }
+@media (max-width: 640px) {
+  [data-ui="v2"] .rv-notif .av-filtros .rv-campo { flex: 1 1 140px; }
+}
+/* Celda de la tira como la `pc-kpi` de Rovaq (121 px): rótulo, cifra, PISTA punteada de 6 px y nota. Sin la pista, la celda dejaba ~45 px en blanco bajo la cifra.
+ * La pista es solo forma (no mide nada): se omite cuando la celda está en error o sin dato. */
+[data-ui="v2"] .rv-notif .rv-kpi { min-height: 0; border-top-width: 0; }
+[data-ui="v2"] .rv-notif .rv-kpi > .rv-kpi__cab { order: 1; }
+[data-ui="v2"] .rv-notif .rv-kpi > .rv-kpi__fila { order: 2; }
+[data-ui="v2"] .rv-notif .rv-kpi:not([data-estado])::after {
+  content: ''; order: 3; display: block; height: 6px; margin: 4px 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
+}
+[data-ui="v2"] .rv-notif .rv-kpi > .rv-kpi__nota { order: 4; }
+[data-ui="v2"] .rv-notif .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; min-height: 0; }
+[data-ui="v2"] .rv-notif .rv-kpi > .rv-kpi__pie:not(:has(*)) { display: none; }

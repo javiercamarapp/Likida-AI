@@ -16,7 +16,7 @@
 
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { fechaLocalMX } from '../peajes/plazo_reclamo';
-import { TIPOS_OPERADOR, validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose } from './desglose_contrato';
+import { normalizarTipoOperador, TIPOS_OPERADOR, validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose } from './desglose_contrato';
 
 /** Ruta con puntos y índices: `datos.bitacora.id`, `renglones[0].monto`. */
 export type RutaJson = string;
@@ -269,11 +269,10 @@ export function mapearBitacoraTms(raw: unknown, mapeo: MapeoTms): ResultadoMapeo
   let tipoOperador: TipoOperadorDesglose | undefined;
   const tipoCrudo = mapeo.tipoOperador ? textoOpt(leerRuta(raw, mapeo.tipoOperador), 'tipoOperador') : undefined;
   if (tipoCrudo !== undefined) {
-    const t = tipoCrudo.toLowerCase();
-    if (!(TIPOS_OPERADOR as readonly string[]).includes(t)) {
+    tipoOperador = normalizarTipoOperador(tipoCrudo);
+    if (tipoOperador === undefined) {
       throw new CampoInvalido('tipoOperador', `\`tipoOperador\` tiene que ser ${TIPOS_OPERADOR.map((x) => `\`${x}\``).join(', ')}.`);
     }
-    tipoOperador = t as TipoOperadorDesglose;
   }
 
   let dias: number | undefined;

@@ -1,9 +1,9 @@
 import { Bell, Flag } from 'lucide-react';
 import { fechaCorta, mxnEntero, numero, porcentaje } from '@/lib/formato';
-import { BotonEnlace, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import { BotonEnlace, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { BarList, Bullet, Columnas, KindBadge, type ItemKpi } from '@/app/ui-v2/graficas';
 import { rotuloDiferencia } from './agentes/liquidacion/rotulo-diferencia';
-import { PERIODO_RANGO, RUTA_LIQUIDACION, type DatosResumen } from './resumen-modelo';
+import { PERIODO_RANGO, RUTA_LIQUIDACION, type DatosResumen, type ViajeReciente } from './resumen-modelo';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 /** ¿Este rol (en este perfil) abre esa pantalla? Sin ello el enlace no se ofrece: nunca un KPI que rebota. */
@@ -45,9 +45,12 @@ export function itemsKpi(d: DatosResumen, sufijo: string, puede: PuedeRuta = sie
     ];
   }
   return [
-    { etiqueta: t('op.liquidaciones_cerradas'), metrica: 'volumen_viajes', info: 'resumen.liquidaciones_cerradas', href: hrefLiq, valor: k ? k.viajesLiquidados : null, sello: selloLiq, conteo: true },
+    { etiqueta: t('op.liquidaciones_cerradas'), metrica: 'volumen_viajes', info: 'resumen.liquidaciones_cerradas', href: hrefLiq, valor: k ? k.viajesLiquidados : null, sello: selloLiq, conteo: true,
+      // Sparkline REAL: los cierres de las últimas semanas (la misma lectura de «Liquidaciones cerradas por semana»); sin lectura no hay línea.
+      serie: d.cierres && d.cierres.some((c) => c.valor > 0) ? d.cierres.map((c) => c.valor) : undefined },
     porRevisar,
-    { etiqueta: t('op.con_diferencias'), metrica: 'diferencias_por_cuadrar', info: 'resumen.con_diferencias', href: hrefLiq, valor: k ? k.conDiferencias : null, sello: selloLiq, conteo: true },
+    // Es un CONTEO de liquidaciones ya cerradas (observado), no una proyección: el sello «Estimado» queda para lo que se estima.
+    { etiqueta: t('op.con_diferencias'), metrica: 'diferencias_por_cuadrar', tipo: 'observado', info: 'resumen.con_diferencias', href: hrefLiq, valor: k ? k.conDiferencias : null, sello: selloLiq, conteo: true },
     cartaPorte,
   ];
 }
@@ -66,14 +69,27 @@ export function TarjetaCierres({ d, t = T_RESTO_ES }: { d: DatosResumen; t?: TRe
   );
 }
 
+/** Columnas mensuales a todo el ancho (plantilla Portada de Rovaq): la misma serie diaria de cierres, por mes calendario. null = no se pudo leer. */
+export function TarjetaCierresMensuales({ d, t = T_RESTO_ES }: { d: DatosResumen; t?: TResto }) {
+  const m = d.mensuales ?? null;
+  const total = m ? m.reduce((s, x) => s + x.valor, 0) : 0;
+  return (
+    <Tarjeta
+      titulo={t('op.res.cierres_mes')} info="resumen.cierres_semana" className="rv-res__cierres"
+      estado={m === null ? 'error' : 'ok'} reintentar
+      acciones={m && total > 0 ? <span className="rv-res__nota">{t('op.res.cierres_mes_nota', { total: numero(total), n: m.length })}</span> : undefined}
+    >
+      {m ? <Columnas datos={m.map((x) => ({ etiqueta: x.etiqueta, valor: x.valor, parcial: x.parcial, largo: `Mes de ${x.etiqueta}` }))} unidad="cierres" matiz={1} etiqueta={t('op.res.cierres_mes')} formato="numero" vacio={t('op.res.cierres_mes_vacio')} /> : null}
+    </Tarjeta>
+  );
+}
+
 function Dato({ etiqueta, children, sello }: { etiqueta: string; children: React.ReactNode; sello?: React.ReactNode }) {
   return <div className="rv-dato"><dt>{etiqueta}</dt><dd>{children}{sello}</dd></div>;
 }
 
 export function TarjetaDiferencias({ d, t = T_RESTO_ES }: { d: DatosResumen; t?: TResto }) {
   const k = d.kpis;
-  const tipos = d.porTipo ? [...d.porTipo].filter((t) => t.monto > 0).sort((a, b) => b.monto - a.monto).slice(0, 3) : null;
-  const tope = tipos && tipos.length ? tipos[0].monto : 1;
   return (
     <Tarjeta titulo={d.veDinero ? t('op.diferencias_vs_recuperado') : t('op.diferencias_en_liquidaciones')} info="resumen.diferencias_recuperado" estado={k === null ? 'error' : 'ok'} reintentar>
       {k ? (
@@ -87,16 +103,22 @@ export function TarjetaDiferencias({ d, t = T_RESTO_ES }: { d: DatosResumen; t?:
           <div data-cero-fuente="">
             <Bullet valor={k.viajesLiquidados > 0 ? k.tasaCuadre : null} maximo={100} matiz={3} etiqueta={t('op.cuadre_sin_diferencias')} formato={(v) => porcentaje(v, 0)} />
           </div>
-          {d.veDinero ? (
-            <div className="rv-res__tipos">
-              <p className="rv-res__sub">{t('op.donde_mas_pesa_historial')}</p>
-              {tipos === null ? <EstadoVacio titulo={t('op.no_disponible_ahora_no_es_cero')} /> : tipos.length === 0 ? <EstadoVacio titulo={t('op.sin_diferencias_registradas')} /> : (
-                <BarList etiqueta={t('op.donde_mas_pesan_las_diferencias')} matiz={6} maximo={tope} formato={mxnEntero}
-                  items={tipos.map((t) => ({ clave: t.tipo, etiqueta: rotuloDiferencia(t.tipo), valor: t.monto }))} />
-              )}
-            </div>
-          ) : null}
         </>
+      ) : null}
+    </Tarjeta>
+  );
+}
+
+/** «Top»: dónde más pesan las diferencias del historial, por tipo. Solo con acceso al dinero; null = «No es cero», nunca una barra en cero. */
+export function TarjetaTopTipos({ d, t = T_RESTO_ES }: { d: DatosResumen; t?: TResto }) {
+  const tipos = d.porTipo ? [...d.porTipo].filter((x) => x.monto > 0).sort((a, b) => b.monto - a.monto).slice(0, 5) : null;
+  const tope = tipos && tipos.length ? tipos[0].monto : 1;
+  return (
+    <Tarjeta titulo={t('op.donde_mas_pesa_historial')} info="resumen.diferencias_recuperado" estado={tipos === null ? 'error' : tipos.length === 0 ? 'vacio' : 'ok'} reintentar
+      mensaje={tipos && tipos.length === 0 ? t('op.sin_diferencias_registradas') : undefined}>
+      {tipos && tipos.length > 0 ? (
+        <BarList etiqueta={t('op.donde_mas_pesan_las_diferencias')} matiz={6} maximo={tope} formato={mxnEntero}
+          items={tipos.map((x) => ({ clave: x.tipo, etiqueta: rotuloDiferencia(x.tipo), valor: x.monto }))} />
       ) : null}
     </Tarjeta>
   );
@@ -122,6 +144,35 @@ export function TarjetaHizoSolo({ d, sufijo, puede = siempre, t = T_RESTO_ES }: 
             </li>
           ))}
         </ul>
+      ) : null}
+    </Tarjeta>
+  );
+}
+
+const TONO_VIAJE: Record<string, TonoEstado> = { liquidado: 'ok', en_cuadre: 'warn', abierto: 'neutral' };
+
+/** «Viajes recientes» (plantilla PO, fila 6-6 junto a la serie): los últimos viajes con su estatus real y, con acceso al dinero, su diferencia. null = no se pudo leer. */
+export function TarjetaViajesRecientes({ d, sufijo, puede = siempre, t = T_RESTO_ES }: { d: DatosResumen; sufijo: string; puede?: PuedeRuta; t?: TResto }) {
+  const filas = d.recientes ?? null;
+  const rotulo: Record<string, string> = { liquidado: t('op.res.est_liquidado'), en_cuadre: t('op.res.est_en_cuadre'), abierto: t('op.res.est_abierto') };
+  return (
+    <Tarjeta
+      titulo={t('op.res.viajes_recientes')} className="rv-res__recientes"
+      estado={filas === null ? 'error' : filas.length === 0 ? 'vacio' : 'ok'} reintentar
+      mensaje={filas && filas.length === 0 ? t('op.res.sin_viajes_recientes') : undefined}
+      acciones={puede('/dashboard/viajes') ? <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/viajes${sufijo}`}>{t('op.res.ver_viajes')}</BotonEnlace> : undefined}
+    >
+      {filas && filas.length > 0 ? (
+        <TablaBase<ViajeReciente>
+          etiqueta={t('op.res.viajes_recientes')} altoMaximo={false} tarjetaMovil
+          filas={filas} idFila={(v) => v.id}
+          columnas={[
+            { id: 'folio', titulo: t('op.res.col_folio'), principal: true, celda: (v) => <b className="rv-id">{v.folio}</b> },
+            { id: 'ruta', titulo: t('op.res.col_ruta'), celda: (v) => v.ruta ?? '—' },
+            { id: 'estatus', titulo: t('op.res.col_estatus'), celda: (v) => <StatusChip tono={TONO_VIAJE[v.estatus] ?? 'neutral'}>{rotulo[v.estatus] ?? v.estatus}</StatusChip> },
+            ...(d.veDinero ? [{ id: 'dif', titulo: t('op.res.col_diferencia'), alinear: 'der' as const, celda: (v: ViajeReciente) => (v.diferencia === null ? '—' : mxnEntero(v.diferencia)) }] : []),
+          ]}
+        />
       ) : null}
     </Tarjeta>
   );

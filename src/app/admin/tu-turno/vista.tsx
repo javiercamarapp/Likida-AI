@@ -1,6 +1,7 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import Link from 'next/link';
 import {
-  Play, Power, PowerOff, GitPullRequest, Inbox, ListChecks, Image as ImageIcon, Bot,
+  Play, Power, PowerOff, GitPullRequest, Image as ImageIcon, Bot,
 } from 'lucide-react';
 // SOLO tipos: lib/admin/bus importa supabaseAdmin y no debe entrar al bundle.
 import type { EstadoBus, ResultadoPrs, RutinaBus } from '@/lib/admin/bus';
@@ -10,11 +11,12 @@ import type { ResumenBandejaCola } from '@/lib/admin/cola-aprobacion';
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import {
-  Aviso, Boton, BotonEnlace, CampoTextarea, Disclosure, EstadoVacio, FilaTarjetas, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  Aviso, BarraFiltros, Boton, BotonEnlace, CampoTextarea, Disclosure, EstadoVacio, FilaTarjetas, FiltroOpciones, StatusChip, TablaBase, Tarjeta,
   clasesBoton, type ColumnaBase,
 } from '../../ui-v2/componentes';
+import { SelloDato } from '../../ui-v2/datos';
 import { BotonConfirmar } from '../../ui-v2/componentes/confirmar';
-import { TiraCifras } from '../../ui-v2/graficas';
+import { EsqueletoPortada } from '../../ui-v2/esqueletos';
 import { contarPorCausa, etiquetaCausa } from '../escalaciones/agentes-parados';
 import { BotonEnvio } from './boton_envio';
 import '../bandeja.css';
@@ -98,7 +100,7 @@ function TarjetaAgentesParados({ parados, cola, t }: { parados: AgentesParados |
  */
 export function VistaTuTurno({
   bus, escalaciones, envios, prs, ahora, aviso, error, sesionNombre,
-  accionPieza, accionOrden, parados, cola, t = trAdminInicioEs,
+  accionPieza, accionOrden, parados, cola, fuente = '', t = trAdminInicioEs,
 }: {
   bus: EstadoBus;
   escalaciones: BandejaEscalaciones;
@@ -113,11 +115,33 @@ export function VistaTuTurno({
   /** «Agentes que no corrieron» (`getAgentesParados`); `null` = no se pudo leer, `undefined` = la página no lo pidió. */
   parados?: AgentesParados | null;
   cola?: ResumenBandejaCola | null;
+  /** El filtro «Mostrar» (`?fuente=`): piezas, envios, cambios, escalaciones o rutinas. Vacío = todo. */
+  fuente?: string;
   t?: TrDe<'admin_inicio'>;
 }) {
   // ADM-4: tres de las seis fuentes vienen topadas; el total sale de los conteos REALES. Lectura caída = null («—»), nunca 0.
   const totalEscalaciones = totalEscalacionesLegible(escalaciones);
   const piezasSinDato = bus.errores.some((e) => /pieza/i.test(e));
+  const ver = (clave: string) => fuente === '' || fuente === clave;
+  const vencidas = escalaciones.cola.filter((it) => it.vence && new Date(it.vence).getTime() < ahora).length;
+  const urgentes = envios.filter((p) => p.prioridad === 'urgente').length;
+  // El titular cuenta SOLO lo leído; una fuente caída se dice, no se suma como cero.
+  const partes: string[] = [];
+  if (!piezasSinDato && bus.piezasPendientes.length > 0) partes.push(t((bus.piezasPendientes.length) === 1 ? 'turno.parte_piezas_uno' : 'turno.parte_piezas', { n: numero(bus.piezasPendientes.length) }));
+  if (envios.length > 0) partes.push(t((envios.length) === 1 ? 'turno.parte_envios_uno' : 'turno.parte_envios', { n: numero(envios.length) }));
+  if (prs.estado === 'ok' && prs.prs.length > 0) partes.push(t((prs.prs.length) === 1 ? 'turno.parte_cambios_uno' : 'turno.parte_cambios', { n: numero(prs.prs.length) }));
+  if (totalEscalaciones !== null && totalEscalaciones > 0) partes.push(t((totalEscalaciones) === 1 ? 'turno.parte_escalaciones_uno' : 'turno.parte_escalaciones', { n: numero(totalEscalaciones) }));
+  const hayCiegas = piezasSinDato || prs.estado === 'error' || totalEscalaciones === null;
+  const titular = (partes.length > 0 ? t('turno.titular_hay', { partes: partes.join(' · ') }) : t('turno.titular_nada')) + (hayCiegas ? ` ${t('turno.titular_sin_lectura')}` : '');
+  // La siguiente mejor acción sale de las mismas cifras, en orden de daño: lo que frena a los agentes, lo urgente, lo vencido, lo demás.
+  const siguiente: { texto: string; href: string; boton: string } | null =
+    cola?.frenaAlRunner ? { texto: t('turno.sig_bandeja', { n: numero(cola.pendientes) }), href: '/admin/aprobaciones', boton: t('tu_turno_vista.ir_a_aprobaciones') }
+    : urgentes > 0 ? { texto: t((urgentes) === 1 ? 'turno.sig_urgentes_uno' : 'turno.sig_urgentes', { n: numero(urgentes) }), href: '/admin/aprobaciones', boton: t('tu_turno_vista.revisar_y_aprobar_en') }
+    : vencidas > 0 ? { texto: t((vencidas) === 1 ? 'turno.sig_vencidas_uno' : 'turno.sig_vencidas', { n: numero(vencidas) }), href: '/admin/escalaciones', boton: t('tu_turno_vista.la_cola_completa') }
+    : !piezasSinDato && bus.piezasPendientes.length > 0 ? { texto: t((bus.piezasPendientes.length) === 1 ? 'turno.sig_piezas_uno' : 'turno.sig_piezas', { n: numero(bus.piezasPendientes.length) }), href: '#tt-piezas', boton: t('turno.sig_ver_piezas') }
+    : envios.length > 0 ? { texto: t((envios.length) === 1 ? 'turno.sig_envios_uno' : 'turno.sig_envios', { n: numero(envios.length) }), href: '/admin/aprobaciones', boton: t('tu_turno_vista.revisar_y_aprobar_en') }
+    : totalEscalaciones !== null && totalEscalaciones > 0 ? { texto: t((totalEscalaciones) === 1 ? 'turno.sig_escalaciones_uno' : 'turno.sig_escalaciones', { n: numero(totalEscalaciones) }), href: '/admin/escalaciones', boton: t('tu_turno_vista.la_cola_completa') }
+    : null;
 
   const columnasRutinas: ColumnaBase<RutinaBus>[] = [
     { id: 'rutina', titulo: t('tu_turno_vista.rutina'), principal: true, celda: (r) => r.nombre },
@@ -148,51 +172,69 @@ export function VistaTuTurno({
   ];
 
   return (
-    <MarcoPagina titulo={t('tu_turno_vista.tu_turno')} apoyo={t('tu_turno_vista.todo_lo_que_espera')}>
-      {aviso && <Aviso tono="ok">{aviso}</Aviso>}
-      {error && <Aviso tono="error">{error}</Aviso>}
-      {bus.errores.length > 0 && (
-        <Aviso tono="warn" titulo={t('tu_turno_vista.fuentes_que_no_se')}>{bus.errores.join(' · ')}</Aviso>
+    <EsqueletoPortada
+      titulo={t('tu_turno_vista.tu_turno')}
+      apoyo={t('tu_turno_vista.todo_lo_que_espera')}
+      titular={titular}
+      filtros={(
+        <BarraFiltros accion="/admin/tu-turno" enLinea etiqueta={t('turno.filtrar')} nActivos={fuente === '' ? 0 : 1} limpiarHref="/admin/tu-turno">
+          <FiltroOpciones etiqueta={t('turno.mostrar')} nombre="fuente" valor={fuente} opciones={[
+            { valor: '', rotulo: t('turno.todo') }, { valor: 'piezas', rotulo: t('turno.f_piezas') }, { valor: 'envios', rotulo: t('turno.f_envios') },
+            { valor: 'cambios', rotulo: t('turno.f_cambios') }, { valor: 'escalaciones', rotulo: t('turno.f_escalaciones') }, { valor: 'rutinas', rotulo: t('turno.f_rutinas') },
+          ]} />
+        </BarraFiltros>
       )}
-
-      {/* Cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */}
-      <TiraCifras
-        etiqueta={t('tu_turno_vista.lo_que_espera_tu')}
-        items={[
+      etiquetaProcedencia={t('turno.procedencia')}
+      procedencia={(
+        <>
+          <li><SelloDato tipo={bus.errores.length > 0 ? 'sin_dato' : 'observado'} fuente={t('turno.fuente_bus')} leidoEn={ahora} ahora={ahora} edad={false} /></li>
+          <li><SelloDato tipo={prs.estado === 'ok' ? 'observado' : 'sin_dato'} fuente="GitHub" leidoEn={ahora} ahora={ahora} edad={false} /></li>
+          <li><SelloDato tipo={totalEscalaciones === null ? 'sin_dato' : 'observado'} fuente={t('turno.fuente_escalaciones')} leidoEn={ahora} ahora={ahora} edad={false} /></li>
+        </>
+      )}
+      metodo={t('turno.sesion_pie', { sesionNombre })}
+      avisos={(aviso || error || bus.errores.length > 0) ? (
+        <>
+          {aviso && <Aviso tono="ok">{aviso}</Aviso>}
+          {error && <Aviso tono="error">{error}</Aviso>}
+          {bus.errores.length > 0 && (
+            <Aviso tono="warn" titulo={t('tu_turno_vista.fuentes_que_no_se')}>{bus.errores.join(' · ')}</Aviso>
+          )}
+        </>
+      ) : null}
+      /* Cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */
+      etiquetaCifras={t('tu_turno_vista.lo_que_espera_tu')}
+      cifras={uniformes([
           {
-            etiqueta: t('tu_turno_vista.piezas_para_tu_tap'), icono: <ImageIcon {...ICONO} />, formato: 'entero',
+            etiqueta: t('tu_turno_vista.piezas_para_tu_tap'), formato: 'entero',
             valor: piezasSinDato ? null : bus.piezasPendientes.length,
             nota: piezasSinDato ? t('tu_turno_vista.no_se_pudo_leer_2') : bus.piezasPendientes.length >= TOPE_PIEZAS ? t('tu_turno_vista.se_cuentan_las_mas', { TOPE_PIEZAS }) : undefined,
           },
-          { etiqueta: t('tu_turno_vista.envios_por_aprobar'), icono: <ListChecks {...ICONO} />, valor: envios.length, formato: 'entero' },
+          { etiqueta: t('tu_turno_vista.envios_por_aprobar'), valor: envios.length, formato: 'entero' },
           {
-            etiqueta: t('tu_turno_vista.cambios_por_aprobar'), icono: <GitPullRequest {...ICONO} />, formato: 'entero',
+            etiqueta: t('tu_turno_vista.cambios_por_aprobar'), formato: 'entero',
             valor: prs.estado === 'ok' ? prs.prs.length : null,
             nota: prs.estado === 'ok' ? undefined : prs.estado === 'sin_token' ? t('tu_turno_vista.falta_conectar_github') : t('tu_turno_vista.github_no_contesto'),
           },
           {
-            etiqueta: t('tu_turno_vista.escalaciones'), icono: <Inbox {...ICONO} />, valor: totalEscalaciones, formato: 'entero',
+            etiqueta: t('tu_turno_vista.escalaciones'), valor: totalEscalaciones, formato: 'entero',
             nota: totalEscalaciones === null ? t('tu_turno_vista.no_se_pudo_leer_3') : undefined,
           },
-        ]}
-      />
+      ])}
+    >
 
-      {/* ── 1 · Piezas de las rutinas — el tap de publicar ────────────────── */}
-      <section className="bj-bloque" aria-labelledby="tt-piezas">
-        {/* FE-13: `leerEstadoBus` trae 50 piezas pendientes como tope. Con la cola llena, "(50)" se lee como el total. */}
-        <h2 className="bj-titulo" id="tt-piezas">
-          {t('turno.piezas_para_tap', { n: bus.piezasPendientes.length, mas: bus.piezasPendientes.length >= TOPE_PIEZAS ? '+' : '' })}
-        </h2>
-        {bus.piezasPendientes.length >= TOPE_PIEZAS && (
-          <p className="bj-nota">{t('turno.se_listan_recientes', { n: TOPE_PIEZAS })}</p>
-        )}
-        {bus.piezasPendientes.length === 0 ? (
-          <EstadoVacio titulo={t('tu_turno_vista.no_hay_piezas_esperando')} contenido>
-            
-            {t('tu_turno_vista.las_piezas_que_preparan')}
-          </EstadoVacio>
-        ) : (
-          <div className="bj-piezas">
+      {ver('piezas') ? (
+        <FilaTarjetas variante="8-4">
+          {/* ── 1 · Piezas de las rutinas — el tap de publicar. FE-13: `leerEstadoBus` trae 50 como tope; con la cola llena, "(50)" se lee como el total. */}
+          <Tarjeta
+            titulo={t('turno.piezas_para_tap', { n: bus.piezasPendientes.length, mas: bus.piezasPendientes.length >= TOPE_PIEZAS ? '+' : '' })}
+            estado={piezasSinDato ? 'error' : bus.piezasPendientes.length === 0 ? 'vacio' : 'ok'} contenida
+            mensaje={piezasSinDato ? t('tu_turno_vista.no_se_pudo_leer_2') : t('tu_turno_vista.no_hay_piezas_esperando')}
+            detalle={t('tu_turno_vista.las_piezas_que_preparan')}
+          >
+            <div id="tt-piezas">
+              {bus.piezasPendientes.length >= TOPE_PIEZAS && <p className="bj-nota">{t('turno.se_listan_recientes', { n: TOPE_PIEZAS })}</p>}
+              <div className="bj-piezas bj-piezas--compacta">
             {bus.piezasPendientes.map((p) => (
               <article key={p.id} className="bj-pieza">
                 <div className="bj-pieza__marco">
@@ -233,12 +275,33 @@ export function VistaTuTurno({
               </article>
             ))}
           </div>
-        )}
-      </section>
+            </div>
+          </Tarjeta>
 
+          {/* ── Siguiente mejor acción: sale de las mismas cifras, nunca de una estimación ── */}
+          <Tarjeta className="bj-sig" titulo={t('turno.siguiente_accion')} estado={siguiente === null ? 'vacio' : 'ok'} contenida
+            mensaje={t('turno.sig_nada')} detalle={hayCiegas ? t('turno.titular_sin_lectura') : t('turno.sig_nada_detalle')}>
+            {siguiente ? (
+              <div className="bj-bloque">
+                <p className="bj-siguiente">{siguiente.texto}</p>
+                <div><BotonEnlace href={siguiente.href} variante="primary" tamano="sm">{siguiente.boton}</BotonEnlace></div>
+              </div>
+            ) : null}
+            {/* Ronda 7: el conteo real por fuente llena la tarjeta (la misma lectura de la tira; una fuente caída dice «—», nunca 0). */}
+            <ul className="bj-lista bj-sig__resumen">
+              <li><span className="bj-lista__texto">{t('turno.f_piezas')}</span><span className="bj-lista__apoyo">{piezasSinDato ? '—' : numero(bus.piezasPendientes.length)}</span></li>
+              <li><span className="bj-lista__texto">{t('turno.f_envios')}</span><span className="bj-lista__apoyo">{numero(envios.length)}</span></li>
+              <li><span className="bj-lista__texto">{t('turno.f_cambios')}</span><span className="bj-lista__apoyo">{prs.estado === 'ok' ? numero(prs.prs.length) : '—'}</span></li>
+              <li><span className="bj-lista__texto">{t('turno.f_escalaciones')}</span><span className="bj-lista__apoyo">{totalEscalaciones === null ? '—' : numero(totalEscalaciones)}</span></li>
+            </ul>
+          </Tarjeta>
+        </FilaTarjetas>
+      ) : null}
+
+      {ver('envios') || ver('escalaciones') ? (
       <FilaTarjetas variante="6-6">
         {/* ── 2 · Envíos redactados (0117) — dinero directo, se resuelven en Aprobaciones ─ */}
-        <Tarjeta
+        {ver('envios') ? <Tarjeta
           titulo={t('tu_turno_vista.envios_por_aprobar_2', { length: envios.length })}
           estado={envios.length === 0 ? 'vacio' : 'ok'} contenida mensaje={t('tu_turno_vista.nada_redactado_esperando_tu')}
           acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">{t('tu_turno_vista.revisar_y_aprobar_en')}</BotonEnlace>}
@@ -252,10 +315,10 @@ export function VistaTuTurno({
               </li>
             ))}
           </ul>
-        </Tarjeta>
+        </Tarjeta> : null}
 
         {/* ── 4 · Escalaciones — el top; la cola completa vive en su pantalla ── */}
-        <Tarjeta
+        {ver('escalaciones') ? <Tarjeta
           titulo={t('tu_turno_vista.escalaciones_2', { totalEscalaciones: totalEscalaciones === null ? '—' : totalEscalaciones })}
           estado={totalEscalaciones === null ? 'error' : totalEscalaciones === 0 ? 'vacio' : 'ok'} contenida
           mensaje={totalEscalaciones === null ? t('tu_turno_vista.no_se_pudo_leer_4') : t('tu_turno_vista.nada_escalado_a_un')}
@@ -270,12 +333,14 @@ export function VistaTuTurno({
               </li>
             ))}
           </ul>
-        </Tarjeta>
+        </Tarjeta> : null}
       </FilaTarjetas>
+      ) : null}
 
+      {ver('cambios') || ver('escalaciones') ? (
       <FilaTarjetas variante="6-6">
         {/* ── 3 · Cambios de código (PRs) — la aprobación de CÓDIGO es fusionarlos en GitHub, no un botón aquí ── */}
-        {prs.estado === 'sin_token' ? (
+        {!ver('cambios') ? null : prs.estado === 'sin_token' ? (
           <Tarjeta titulo={t('tu_turno_vista.cambios_por_aprobar')} estado="vacio" contenida mensaje={t('tu_turno_vista.falta_conectar_github')}
             detalle={t('tu_turno_vista.sin_ese_acceso_no')} />
         ) : prs.estado === 'error' ? (
@@ -296,13 +361,15 @@ export function VistaTuTurno({
         )}
 
         {/* ── Agentes que no corrieron y por qué (P0 de visibilidad) ──────── */}
-        <TarjetaAgentesParados t={t} parados={parados} cola={cola} />
+        {ver('escalaciones') ? <TarjetaAgentesParados t={t} parados={parados} cola={cola} /> : null}
       </FilaTarjetas>
+      ) : null}
 
       {/* ── 5 · Las rutinas de la Mac — estado y mando ───────────────────── */}
-      <section className="bj-bloque" aria-labelledby="tt-rutinas">
-        <div className="bj-titulo-fila">
-          <h2 className="bj-titulo" id="tt-rutinas">{t('turno.rutinas_automaticas', { n: bus.rutinas.length })}</h2>
+      {ver('rutinas') ? (
+      <Tarjeta
+        titulo={t('turno.rutinas_automaticas', { n: bus.rutinas.length })}
+        acciones={(
           <div className="bj-acciones">
             <form action={accionOrden}>
               <input type="hidden" name="tipo" value="kill_switch_on" />
@@ -311,7 +378,7 @@ export function VistaTuTurno({
                 etiqueta={t('tu_turno_vista.apagar_todas')} icono={<PowerOff {...ICONO} />} tono="peligro"
                 etiquetaConfirmar="Sí, apagar todas" titulo={t('tu_turno_vista.apagar_todas_las_rutinas')}
                 descripcion={t('tu_turno_vista.se_encola_la_orden', { length: bus.rutinas.length })}
-                className={clasesBoton('danger', 'sm')}
+                className={clasesBoton('secondary', 'sm')}
               />
             </form>
             <form action={accionOrden}>
@@ -324,7 +391,8 @@ export function VistaTuTurno({
               />
             </form>
           </div>
-        </div>
+        )}
+      >
         {bus.killSwitchPendiente && (
           <p className="bj-nota">{t('turno.orden_esperando')}</p>
         )}
@@ -335,7 +403,7 @@ export function VistaTuTurno({
           </EstadoVacio>
         ) : (
           <>
-            <TablaBase etiqueta={t('tu_turno_vista.rutinas_programadas')} columnas={columnasRutinas} filas={bus.rutinas} idFila={(r) => r.nombre} densa />
+            <TablaBase etiqueta={t('tu_turno_vista.rutinas_programadas')} columnas={columnasRutinas} filas={bus.rutinas} idFila={(r) => r.nombre} densa tarjetaMovil />
             {/* ── EL EDITOR DE RUTINAS (Fase D, cerrado 17-ago-2026) ────────
                 El encargo se edita AQUÍ y viaja como orden editar_encargo: la Mac abre un PR chico con el cambio — jamás escritura
                 directa. Solo rutinas con encargo sembrado se pueden editar (sin el texto original no hay qué pre-llenar ni qué PR). */}
@@ -354,10 +422,11 @@ export function VistaTuTurno({
             ))}
           </>
         )}
-      </section>
+      </Tarjeta>
+      ) : null}
 
       {/* ── 6 · Órdenes recientes — el acuse de la Mac ───────────────────── */}
-      <Tarjeta titulo={t('tu_turno_vista.ordenes_recientes')} estado={bus.ordenesRecientes.length === 0 ? 'vacio' : 'ok'} mensaje={t('tu_turno_vista.aun_no_has_ordenado')}>
+      {ver('rutinas') ? <Tarjeta titulo={t('tu_turno_vista.ordenes_recientes')} estado={bus.ordenesRecientes.length === 0 ? 'vacio' : 'ok'} mensaje={t('tu_turno_vista.aun_no_has_ordenado')}>
         <ul className="bj-lista">
           {bus.ordenesRecientes.map((o) => (
             <li key={o.id}>
@@ -368,11 +437,8 @@ export function VistaTuTurno({
             </li>
           ))}
         </ul>
-      </Tarjeta>
+      </Tarjeta> : null}
 
-      <p className="bj-nota">
-        {t('turno.sesion_pie', { sesionNombre })}
-      </p>
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }

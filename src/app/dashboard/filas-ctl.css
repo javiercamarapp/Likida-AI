@@ -1,0 +1,28 @@
+/* Filas rótulo-control de Rovaq «Equipo / Setup / Retención» (CF 22, 23 y 25): rótulo 14/600 con su ayuda 12 a la izquierda, control de
+ * 170-200 px a la derecha, divisor de 1 px entre filas. Se usa con `<Campo className="rv-fila-c">` (el DOM sigue siendo rótulo → control → ayuda:
+ * la rejilla solo los coloca). Sin `content:`, sin texto. */
+[data-ui="v2"] .rv-fila-c { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 200px); column-gap: 16px; row-gap: 2px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-fila-c:first-child { border-top: 0; padding-top: 0; }
+[data-ui="v2"] .rv-fila-c > .rv-campo__etq { grid-column: 1; grid-row: 1; font-size: 14px; font-weight: 600; color: var(--ink); }
+[data-ui="v2"] .rv-fila-c > .rv-ctl, [data-ui="v2"] .rv-fila-c > .rv-archivo { grid-column: 2; grid-row: 1 / span 2; width: 100%; min-width: 0; }
+[data-ui="v2"] .rv-fila-c > .rv-ctl--area { align-self: stretch; }
+[data-ui="v2"] .rv-fila-c > .rv-campo__ayuda { grid-column: 1; grid-row: 2; font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .rv-fila-c > .rv-campo__error { grid-column: 1 / -1; grid-row: 3; }
+@media (max-width: 640px) {
+  [data-ui="v2"] .rv-fila-c { grid-template-columns: minmax(0, 1fr); }
+  [data-ui="v2"] .rv-fila-c > .rv-ctl, [data-ui="v2"] .rv-fila-c > .rv-archivo { grid-column: 1; grid-row: auto; }
+  [data-ui="v2"] .rv-fila-c > .rv-campo__ayuda { grid-row: auto; }
+}
+/* Pie de sección: una sola acción primaria a la derecha, con un divisor. */
+[data-ui="v2"] .rv-fila-pie { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* Configuración en DOS columnas (Rovaq «Equipo» y «Retención»: rejilla de 2 tarjetas). Se activa con un marcador `rv-cfg-dos` en el contexto de la página; las
+ * secciones con tabla o contenido ancho llevan `rv-cfg-ancha` y ocupan las dos. Bajo 1100 px vuelve a una sola columna. Sin `content:`. */
+[data-ui="v2"] .rv-cfg-dos { display: none; }
+@media (min-width: 1100px) {
+  [data-ui="v2"] .rv-esq--config:has(.rv-cfg-dos) .rv-esq__cfg { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  [data-ui="v2"] .rv-esq--config:has(.rv-cfg-dos) .rv-esq__cfg > .rv-tarjeta:has(.rv-cfg-ancha) { grid-column: 1 / -1; }
+}
+
+/* El botón de envío de `FormaConAviso` (compartido, con `style=` propio) lleva el borde de 1 px de tinta de todo primario .rv-btn. */
+[data-ui="v2"] form button[type="submit"].inline-flex.h-8:not(.rv-btn--danger) { border: var(--borde-w, 1px) solid var(--btn-borde, var(--ink)); }

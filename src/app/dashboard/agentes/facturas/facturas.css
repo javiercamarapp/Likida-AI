@@ -27,6 +27,8 @@
 .rv-fact__linea .rv-campo { flex: 1; min-width: 220px; }
 .rv-fact__pila { display: grid; gap: 12px; }
 .rv-fact__tres { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; }
+.rv-fact__pie { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+.rv-fact__pie .rv-btn { height: 32px; width: auto; }
 .rv-btn[data-copiado] { color: var(--ok); }
 .rv-fact__enlace { font-size: var(--t-small, 12px); font-weight: 500; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; gap: 4px; }
 .rv-fact__reglones { list-style: none; margin: 0; padding: 0; display: grid; }
@@ -45,3 +47,44 @@
    alto mínimo ni el color de hover del botón suelto. Mayor especificidad que `[data-ui="v2"] .rv-btn`. */
 [data-ui="v2"] .rv-btn.rv-fact__cab { display: grid; justify-content: stretch; min-height: 0; padding: 8px 10px; border-radius: 12px; font: inherit; font-size: var(--t-body, 13px); font-weight: 400; text-align: left; color: var(--ink); }
 [data-ui="v2"] .rv-btn.rv-fact__cab:hover { background: var(--canvas); color: var(--ink); }
+
+/* Raíz del cajón «Vista rápida» dentro de una celda numérica: el panel hereda `text-align: start`, no el `right` de la celda. */
+.rv-fact__cajon-raiz { display: contents; text-align: start; }
+.rv-fact__cajon-raiz .rv-ov, .rv-fact__cajon-raiz .rv-ov__panel { text-align: start; }
+
+/* Cajón del portal: los botones fantasma alinean su texto con «Abrir el portal» (sin 8 px de sangría). */
+.rv-fact__cajon-raiz .rv-fact__pila .rv-btn--ghost { margin-inline-start: -8px; }
+
+/* F26 ronda 5 · «Tus portales»: la tabla llega a sangre dentro de su tarjeta (Rovaq: padding 0), sin un segundo borde ni radio propios. */
+.rv-fact__portales { gap: 8px; }
+.rv-fact__portales-pad { display: grid; gap: 8px; padding: 12px 14px 0; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-fact__portales .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-fact__portales .rv-tb__region { border-top: 1px solid var(--line); }
+
+/* Cifras en la fuente del sistema con dígitos tabulares (Rovaq: Hanken Grotesk), no en monoespaciada. */
+.rv-cifra { font-variant-numeric: tabular-nums; }
+
+/* «Emisión real de facturas» (Rovaq FM): secciones de configuración con filas rótulo-control separadas por un filete, título 14/600 y una sola acción
+   en el pie. Dos columnas (estado y límites | lotes y portales) con 12 px de separación y 32 de medianil, en vez de una columna de 780 px con la mitad
+   derecha de la tarjeta vacía; en móvil, una. */
+.rv-fact__emision { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 32px; align-items: start; }
+.rv-fact__emision-col { gap: 8px; min-width: 0; align-content: start; }
+@media (max-width: 899.98px) { .rv-fact__emision { grid-template-columns: minmax(0, 1fr); } }
+.rv-fact__sec { margin: 0; font-size: var(--t-card, 14px); font-weight: 600; line-height: 1.3; color: var(--ink); }
+.rv-fact__ctl-forma { display: grid; }
+.rv-fact__ctl-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 41px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.rv-fact__ctl-etq { min-width: 0; font-size: var(--t-body, 13px); color: var(--ink); }
+.rv-fact__ctl-etq strong { font-weight: 600; }
+.rv-fact__ctl-campo { flex: 0 0 160px; width: 160px; }
+.rv-fact__ctl-forma .rv-fact__pie { padding-top: 8px; }
+@media (max-width: 767.98px) { .rv-fact__ctl-fila { flex-wrap: wrap; } .rv-fact__ctl-campo { flex: 1 1 140px; } }
+
+/* Aviso compacto (Rovaq): la acción va a la DERECHA, en la misma línea que el resumen («Ver cuáles son»), no en una segunda línea. Abierto, el detalle baja a ancho completo. */
+[data-ui="v2"] .rv-fact__aviso .rv-aviso__compacto { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; }
+[data-ui="v2"] .rv-fact__aviso .rv-aviso__resumen { grid-column: 1; grid-row: 1; }
+[data-ui="v2"] .rv-fact__aviso .rv-aviso__mas { grid-column: 2; grid-row: 1; margin-top: 0; }
+[data-ui="v2"] .rv-fact__aviso .rv-aviso__mas[open] { grid-column: 1 / -1; grid-row: 2; margin-top: 4px; }
+
+/* Vacío dentro de tarjeta (Rovaq `ac-vacio`): caja de 1 px discontinua, radio 8, padding 20/14, que llena la tarjeta (sin franja en blanco debajo). */
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { flex: 1 1 auto; justify-content: center; border: 1px dashed var(--line); border-radius: 8px; padding: 20px 14px; max-height: none; }

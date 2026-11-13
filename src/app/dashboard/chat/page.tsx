@@ -10,6 +10,7 @@ import { hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { AvisoSinFlota } from '../sin-flota';
 import ChatFlota from '../chat';
+import './chat-pagina.css';
 
 export const dynamic = 'force-dynamic';
 

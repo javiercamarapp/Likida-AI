@@ -7,8 +7,19 @@
 .rv-mp__texto[data-tono="bad"] { color: var(--bad); }
 .rv-mp__nota { margin: 0; font-size: var(--t-micro); color: var(--faint); word-break: break-all; }
 .rv-mp__qr { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-.rv-mp__datos { margin: 0; display: grid; gap: 8px; font-size: var(--t-body); }
-.rv-mp__datos > div { display: flex; justify-content: space-between; gap: 16px; }
-.rv-mp__datos dt { color: var(--muted); }
-.rv-mp__datos dd { margin: 0; text-align: right; }
+.rv-mp__datos { margin: 0; display: grid; }
 .rv-mp__separador { padding-top: 16px; border-top: 1px solid var(--line); }
+/* Botón de envío de las formas de esta pantalla a la medida de Rovaq (32 px, 13/500, padding 6x12, radio 8): el de `FormaConAviso` trae text-sm de Tailwind (36 px). */
+[data-ui="v2"] form button[type="submit"].px-4.py-2.text-sm { min-height: 32px; padding: 6px 12px; font-size: var(--t-body, 13px); font-weight: 500; line-height: 1.3; border-radius: 8px; }
+
+/* Avatar: el nombre y «Cambiar foto» no van pegados (≥ 8 px entre vecinos). El uploader es del paquete A: aquí solo se le da aire por sus clases. */
+.rv-mp__pila .adm-perfil-avatar { display: flex; align-items: center; gap: 12px; }
+.rv-mp__pila .adm-perfil-avatar__img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+.rv-mp__pila .adm-perfil-avatar__texto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
+.rv-mp__pila .adm-perfil-avatar__texto strong { font-size: var(--t-card, 14px); font-weight: 600; overflow-wrap: anywhere; }
+.rv-mp__forma { display: grid; gap: 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.rv-mp__datos { gap: 0; }
+.rv-mp__valor { font-size: var(--t-body); color: var(--ink); overflow-wrap: anywhere; text-align: right; }
+/* Peligro con su borde de peligro (Rovaq: rgba(172,36,64,.24)), no el borde de tinta que `filas-ctl.css` pone a todo envío de 32 px. */
+[data-ui="v2"] form button[type="submit"].rv-btn--danger.inline-flex.h-8 { border-color: color-mix(in srgb, var(--bad) 24%, transparent); }
+[data-ui="v2"] form button[type="submit"].rv-btn--danger.inline-flex.h-8:hover { border-color: var(--bad); }

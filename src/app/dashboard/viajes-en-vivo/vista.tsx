@@ -1,4 +1,6 @@
-import { Aviso, BarraFiltros, Boton, BotonEnlace, Disclosure, FiltroInterruptor, FiltroOpciones, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { cifrasUniformes } from '../formato';
+import { TarjetaTabla } from '../bloque';
+import { Aviso, BarraFiltros, Boton, BotonEnlace, EstadoVacio, FiltroInterruptor, FiltroOpciones, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { MapPin, MapPinOff, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -6,7 +8,8 @@ import { textoAntiguedad, type FilaViaje, type TableroViajes, type TipoExcepcion
 import type { NivelFrescura } from '@/lib/likida/orquestador/enganche_gps';
 import { ActualizarSolo } from './actualizar_solo';
 import { PillSemaforo } from '../viajes/pills';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import './en-vivo.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -45,7 +48,7 @@ const gravedadTr = (t: TResto = T_RESTO_ES): Record<1 | 2 | 3, { texto: string; 
 function Filtros({ f, c, accionUrl, ocultos, t = T_RESTO_ES }: { f: FiltrosVistaViajes; c: CatalogoVista; accionUrl: string; ocultos: Record<string, string>; t?: TResto }) {
   const hay = Boolean(f.terminalId || f.clienteId || f.soloExcepciones);
   return (
-    <BarraFiltros accion={accionUrl} ocultos={ocultos} etiqueta={t('op.filtros_de_viajes_en_vivo')} nActivos={hay ? 1 : 0} limpiarHref={accionUrl}>
+    <BarraFiltros enLinea accion={accionUrl} ocultos={ocultos} etiqueta={t('op.filtros_de_viajes_en_vivo')} nActivos={hay ? 1 : 0} limpiarHref={accionUrl}>
       <FiltroOpciones nombre="terminal" etiqueta={t('op.terminal')} valor={f.terminalId} opciones={[{ valor: '', rotulo: t('cfg.todas') }, ...c.terminales.map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
       <FiltroOpciones nombre="cliente" etiqueta={t('cfg.cliente')} valor={f.clienteId} opciones={[{ valor: '', rotulo: t('op.todos') }, ...c.clientes.map((x) => ({ valor: x.id, rotulo: x.nombre }))]} />
       <FiltroInterruptor nombre="vista" valor="excepciones" etiqueta={t('op.solo_con_excepciones')} marcado={f.soloExcepciones} />
@@ -145,7 +148,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
     <Tarjeta titulo={t('op.tareas_del_asistente')} info="viajes_en_vivo.tareas">
       {aviso && avisoAtencion(t)[aviso] && <p role="status" className="rv-vv__sub">{avisoAtencion(t)[aviso]}</p>}
       {tareas.length === 0
-        ? <p className="rv-vv__apagado">{t('op.no_hay_tareas_abiertas_cuando_el')}</p>
+        ? <EstadoVacio contenido titulo={t('op.sin_tareas_abiertas')}>{t('op.no_hay_tareas_abiertas_cuando_el')}</EstadoVacio>
         : (
           <ul className="rv-vv__lista">
             {tareas.map((tarea) => (
@@ -168,60 +171,70 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
   );
 }
 
-export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocultos, hrefMapa, pregunta, tareas, notificaciones, t = T_RESTO_ES }: {
+export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocultos, pregunta, tareas, notificaciones, mapa, totalEnCurso, sinSeguimiento = 0, t = T_RESTO_ES }: {
   tablero: TableroViajes;
   filtros: FiltrosVistaViajes;
   catalogo: CatalogoVista;
   accionUrl: string;
   ocultos: Record<string, string>;
-  hrefMapa: string;
-  /** La caja de preguntas del asistente (componente de cliente). */
+  /** @deprecated sin efecto: «Ver el mapa» se retiró (la pestaña Mapa ya lo es). */
+  hrefMapa?: string;
+  /** Hay chat disponible para este perfil: se ofrece el enlace a «Pregunta a tus datos» (la caja propia de esta página se retiró). */
   pregunta?: ReactNodeLike;
   tareas: ReactNodeLike;
   /** La sección «Notificaciones» (a quién le llega el aviso de una tarea nueva). Solo la ve quien puede configurarla. */
-  notificaciones?: ReactNodeLike; t?: TResto;
+  notificaciones?: ReactNodeLike;
+  /** El mapa de los viajes del tablero (componente de cliente armado en el servidor con `mapaDelTablero`). Va antes de la tabla: la tabla es su equivalente. */
+  mapa?: ReactNodeLike;
+  /** Los viajes en curso de la flota contados en la base (los mismos que cuenta el Mapa). `null` = no se pudo contar; sin él se usa el conteo del tablero. */
+  totalEnCurso?: number | null;
+  /** Viajes en curso (base) que el tablero del conductor aún no sigue: la tabla vacía lo dice en vez de negar el viaje. */
+  sinSeguimiento?: number; t?: TResto;
 }) {
   const c = tablero.conteos;
+  const cifras: PropsCifra[] = [
+    // Un mismo rótulo da la misma cifra en todas las pantallas: «en curso» es lo que cuenta el Mapa (abiertos y en cuadre). El tablero sólo
+    // sigue a los que el conductor ya aceptó; esa diferencia se dice en la nota, no se esconde.
+    typeof totalEnCurso === 'number'
+      ? { etiqueta: t('op.viajes_en_curso'), valor: numero(totalEnCurso), nota: t('op.con_seguimiento_del_conductor', { n: numero(c.viajes) }), info: 'viajes_en_vivo.en_curso' }
+      : { etiqueta: t('op.viajes_en_curso'), valor: numero(c.viajes), nota: tablero.hayMas ? t('op.hay_mas_viajes_activos_que_los') : undefined, info: 'viajes_en_vivo.en_curso' },
+    { etiqueta: t('op.con_excepcion'), valor: numero(c.conExcepcion), tono: c.conExcepcion > 0 ? 'warn' : undefined, info: 'viajes_en_vivo.con_excepcion' },
+    { etiqueta: t('op.sin_senal_de_vida'), valor: numero(c.sinSenal), nota: t('op.chofer_y_tractor_callados'), tono: c.sinSenal > 0 ? 'bad' : undefined, info: 'viajes_en_vivo.sin_senal' },
+    { etiqueta: t('op.llegadas_sin_confirmar'), valor: numero(c.llegadaSinConfirmar), nota: t('op.escalados_a_trafico', { numero: numero(c.escaladosATrafico) }), info: 'viajes_en_vivo.llegadas_sin_confirmar' },
+  ];
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
       titulo={t('op.viajes_en_vivo')}
       apoyo={t('op.viajes_en_curso_con_su_ultimo', { fechaHoraMx: fechaHoraMx(tablero.generadoEn) })}
       acciones={(
         <>
           <ActualizarSolo />
-          <BotonEnlace tamano="sm" href={hrefMapa}>{t('op.ver_el_mapa')}</BotonEnlace>
+          {/* El chat vive en «Pregunta a tus datos» (un solo compositor); aquí solo se enlaza, sin una caja propia. «Ver el mapa» se retiró: ya es la pestaña Mapa. */}
+          {pregunta ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/chat${ocultos.tenant ? `?tenant=${encodeURIComponent(ocultos.tenant)}` : ''}`}>{t('op.preguntale_al_asistente')}</BotonEnlace> : null}
         </>
       )}
+      filtros={<Filtros t={t} f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />}
+      avisos={!tablero.gpsDisponible ? <Aviso tono="warn">{t('op.no_se_pudieron_leer_las_posiciones')}</Aviso> : undefined}
+      cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy('Viajes en curso')}
     >
-
-      {!tablero.gpsDisponible && (
-        <Aviso tono="warn">{t('op.no_se_pudieron_leer_las_posiciones')}</Aviso>
-      )}
-
-      <TiraCifras sello={selloHoy('Viajes en curso')}>
-        <Cifra etiqueta={t('op.viajes_en_curso')} valor={numero(c.viajes)} nota={tablero.hayMas ? t('op.hay_mas_viajes_activos_que_los') : undefined} info="viajes_en_vivo.en_curso" />
-        <Cifra etiqueta={t('op.con_excepcion')} valor={numero(c.conExcepcion)} tono={c.conExcepcion > 0 ? 'warn' : undefined} info="viajes_en_vivo.con_excepcion" />
-        <Cifra etiqueta={t('op.sin_senal_de_vida')} valor={numero(c.sinSenal)} nota={t('op.chofer_y_tractor_callados')} tono={c.sinSenal > 0 ? 'bad' : undefined} info="viajes_en_vivo.sin_senal" />
-        <Cifra etiqueta={t('op.llegadas_sin_confirmar')} valor={numero(c.llegadaSinConfirmar)} nota={t('op.escalados_a_trafico', { numero: numero(c.escaladosATrafico) })} info="viajes_en_vivo.llegadas_sin_confirmar" />
-      </TiraCifras>
-
-      <Filtros t={t} f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />
-
-      <TablaBase<FilaViaje>
-        etiqueta={t('op.viajes_en_vivo_y_su_estado')}
-        columnas={columnas(tablero.gpsDisponible, t)}
-        filas={tablero.filas}
-        idFila={(f) => f.viajeId}
-        tarjetaMovil
-        vacio={{
-          titulo: t('op.sin_viajes_que_mostrar'),
-          texto: filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? t('op.ningun_viaje_cumple_los_filtros') : t('op.no_hay_viajes_en_curso'),
-        }}
-      />
+      {mapa}
+      <TarjetaTabla titulo={t('op.viajes_en_vivo_y_su_estado')} contador={tablero.hayMas ? undefined : numero(tablero.filas.length)}>
+        <TablaBase<FilaViaje>
+          etiqueta={t('op.viajes_en_vivo_y_su_estado')}
+          columnas={columnas(tablero.gpsDisponible, t)}
+          filas={tablero.filas}
+          idFila={(f) => f.viajeId}
+          tarjetaMovil
+          vacio={{
+            titulo: t('op.sin_viajes_que_mostrar'),
+            texto: filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? t('op.ningun_viaje_cumple_los_filtros') : sinSeguimiento > 0 ? t('op.viajes_sin_seguimiento', { n: numero(sinSeguimiento) }) : t('op.no_hay_viajes_en_curso'),
+          }}
+        />
+      </TarjetaTabla>
       {tareas}
-      {pregunta ? <Disclosure variante="linea" titulo={t('op.preguntale_al_asistente')}>{pregunta}</Disclosure> : null}
-      {notificaciones ? <Disclosure variante="linea" titulo={t('op.notificaciones_de_los_avisos')}>{notificaciones}</Disclosure> : null}
-    </MarcoPagina>
+      {notificaciones ? <Tarjeta titulo={t('op.notificaciones_de_los_avisos')}>{notificaciones}</Tarjeta> : null}
+    </EsqueletoTablaMaestra>
   );
 }
 

@@ -1,0 +1,116 @@
+/* Páginas públicas · ronda 2 (Rovaq «access-flow», PU, estado, demo). Archivo propio de los paquetes públicos: solo DISPOSICIÓN con los
+ * tokens del marco; no añade texto (ni `content:`), así que no toca la huella de los documentos legales. */
+
+/* ── Pantallas de flujo de acceso (sin-acceso, mcp/autorizar, pago, 404, cuenta): UNA tarjeta central ──────────────────────────────
+ * Rovaq `/seguridad`: tarjeta blanca de ~560 px, radio 12, padding 48; h1 20/600; texto 14/23 con ancho máximo de 520. La página marca
+ * el flujo con `<div className="rv-flujo" />` dentro del marco; el marco compartido no cambia. */
+[data-ui="v2"] .rv-pub__main[data-ancho]:has(> .rv-flujo) {
+  box-sizing: border-box; max-width: var(--pub-ancho-lectura, 640px); padding: 48px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+}
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-pub__titulo { font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-pub__apoyo { font-size: 14px; line-height: 1.65; max-width: 520px; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-pub__prosa { font-size: 14px; line-height: 1.65; max-width: 520px; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-pub__sec { margin-top: 20px; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-flujo) .rv-pub__acciones { margin-top: 20px; gap: 8px 12px; }
+[data-ui="v2"] .rv-flujo { display: none; }
+@media (max-width: 640px) {
+  [data-ui="v2"] .rv-pub__main[data-ancho]:has(> .rv-flujo) { padding: 28px 20px; }
+}
+
+/* ── Blog: lista de artículos en TARJETAS (radio 12, borde 1 px, padding 14) ─────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-blog__lista { margin: 24px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+[data-ui="v2"] .rv-blog__tarjeta { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: border-color 150ms ease; }
+[data-ui="v2"] .rv-blog__tarjeta:hover { border-color: var(--ink); }
+[data-ui="v2"] .rv-blog__tarjeta .rv-pub__item-titulo { margin: 2px 0 0; font-size: 16px; }
+[data-ui="v2"] .rv-blog__tarjeta .rv-pub__resumen { margin: 6px 0 0; }
+@media (prefers-reduced-motion: reduce) { [data-ui="v2"] .rv-blog__tarjeta { transition: none; } }
+
+/* ── Estado: semáforo por servicio en TABLA compacta (cabecera de 36, filas de 40); lo desconocido se pinta punteado ───────────────── */
+[data-ui="v2"] .rv-estado__tabla { margin-top: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+[data-ui="v2"] .rv-estado__tabla table { width: 100%; border-collapse: collapse; font-size: 13px; }
+[data-ui="v2"] .rv-estado__tabla th { height: 36px; padding: 0 14px; text-align: left; font-size: 12px; font-weight: 600; color: var(--ink); border-bottom: 1px solid var(--line); background: var(--canvas); white-space: nowrap; }
+[data-ui="v2"] .rv-estado__tabla td { min-height: 40px; padding: 8px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+[data-ui="v2"] .rv-estado__tabla tr:last-child td { border-bottom: 0; }
+[data-ui="v2"] .rv-estado__tabla td[data-col="nombre"] { font-weight: 500; color: var(--ink); }
+[data-ui="v2"] .rv-estado__nota { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
+[data-ui="v2"] .rv-estado__disp { font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .rv-estado__pista { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; align-items: center; min-width: 180px; }
+[data-ui="v2"] .rv-estado__celda { flex: 1 1 0; height: 14px; min-width: 3px; border-radius: 2px; background: var(--ink); }
+[data-ui="v2"] .rv-estado__celda[data-nivel="ok"] { background: var(--ok, #1a7f4b); }
+[data-ui="v2"] .rv-estado__celda[data-nivel="warn"] { background: var(--warn, #b7791f); }
+[data-ui="v2"] .rv-estado__celda[data-nivel="bad"] { background: var(--bad, #ac2440); }
+/* Sin medición: NO es cero ni es «bien»: casilla punteada y vacía (1 px dashed). */
+[data-ui="v2"] .rv-estado__celda[data-nivel="sin"] { background: transparent; border: 1px dashed var(--faint); }
+@media (max-width: 640px) { [data-ui="v2"] .rv-estado__pista { min-width: 120px; } }
+
+/* ── Demo: el alto sigue al contenido (sin tarjeta alta medio vacía) ──────────────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-demo { height: auto; min-height: 0; max-height: 520px; }
+[data-ui="v2"] .rv-demo__hilo { flex: 0 1 auto; min-height: 120px; }
+
+/* ── Documentos legales con piel de sitio (índice) ───────────────────────────────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-legal__indice { margin: 24px 0 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+[data-ui="v2"] .rv-legal__indice ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; }
+[data-ui="v2"] .rv-legal__indice a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+[data-ui="v2"] .rv-pub__aviso-falta[data-ambar] { border-color: rgba(134, 88, 13, .22); background: #fff7e5; color: #5a3d08; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) [data-ui="v2"] .rv-pub__aviso-falta[data-ambar] { background: rgba(134, 88, 13, .18); color: var(--ink); border-color: rgba(214, 168, 84, .3); } }
+:root[data-theme="dark"] [data-ui="v2"] .rv-pub__aviso-falta[data-ambar] { background: rgba(134, 88, 13, .18); color: var(--ink); border-color: rgba(214, 168, 84, .3); }
+
+/* ── Cuenta: filas rótulo-control (idioma, tema) y cierre de sesión al final ──────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-cuenta__tarjeta { display: flex; align-items: center; gap: 12px; }
+[data-ui="v2"] .rv-cuenta__quien { display: grid; gap: 2px; min-width: 0; }
+[data-ui="v2"] .rv-cuenta__quien strong { font-size: 14px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-cuenta__quien span { font-size: 13px; color: var(--muted); }
+[data-ui="v2"] .rv-cuenta__prefs { margin-top: 20px; display: grid; }
+[data-ui="v2"] .rv-cuenta__fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-cuenta__fila p { margin: 0; font-size: 13px; font-weight: 500; color: var(--ink); }
+[data-ui="v2"] .rv-cuenta__pie { margin-top: 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* ── Texto solo para lector de pantalla (el marco público no carga paginas.css) ───────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* El círculo rojo que marcaba lo pendiente sigue en el texto (huella) pero no se pinta. */
+[data-ui="v2"] .rv-pub__marca-falta { display: none; }
+
+/* ── Marco público «access-flow» de Rovaq: cabecera sin borde (logo a la izquierda, ancho 76 rem), escala de texto 20/14/13 y tarjeta de lectura ── */
+div[data-ui="v2"].rv-pub { --pub-t-titulo: 20px; --pub-t-lead: 14px; --pub-t-cuerpo: 14px; --pub-t-h2: 16px; --pub-ancho-lectura: 640px; }
+div[data-ui="v2"].rv-pub .rv-pub__cab { max-width: 76rem; width: 100%; margin: 0 auto; box-sizing: border-box; padding: 28px clamp(16px, 4vw, 32px); border-bottom: 0; }
+div[data-ui="v2"].rv-pub .rv-pub__titulo { font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
+div[data-ui="v2"].rv-pub .rv-pub__apoyo { line-height: 1.65; }
+div[data-ui="v2"].rv-pub .rv-pub__prosa { font-size: 13px; line-height: 1.65; }
+div[data-ui="v2"].rv-pub .rv-pub__main[data-ancho="lectura"] { box-sizing: border-box; padding: 48px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+/* Los h2 de la prosa llevan aire arriba (24-32 px); el primero de cada bloque, no. */
+div[data-ui="v2"].rv-pub .rv-pub__prosa h2 { margin: 28px 0 0; }
+div[data-ui="v2"].rv-pub .rv-pub__prosa > h2:first-child, div[data-ui="v2"].rv-pub .rv-pub__sec h2 { margin-top: 0; }
+div[data-ui="v2"].rv-pub .rv-pub__lista { margin-top: 24px; }
+@media (max-width: 640px) {
+  div[data-ui="v2"].rv-pub .rv-pub__main[data-ancho="lectura"] { padding: 28px 20px; }
+}
+
+/* ── Estado: la tabla se desplaza o pasa a tarjeta-fila; la columna de disponibilidad no se aprieta a 3 renglones ───────────────────── */
+[data-ui="v2"] .rv-estado__tabla { overflow-x: auto; }
+[data-ui="v2"] .rv-estado__tabla th[scope="row"] { height: auto; padding: 8px 14px; border-bottom: 1px solid var(--line); background: transparent; white-space: normal; font-size: 13px; text-align: left; }
+[data-ui="v2"] .rv-estado__tabla tr:last-child th[scope="row"] { border-bottom: 0; }
+[data-ui="v2"] .rv-estado__disp { min-width: 200px; line-height: 1.5; }
+[data-ui="v2"] .rv-estado__etq { display: none; }
+/* Un solo ancho en el marco público (640): los servicios van apilados, una fila por servicio, a cualquier ancho de pantalla. */
+@media all {
+  [data-ui="v2"] .rv-estado__tabla { overflow: visible; border: 0; background: transparent; }
+  [data-ui="v2"] .rv-estado__tabla table, [data-ui="v2"] .rv-estado__tabla tbody, [data-ui="v2"] .rv-estado__tabla tr, [data-ui="v2"] .rv-estado__tabla th, [data-ui="v2"] .rv-estado__tabla td { display: block; }
+  [data-ui="v2"] .rv-estado__tabla thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  [data-ui="v2"] .rv-estado__tabla tr { margin-bottom: 8px; padding: 6px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  [data-ui="v2"] .rv-estado__tabla th[scope="row"], [data-ui="v2"] .rv-estado__tabla td { padding: 6px 14px; border-bottom: 0; }
+  [data-ui="v2"] .rv-estado__etq { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  [data-ui="v2"] .rv-estado__disp { min-width: 0; }
+  [data-ui="v2"] .rv-estado__pista { min-width: 0; }
+}
+
+/* ── Piel `documento` de las páginas legales con huella (/terminos, /privacidad, /aviso/[tenant]) en la misma familia que el resto de las públicas ──
+ * El texto del documento NO cambia (la huella lo hashea): el logo es una máscara CSS sin texto (`content: ''`), el nombre del documento (que el DOM
+ * trae como rótulo) se pinta como el título 20/600 de `access-flow`, y el h1 «Likida» queda solo para lectores de pantalla. */
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) > header { display: flex; flex-direction: column; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) > header::before {
+  content: ''; order: 0; display: block; width: 112px; height: 22px; margin-bottom: 24px; background: var(--ink);
+  -webkit-mask: url('/brand/likida-logo-horizontal-positivo.svg') left center / contain no-repeat; mask: url('/brand/likida-logo-horizontal-positivo.svg') left center / contain no-repeat;
+}
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__rotulo { order: 1; font-family: var(--font-display), var(--font-sans-ui), sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; text-transform: none; color: var(--ink); }
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo { order: 2; position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__apoyo { order: 3; margin-top: 8px; }

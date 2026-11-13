@@ -1,0 +1,49 @@
+/* Portada del perfil de cinco agentes (Rovaq «Hoy»): solo DISPOSICIÓN que las reglas compartidas de `.rv-ic__*` no dan. Tokens del sistema; sin hex. */
+
+/* Los cinco agentes: tarjetas de la MISMA altura y el enlace «Abrir» siempre al pie, a la misma altura en todas (antes cada una medía lo suyo). */
+.rv-ic__agentes > .rv-ic__agente { display: flex; flex-direction: column; position: relative; }
+/* El texto solo para lectores (.rv-sr) es absoluto: con la tarjeta posicionada ya no escapa a la derecha ni ensancha el documento en móvil. */
+.rv-ic__agentes, .rv-ic__seccion { position: relative; }
+.rv-ic__agentes > .rv-ic__agente > .rv-tarjeta__cuerpo { display: flex; flex: 1 1 auto; flex-direction: column; }
+.rv-ic__agentes .rv-ic__agente-cuerpo { flex: 1 1 auto; }
+
+/* Botones de ancho de contenido dentro de las tarjetas de la portada: un primario de 538 px es un botón tosco, no un botón de Rovaq. */
+.rv-ic__marcha .rv-tarjeta__cuerpo > .rv-btn,
+.rv-ic__hoy .rv-tarjeta__cuerpo > .rv-btn { align-self: flex-start; width: auto; }
+
+/* Las filas de tarjetas de la portada se estiran a la altura de la más alta: sin tarjetas bajas junto a una alta. */
+.rv-ic__fila > .rv-tarjeta { height: 100%; }
+/* Rovaq: las tres tarjetas de la fila 4-4-4 miden lo mismo (stretch). La «contenida» (vacío de «Lo que hizo solo») también se estira: antes medía 158 px junto a
+   dos de 276 y dejaba un hueco bajo ella. Su vacío punteado se centra en el cuerpo completo. */
+.rv-ic__fila > .rv-tarjeta[data-contenida] { height: 100%; align-self: stretch; }
+.rv-ic__fila > .rv-tarjeta[data-contenida] > .rv-tarjeta__cuerpo { display: flex; flex-direction: column; justify-content: center; flex: 1 1 auto; }
+
+/* El chip de estado de cada agente se ve COMPLETO: si el texto no cabe en una línea baja a la siguiente (altura mínima 22 px), nunca se recorta con puntos suspensivos. */
+/* Las cinco tarjetas llevan icono y chip en la MISMA disposición (icono arriba, chip debajo): antes el chip de Liquidaciones iba junto al icono y el de las otras
+   cuatro bajaba una línea, y «— por revisar», el texto y «Para que arranque» no quedaban alineados entre tarjetas. Altura mínima = icono + chip de dos líneas. */
+[data-ui="v2"] .rv-ic__agentes .rv-ic__estado { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 6px; min-height: 68px; }
+[data-ui="v2"] .rv-ic__estado { flex-wrap: wrap; row-gap: 4px; min-width: 0; }
+[data-ui="v2"] .rv-ic__estado > .rv-estado { white-space: normal; overflow: visible; text-overflow: clip; height: auto; min-height: 22px; padding-block: 3px; line-height: 1.25; max-width: 100%; }
+
+/* La cifra vacía «—» de la tira de la portada mide lo mismo que cualquier cifra (26/700, la escala del sistema), en gris para no leerse como medición. */
+[data-ui="v2"] .rv-esq--portada .rv-kpi__valor[data-vacio] { font-size: var(--t-kpi, 26px); font-weight: 700; color: var(--muted); }
+
+/* Móvil: la tira de los cinco agentes se desliza DENTRO de sí misma. `contain: inline-size` impide que su contenido ensanche el documento
+   (antes la página entera medía 934 px sobre un viewport de 412). */
+.rv-ic__seccion { max-width: 100%; }
+@media (max-width: 819px) {
+  .rv-ic__agentes { max-width: 100%; contain: inline-size; overscroll-behavior-x: contain; }
+}
+
+/* «Requiere tu atención» (Rovaq): LISTA de filas con punto, título 13/500, metadato 12 px y divisor de 1 px, no subtarjetas con borde y radio. */
+.rv-ic__hoy .rv-ic__pasos { gap: 0; }
+.rv-ic__hoy .rv-ic__pasos > li { border-bottom: 1px solid var(--line); }
+.rv-ic__hoy .rv-ic__pasos > li:last-child { border-bottom: 0; }
+.rv-ic__hoy .rv-ic__paso { position: relative; gap: 2px; padding: 9px 0 9px 16px; border: 0; border-radius: 0; background: transparent; }
+.rv-ic__hoy .rv-ic__paso::before { content: ""; position: absolute; left: 0; top: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+.rv-ic__hoy .rv-ic__paso:hover { background: var(--canvas); }
+.rv-ic__hoy .rv-ic__paso-titulo { font-size: var(--t-body, 13px); font-weight: 500; }
+.rv-ic__hoy .rv-ic__paso .rv-ic__nota { font-size: var(--t-small, 12px); color: var(--muted); }
+
+/* La tira «Hoy» de la portada (Rovaq `hoy-kpi`): rótulo en ORACIÓN 12/500 (no las mayúsculas de `pc-kpis`), cifra 26/700 y la línea de procedencia en cada celda. */
+[data-ui="v2"] .rv-esq--portada .rv-kpi__etq { text-transform: none; letter-spacing: 0; font: 500 var(--t-small, 12px)/1.3 var(--font-sans-ui, inherit); color: var(--ink-2, var(--muted)); }

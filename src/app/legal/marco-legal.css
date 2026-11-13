@@ -1,0 +1,16 @@
+/* Piel `documento` de las legales con huella (/terminos, /privacidad, /aviso/[tenant]) como el flujo de acceso de Rovaq: cabecera de SITIO (logo a la izquierda de una
+ * columna de 1180 px, padding 28×32) y tarjeta de lectura con el h1 20/600 que dice el nombre real del documento. Solo DISPOSICIÓN: ninguna regla pinta texto
+ * (`content` queda vacío), así que la huella de texto de los documentos no cambia (lib/legal/huella_texto.test). Va DESPUÉS de publico-r2.css y pisa su piel anterior
+ * (logo dentro de la tarjeta, rótulo como título, h1 oculto). */
+[data-ui="v2"].rv-pub:has(.rv-legal__doc)::before {
+  content: ''; flex: none; display: block; width: 112px; height: 22px; margin: 28px 0 0 max(32px, calc((100% - 1180px) / 2 + 32px));
+  background: var(--ink);
+  -webkit-mask: url('/brand/likida-logo-horizontal-positivo.svg') left center / contain no-repeat; mask: url('/brand/likida-logo-horizontal-positivo.svg') left center / contain no-repeat;
+}
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) > header::before { display: none; }
+[data-ui="v2"] .rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo {
+  order: 1; position: static; width: auto; height: auto; margin: 0; padding: 0; overflow: visible; clip: auto; white-space: normal; border: 0;
+  font-family: var(--font-display), var(--font-sans-ui), sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; text-transform: none; color: var(--ink);
+}
+/* El nombre de la marca: lo anuncia el lector de pantalla junto al logo (que es una máscara sin texto); no se ve dos veces. */
+[data-ui="v2"] .rv-legal__marca { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

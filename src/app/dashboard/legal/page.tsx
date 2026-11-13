@@ -9,19 +9,20 @@ import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { fechaHoraMx } from '@/lib/formato';
+import { fechaHoraMx, fechaMx } from '@/lib/formato';
 import {
   aceptacionesDeFlota, registrarAceptacion, revocarMandato, pendientesDeUsuario, mandatoDe,
   type AceptacionFila,
 } from '@/lib/legal/aceptacion';
 import { guardarDatosResponsable, leerDatosResponsable, type CamposResponsable } from '@/lib/legal/datos_responsable';
 import {
-  ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD,
+  ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VIGENTE_DESDE_TERMINOS, VIGENTE_DESDE_AVISO_PRIVACIDAD,
 } from '@/lib/legal/documentos';
 import type { Metadata } from 'next';
 import {
-  CampoTexto, Disclosure, EstadoError, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, type ResultadoAccion,
+  CampoTexto, Disclosure, EstadoError, FormaConAviso, StatusChip, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
+import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
 import './legal.css';
 export async function generateMetadata(): Promise<Metadata> {
   const { t: tr } = await getT('dinero');
@@ -62,7 +63,7 @@ export default async function PaginaLegal({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
-  const { t: tr } = await getT('dinero');
+  const { t: tr, idioma } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -144,12 +145,14 @@ export default async function PaginaLegal({
   const conPerfil = (await perfilDeTenant(tenantId)) !== null;
 
   return (
-    <MarcoPagina titulo={tr('legal.page.legalYPrivacidad')} apoyo={tr('legal.page.aceptacionDeTerminosY')} ancho="lectura">
-      {filas === null ? (
-        <EstadoError>{tr('legal.page.noPudeLeerEl')}</EstadoError>
-      ) : (
-        <>
-          <Tarjeta titulo={tr('legal.page.responsableDePrivacidadDe')} info="legal.responsable">
+    <EsqueletoConfiguracion
+      titulo={tr('legal.page.legalYPrivacidad')} apoyo={tr('legal.page.aceptacionDeTerminosY')}
+      avisos={filas === null ? <EstadoError>{tr('legal.page.noPudeLeerEl')}</EstadoError> : undefined}
+      secciones={filas === null ? [] : [
+        {
+          id: 'responsable', titulo: tr('legal.page.responsableDePrivacidadDe'),
+          contenido: (
+            <>
             <p className="rv-legal__nota">
               {rico(tr('legal.page.elAvisoDePrivacidad'), { strong: (c) => <strong>{c}</strong> })}
             </p>
@@ -166,11 +169,15 @@ export default async function PaginaLegal({
             ) : (
               <p className="rv-legal__nota">{soloDueno(tr)}</p>
             )}
-          </Tarjeta>
-
-          <Tarjeta titulo={tr('legal.page.documentosVigentes')} info="legal.documentos">
+            </>
+          ),
+        },
+        {
+          id: 'documentos', titulo: tr('legal.page.documentosVigentes'),
+          contenido: (
+            <>
             <p className="rv-legal__nota">
-              {rico(tr('legal.page.linkLinkVersionY', { terminos: ETIQUETA_DOCUMENTO.terminos, VERSION_TERMINOS, aviso_privacidad: ETIQUETA_DOCUMENTO.aviso_privacidad, VERSION_AVISO_PRIVACIDAD }), { link: (c) => <Link href="/terminos" className="rv-legal__enlace">{c}</Link>, link2: (c) => <Link href="/privacidad" className="rv-legal__enlace">{c}</Link> })}
+              {rico(tr('legal.page.linkLinkVersionY', { terminos: ETIQUETA_DOCUMENTO.terminos, desdeTerminos: fechaMx(VIGENTE_DESDE_TERMINOS, idioma), aviso_privacidad: ETIQUETA_DOCUMENTO.aviso_privacidad, desdeAviso: fechaMx(VIGENTE_DESDE_AVISO_PRIVACIDAD, idioma) }), { link: (c) => <Link href="/terminos" className="rv-legal__enlace">{c}</Link>, link2: (c) => <Link href="/privacidad" className="rv-legal__enlace">{c}</Link> })}
             </p>
             {pendientes && pendientes.length === 0 ? (
               <p className="rv-legal__estado">{rico(tr('legal.page.statuschipAlDiaStatuschip'), { statuschip: (c) => <StatusChip tono="ok">{c}</StatusChip> })}</p>
@@ -181,9 +188,13 @@ export default async function PaginaLegal({
             ) : (
               <p className="rv-legal__nota">{soloDueno(tr)}</p>
             )}
-          </Tarjeta>
-
-          <Tarjeta titulo={tr('legal.page.mandatoDeAutofacturacion')} info="legal.mandato">
+            </>
+          ),
+        },
+        {
+          id: 'mandato', titulo: tr('legal.page.mandatoDeAutofacturacion'),
+          contenido: (
+            <>
             <Disclosure variante="linea" abierto={!mandato} titulo={tr('legal.page.textoDelMandato')} resumen={tr('legal.page.version', { version: MANDATO_AUTOFACTURACION.version })}>
               <blockquote className="rv-legal__cita">
                 {MANDATO_AUTOFACTURACION.texto}
@@ -214,9 +225,10 @@ export default async function PaginaLegal({
             ) : (
               <p className="rv-legal__nota">{tr('legal.page.aunNoEstaOtorgado', { SOLO_DUENO: soloDueno(tr) })}</p>
             )}
-          </Tarjeta>
-        </>
-      )}
-    </MarcoPagina>
+            </>
+          ),
+        },
+      ]}
+    />
   );
 }

@@ -9,11 +9,13 @@ import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { ESTADOS_PROSPECTO, COMISION_PRIMER_MES, COMISION_RECURRENTE } from '@/lib/likida/vendedores';
 import { embudoCanonico, getResumenProspectos } from '@/lib/admin/prospectos-mapa';
 import { getEmbudoActivacion, getCohortesUso } from '@/lib/admin/instrumentacion';
-import { numero, fechaCorta, usd } from '@/lib/formato';
+import { numero, fechaCorta, porcentaje, usd } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { getT } from '@/lib/i18n/servidor';
-import { AvisoCompacto, Aviso, Disclosure, FilaTarjetas, StatusChip, Tarjeta, TablaBase } from '../../ui-v2/componentes';
-import { Columnas, Embudo, TiraCifras } from '../../ui-v2/graficas';
+import { AvisoCompacto, Aviso, Disclosure, StatusChip, Tarjeta, TablaBase } from '../../ui-v2/componentes';
+import { BarList, Columnas, TiraCifras, type PropsCifra } from '../../ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import './embudo.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -78,22 +80,10 @@ export async function BloqueEmbudoAdquisicion() {
   const etapas = ESTADOS_PROSPECTO.filter((e) => e.valor !== 'lost').map((e) => ({ clave: e.valor, etiqueta: e.rotulo, valor: porEstado[e.valor] }));
   const conGente = etapas.filter((e) => e.valor > 0);
   const vacias = etapas.filter((e) => e.valor === 0);
-  const tope = Math.max(1, ...conGente.map((e) => e.valor));
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion_prospectos', { total: numero(prospectos.total) })}>
-      <ul className="crc-embudo" aria-label={ta('crecimiento_bloques.prospectos_por_estado')}>
-        {conGente.map((e) => (
-          <li key={e.clave} className="crc-embudo__fila" data-etapa={e.clave}>
-            <div className="crc-embudo__cab">
-              <span className="crc-embudo__etq"><i className="crc-embudo__punto" aria-hidden="true" />{e.etiqueta}</span>
-              <span className="crc-embudo__val">{numero(e.valor)}</span>
-            </div>
-            <svg className="crc-embudo__pista" width="100%" height="8" aria-hidden="true">
-              <rect className="crc-embudo__relleno" x="0" y="0" height="8" rx="4" width={`${Math.max(1, (e.valor / tope) * 100).toFixed(2)}%`} />
-            </svg>
-          </li>
-        ))}
-      </ul>
+      {/* Barra de 6 px, radio 999 y pista tenue (Rovaq `barlist`), con la cifra exacta a la derecha. */}
+      <BarList etiqueta={ta('crecimiento_bloques.prospectos_por_estado')} matiz={8} items={conGente.map((e) => ({ clave: e.clave, etiqueta: e.etiqueta, valor: e.valor, texto: numero(e.valor) }))} />
       {vacias.length > 0 && (
         <p className="adm-din-nota">{ta('crecimiento_bloques.sin_prospectos_todavia_en', { etapas: vacias.map((e) => e.etiqueta).join(', ') })}</p>
       )}
@@ -106,60 +96,69 @@ export async function BloqueEmbudoAdquisicion() {
   );
 }
 
-export async function BloqueCostoYCampanas() {
+/** Alertas de adquisición (panel-de-adquisicion §5): avisos, no tarjetas; si la lectura cae, lo dicen los dos bloques de abajo. */
+export async function BloqueAlertasAdquisicion() {
+  const adquisicion = await adquisicionAdmin();
+  if (adquisicion === null || adquisicion.alertas.length === 0) return null;
+  return <>{adquisicion.alertas.map((a) => <Aviso key={`${a.id}-${a.titulo}`} tono="warn" titulo={a.titulo}>{a.detalle}</Aviso>)}</>;
+}
+
+/** Costo por lead por fuente (panel-de-adquisicion §2): costo real solo donde es $0 POR DISEÑO; donde falta la integración de gasto se dice,
+ *  jamás un $0 de encuadre. */
+export async function BloqueCostoLead() {
   const { t: ta } = await getT('admin_dinero');
-  const [adquisicion, campanas] = await Promise.all([adquisicionAdmin(), campanasAdmin()]);
-  const integracionAds = estadoIntegracionAds();
-  // Costo por lead + alertas (panel-de-adquisicion §2 y §5). La regla del §2: costo real solo donde es $0 POR DISEÑO; donde falta la
-  // integración de gasto se dice, jamás un $0 de encuadre. Las alertas heredan sus umbrales de los documentos que ya los fijaron.
+  const adquisicion = await adquisicionAdmin();
   if (adquisicion === null) {
     return <Tarjeta titulo={ta('crecimiento_bloques.costo_por_lead_y')} estado="error" mensaje={ta('crecimiento_bloques.no_se_pudo_leer_3')} reintentar />;
   }
   return (
-    <>
-      {adquisicion.alertas.map((a) => <Aviso key={`${a.id}-${a.titulo}`} tono="warn" titulo={a.titulo}>{a.detalle}</Aviso>)}
-      <FilaTarjetas variante="6-6">
-        <Tarjeta titulo={ta('crecimiento_bloques.costo_por_lead_por')} estado={adquisicion.porFuente.length === 0 ? 'vacio' : 'ok'} mensaje={ta('crecimiento_bloques.sin_leads_capturados')} detalle={ta('crecimiento_bloques.aparece_en_cuanto_entra')}>
-          <TablaBase
-            etiqueta={ta('crecimiento_bloques.costo_por_lead_por')} idFila={(f) => f.fuente} tarjetaMovil densa filas={adquisicion.porFuente}
-            columnas={[
-              { id: 'fuente', titulo: ta('crecimiento_bloques.fuente'), principal: true, celda: (f) => f.fuente },
-              { id: 'leads', titulo: ta('crecimiento_bloques.leads'), alinear: 'der', celda: (f) => numero(f.leads) },
-              { id: 'ultimo', titulo: ta('crecimiento_bloques.ultimo'), alinear: 'der', celda: (f) => (f.ultimoCapturado ? fechaCorta(f.ultimoCapturado) : '—') },
-              {
-                id: 'costo', titulo: ta('crecimiento_bloques.costo_por_lead'), alinear: 'der',
-                celda: (f) => (
-                  <>
-                    {f.costo ? usd(f.costo.usd) : 'no disponible'}
-                    <span className="adm-din-sub">{f.costoNota}</span>
-                  </>
-                ),
-              },
-            ]}
-          />
-          {adquisicion.sinFuenteDeDatos.length > 0 ? (
-            <p className="adm-din-nota">Alertas del plan sin fuente de datos todavía: {adquisicion.sinFuenteDeDatos.map((s) => `${s.alerta} (${s.falta})`).join(' · ')}.</p>
-          ) : null}
-        </Tarjeta>
+    <Tarjeta titulo={ta('crecimiento_bloques.costo_por_lead_por')} estado={adquisicion.porFuente.length === 0 ? 'vacio' : 'ok'} mensaje={ta('crecimiento_bloques.sin_leads_capturados')} detalle={ta('crecimiento_bloques.aparece_en_cuanto_entra')} contenida>
+      <TablaBase
+        etiqueta={ta('crecimiento_bloques.costo_por_lead_por')} idFila={(f) => f.fuente} tarjetaMovil filas={adquisicion.porFuente}
+        columnas={[
+          { id: 'fuente', titulo: ta('crecimiento_bloques.fuente'), principal: true, celda: (f) => f.fuente },
+          { id: 'leads', titulo: ta('crecimiento_bloques.leads'), alinear: 'der', celda: (f) => numero(f.leads) },
+          { id: 'ultimo', titulo: ta('crecimiento_bloques.ultimo'), alinear: 'der', celda: (f) => (f.ultimoCapturado ? fechaCorta(f.ultimoCapturado) : '—') },
+          {
+            id: 'costo', titulo: ta('crecimiento_bloques.costo_por_lead'), alinear: 'der',
+            celda: (f) => (
+              <>
+                {f.costo ? usd(f.costo.usd) : 'no disponible'}
+                <span className="adm-din-sub">{f.costoNota}</span>
+              </>
+            ),
+          },
+        ]}
+      />
+      {adquisicion.sinFuenteDeDatos.length > 0 ? (
+        <p className="adm-din-nota">Alertas del plan sin fuente de datos todavía: {adquisicion.sinFuenteDeDatos.map((s) => `${s.alerta} (${s.falta})`).join(' · ')}.</p>
+      ) : null}
+    </Tarjeta>
+  );
+}
 
-        <Tarjeta titulo={ta('crecimiento_bloques.control_de_campanas')} estado={campanas === null ? 'error' : 'ok'} mensaje={ta('crecimiento_bloques.no_se_pudieron_leer')} reintentar>
-          {campanas !== null ? (
-            <>
-              <ControlCampanas
-                campanas={campanas.campanas}
-                integracion={{ metaConfigurada: integracionAds.metaConfigurada }}
-                leadsAds={adquisicion.porFuente.filter((f) => f.fuente === 'ads' || f.fuente === 'ads-meta' || f.fuente === 'ads-google').reduce((n, f) => n + f.leads, 0)}
-                pausar={accionPausarCampana}
-                refrescar={accionRefrescarGasto}
-              />
-              {campanas.total > campanas.campanas.length ? (
-                <Aviso tono="warn">Se muestran las {campanas.campanas.length} campañas más recientes de {campanas.total}. «Actualizar gasto desde Meta» sí cubre todas las de Meta.</Aviso>
-              ) : null}
-            </>
+/** El control de campañas (0123, §4) — leer y pausar; jamás crear ni subir. */
+export async function BloqueCampanas() {
+  const { t: ta } = await getT('admin_dinero');
+  const [adquisicion, campanas] = await Promise.all([adquisicionAdmin(), campanasAdmin()]);
+  const integracionAds = estadoIntegracionAds();
+  return (
+    <Tarjeta titulo={ta('crecimiento_bloques.control_de_campanas')} estado={campanas === null ? 'error' : 'ok'} mensaje={ta('crecimiento_bloques.no_se_pudieron_leer')} reintentar>
+      {campanas !== null ? (
+        <>
+          <ControlCampanas
+            campanas={campanas.campanas}
+            integracion={{ metaConfigurada: integracionAds.metaConfigurada }}
+            leadsAds={(adquisicion?.porFuente ?? []).filter((f) => f.fuente === 'ads' || f.fuente === 'ads-meta' || f.fuente === 'ads-google').reduce((n, f) => n + f.leads, 0)}
+            pausar={accionPausarCampana}
+            refrescar={accionRefrescarGasto}
+          />
+          {campanas.total > campanas.campanas.length ? (
+            <Aviso tono="warn">Se muestran las {campanas.campanas.length} campañas más recientes de {campanas.total}. «Actualizar gasto desde Meta» sí cubre todas las de Meta.</Aviso>
           ) : null}
-        </Tarjeta>
-      </FilaTarjetas>
-    </>
+        </>
+      ) : null}
+    </Tarjeta>
   );
 }
 
@@ -176,15 +175,22 @@ export async function BloqueActivacion() {
       {/* Con los tres conteos en cero el embudo se pinta «vacío»; aquí el cero es un dato real y se dice como tal. */}
       {embudoActivacion.altas + embudoActivacion.activadas + embudoActivacion.dePago === 0 ? (
         <p className="adm-din-nota">{t('crecimiento.activacion.ceros')}</p>
-      ) : <Embudo
-        etiqueta={ta('crecimiento_bloques.flotas_por_etapa_de')}
-        formato="numero"
-        etapas={[
-          { etiqueta: ta('crecimiento_bloques.flotas_dadas_de_alta'), valor: embudoActivacion.altas },
-          { etiqueta: ta('crecimiento_bloques.activadas_con_al_menos'), valor: embudoActivacion.activadas },
-          { etiqueta: ta('crecimiento_bloques.de_pago_suscripcion_activa'), valor: embudoActivacion.dePago },
-        ]}
-      />}
+      ) : (
+        <BarList
+          etiqueta={ta('crecimiento_bloques.flotas_por_etapa_de')} matiz={8}
+          items={[
+            { clave: 'altas', etiqueta: ta('crecimiento_bloques.flotas_dadas_de_alta'), valor: embudoActivacion.altas, texto: numero(embudoActivacion.altas) },
+            ...[
+              { clave: 'activadas', etiqueta: ta('crecimiento_bloques.activadas_con_al_menos'), valor: embudoActivacion.activadas, previo: embudoActivacion.altas },
+              { clave: 'pago', etiqueta: ta('crecimiento_bloques.de_pago_suscripcion_activa'), valor: embudoActivacion.dePago, previo: embudoActivacion.activadas },
+            ].map((x) => ({
+              clave: x.clave, etiqueta: x.etiqueta, valor: x.valor,
+              // La conversión contra la etapa anterior solo existe si esa etapa tiene base: sin base no se inventa una tasa.
+              texto: x.previo > 0 ? `${numero(x.valor)} · ${porcentaje((x.valor / x.previo) * 100, 0)}` : numero(x.valor),
+            })),
+          ]}
+        />
+      )}
       <p className="adm-din-nota">
         
         {ta('crecimiento_bloques.contado_en_la_base')}
@@ -205,7 +211,7 @@ export async function BloqueCohortes() {
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.retencion_por_cohortes_uso')} estado={cohortes.filas.length === 0 ? 'vacio' : 'ok'} mensaje={ta('crecimiento_bloques.sin_flotas_dadas_de_2')} detalle={ta('crecimiento_bloques.no_hay_cohorte_que')}>
       <TablaBase
-        etiqueta={ta('crecimiento_bloques.cohortes_por_mes_de')} idFila={(f) => f.cohorte} tarjetaMovil densa filas={cohortes.filas}
+        etiqueta={ta('crecimiento_bloques.cohortes_por_mes_de')} idFila={(f) => f.cohorte} tarjetaMovil filas={cohortes.filas}
         columnas={[
           { id: 'cohorte', titulo: ta('crecimiento_bloques.cohorte_mes_de_alta'), principal: true, celda: (f) => f.cohorte },
           { id: 'flotas', titulo: ta('crecimiento_bloques.flotas'), alinear: 'der', celda: (f) => numero(f.flotas) },
@@ -233,24 +239,53 @@ export async function BloqueCohortes() {
   );
 }
 
+/** La tira de arriba (plantilla PC): cuatro cifras reales ya leídas por los bloques de abajo. Una lectura caída es «No disponible», nunca 0. */
+export async function BloqueCifrasCrecimiento() {
+  const { t: ta } = await getT('admin_dinero');
+  const [r, prospectos, embudo] = await Promise.all([resumenNegocio(), prospectosPorEstado(), embudoActivacionAdmin()]);
+  const ERR = { estado: 'error' as const, reintentar: true };
+  const rotulo = ta('a1r4.observado');
+  const cifras: PropsCifra[] = [
+    prospectos === null
+      ? { etiqueta: ta('a1r4.cr_prospectos'), valor: null, ...ERR }
+      : { etiqueta: ta('a1r4.cr_prospectos'), valor: prospectos.total, formato: 'entero', href: '/admin/mapa-prospectos' },
+    embudo === null
+      ? { etiqueta: ta('a1r4.cr_flotas_alta'), valor: null, ...ERR }
+      : { etiqueta: ta('a1r4.cr_flotas_alta'), valor: embudo.altas, formato: 'entero', nota: ta('a1r4.cr_de_pago', { n: numero(embudo.dePago) }) },
+    r === null
+      ? { etiqueta: ta('crecimiento_bloques.viajes_procesados'), valor: null, ...ERR }
+      : { etiqueta: ta('crecimiento_bloques.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero' },
+    r === null
+      ? { etiqueta: ta('crecimiento_bloques.tokens_usados'), valor: null, ...ERR }
+      : {
+        etiqueta: ta('crecimiento_bloques.tokens_usados'), valor: r.tokensIn + r.tokensOut, formato: 'numero',
+        delta: r.tendenciaTokens === null ? null : { texto: ta('crecimiento_bloques.vs_los_7_dias', { Math: Math.abs(r.tendenciaTokens) }), dir: r.tendenciaTokens > 0 ? 'sube' : r.tendenciaTokens < 0 ? 'baja' : 'igual' },
+        serie: r.porDia.slice(-8).map((d) => d.tokens),
+      },
+  ];
+  return <TiraCifras etiqueta={ta('crecimiento_bloques.uso_de_la_plataforma_2')} items={observadas(uniformes(cifras), rotulo)} entra="seccion" />;
+}
+
+/** Gasto de IA por día = proxy de uso, rotulado así (jamás «crecimiento de usuarios»). */
 export async function BloqueUso() {
   const { t: ta } = await getT('admin_dinero');
   const r = await resumenNegocio();
   if (r === null) {
     return <Tarjeta titulo={ta('crecimiento_bloques.uso_de_la_plataforma')} estado="error" mensaje={ta('crecimiento_bloques.no_se_pudo_leer_5')} reintentar />;
   }
-  const serieTokens = r.porDia.slice(-8).map((d) => d.tokens);
   return (
-    <>
-      <Tarjeta titulo={ta('crecimiento_bloques.uso_de_la_plataforma')} estado={r.porDia.length > 1 ? 'ok' : 'vacio'} mensaje={ta('crecimiento_bloques.sin_historial_suficiente')} detalle={ta('crecimiento_bloques.hacen_falta_al_menos')}>
-        <p className="adm-din-nota">{ta('crecimiento_bloques.no_es_una_metrica')}</p>
-        <Columnas etiqueta={ta('crecimiento_bloques.gasto_de_ia_por')} datos={r.porDia.map((d) => ({ etiqueta: d.dia.slice(5), largo: d.dia, valor: d.costoUsd }))} formato="usd" vacio="Sin gasto registrado" />
-      </Tarjeta>
-      <TiraCifras etiqueta={ta('crecimiento_bloques.uso_de_la_plataforma_2')} items={[
-        { etiqueta: ta('crecimiento_bloques.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero' },
-        { etiqueta: ta('crecimiento_bloques.tokens_usados'), valor: r.tokensIn + r.tokensOut, formato: 'numero', delta: r.tendenciaTokens === null ? null : { texto: ta('crecimiento_bloques.vs_los_7_dias', { Math: Math.abs(r.tendenciaTokens) }), dir: r.tendenciaTokens > 0 ? 'sube' : r.tendenciaTokens < 0 ? 'baja' : 'igual' }, serie: serieTokens },
-      ]} />
-    </>
+    <Tarjeta titulo={ta('crecimiento_bloques.uso_de_la_plataforma')} estado={r.porDia.length > 1 ? 'ok' : 'vacio'} mensaje={ta('crecimiento_bloques.sin_historial_suficiente')} detalle={ta('crecimiento_bloques.hacen_falta_al_menos')} contenida>
+      <p className="adm-din-nota">{ta('crecimiento_bloques.no_es_una_metrica')}</p>
+      <Columnas etiqueta={ta('crecimiento_bloques.gasto_de_ia_por')} datos={r.porDia.map((d) => ({ etiqueta: d.dia.slice(5), largo: d.dia, valor: d.costoUsd }))} formato="usd" vacio="Sin gasto registrado" />
+    </Tarjeta>
+  );
+}
+
+export function BloqueComisiones({ ta = trAdminDineroEs }: { ta?: TrDe<'admin_dinero'> } = {}) {
+  return (
+    <Tarjeta titulo={ta('crecimiento_bloques.comisiones_de_vendedores')} estado="vacio" mensaje={ta('crecimiento_bloques.falta_aun_no_hay')}
+      detalle={ta('crecimiento_bloques.el_esquema_solo_existe', { Math: Math.round(COMISION_PRIMER_MES * 100), Math2: Math.round(COMISION_RECURRENTE * 100) })}
+      contenida />
   );
 }
 
@@ -262,16 +297,11 @@ export function BloqueSinInstrumentacion({ ta = trAdminDineroEs }: { ta?: TrDe<'
     ta('crecimiento_bloques.adopcion_por_funcion_se'),
   ];
   return (
-    <>
-      <Tarjeta titulo={ta('crecimiento_bloques.comisiones_de_vendedores')} estado="vacio" mensaje={ta('crecimiento_bloques.falta_aun_no_hay')}
-        detalle={ta('crecimiento_bloques.el_esquema_solo_existe', { Math: Math.round(COMISION_PRIMER_MES * 100), Math2: Math.round(COMISION_RECURRENTE * 100) })}
-        contenida />
-      <Disclosure titulo={ta('crecimiento_bloques.lo_que_esta_pagina')} resumen={ta('crecimiento_bloques.cosas_cada_una_con', { length: sinInstrumentacion.length })}>
-        <ul className="adm-din-lista">
-          {sinInstrumentacion.map((item) => <li key={item}>{item}</li>)}
-        </ul>
-        <p className="adm-din-nota">{ta('crecimiento_bloques.cada_renglon_dice_su')}</p>
-      </Disclosure>
-    </>
+    <Disclosure titulo={ta('crecimiento_bloques.lo_que_esta_pagina')} resumen={ta('crecimiento_bloques.cosas_cada_una_con', { length: sinInstrumentacion.length })}>
+      <ul className="adm-din-lista">
+        {sinInstrumentacion.map((item) => <li key={item}>{item}</li>)}
+      </ul>
+      <p className="adm-din-nota">{ta('crecimiento_bloques.cada_renglon_dice_su')}</p>
+    </Disclosure>
   );
 }

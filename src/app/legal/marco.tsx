@@ -14,12 +14,20 @@
 
 import { fechaMx } from '@/lib/formato';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
+import './publico-r2.css';
+import './marco-legal.css';
 
 export interface SeccionLegal {
   titulo: string;
   /** El artículo que sostiene la sección. Vacío cuando es contractual y no legal. */
   fundamento?: string;
   parrafos: string[];
+}
+
+/** El círculo de color que marcaba lo pendiente se queda en el texto (la huella del documento lo cuenta) pero no se ve: lo pendiente se dice con negritas y con el aviso ámbar, sin emojis. */
+function conMarca(texto: string) {
+  if (!texto.includes('\u{1F534}')) return texto;
+  return texto.split('\u{1F534}').flatMap((trozo, i) => (i === 0 ? [trozo] : [<span key={`m${i}`} className="rv-pub__marca-falta" aria-hidden="true">{'\u{1F534}'}</span>, trozo]));
 }
 
 /**
@@ -34,7 +42,7 @@ export function ConNegritas({ texto }: { texto: string }) {
       {texto.split(/(\*\*[^*]+\*\*)/g).map((t, i) =>
         t.startsWith('**') && t.endsWith('**')
           ? <strong key={i}>{t.slice(2, -2)}</strong>
-          : <span key={i}>{t}</span>,
+          : <span key={i}>{conMarca(t)}</span>,
       )}
     </>
   );
@@ -47,8 +55,9 @@ export function ConNegritas({ texto }: { texto: string }) {
  * art. 29.
  */
 export function FaltaDato({ children }: { children: React.ReactNode }) {
+  // Aviso ÁMBAR (Rovaq: #fff7e5 con borde rgba(134,88,13,.22)), nunca un emoji de color: las faltas se marcan con el aviso, no con un círculo rojo.
   return (
-    <p className="rv-pub__aviso-falta">{children}</p>
+    <p className="rv-pub__aviso-falta" data-ambar="">{children}</p>
   );
 }
 
@@ -59,7 +68,7 @@ const ENLACES_LEGALES = [
 ] as const;
 
 export function PaginaLegal({
-  etiqueta, bajada, secciones, aviso, pie, vigenteDesde,
+  etiqueta, bajada, secciones, aviso, pie, vigenteDesde, piel = 'documento', titulo, rotulo, etiquetaIndice,
 }: {
   /** El rótulo chico de arriba: "Términos de servicio", "Política de privacidad". */
   etiqueta: string;
@@ -83,21 +92,46 @@ export function PaginaLegal({
    * verdad en vez de uno que se actualiza solo con el reloj.
    */
   vigenteDesde: string;
+  /**
+   * `documento` (por omisión): la piel de los textos con HUELLA (/terminos, /privacidad): h1 = nombre del documento, logo en una
+   * cabecera de sitio pintada por CSS (sin texto) y sin índice, porque cualquier texto nuevo cambia la huella y obliga a todos a aceptar de nuevo (`lib/legal/huella_texto`).
+   * `sitio`: la piel del resto de las públicas (Rovaq `access-flow`): cabecera con el logo, h1 = el nombre del documento (`titulo`),
+   * eyebrow (`rotulo`) e ÍNDICE de secciones. Solo para documentos SIN huella (hoy: /aviso/prospectos).
+   */
+  piel?: 'documento' | 'sitio';
+  titulo?: string;
+  rotulo?: string;
+  /** Nombre accesible/encabezado del índice (solo piel `sitio`). */
+  etiquetaIndice?: string;
 }) {
+  const sitio = piel === 'sitio' && titulo !== undefined;
+  const textoVigencia = `Vigente desde el ${fechaMx(vigenteDesde)} · ${bajada}`;
+  // Piel `documento`: el <h1> es el NOMBRE del documento («Términos de servicio»), como en las demás públicas; «Likida» (la marca) va dentro del
+  // apoyo como nombre accesible del logo. Mismo texto y mismo ORDEN que antes (rótulo, «Likida», vigencia) → la huella no cambia.
   return (
     <MarcoPublico
-      rotulo={etiqueta}
-      titulo="Likida"
-      apoyo={`Vigente desde el ${fechaMx(vigenteDesde)} · ${bajada}`}
+      rotulo={sitio ? (rotulo ?? etiqueta) : undefined}
+      titulo={sitio ? titulo : etiqueta}
+      apoyo={sitio ? textoVigencia : <><span className="rv-legal__marca">Likida</span>{' '}{textoVigencia}</>}
       pie={pie ?? undefined}
-      enlaces={ENLACES_LEGALES}
-      documento
+      enlaces={sitio ? undefined : ENLACES_LEGALES}
+      documento={!sitio}
     >
+      {/* Marca de la piel `documento` para el CSS (logo arriba y el nombre del documento como título visible): un div vacío, sin atributos con texto, así la huella del documento no cambia. */}
+      {sitio ? null : <div className="rv-legal__doc" aria-hidden="true" />}
       {aviso}
 
+      {sitio ? (
+        <nav className="rv-legal__indice" aria-label={etiquetaIndice}>
+          <ol>
+            {secciones.map((s, i) => <li key={s.titulo}><a href={`#seccion-${i + 1}`}>{s.titulo}</a></li>)}
+          </ol>
+        </nav>
+      ) : null}
+
       <div className="rv-pub__prosa">
-        {secciones.map((s) => (
-          <section key={s.titulo} className="rv-pub__sec">
+        {secciones.map((s, i) => (
+          <section key={s.titulo} className="rv-pub__sec" id={sitio ? `seccion-${i + 1}` : undefined}>
             <h2>{s.titulo}</h2>
             {s.fundamento && <p className="rv-pub__nota">{s.fundamento}</p>}
             {s.parrafos.map((p, i) => (

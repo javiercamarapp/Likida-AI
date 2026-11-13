@@ -27,6 +27,11 @@ describe('conversaciones sin atender (pantalla)', () => {
     expect(h).toContain('2 h 0 min');
     expect(h).toContain('apagado');
   });
+  it('los ajustes de la revisión viven en un cajón (no a todo el ancho de la tarjeta) con su botón de apertura', () => {
+    const h = pintar();
+    expect(h).toContain('rv-ov--drawer');
+    expect(h).toContain('Ajustes de la revisión');
+  });
   it('quien no administra no ve el botón de enviar ni la fecha de corte', () => {
     const h = pintar({ puedeEnviar: false });
     expect(h).not.toContain('Enviar resumen por correo');
@@ -62,6 +67,14 @@ describe('conversaciones sin atender (pantalla)', () => {
     expect(h).toContain('Configuración de tu flota');
     expect(h).toContain('name="resumenCorreo"');
     expect(h).toContain('name="horarioActivo"');
+  });
+  it('1005: la configuración trae los campos de plazos y noche (vacíos por omisión) y pinta lo guardado', () => {
+    const h = pintar();
+    for (const n of ['umbralMin', 'umbralCriticoMin', 'nocheDesdeHora', 'nocheHastaHora']) expect(h).toContain(`name="${n}"`);
+    expect(h).toContain('Plazos y noche');
+    expect(h).toContain('Plazo normal de espera (min)');
+    const g = pintar({ guardada: { ...copiaConfigGuardadaPorOmision(), umbralMin: 45, umbralCriticoMin: 15, nocheDesdeHora: 21, nocheHastaHora: 6 } });
+    for (const v of ['45', '15', '21', '6']) expect(g).toContain(`value="${v}"`);
   });
   it('quien no administra no ve la configuración de la flota', () => {
     const h = pintar({ puedeEnviar: false });

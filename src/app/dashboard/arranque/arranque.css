@@ -21,3 +21,26 @@
 .rv-ar__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px 24px; grid-template-columns: repeat(2, minmax(0, 1fr)); font-size: var(--t-small); }
 .rv-ar__lista span { color: var(--muted); }
 @media (max-width: 640px) { .rv-ar__lista { grid-template-columns: minmax(0, 1fr); } .rv-ar__paso { flex-wrap: wrap; } .rv-ar__accion { min-width: 0; text-align: left; } }
+
+/* Barra fina de ~140 px («3 de 6 que puedes hacer ahora», Rovaq `/setup`) en lugar de la dona. */
+.rv-ar__barra { flex: none; width: 140px; height: 6px; appearance: none; border: 0; border-radius: 999px; background: var(--line); overflow: hidden; }
+.rv-ar__barra::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
+.rv-ar__barra::-webkit-progress-value { background: var(--ink); border-radius: 999px; }
+.rv-ar__barra::-moz-progress-bar { background: var(--ink); border-radius: 999px; }
+
+/* Contención del desborde del documento: los `.rv-sr` absolutos escapaban del marco y alargaban la ventana (ver conexiones.css). */
+[data-ui="v2"] .rv-contenido { position: relative; }
+
+/* Ronda 5: el estado del paso es el chip con contorno del kit (Hecho / Para revisar), a su ancho, en una columna fija a la izquierda. */
+.rv-ar__estado { flex: none; min-width: 96px; display: inline-flex; }
+@media (max-width: 640px) { .rv-ar__estado { min-width: 0; } }
+
+/* Ronda 6 (Rovaq /setup): chips de estado de contorno, sin relleno de color. */
+.rv-ar__estado .rv-estado { background: transparent; border: 1px solid var(--line2); color: var(--ink); }
+
+/* Ronda 7 (móvil 412): los enlaces de la lista de automatizaciones y del siguiente paso miden al menos 32 px de alto de toque (antes < 24 px). */
+@media (max-width: 767px) {
+  .rv-ar__lista { gap: 0; }
+  .rv-ar__lista li { display: flex; align-items: center; min-height: 32px; }
+  .rv-ar__enlace { display: inline-flex; align-items: center; min-height: 32px; }
+}

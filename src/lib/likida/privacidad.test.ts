@@ -225,6 +225,33 @@ describe('sondearAvisoIntegral', () => {
     expect(vistos).toEqual(['HEAD', 'GET']);
   });
 
+  it('un timeout se reintenta y, si el segundo intento abre, la liga abre', async () => {
+    let n = 0;
+    const f = async () => {
+      n++;
+      if (n === 1) { const e = new Error('The operation was aborted due to timeout'); e.name = 'TimeoutError'; throw e; }
+      return new Response(null, { status: 200 });
+    };
+    const r = await sondearAvisoIntegral('https://app.likida.ai/aviso/x', { fetchImpl: f as unknown as typeof fetch, esperaMs: 0 });
+    expect(r).toEqual({ abre: true });
+    expect(n).toBe(2);
+  });
+
+  it('dos timeouts seguidos quedan marcados como transitorios', async () => {
+    const f = async () => { const e = new Error('timeout'); e.name = 'TimeoutError'; throw e; };
+    const r = await sondearAvisoIntegral('https://app.likida.ai/aviso/x', { fetchImpl: f as unknown as typeof fetch, esperaMs: 0 });
+    expect(r).toMatchObject({ abre: false, transitorio: true });
+  });
+
+  it('un DNS que no resuelve no se reintenta ni es transitorio', async () => {
+    let n = 0;
+    const f = async () => { n++; throw new Error('getaddrinfo ENOTFOUND x.mx'); };
+    const r = await sondearAvisoIntegral('https://x.mx/aviso', { fetchImpl: f as unknown as typeof fetch, esperaMs: 0 });
+    expect(n).toBe(1);
+    expect(r.abre).toBe(false);
+    expect((r as { transitorio?: boolean }).transitorio).toBe(false);
+  });
+
   it('no sale a la red si la liga ya era inservible', async () => {
     let llamadas = 0;
     const f = async () => { llamadas++; return new Response(null, { status: 200 }); };

@@ -1,6 +1,18 @@
 /* Facturas de proveedores · archivo propio de la pantalla. Solo tokens del sistema. */
 .rv-prov__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.5; max-width: 72ch; }
-.rv-prov__subir { display: grid; gap: 8px; max-width: 560px; }
+.rv-prov__subir { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+/* Zona de carga punteada (patrón de Importaciones): el control nativo de archivo vive dentro de una caja con borde discontinuo. */
+.rv-prov__zona { display: grid; gap: 6px; align-content: start; min-width: 0; }
+/* Zona de soltar de Rovaq (`FL`): 1.5 px punteada #d6d6d9 (--line2), fondo gris del lienzo (#f1f1f2), radio 12 y padding 20×16; el botón «Seleccionar archivo» lleva el
+   borde de botón secundario (--line2) y no el de campo (--input, #8a8a90). La acción sin archivo elegido se dibuja punteada («No disponible ahora»), no como
+   un primario activo; sigue siendo pulsable para que el navegador diga qué falta. Solo dentro de `.rv-prov__zona` (no toca la zona de los demás agentes). */
+.rv-prov__zona { gap: 6px; }
+[data-ui="v2"] .rv-prov__zona .rv-ag-soltar { padding: 20px 16px; border: 1.5px dashed var(--line2); border-radius: 12px; background: var(--canvas); }
+[data-ui="v2"] .rv-prov__zona .rv-ag-soltar[data-encima] { border-color: var(--ink); background: var(--ui-soft, var(--canvas2, var(--canvas))); }
+[data-ui="v2"] .rv-prov__zona .rv-archivo__boton { border-color: var(--line2); }
+[data-ui="v2"] .rv-prov__zona form:has(.rv-archivo__input:invalid) .rv-btn[type="submit"] {
+  background: var(--surface); border: 1px dashed var(--line2); color: var(--muted); box-shadow: none;
+}
 .rv-prov__export { display: grid; gap: 8px; justify-items: start; padding-top: 12px; border-top: 1px solid var(--line); }
 .rv-prov__nota[data-tono="warn"] { color: var(--warn); }
 .rv-prov__nota[data-tono="bad"] { color: var(--bad); }
@@ -10,7 +22,11 @@
 .rv-prov__decision { display: grid; gap: 4px; min-width: 190px; }
 .rv-prov__direccion { padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: var(--t-small, 12px); overflow-wrap: anywhere; }
 .rv-btn[data-copiado] { color: var(--ok); }
-.rv-prov__forma { display: grid; gap: 12px; max-width: 560px; }
+.rv-prov__forma { display: grid; gap: 12px; }
+.rv-prov__cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 32px; }
+.rv-prov__col { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.rv-prov__pie { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 767.98px) { .rv-prov__cols { grid-template-columns: minmax(0, 1fr); } }
 .rv-prov__par { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; }
 .rv-prov__msg { margin: 0; font-size: var(--t-micro, 11px); color: var(--muted); }
 .rv-prov__msg[data-tono="bad"] { color: var(--bad); }
@@ -22,3 +38,25 @@
 .rv-prov__resumen [data-tono="warn"] { color: var(--warn); }
 .rv-prov__resumen [data-tono="bad"] { color: var(--bad); }
 .rv-prov__rotulo { margin: 0; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* F26 ronda 5 · páginas de agentes compactas (cobranza, facturas, proveedores). Rovaq `ac-vacio`: caja punteada de 1 px, texto de 13 px CENTRADO (icono fuera, título 13/600 y texto en
+   la misma línea cuando caben), no un bloque de 120-220 px con icono y tres líneas; seis vacíos apilados alargaban la página a ~1,550 px. Solo con la clase
+   `rv-ag-compacto` (la ponen estas tres páginas), así que no toca a las demás pantallas que comparten este archivo. */
+[data-ui="v2"] .rv-ag-compacto .rv-vacio.rv-vacio:not([data-pantalla]) {
+  flex: 0 0 auto; min-height: 0; max-height: none; flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: center;
+  gap: 2px 8px; padding: 20px 14px; text-align: center; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; background: transparent;
+}
+[data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__icono { display: none; }
+[data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__titulo { margin: 0; font-size: 13px; font-weight: 600; }
+[data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__texto { margin: 0; max-width: none; font-size: 13px; }
+[data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__accion { flex: 0 0 100%; margin-top: 8px; }
+[data-ui="v2"] .rv-ag-compacto .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo { flex: 0 0 auto; }
+
+/* «Subir factura» y «Buzón» van una bajo la otra a todo el ancho (dos zonas de soltar lado a lado, y la dirección del buzón en una fila): alto equilibrado,
+   ningún hueco bajo la tarjeta corta. El ritmo entre bloques es de 12 px. */
+.rv-fila-tarjetas.rv-prov__fila { align-items: stretch; gap: 12px; }
+/* El subtítulo de la bandeja no queda pegado al vacío que le sigue. */
+[data-ui="v2"] .rv-ag-compacto .rv-prov__nota + .rv-vacio { margin-top: 8px; }
+
+/* Cifras en la fuente del sistema con dígitos tabulares (Rovaq: Hanken Grotesk), no en monoespaciada. */
+.rv-cifra { font-variant-numeric: tabular-nums; }

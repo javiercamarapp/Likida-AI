@@ -350,18 +350,24 @@ for (const id of IDENTIDADES) {
     });
 
     test('(k) hay UN solo nivel de pestañas de sección en la pantalla de avisos', async ({ page }) => {
+      // F26 (Rovaq «Avisos»): la pantalla ya no pinta su propia fila de pestañas «Secciones de avisos»; la configuración es una acción de la cabecera.
+      // El contrato sigue siendo que NUNCA haya dos niveles de pestañas: a lo más la barra que trae el marco (una), y jamás la de la pantalla.
       for (const url of [id.ruta, `${id.ruta}?seccion=configuracion`]) {
         await page.goto(url);
-        await expect(page.getByRole('navigation', { name: /^Secciones de/ })).toHaveCount(1);
+        if (url === id.ruta) await listaLista(page);
+        else await expect(page.getByRole('button', { name: 'Guardar horario' })).toBeVisible();
+        const barras = page.getByRole('navigation', { name: /^Secciones de/ });
+        expect(await barras.count(), `${url}: más de un nivel de pestañas de sección`).toBeLessThanOrEqual(1);
+        await expect(page.getByRole('navigation', { name: 'Secciones de avisos' })).toHaveCount(0);
       }
-      // Y desde la pantalla se llega a la otra sección y se vuelve.
+      // Y desde la pantalla se llega a la otra sección (acción de la cabecera) y se vuelve.
       await page.goto(id.ruta);
       await listaLista(page);
-      const cuerpo = page.locator('#contenido-principal');
-      await cuerpo.getByRole('link', { name: 'Configuración', exact: true }).click();
+      // `.first()`: la acción de la cabecera es la primera; en v1 (caché de `tenant_ui` de 30 s tras fijarlo a v2) el cambio de sección repite el mismo enlace.
+      await page.getByRole('main').getByRole('link', { name: /^(Configuración|Configurar avisos)$/ }).first().click();
       await expect(page).toHaveURL(/seccion=configuracion/);
       await expect(page.getByRole('button', { name: 'Guardar horario' })).toBeVisible();
-      await page.locator('#contenido-principal').getByRole('link', { name: /^Avisos/ }).last().click();
+      await page.getByRole('main').getByRole('link', { name: 'Avisos', exact: true }).first().click();
       await listaLista(page);
     });
 

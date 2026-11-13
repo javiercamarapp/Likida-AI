@@ -5,7 +5,7 @@ import { pendientesDeHistorial } from '@/lib/likida/vigia/historial/pendientes';
 import { VistaHistorialVigia } from './vista';
 
 const accion = async () => null;
-const acciones = { alta: accion, critico: accion, borrar: accion, importar: accion, aprobarRapida: accion, retirarRapida: accion };
+const acciones = { altaCliente: accion, alta: accion, critico: accion, borrar: accion, importar: accion, aprobarRapida: accion, retirarRapida: accion };
 const base = (p: Partial<Parameters<typeof VistaHistorialVigia>[0]> = {}): Parameters<typeof VistaHistorialVigia>[0] => ({
   sufijo: '', grupos: [], clientes: [{ id: 'c1', nombre: 'Cliente A' }], reporte: null, grupoElegido: null, truncado: false, umbralMin: 10, puedeEditar: true, puedeAprobar: true, rapidas: [], acciones, ...p,
 });
@@ -16,6 +16,16 @@ describe('grupos e histórico del Vigía (pantalla)', () => {
     const html = pintar({ grupos: null });
     expect(html).toContain('Los grupos de clientes todavía no están disponibles');
     expect(html).not.toContain('Aún no hay grupos');
+  });
+
+  it('A1: el dueño ve el alta rápida de cliente con solo el nombre, aunque aún no haya grupos; quien no es dueño no', () => {
+    const html = pintar();
+    expect(html).toContain('Agregar un cliente');
+    expect(html).toContain('Agregar cliente');
+    const forma = html.slice(html.indexOf('Agregar un cliente</h2>'), html.indexOf('Agregar un grupo</h2>'));
+    expect(forma).toContain('name="nombre"');
+    expect(forma).not.toContain('name="rfc"');
+    expect(pintar({ puedeEditar: false })).not.toContain('Agregar cliente');
   });
 
   it('sin grupos: invita a agregar el primero y no ofrece subir histórico', () => {

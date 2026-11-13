@@ -37,7 +37,7 @@ export function barrasDePestanas(src: string): number {
 // ── admin_encabezados_contrato ─────────────────────────────────────────────
 export const barraPagina = (src: string): number => cuenta(sinComentarios(src), /<BarraPagina(?=[\s/>])/g);
 export const h1Propio = (src: string): number => cuenta(sinComentarios(src), /<h1(?=[\s/>])/g);
-export const marcosDePagina = (src: string): number => cuenta(sinComentarios(src), /<MarcoPagina(?=[\s/>])/g);
+export const marcosDePagina = (src: string): number => cuenta(sinComentarios(src), /<(?:MarcoPagina|Esqueleto(?:Portada|TablaMaestra|PanelCifras|Ficha|Configuracion))(?=[\s/>])/g);
 /** `apoyo` escrito como literal con más de 140 caracteres (los dinámicos no se pueden medir aquí). */
 export function apoyosLargos(src: string): number {
   let n = 0;
@@ -118,7 +118,10 @@ export function medirEncabezados() {
   const sinMarco: string[] = [];
   for (const { dir, paginas } of rutasConArchivos()) {
     const marcos = paginas.reduce((n, f) => n + marcosDePagina(leer(f)), 0);
-    if (marcos === 0) sinMarco.push(dir);
+    // Una ruta que solo redirige (p. ej. /admin/usuarios/nuevo → Equipo) no es una pantalla: no dibuja encabezado ni necesita MarcoPagina.
+    const pagina = paginas.filter((f) => f.endsWith('/page.tsx'));
+    const soloRedirige = pagina.length > 0 && pagina.every((f) => { const t = leer(f); return /\bredirect\(/.test(t) && !/return\s*\(?\s*</.test(t); });
+    if (marcos === 0 && !soloRedirige) sinMarco.push(dir);
     if (marcos > 1) marcosMultiples[dir] = marcos - 1;
   }
   return { barra: soloSi(barra), h1: soloSi(h1), apoyo: soloSi(apoyo), marcosMultiples, sinMarco: sinMarco.sort() };

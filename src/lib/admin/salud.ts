@@ -328,6 +328,25 @@ export function esHuecoDeConfiguracion(valor: unknown): boolean {
   return false;
 }
 
+/**
+ * Un `parcial` que es SOLO contrapresión de la bandeja: el runner está vivo (despachó al menos un agente, sin cortes seguidos) y frenó a los
+ * demás porque hay piezas pendientes de aprobar (`aprobar es humano; el runner no fabrica encima`). Es un freno por diseño, no una regresión:
+ * tumbar el health a 503 por esto dejaba «Salud de producción» en rojo sin que hubiera nada que arreglar en el código. Sigue visible
+ * (warn + aviso semanal por el canal de huecos); lo que sí degrada es un runner que no despacha nada o que lleva cortes seguidos.
+ */
+export function esContrapresionDeclarada(valor: unknown): boolean {
+  if (valor === null || typeof valor !== 'object') return false;
+  const d = valor as Record<string, unknown>;
+  const c = d.contrapresion;
+  if (c === null || typeof c !== 'object') return false;
+  const frenados = (c as Record<string, unknown>).agentesFrenados;
+  const despachados = d.despachados;
+  const cortes = d.cortesSeguidos;
+  return typeof frenados === 'number' && frenados > 0
+    && typeof despachados === 'number' && despachados >= 1
+    && (cortes === undefined || cortes === 0);
+}
+
 export interface LatidoDetallado extends SaludCron {
   /** ISO del último latido, o `null` si nunca latió. */
   ultimoLatido: string | null;

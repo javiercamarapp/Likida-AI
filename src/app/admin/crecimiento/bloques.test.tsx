@@ -22,7 +22,7 @@ vi.mock('./acciones', () => ({ accionPausarCampana: vi.fn(), accionRefrescarGast
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 
-import { BloqueActivacion, BloqueCohortes, BloqueCostoYCampanas, BloqueEmbudoAdquisicion, BloqueIntro, BloqueSinInstrumentacion, BloqueUso } from './bloques';
+import { BloqueActivacion, BloqueCampanas, BloqueCifrasCrecimiento, BloqueCohortes, BloqueComisiones, BloqueCostoLead, BloqueEmbudoAdquisicion, BloqueIntro, BloqueUso } from './bloques';
 import { ControlCampanas } from './campanas';
 import CrecimientoPage from './page';
 
@@ -70,11 +70,11 @@ describe('embudo de adquisición', () => {
     const h = await html(BloqueEmbudoAdquisicion);
     expect(h).toContain('130 prospectos del censo');
     // Tres etapas con gente = tres barras; 'negociacion' (alias histórico) suma en «Propuesta».
-    expect(h.match(/crc-embudo__fila/g)).toHaveLength(3);
-    expect(h).toContain('data-etapa="proposal"');
-    expect(h).toContain('width="100.00%"');
-    expect(h).toContain('width="25.00%"');
-    expect(h).toContain('width="5.00%"');
+    expect(h.match(/rv-barlist__fila/g)).toHaveLength(3);
+    expect(h).toContain('Propuesta');
+    expect(h).toMatch(/width="100\.?0*%"/);
+    expect(h).toMatch(/width="25\.?0*%"/);
+    expect(h).toMatch(/width="5\.?0*%"/);
     // Las siete etapas en cero NO son siete filas: van en una frase.
     expect(h).toContain('Sin prospectos todavía en: Cita agendada, Cita reprogramada');
     expect(h.match(/<svg/g)).toHaveLength(3);
@@ -98,18 +98,18 @@ describe('activación y cohortes', () => {
     const h = await html(BloqueActivacion);
     expect(h).toContain('El cero de «de pago» es un conteo real');
   });
-  it('el embudo de activación es la gráfica Embudo con la cifra exacta de cada etapa y la conversión contra la anterior', async () => {
+  it('el embudo de activación son barras de 6 px con la cifra exacta de cada etapa y la conversión contra la anterior', async () => {
     const h = await html(BloqueActivacion);
-    expect(h).toContain('rv-embudo');
-    expect(h).toContain('25.0% de la etapa anterior');
-    expect(h).toContain('0.0% de la etapa anterior'); // de pago: 0 de 1 activada; es un cero real, no un faltante
+    expect(h).toContain('rv-barlist');
+    expect(h).toContain('· 25%');
+    expect(h).toContain('· 0%'); // de pago: 0 de 1 activada; es un cero real, no un faltante
     expect(h).toContain('data-lift');
   });
   it('con los tres conteos en cero dice que el cero es real, no «sin datos»', async () => {
     dobles.getEmbudoActivacion.mockResolvedValue({ altas: 0, activadas: 0, dePago: 0 });
     const h = await html(BloqueActivacion);
     expect(h).toContain('las tres etapas valen cero');
-    expect(h).not.toContain('rv-embudo');
+    expect(h).not.toContain('rv-barlist');
   });
   it('lecturas caídas: no se pintan como cero flotas ni como cero uso', async () => {
     dobles.getEmbudoActivacion.mockResolvedValue(null);
@@ -129,15 +129,15 @@ describe('activación y cohortes', () => {
 describe('costo por lead y campañas', () => {
   it('adquisición caída: lo dice', async () => {
     dobles.getAdquisicion.mockResolvedValue(null);
-    expect(await html(BloqueCostoYCampanas)).toContain('NO significa que no haya alertas');
+    expect(await html(BloqueCostoLead)).toContain('NO significa que no haya alertas');
   });
   it('campañas caídas: lo dicen y no afirman que no haya', async () => {
     dobles.listarCampanasConTotal.mockResolvedValue(null);
-    expect(await html(BloqueCostoYCampanas)).toContain('NO significa que no haya');
+    expect(await html(BloqueCampanas)).toContain('NO significa que no haya');
   });
   it('el costo por lead sin dato dice «no disponible», nunca $0', async () => {
     dobles.getAdquisicion.mockResolvedValue({ porFuente: [{ fuente: 'ads', leads: 3, ultimoCapturado: '2026-11-01T00:00:00Z', costo: null, costoNota: 'falta integración de gasto' }], alertas: [], sinFuenteDeDatos: [] });
-    const h = await html(BloqueCostoYCampanas);
+    const h = await html(BloqueCostoLead);
     expect(h).toContain('no disponible');
     expect(h).toContain('falta integración de gasto');
   });
@@ -147,7 +147,9 @@ describe('uso', () => {
   it('rotula el gasto de IA como proxy de uso, no como usuarios, y no inventa el delta de tokens', async () => {
     const h = await html(BloqueUso);
     expect(h).toContain('No es una métrica de usuarios');
-    expect(h).toContain('Tokens usados');
+    const cifras = await html(BloqueCifrasCrecimiento);
+    expect(cifras).toContain('Tokens usados');
+    expect(cifras).toContain('Observado');
   });
   it('lectura caída: no se pinta como uso cero', async () => {
     dobles.getResumenNegocio.mockRejectedValue(new Error('caída'));
@@ -157,7 +159,7 @@ describe('uso', () => {
 
 describe('comisiones de vendedores', () => {
   it('se declaran «falta»: no hay base y la pantalla no calcula ni una cifra', async () => {
-    const h = await html(async () => BloqueSinInstrumentacion());
+    const h = await html(async () => BloqueComisiones());
     expect(h).toContain('Comisiones de vendedores');
     expect(h).toContain('Falta: aún no hay base para calcularlas');
     expect(h).toContain('sería inventar una cifra');

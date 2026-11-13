@@ -7,9 +7,9 @@ import { esFolioSimulado, type EpisodioVista, type Excepcion, type FilaTablero, 
 import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
 import type { ReubicacionesCliente } from '@/lib/likida/conductor/reubicaciones';
 import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import './conductores.css';
 import { BarraFiltros, Disclosure, FiltroOpciones, Icono, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
+import { VacioAgente } from '../vacio-agente';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -68,31 +68,41 @@ export const TEXTO_SIN_TELEFONO = textoSinTelefono();
 
 const minutos = (m: number): string => (m < 60 ? `${numero(Math.round(m))} min` : textoTiempo(m));
 
+function Def({ rotulo, valor, nota, tono }: { rotulo: string; valor: string | null; nota: string; tono?: 'warn' }) {
+  return (
+    <div>
+      <dt>{rotulo}</dt>
+      <dd><span className="rv-ag-indic__valor" data-vacio={valor === null || undefined}>{valor ?? '—'}{valor === null ? <span className="rv-sr">{' Sin dato'}</span> : null}</span></dd>
+      <dd className="rv-ag-indic__nota" data-tono={tono}>{nota}</dd>
+    </div>
+  );
+}
+
 export function IndicadoresHitos({ i, dias, tr = TR_ES }: { i: IndicadoresVista | null; dias: number; tr?: TrAgentes }) {
   const { t: tx } = tr;
   if (i === null) {
     return <p className="rv-cd__nota">{tx('rest.no_se_pudieron_calcular_los_indicadores')}</p>;
   }
   return (
-    <div>
-      <TiraCifras sello={selloHoy(tx('conductores.vista.viajes_de_la_flota'))}>
-        <Cifra etiqueta={tx('rest.hitos_reportados_sin_insistencia')} info="conductores_tablero.sin_insistencia"
+    <Tarjeta titulo={tx('f26d5.cd.indicadores_hitos')} info="conductores_tablero.sin_insistencia" acciones={<span className="rv-cd__micro">{selloHoy(tx('conductores.vista.viajes_de_la_flota'))}</span>}>
+      <dl className="rv-ag-indic">
+        <Def rotulo={tx('rest.hitos_reportados_sin_insistencia')}
           valor={i.tasaSinInsistencia === null ? null : porcentaje(i.tasaSinInsistencia * 100, 0)}
           nota={i.recibidos === 0 ? tx('rest.ningun_hito_recibido_en_el_periodo') : tx('rest.de_hitos_a_lo_mas_un', { numero: numero(i.recibidos) })} />
-        <Cifra etiqueta={tx('rest.tiempo_medio_de_respuesta')} info="conductores_tablero.tiempo_respuesta"
+        <Def rotulo={tx('rest.tiempo_medio_de_respuesta')}
           valor={i.minutosRespuestaPromedio === null ? null : minutos(i.minutosRespuestaPromedio)}
           nota={i.conRespuestaMedida === 0 ? tx('rest.ninguna_solicitud_con_respuesta_medible') : `sobre ${numero(i.conRespuestaMedida)} solicitudes contestadas`} />
-        <Cifra etiqueta={tx('rest.hitos_escalados')} info="conductores_tablero.escalados" valor={numero(i.escalados)} tono={i.escalados > 0 ? 'warn' : undefined} nota={tx('rest.agotaron_la_escalera_de_recordatorios')} />
-        <Cifra etiqueta={tx('rest.validados_con_ubicacion')} info="conductores_tablero.validados_ubicacion" valor={numero(i.validadosUbicacion)}
+        <Def rotulo={tx('rest.hitos_escalados')} valor={numero(i.escalados)} tono={i.escalados > 0 ? 'warn' : undefined} nota={tx('rest.agotaron_la_escalera_de_recordatorios')} />
+        <Def rotulo={tx('rest.validados_con_ubicacion')} valor={numero(i.validadosUbicacion)}
           nota={i.sinCoincidencia > 0 ? tx('rest.sin_coincidencia_por_revisar', { numero: numero(i.sinCoincidencia) }) : tx('rest.pin_o_gps_dentro_del_sitio')} />
-        <Cifra etiqueta={tx('rest.validacion_en_modo_degradado')} info="conductores_tablero.validacion_degradada" valor={i.tasaValidacionDegradada === null ? null : porcentaje(i.tasaValidacionDegradada * 100, 0)}
+        <Def rotulo={tx('rest.validacion_en_modo_degradado')} valor={i.tasaValidacionDegradada === null ? null : porcentaje(i.tasaValidacionDegradada * 100, 0)}
           tono={i.tasaValidacionDegradada !== null && i.tasaValidacionDegradada > 0 ? 'warn' : undefined}
           nota={i.llegadasValidables === 0 ? tx('rest.ninguna_llegada_validable_en_el_periodo') : tx('rest.de_llegadas_sin_geocerca_o_solo', { numero: numero(i.validacionDegradada), numero2: numero(i.llegadasValidables) })} />
-      </TiraCifras>
+      </dl>
       <p className="rv-cd__micro">{tx(dias === 1 ? 'rest.hitos_actividad_ultimos_dias.uno' : 'rest.hitos_actividad_ultimos_dias.otros', { n: dias })}{i.capturadosOficina > 0 ? tx('rest.los_capturo_la_oficina_a_mano', { numero: numero(i.capturadosOficina) }) : ''}
         {i.omitidos > 0 ? tx('rest.se_dieron_por_omitidos_el_chofer', { numero: numero(i.omitidos) }) : ''}
       </p>
-    </div>
+    </Tarjeta>
   );
 }
 
@@ -186,7 +196,7 @@ function CeldaHito({ h, puedeActuar, accion, viajeId, tr = TR_ES }: { h: HitoVis
         <span>{h.etiqueta}</span>
       </div>
       {resuelto && h.horaMensaje ? (
-        <div className="cifra-mono" title={tx('rest.hora_del_mensaje_del_chofer_no')}>{fechaHoraMx(h.horaMensaje)}</div>
+        <div className="rv-ag-num" title={tx('rest.hora_del_mensaje_del_chofer_no')}>{fechaHoraMx(h.horaMensaje)}</div>
       ) : (
         <div className="rv-cd__faint">
           {h.estado === 'omitido' ? textoOmitido(h) : h.estado === 'escalado' ? `escalado${h.atendidaEn ? ' · atendido' : ''}` : h.tocaDesde ? `toca desde ${fechaHoraMx(h.tocaDesde)}` : 'pendiente'}
@@ -211,7 +221,7 @@ function CeldaHito({ h, puedeActuar, accion, viajeId, tr = TR_ES }: { h: HitoVis
       {h.reporte && h.reporte.reubicaciones > 0 && (
         <Disclosure titulo={h.reporte.reubicaciones === 1 ? tx('rest.1_cambio_de_rampa_o_contacto') : tx('rest.cambios_de_rampa_o_contacto', { reubicaciones: h.reporte.reubicaciones })} variante="linea">
           <ol className="rv-cd__lista">
-            {h.reporte.historial.map((r) => <li key={r.en} className="rv-cd__micro" data-tono="muted"><span className="cifra-mono">{fechaHoraMx(r.en)}</span> · {r.rampa ?? tx('rest.sin_rampa_registrada')}</li>)}
+            {h.reporte.historial.map((r) => <li key={r.en} className="rv-cd__micro" data-tono="muted"><span className="rv-ag-num">{fechaHoraMx(r.en)}</span> · {r.rampa ?? tx('rest.sin_rampa_registrada')}</li>)}
           </ol>
         </Disclosure>
       )}
@@ -247,7 +257,7 @@ function DocumentosCierreFila({ r, tr = TR_ES }: { r: ResumenDocumentosCierre; t
   return (
     <p className="rv-cd__icono-linea" data-tono={faltan > 0 ? 'warn' : 'ok'} aria-label={tx('rest.documentos_de_cierre')}>
       <Icono icono={faltan > 0 ? FileWarning : FileCheck2} tam={14} />
-      <span>{ricoT(tx('rest.e0_documentos_de_cierre_e0'), { e0: (c) => <span className="rv-cd__medio">{c}</span> })}{' '}<span className="cifra-mono">{numero(r.recibidos)}</span> de <span className="cifra-mono">{numero(r.total)}</span> recibidos
+      <span>{ricoT(tx('rest.e0_documentos_de_cierre_e0'), { e0: (c) => <span className="rv-cd__medio">{c}</span> })}{' '}<span className="rv-ag-num">{numero(r.recibidos)}</span> de <span className="rv-ag-num">{numero(r.total)}</span> recibidos
         {faltan > 0 && <>{tx('rest.faltan')}{' '}{r.faltantes.map((f) => f.nombreSolicitado).join(', ')}</>}
         {porRevisar > 0 && <span> · {numero(porRevisar)} {porRevisar === 1 ? tx('rest.con_foto_por_revisar_calidad') : tx('rest.con_fotos_por_revisar_calidad')}</span>}
       </span>
@@ -260,7 +270,7 @@ function ResumenEstancia({ e, tr = TR_ES }: { e: Estancia; tr?: TrAgentes }) {
   const texto = e.fase === 'cerrada' ? `${minutos(e.minutos ?? 0)} (cerrada)`
     : e.fase === 'en_curso' ? tx('rest.y_sigue_en_el_anden', { minutos: minutos(e.minutos ?? 0) })
       : e.fase === 'incoherente' ? 'horas incoherentes' : e.fase === 'sin_llegada' ? 'sin llegada registrada' : 'sin salida registrada';
-  return <span>{e.lugar === 'carga' ? tx('rest.en_carga') : tx('rest.en_descarga')}: <span className="cifra-mono">{texto}</span></span>;
+  return <span>{e.lugar === 'carga' ? tx('rest.en_carga') : tx('rest.en_descarga')}: <span className="rv-ag-num">{texto}</span></span>;
 }
 
 export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios, sitiosHayMas = false, tr = TR_ES }: {
@@ -340,13 +350,13 @@ export function EpisodiosSenalVida({ episodios, dias, hayMas, tr = TR_ES }: { ep
                 <span className="rv-cd__medio">{e.folio}</span>
                 <span className="rv-cd__muted">{e.chofer}</span>
                 <StatusChip tono="muted">{e.motivo}</StatusChip>
-                <span className="cifra-mono rv-cd__micro">desde {fechaHoraMx(e.abiertoEn)}</span>
+                <span className="rv-ag-num rv-cd__micro">desde {fechaHoraMx(e.abiertoEn)}</span>
                 <StatusChip tono={e.urgente ? 'bad' : e.abierto ? 'warn' : 'ok'}>{e.abierto ? tx('rest.abierto') : tx('rest.cerrado')}</StatusChip>
               </div>
               <div>{e.estado}</div>
               {e.pasos.length > 0 && (
                 <ol className="rv-cd__linea rv-cd__micro" data-tono="muted">
-                  {e.pasos.map((p) => <li key={p.texto}>{p.texto} · <span className="cifra-mono">{fechaHoraMx(p.en)}</span></li>)}
+                  {e.pasos.map((p) => <li key={p.texto}>{p.texto} · <span className="rv-ag-num">{fechaHoraMx(p.en)}</span></li>)}
                 </ol>
               )}
             </li>
@@ -381,8 +391,8 @@ export function ReubicacionesPorCliente({ filas, csv, tr = TR_ES }: { filas: Reu
                   <span className="rv-cd__muted">{tx('rest.sin_dato_2', { numero: numero(f.viajes) })}{' '}{f.viajes === 1 ? 'viaje' : 'viajes'}{' '}{tx('rest.sin_respuesta_del_chofer')}</span>
                 ) : (
                   <>
-                    <span><span className="cifra-mono">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? tx('rest.reubicacion') : 'reubicaciones'}</span>
-                    <span><span className="cifra-mono">{numero(f.minutos ?? 0)}</span> min</span>
+                    <span><span className="rv-ag-num">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? tx('rest.reubicacion') : 'reubicaciones'}</span>
+                    <span><span className="rv-ag-num">{numero(f.minutos ?? 0)}</span> min</span>
                     <span className="rv-cd__muted">{tx('rest.en_de', { numero: numero(f.viajesReubicados ?? 0), numero2: numero(f.viajesConDato) })}{' '}{f.viajesConDato === 1 ? tx('rest.viaje_con_dato') : tx('rest.viajes_con_dato')}</span>
                   </>
                 )}
@@ -412,16 +422,15 @@ export function TableroHitos({
   return (
     <>
       <IndicadoresHitos tr={tr} i={indicadores} dias={dias} />
-      <Tarjeta titulo={tx('liquidacion.vista.viajes_en_curso')} info="conductores_tablero.viajes_en_curso" acciones={
-        <span className="rv-cd__linea">
-          {ORDEN_SEMAFORO.map((s) => (
-            <span key={s} className="rv-cd__linea">
-              <PuntoSemaforo s={s} tr={tr} /><span className="cifra-mono rv-cd__muted">{numero(tablero.conteos[s])}</span>
-            </span>
-          ))}
-        </span>
-      }>
+      <Tarjeta titulo={tx('liquidacion.vista.viajes_en_curso')} info="conductores_tablero.viajes_en_curso">
         <div className="rv-cd__pila">
+          <span className="rv-cd__linea">
+            {ORDEN_SEMAFORO.map((s) => (
+              <span key={s} className="rv-cd__linea">
+                <PuntoSemaforo s={s} tr={tr} /><span className="rv-ag-num rv-cd__muted">{numero(tablero.conteos[s])}</span>
+              </span>
+            ))}
+          </span>
           <FiltrosTablero tr={tr} f={filtros} catalogos={catalogos} ocultos={ocultos} accionUrl={accionUrl} />
           {tablero.sinGps && (
             <p role="note" className="rv-cd__icono-linea" data-tono="warn">
@@ -431,23 +440,22 @@ export function TableroHitos({
           {tablero.hayMas && (
             <p className="rv-cd__nota" data-tono="warn">{tx('rest.hay_mas_viajes_en_curso_de')}</p>
           )}
+        {tablero.filas.length === 0 ? (
+          <VacioAgente icono={MapPinOff} titulo={filtros.terminalId || filtros.clienteId || filtros.operadorId || filtros.semaforo
+            ? tx('rest.ningun_viaje_en_curso_cumple_esos')
+            : tx('f26d5.cd.sin_viajes_titulo')}>
+            {filtros.terminalId || filtros.clienteId || filtros.operadorId || filtros.semaforo ? null : textoSinViajes(tx)}
+          </VacioAgente>
+        ) : (
+          <ul className="rv-cd__viajes">
+            {tablero.filas.map((f) => <TarjetaViaje tr={tr} key={f.viaje.id} f={f} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios} sitiosHayMas={sitiosHayMas} />)}
+          </ul>
+        )}
         </div>
       </Tarjeta>
       <ColaExcepciones tr={tr} excepciones={tablero.excepciones} puedeActuar={puedeActuar} accion={accion} />
       {tablero.reubicaciones && <ReubicacionesPorCliente tr={tr} filas={tablero.reubicaciones.porCliente} csv={tablero.reubicaciones.csv} />}
       {episodios !== undefined && <EpisodiosSenalVida tr={tr} episodios={episodios} dias={dias} hayMas={hayMasEpisodios} />}
-      {tablero.filas.length === 0 ? (
-        <p className="rv-cd__icono-linea" data-tono="muted">
-          <Icono icono={CircleAlert} tam={14} />
-          {filtros.terminalId || filtros.clienteId || filtros.operadorId || filtros.semaforo
-            ? tx('rest.ningun_viaje_en_curso_cumple_esos')
-            : textoSinViajes(tx)}
-        </p>
-      ) : (
-        <ul className="rv-cd__viajes">
-          {tablero.filas.map((f) => <TarjetaViaje tr={tr} key={f.viaje.id} f={f} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios} sitiosHayMas={sitiosHayMas} />)}
-        </ul>
-      )}
     </>
   );
 }

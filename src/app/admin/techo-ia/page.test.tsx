@@ -23,7 +23,7 @@ const fila = (sobre: Record<string, unknown> = {}) => ({
   declaradoUsd: 40, usadoHoyUsd: 18, pctUsado: 45, ...sobre,
 });
 const datos = (filas: unknown[], sobre: Record<string, unknown> = {}) => ({ filas, pisoUsd: 5, truncado: false, gastoIlegible: false, ...sobre });
-async function renderizar(sp: { ok?: string; error?: string } = {}) { return renderToStaticMarkup(await TechoIaPage({ searchParams: Promise.resolve(sp) })); }
+async function renderizar(sp: { ok?: string; error?: string; ver?: string } = {}) { return renderToStaticMarkup(await TechoIaPage({ searchParams: Promise.resolve(sp) })); }
 
 beforeEach(() => { dobles.getTechosIa.mockReset(); });
 
@@ -35,11 +35,15 @@ describe('/admin/techo-ia', () => {
     expect(html).toContain('Declarado');
     expect(html).toContain('Piso global');
     expect(html).toContain('45%');
-    expect(html).toContain('name="techoUsd"');
-    expect(html).toContain('value="40"');
+    // La tabla ya no edita en línea: cada fila abre el cajón (`?ver=`) y ahí vive el formulario.
+    expect(html).not.toContain('name="techoUsd"');
+    expect(html).toContain('?ver=11111111-1111-4111-8111-111111111111');
     expect(html).toContain('Cambiar');
     expect(html).toContain('Fijar');
-    expect(html).toContain('Techo diario en dólares para Flota Norte');
+    const cajon = await renderizar({ ver: '11111111-1111-4111-8111-111111111111' });
+    expect(cajon).toContain('name="techoUsd"');
+    expect(cajon).toContain('value="40"');
+    expect(cajon).toContain('Techo diario en dólares para Flota Norte');
   });
 
   it('gasto ilegible: «sin medir» y el aviso, NO ceros', async () => {
@@ -73,7 +77,8 @@ describe('/admin/techo-ia', () => {
     // Un `ok` que no es de la lista no se pinta nunca (no hay forma de inyectar texto por la URL).
     const ajeno = await renderizar({ ok: '<img src=x onerror=alert(1)>' });
     expect(ajeno).not.toContain('onerror');
-    expect(ajeno).not.toContain('role="status"');
+    // (El aviso administrativo fijo es informativo; lo que no puede aparecer es un aviso de éxito.)
+    expect(ajeno).not.toContain('rv-aviso" data-tono="ok"');
   });
 
   it('la pantalla está en el menú de /admin', async () => {

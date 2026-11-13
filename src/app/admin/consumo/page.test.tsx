@@ -74,7 +74,7 @@ it('si SOLO el resumen (llm_costo) falla, la sección de agentes sigue viva por 
   dobles.getResumenNegocio.mockRejectedValueOnce(new Error('caída'));
   const html = await renderizar();
   expect(html).toContain('No disponible ahora. No es cero.'); // la cifra del gasto del producto cae en error, no en cero
-  expect(html).toContain('analista'); // la tabla de agentes sí se pintó
+  expect(html).toContain('Analista'); // la tabla de agentes sí se pintó
 });
 
 it('si SOLO el consumo por agente (migración 0123) falla, el resumen de negocio sigue vivo', async () => {
@@ -90,7 +90,7 @@ it('si el presupuesto por propósito (migración 0244) falla, el resto de la pá
   const html = await renderizar();
   expect(html).toContain('No se pudo leer el gasto por propósito');
   expect(html).not.toMatch(/migración 0\d{3}/);
-  expect(html).toContain('analista');
+  expect(html).toContain('Analista');
 });
 
 it('los insights se separan: "problema" arriba de todo, el resto abajo en su propia sección', async () => {
