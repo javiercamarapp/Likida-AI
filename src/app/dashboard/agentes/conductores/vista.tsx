@@ -90,8 +90,10 @@ export interface ColaConductores {
  * nada, y hasta hoy esperaba detrás de los cuatro `count` de la flota.
  */
 export function VistaAgenteConductores({
-  kpis, cola, eventos, sufijo = '', notificaciones, tablero, tr = TR_ES,
+  kpis, cola, eventos, sufijo = '', notificaciones, tablero, avisos, tr = TR_ES,
 }: {
+  /** Los avisos de la flota (preflight): van ANTES de la tira de cifras, como en Rovaq (cabecera → avisos → cifras). */
+  avisos?: React.ReactNode;
   /** 0385: el tablero de hitos (semáforo, excepciones, línea de tiempo). Ya renderizado en el servidor. */
   tablero?: React.ReactNode;
   /** FE-5: los cuatro salen de `count` en la base, no de filtrar las 100
@@ -108,6 +110,8 @@ export function VistaAgenteConductores({
   const { t: tx } = tr;
   return (
     <MarcoPagina titulo={tx('conductores.vista.comunicacion_con_operadores')} apoyo={tx('conductores.vista.la_cola_de_aceptacion_por')}>
+
+      {avisos}
 
       <Bloque mensaje={tx('conductores.vista.no_se_pudieron_leer_los')} esqueleto={<EsqCifrasV2 n={4} />}>
         <BloqueConteos kpis={kpis} />

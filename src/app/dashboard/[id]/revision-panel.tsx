@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { Aviso, AvisoResultado, Boton, BotonConfirmar, CampoTexto, CampoTextarea, Fieldset, Radio, Tarjeta, clasesBoton, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoResultado, Boton, BotonConfirmar, CampoTexto, CampoTextarea, Fieldset, Radio, StatusChip, Tarjeta, clasesBoton, type ResultadoAccion } from '@/app/ui-v2/componentes';
 import { mxn, fechaMx } from '@/lib/formato';
 import { useT } from '@/lib/i18n/proveedor';
 import { dinero } from '@/lib/i18n/es/dinero';
@@ -141,7 +141,9 @@ function FirmaActual({ estado }: { estado: RevisionDetalle }) {
   return (
     <div>
       <p className="rv-liq__firma-estado">
-        <strong>{rotulo}</strong>
+        {/* El estado de la firma es un sello, no una palabra en negritas (Rovaq 06d: chip de estado junto al título). Pendiente es lo que pide
+            acción; las demás ya están resueltas. */}
+        <StatusChip tono={revision === 'pendiente' ? 'warn' : revision === 'rechazada' ? 'bad' : revision === 'aprobada' || revision === 'ajustada' ? 'ok' : 'neutral'}>{rotulo}</StatusChip>
         {revision !== 'pendiente' && (
           revisadaPor
             ? <> · {revisadaEn ? tr('liquidacion.revision.firmoEl', { quien: revisadaPor, fecha: fechaMx(revisadaEn) }) : tr('liquidacion.revision.firmo', { quien: revisadaPor })}</>

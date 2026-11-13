@@ -54,7 +54,7 @@
 
 /* Firma humana */
 .rv-liq__firma { display: grid; gap: 10px; }
-.rv-liq__firma-estado { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-liq__firma-estado { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: var(--t-small); color: var(--muted); }
 .rv-liq__firma-estado strong { color: var(--ink); font-weight: 600; }
 .rv-liq__ajustes { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: var(--t-small); color: var(--muted); }
 .rv-liq__opciones { display: flex; flex-wrap: wrap; gap: 4px 20px; }

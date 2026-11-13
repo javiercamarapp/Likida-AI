@@ -279,7 +279,7 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 [data-ui="v2"] .rv-ic__estado > .rv-estado { height: auto; min-height: 22px; min-width: 0; padding-block: 4px; border-radius: 11px; white-space: normal; line-height: 1.25; overflow-wrap: anywhere; }
 [data-ui="v2"] .rv-ic__estado > .rv-estado .rv-estado__punto { flex: none; }
 .rv-ic__falta { margin: 0; padding-top: 6px; border-top: 1px dotted var(--line2); font-size: 12px; line-height: 1.4; color: var(--muted); }
-.rv-ic__falta > b { font-weight: 600; color: var(--ink); }
+.rv-ic__falta > b { display: block; margin-bottom: 2px; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .rv-ic__fila--12 > * { grid-column: 1 / -1; }
 .rv-ic__fila--6-6 > :only-child { grid-column: 1 / -1; }
 .rv-ic__fila { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
