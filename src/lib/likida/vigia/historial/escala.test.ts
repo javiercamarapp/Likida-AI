@@ -57,9 +57,17 @@ describe('escala: decenas de miles de mensajes', () => {
   }, 180_000); // el tope de Vitest es de PARED y sí sufre la carga: holgado a propósito; el umbral real es el de CPU
 
   it('analizarHistorial no es cuadrático (preguntas casi todas distintas y nadie del equipo contesta)', () => {
-    const distintas: EntradaPendientes[] = Array.from({ length: 40_000 }, (_, i) => msg(i, 'cliente', `¿Cuándo llega la unidad ${i} con carga de producto${i} a bodega${i}?`));
+    // Razón de tiempos de CPU entre N y 2N en vez de un tope absoluto: un tope en ms (15 000) midió 15 105 en CI cargado sin que el
+    // algoritmo cambiara. Un algoritmo lineal/casi lineal duplica el tiempo (razón ≈ 2); uno cuadrático lo cuadruplica (≈ 4). Umbral 3,2.
+    // El tope absoluto solo queda como red de cordura, muy holgado.
+    const generar = (n: number): EntradaPendientes[] => Array.from({ length: n }, (_, i) => msg(i, 'cliente', `¿Cuándo llega la unidad ${i} con carga de producto${i} a bodega${i}?`));
+    const chica = generar(20_000);
+    const doble = generar(40_000);
     let sinRespuesta = 0;
-    expect(cpuMs(1, () => { sinRespuesta = analizarHistorial(distintas).tiempos.sinRespuesta; })).toBeLessThan(15_000);
+    const tChica = cpuMs(3, () => { analizarHistorial(chica); });
+    const tDoble = cpuMs(3, () => { sinRespuesta = analizarHistorial(doble).tiempos.sinRespuesta; });
     expect(sinRespuesta).toBeGreaterThan(0);
-  }, 300_000); // ídem
+    expect(tDoble).toBeLessThan(120_000);
+    expect(tDoble / Math.max(tChica, 1)).toBeLessThan(3.2);
+  }, 600_000); // ídem
 });

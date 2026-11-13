@@ -501,7 +501,7 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-calor__celda[data-nivel="1"] { background: color-mix(in srgb, var(--cat, var(--ink)) 20%, var(--surface)); }
 [data-ui="v2"] .rv-calor__celda[data-nivel="2"] { background: color-mix(in srgb, var(--cat, var(--ink)) 40%, var(--surface)); }
 [data-ui="v2"] .rv-calor__celda[data-nivel="3"] { background: color-mix(in srgb, var(--cat, var(--ink)) 66%, var(--surface)); }
-[data-ui="v2"] .rv-calor__celda[data-nivel="4"] { background: var(--cat, var(--ink)); color: var(--surface); }
+[data-ui="v2"] .rv-calor__celda[data-nivel="4"] { background: color-mix(in srgb, var(--cat, var(--ink)) 45%, var(--ink)); color: var(--surface); }
 [data-ui="v2"] .rv-calor__celda[data-sd] { background: repeating-linear-gradient(135deg, var(--muted) 0 2px, transparent 2px 5px); opacity: .5; }
 [data-ui="v2"] .rv-calor__escala { display: flex; align-items: center; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 11px; color: var(--muted); }
 [data-ui="v2"] .rv-calor__escala .rv-calor__celda { display: block; width: 18px; min-height: 10px; height: 10px; }

@@ -621,7 +621,7 @@ describe('las corridas (el ledger en tablas, mig. 0185)', () => {
     // y la lectura de UNA corrida (leerCorrida) sigue completa
     const una = await leerCorrida(db, 'comp-00');
     expect(una.ok && una.datos?.pasos).toHaveLength(95);
-  });
+  }, 30_000); // ~2 200 filas en la base falsa: bajo carga excede los 5 000 ms por omisión
 
   it('A37-S23-02: si el conteo exacto no se puede demostrar, el historial FALLA cerrado (no un avance corto)', async () => {
     const db = dbFalsa();

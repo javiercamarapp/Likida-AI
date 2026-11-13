@@ -3,7 +3,9 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Browser, type Page } from 'playwright';
 import { build } from 'vite';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.setConfig({ testTimeout: 30_000 }); // Chromium bajo una Mac/CI cargada
 import { lanzarNavegador, SIN_NAVEGADOR } from '../navegador_prueba';
 
 // COMPORTAMIENTO REAL (Chromium) de cada overlay MIGRADO al motor único (L3), con los componentes de producción:
