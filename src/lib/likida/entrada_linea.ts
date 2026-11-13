@@ -24,7 +24,7 @@ import { logger } from '@/lib/logger';
 const GRAPH = 'https://graph.facebook.com/v21.0';
 
 export const TEXTO_NO_REGISTRADO_EN_LINEA =
-  'Hola, no te tengo registrado en esta línea. Pídele a tu flota que te dé de alta en Likida. 🚛';
+  'Hola, no te tengo registrado en esta línea. Pídele a tu flota que te dé de alta en Likida.';
 
 /** ¿El número es operador activo, cuenta de oficina activa o contacto del Vigía DE ESTE TENANT? Lanza si la base no contesta. */
 export async function remitenteEnTenant(tenantId: string, telefono: string): Promise<boolean> {
