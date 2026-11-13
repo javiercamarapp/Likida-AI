@@ -26,9 +26,10 @@
 import { logger } from '@/lib/logger';
 import { ventanaDeContacto, registrarDecisionEnvio, type EstadoVentana } from '@/lib/likida/wa_ventana';
 import { encolarSalidaWhatsAppDedupe, leerSalidasPorLlave } from '@/lib/likida/wa_outbox';
+import { canalDeEnvio } from './canal_envio';
 import {
   enviarTexto, enviarBotones, sendTemplate, esReintentableMeta, motivoDeFalloWhatsApp,
-  payloadBotones, payloadPlantilla, motivoDocumentoInvalido,
+  payloadBotones, payloadPlantilla, motivoDocumentoInvalido, conCanal,
   type BotonAcuse, type EnvioWhatsApp, type DocumentoEncabezado,
 } from './client';
 import { armarComponentesPlantilla, type OpcionesPlantilla } from './plantilla_payload';
@@ -122,11 +123,23 @@ export async function enviarConFallback(
 ): Promise<ResultadoEnvioConFallback> {
   const ventana = await ventanaDeContacto(telefono, op.ahora);
 
-  const enviarLibre = (): Promise<EnvioWhatsApp> => (
-    op.botones && op.botones.length > 0
-      ? (op.documento ? enviarBotones(telefono, op.texto, op.botones, op.documento) : enviarBotones(telefono, op.texto, op.botones))
-      : enviarTexto(telefono, op.texto)
-  );
+  const elegido = await canalDeEnvio(op.tenantId);
+  if ('error' in elegido) {
+    // Fallo cerrado y REINTENTABLE (no consume sellos/tiers): nada salió ni quedó en `wa_outbox`.
+    return {
+      ok: false, motivo: 'rechazo_no_ventana', mensaje: elegido.error, fueraDeVentana: false, reintentable: true, ventana: ventana.estado,
+    };
+  }
+  const canal = elegido.canal;
+  const optsCanal = canal ? { canal } : undefined;
+
+  const enviarLibre = (): Promise<EnvioWhatsApp> => {
+    if (!op.botones || op.botones.length === 0) {
+      return optsCanal ? enviarTexto(telefono, op.texto, optsCanal) : enviarTexto(telefono, op.texto);
+    }
+    if (optsCanal) return enviarBotones(telefono, op.texto, op.botones, op.documento, optsCanal);
+    return op.documento ? enviarBotones(telefono, op.texto, op.botones, op.documento) : enviarBotones(telefono, op.texto, op.botones);
+  };
   const viaLibre: 'texto' | 'botones' = op.botones && op.botones.length > 0 ? 'botones' : 'texto';
   const { nombre, idioma, ...resto } = conDocumento(op.plantilla, op.documento);
 
@@ -142,7 +155,7 @@ export async function enviarConFallback(
   };
 
   const conPlantilla = async (motivoOk: MotivoEnvio, estadoTexto?: { codigo?: number; status?: number }): Promise<ResultadoEnvioConFallback> => {
-    const p = await sendTemplate(telefono, nombre, { idioma, ...resto });
+    const p = await sendTemplate(telefono, nombre, { idioma, ...resto, ...(canal ? { canal } : {}) });
     if (p.ok) return registrar({ ok: true, via: 'plantilla', id: p.id, motivo: motivoOk, ventana: ventana.estado }, 'plantilla');
 
     // Plantilla sin aprobar con la ventana «cerrada» según el registro: el registro
@@ -277,6 +290,9 @@ export async function enviarConFallbackDurable(
 ): Promise<ResultadoDurable> {
   const kS = llaveSesionDurable(op.llave);
   const kP = llavePlantillaDurable(op.llave);
+  const elegido = await canalDeEnvio(op.tenantId);
+  if ('error' in elegido) return { estado: 'fallida', via: 'sesion', error: elegido.error, reintentable: true, ventana: null };
+  const canal = elegido.canal;
   try {
     if (op.documento) {
       const malo = motivoDocumentoInvalido(op.documento);
@@ -302,7 +318,7 @@ export async function enviarConFallbackDurable(
     const encolarPlantilla = async (motivo: MotivoEnvio, ventana: EstadoVentana | null): Promise<ResultadoDurable> => {
       const a = armarPlantilla();
       if (!a.ok) return { estado: 'fallida', via: 'plantilla', error: a.error, reintentable: false, ventana };
-      const q = await encolarSalidaWhatsAppDedupe(kP, a.payload, `${op.contexto}: por plantilla`);
+      const q = await encolarSalidaWhatsAppDedupe(kP, conCanal(a.payload, canal), `${op.contexto}: por plantilla`);
       await registrarDecisionEnvio({
         tenantId: op.tenantId, contexto: op.contexto, telefono, ventana: ventana ?? 'desconocida',
         canal: 'plantilla', motivo, plantilla: a.nombre, ok: q !== null,
@@ -327,7 +343,7 @@ export async function enviarConFallbackDurable(
       return { estado: 'fallida', via: 'sesion', error: 'el modo durable exige botones para el mensaje de sesión', reintentable: false, ventana: ventana.estado };
     }
     const payload = payloadBotones(telefono, op.texto, op.botones, op.documento);
-    const q = await encolarSalidaWhatsAppDedupe(kS, payload, op.contexto);
+    const q = await encolarSalidaWhatsAppDedupe(kS, conCanal(payload, canal), op.contexto);
     await registrarDecisionEnvio({
       tenantId: op.tenantId, contexto: op.contexto, telefono, ventana: ventana.estado,
       canal: 'botones', motivo: ventana.estado === 'abierta' ? 'ventana_abierta' : 'ventana_desconocida', ok: q !== null,
