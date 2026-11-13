@@ -291,3 +291,51 @@ it.each(['contador', 'vendedor'])('la puerta compartida `gate()` rechaza a %s en
   expect(dobles.borrarProveedorEmergencia).not.toHaveBeenCalled();
   expect(dobles.borrarContactoEmergencia).not.toHaveBeenCalled();
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A51-FE-03 · A47-FE-01, fijado por el ÁRBOL y no por el texto del archivo.
+//
+// A47-FE-01 (ronda 47): los formularios de captura de esta pantalla viajaban
+// como `children` de tarjetas cuyo estado es `vacio` justo cuando la flota es
+// nueva —el caso del demo—, y `Tarjeta` solo pinta `children` en `ok`
+// (`ui-v2/componentes/tarjeta.tsx:58`): pantalla sin salida. La ronda 49 lo
+// arregló moviéndolos a la ranura `formulario`; el rediseño F26 los movió otra
+// vez, ahora a `acciones` dentro de `CajonAlta`. Las dos ranuras cumplen —
+// `acciones` se pinta fuera del switch de `estado` (`tarjeta.tsx:51`)— pero el
+// ancla de entonces fijaba el MECANISMO con un grep de `formulario={` sobre el
+// texto del archivo, y por eso pasó 327 commits en rojo sin que nada estuviera
+// roto. Reescrita como otro grep volvió a fallar: dejando un `acciones={<span/>}`
+// vacío delante de una forma colgada de `children`, seguía verde.
+//
+// Esta versión recorre el árbol REAL de la página, que es lo único que
+// distingue «dentro de la ranura» de «en el archivo, cerca de la ranura».
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Todo `FormaConAviso` alcanzable SOLO por `children`, sin pasar por una
+ *  ranura que la tarjeta pinte con cero datos (`acciones` o `formulario`). */
+function formasSoloPorChildren(nodo: ReactNode, enRanura = false, salida: Elemento[] = []): Elemento[] {
+  if (Array.isArray(nodo)) { for (const h of nodo) formasSoloPorChildren(h, enRanura, salida); return salida; }
+  if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
+  if (nodo.type === FormaConAviso && !enRanura) salida.push(nodo);
+  formasSoloPorChildren(nodo.props.children as ReactNode, enRanura, salida);
+  // Entrar por una ranura marca el subárbol como alcanzable en vacío.
+  formasSoloPorChildren(nodo.props.acciones as ReactNode, true, salida);
+  formasSoloPorChildren(nodo.props.formulario as ReactNode, true, salida);
+  return salida;
+}
+
+it('A47-FE-01 · las tres formas de captura cuelgan de una ranura que el vacío sí pinta', async () => {
+  // Flota NUEVA: cero póliza, cero proveedores, cero contactos — el estado en
+  // el que la regresión original dejaba la pantalla sin salida. Un operador,
+  // porque el alta de contacto necesita a quién asignárselo.
+  dobles.polizaVigenteDe.mockResolvedValue(null);
+  dobles.listarProveedoresEmergencia.mockResolvedValue([]);
+  dobles.listarContactosEmergencia.mockResolvedValue([]);
+  const pagina = await PaginaEmergencias({ searchParams: SP });
+
+  expect(formasConAviso(pagina)).toHaveLength(3);
+  expect(
+    formasSoloPorChildren(pagina).map((f) => String(f.props.boton)),
+    'una forma de captura solo alcanzable por `children`: con cero datos no se pinta',
+  ).toEqual([]);
+});

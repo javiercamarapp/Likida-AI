@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Tarjeta } from './index';
@@ -63,24 +61,39 @@ describe('A47-FE-01 · el formulario de captura sobrevive al estado vacío', () 
   });
 });
 
-// El ancla de la pantalla que produjo la regresión: si alguien vuelve a meter un
-// formulario de captura como `children` de una tarjeta con vacío, esto truena.
-describe('A47-FE-01 · /dashboard/emergencias captura por la ranura, no por children', () => {
-  const fuente = readFileSync(
-    join(__dirname, '..', '..', 'dashboard', 'emergencias', 'page.tsx'), 'utf8',
-  );
+// ═══════════════════════════════════════════════════════════════════════════
+// A51-FE-03 — El ancla de la pantalla se mudó a `emergencias/page.test.tsx`,
+// que es el único sitio con el árbol REAL de la página, y aquí se queda el
+// contrato del componente, que es lo que de verdad protege la propiedad.
+//
+// La versión anterior exigía tres `formulario={` literales en el TEXTO de
+// `emergencias/page.tsx`. El rediseño F26 mudó la captura a `acciones` dentro
+// de un `CajonAlta` y el ancla se puso roja durante 327 commits sin que el
+// comportamiento se hubiera roto: la `Tarjeta` pinta `acciones` FUERA del
+// switch de `estado` (`tarjeta.tsx:51`), así que la captura sigue alcanzable
+// con cero datos, que es lo único que A47-FE-01 pedía.
+//
+// Se intentó reescribir el ancla como otro grep («la forma cuelga de una
+// ranura») y se comprobó que NO PRUEBA NADA: sacando la forma de la póliza a
+// los `children` y dejando un `acciones={<span/>}` vacío delante, las 6
+// seguían verdes, porque un grep posicional no distingue «dentro de la ranura»
+// de «después del texto de la ranura». Un ancla que no caza su propia mutación
+// es peor que ninguna: enseña que el defecto ya está cubierto.
+// ═══════════════════════════════════════════════════════════════════════════
 
-  it('las tres tarjetas con vacío pasan su formulario por `formulario=`', () => {
-    // Tres tarjetas de captura: póliza, proveedores, contactos.
-    expect((fuente.match(/formulario=\{/g) ?? []).length).toBe(3);
-    expect((fuente.match(/<FormaConAviso/g) ?? []).length).toBe(3);
-  });
-
-  it('ningún FormaConAviso queda fuera de una ranura `formulario`', () => {
-    // Cada `formulario={` tiene que abrirse ANTES del `<FormaConAviso` que le toca.
-    const ranuras = [...fuente.matchAll(/formulario=\{/g)].map((m) => m.index ?? -1);
-    const formas = [...fuente.matchAll(/<FormaConAviso/g)].map((m) => m.index ?? -1);
-    expect(formas).toHaveLength(ranuras.length);
-    for (let i = 0; i < formas.length; i += 1) expect(ranuras[i]).toBeLessThan(formas[i]);
+describe('A51-FE-03 · el contrato de la ranura que sobrevive al vacío', () => {
+  it('`acciones` se pinta en los cuatro estados; `children`, solo en ok', () => {
+    for (const estado of ['ok', 'vacio', 'error', 'cargando'] as const) {
+      const h = renderToStaticMarkup(
+        <Tarjeta titulo="Proveedores" estado={estado} mensaje="Sin proveedores" esqueleto={<div />}
+          acciones={<button type="button">Agregar proveedor</button>}>
+          <p>Grúas del Bajío</p>
+        </Tarjeta>,
+      );
+      // Por eso `CajonAlta` en `acciones` cumple A47-FE-01: la cabecera no
+      // depende del estado, así que una flota con cero datos SÍ tiene captura.
+      expect(h, `acciones en ${estado}`).toContain('Agregar proveedor');
+      if (estado !== 'ok') expect(h, `children en ${estado}`).not.toContain('Grúas del Bajío');
+    }
   });
 });
