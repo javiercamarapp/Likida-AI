@@ -50,7 +50,7 @@ create table if not exists public.tenant_whatsapp_linea (
   waba_id          text,
   numero_visible   text,
   etiqueta         text,
-  terminal_id      uuid references public.terminal(id) on delete set null,
+  terminal_id      uuid,
   proposito        text,
   principal        boolean not null default false,
   -- Cifrado POR LA APLICACIÓN (cofre v2). Nunca en claro.
@@ -68,6 +68,17 @@ create table if not exists public.tenant_whatsapp_linea (
   constraint tenant_whatsapp_linea_estado check (estado in ('pendiente', 'activa', 'pausada', 'token_vencido')),
   constraint tenant_whatsapp_linea_proposito check (proposito is null or proposito in ('servicio_cliente', 'operadores', 'oficina', 'general'))
 );
+
+-- La terminal es del MISMO tenant (FK compuesta con `terminal_id_tenant_key`, como 0298/0380): una línea no puede apuntar a la terminal de
+-- otro cliente. `on delete set null (terminal_id)` solo anula la terminal, no el tenant.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'tenant_whatsapp_linea_terminal_fk') then
+    alter table public.tenant_whatsapp_linea
+      add constraint tenant_whatsapp_linea_terminal_fk
+      foreign key (terminal_id, tenant_id) references public.terminal (id, tenant_id) on delete set null (terminal_id);
+  end if;
+end $$;
 
 -- Una sola principal ACTIVA por tenant (varias líneas por tenant: ya no hay índice de «una viva»).
 create unique index if not exists tenant_whatsapp_linea_una_principal

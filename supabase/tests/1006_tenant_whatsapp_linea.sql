@@ -102,6 +102,16 @@ begin
   if public.tenant_whatsapp_linea_hacer_principal('10060000-0000-4000-8000-0000000000ff') then
     raise exception '1006(d): una línea inexistente no debía poder ser principal';
   end if;
+  -- una línea de OTRO tenant no puede apuntar a la terminal de este (FK compuesta por tenant).
+  declare rebote boolean := false;
+  begin
+    begin
+      insert into public.tenant_whatsapp_linea (tenant_id, phone_number_id, token_cifrado, estado, terminal_id)
+        values (tb, '1006-pn-b-ajena', 'v2.x.y.z', 'pendiente', '10060000-0000-4000-8000-0000000000c1');
+    exception when foreign_key_violation then rebote := true;
+    end;
+    if not rebote then raise exception '1006(d): una línea no debía poder apuntar a la terminal de otro tenant'; end if;
+  end;
   -- borrar la terminal deja terminal_id nulo (no borra la línea).
   delete from public.terminal where id = '10060000-0000-4000-8000-0000000000c1';
   select * into r from public.tenant_whatsapp_linea where phone_number_id = '1006-pn-a2';
