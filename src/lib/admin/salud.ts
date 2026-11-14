@@ -330,6 +330,16 @@ export function esHuecoDeConfiguracion(valor: unknown): boolean {
 }
 
 /**
+ * Integración OPCIONAL que nadie ha contratado: el cron la declara (`detalle.noContratada`) solo cuando NO hay ni una sola de sus
+ * variables puestas (p. ej. `LIKIDA_SAT_PROVEEDOR` ausente, Cal.com sin API key ni secreto). Es un estado correcto, no un pendiente:
+ * sigue visible (`checks.crons='config_ausente'`, panel, log informativo) pero no genera correo al operador. Una configuración A MEDIAS
+ * (proveedor desconocido, host que no corresponde, solo uno de dos secretos) NO se declara así y sigue avisando.
+ */
+export function esIntegracionNoContratada(detalle: unknown): boolean {
+  return detalle !== null && typeof detalle === 'object' && (detalle as Record<string, unknown>).noContratada === true;
+}
+
+/**
  * Un `parcial` que es SOLO contrapresión de la bandeja: el runner está vivo (despachó al menos un agente, sin cortes seguidos) y frenó a los
  * demás porque hay piezas pendientes de aprobar (`aprobar es humano; el runner no fabrica encima`). Es un freno por diseño, no una regresión:
  * tumbar el health a 503 por esto dejaba «Salud de producción» en rojo sin que hubiera nada que arreglar en el código. Sigue visible

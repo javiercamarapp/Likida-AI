@@ -433,6 +433,19 @@ describe('OP-P4: un cron que nunca latió es degraded aunque haya un hueco decla
     expect((await r.json()).checks.crons).toBe('config_ausente');
     expect(alertarOperador).not.toHaveBeenCalled();
   });
+
+  // 14-nov-2026: `cron.config_ausente:escalar` (Cal.com) y `:descarga-sat` llegaban al correo del dueño por integraciones que nadie contrató.
+  it('integración NO CONTRATADA a propósito: sigue visible como config_ausente (200) pero NO manda correo de hueco', async () => {
+    latidos = frescos({
+      id: 'descarga-sat', ultimo_latido: new Date().toISOString(), estado: 'parcial',
+      detalle: { motivo: 'falta LIKIDA_SAT_PROVEEDOR en el servidor', configAusente: true, noContratada: true },
+    });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect((await r.json()).checks.crons).toBe('config_ausente');
+    expect(alertarHuecoConfiguracion).not.toHaveBeenCalled();
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

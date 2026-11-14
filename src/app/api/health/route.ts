@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { detalleLatidos, esHuecoDeConfiguracion, esContrapresionDeclarada, esApagadoPorInterruptor, diasApagado, DIAS_APAGADO_ALERTA, type CronId } from '@/lib/admin/salud';
+import { detalleLatidos, esHuecoDeConfiguracion, esContrapresionDeclarada, esApagadoPorInterruptor, esIntegracionNoContratada, diasApagado, DIAS_APAGADO_ALERTA, type CronId } from '@/lib/admin/salud';
 import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/alerta';
 import { resumenWebhookParaHealth, type ResumenWebhookHealth } from '@/lib/likida/liquidacion_externa/alertas_webhook';
 import { logger } from '@/lib/logger';
@@ -187,6 +187,11 @@ async function manejarGET(req: NextRequest) {
       else if (cronCheck !== 'degraded') cronCheck = configAusente.length > 0 ? 'config_ausente' : 'ok';
       if (configAusente.length > 0) {
         for (const c of configAusente) {
+          // Integración opcional que nadie ha contratado: estado correcto, visible en `checks.crons` y en el panel, sin correo ni warn en cada ping.
+          if (esIntegracionNoContratada(latidos[c].detalle)) {
+            logger.info('health.cron_integracion_no_contratada', { codigo: `cron_integracion_no_contratada:${c}`, ruta: `/api/cron/${c}` });
+            continue;
+          }
           // Código controlado por el catálogo: sobrevive al saneador sin
           // enviar la prosa potencialmente privada del motivo a Sentry.
           logger.warn('health.cron_config_ausente', {
