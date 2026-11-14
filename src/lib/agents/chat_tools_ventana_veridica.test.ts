@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- lee su propio fuente del repo para cotejarlo contra la descripción declarada */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 

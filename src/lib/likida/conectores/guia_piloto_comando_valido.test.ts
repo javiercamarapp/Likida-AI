@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- lee la guía y el script del propio repo, rutas relativas a import.meta.url */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 

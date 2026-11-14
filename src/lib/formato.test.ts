@@ -631,6 +631,7 @@ describe('una coordenada no se lee con el parser de dinero (A38-FE-01)', () => {
 
   it('los archivos que capturan lat/lng importan parsearCoordenadaMx', () => {
     const fuera = candidatos.filter((f) => {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- `f` sale del barrido de candidatos del propio repo
       const src = sinComentarios(readFileSync(f, 'utf8'));
       const capturaCoordenada = /\blat:\s|\blng:\s/.test(src);
       return capturaCoordenada && !src.includes('parsearCoordenadaMx');
