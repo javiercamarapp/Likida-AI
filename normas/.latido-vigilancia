@@ -1,36 +1,42 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-07 (sábado)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
+rango_pendiente: 2026-09-11 — 2026-11-06 (57 días, ~8 viernes de cuota
+  de diésel, incluye la deriva trimestral del 01-oct) sin barrer. Sigue
   arrancando en 09-11 para la próxima corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable_hoy — hoy no es viernes; los ~8 viernes entre
+  11-sep y 06-nov tampoco se pudieron verificar (mismo bloqueo).
+etag_sat: no_aplica_hoy — no es lunes. Los lunes 14/21/28-sep,
+  05/12/19/26-oct y 02-nov tampoco se pudieron verificar.
+deriva_ley_check: no_aplica_hoy — no es día 1 de trimestre. El
+  01-oct-2026 (que sí aplicaba) tampoco se pudo verificar.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — el bloqueo de red reportado el 20-sep sigue exactamente igual
+  48 días después, y en el ínterin nadie volvió a tocar este latido: el
+  historial de git muestra el archivo arrastrado sin cambios por varios
+  commits masivos no relacionados (ninguno con mensaje de vigilancia),
+  así que no hay evidencia de que la rutina se haya ejecutado entre el
+  20-sep y hoy, bloqueada o no. Re-probado hoy con curl directo por
+  HTTPS_PROXY contra sidofqa.segob.gob.mx (notas y diarios/porFecha):
+  "CONNECT tunnel failed, response 403" contra los tres. Para descartar
+  que sea cosa del SIDOF, se probó también www.google.com,
+  www.sat.gob.mx y www.diputados.gob.mx — LOS TRES también 403 en el
+  CONNECT. El agente proxy (/__agentproxy/status) confirma política de
+  egreso activa con allowlist muy corta (api.anthropic.com, registries
+  de paquetes, rangos privados) — ningún dominio público normal pasa.
+  recentRelayFailures del propio status muestra rechazos 403 en curso
+  contra decenas de otros hosts (api.salesforce.com, mcp.zoom.us, etc.),
+  o sea el bloqueo es de política de este entorno programado para TODO
+  egreso saliente no listado, no un problema puntual del SIDOF. No se
+  leyó ninguna nota del DOF. No se tocó ninguna ficha de normas/ (39
+  fichas sin verificar en esta corrida). Requiere intervención humana:
+  permitir sidofqa.segob.gob.mx, sat.gob.mx y diputados.gob.mx (ver
+  references/fuentes.md) en la política de egreso de este entorno
+  programado — o mover esta rutina a un entorno con esos dominios
+  permitidos — y revisar por qué no hay latidos entre el 20-sep y el
+  07-nov para confirmar si el cron dejó de disparar o si solo dejó de
+  comitearse.
