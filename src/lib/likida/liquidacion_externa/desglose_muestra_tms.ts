@@ -43,7 +43,12 @@
 //   · Conceptos: texto libre. Se reconocen con `normalizarConcepto` y un catálogo de alias (abajo). Descripción desconocida
 //     ⇒ el renglón SE CONSERVA y la bitácora pasa a revisión (`concepto_desconocido`); un concepto conocido del lado
 //     contrario (p. ej. Fonacot en Percepciones) también.
-//   · Campos extra desconocidos se ignoran. Envoltorio configurable: arreglo directo, `{ data: [...] }` (o la ruta que se
+//   · SINÓNIMOS DE MONTO (14-nov-2026, estrictos): en Percepciones el monto es `Monto` y, si no viene, `Cargo`; en Deducciones es `Monto` y,
+//     si no viene, `Abono`. «Viene» = presente y distinto de null. Si vienen `Monto` y el sinónimo con valores DISTINTOS ⇒ revisión
+//     `monto_ambiguo` (no se adivina, no se suma). El signo lo da el bloque, nunca el nombre del campo. `Abono` en Percepciones o
+//     `Cargo` en Deducciones NO son sinónimos (se avisan como campo desconocido). Negativo/cero/decimales siguen las reglas de arriba.
+//   · Campos extra desconocidos NO cambian la aceptación (se ignoran), pero se AVISAN en `advertencias` (código `campo_desconocido`,
+//     solo el nombre del campo, jamás su valor; sin duplicados; máximo `MAX_ADVERTENCIAS_BITACORA`). Envoltorio configurable: arreglo directo, `{ data: [...] }` (o la ruta que se
 //     indique) o ambos (`auto`).
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -80,7 +85,7 @@ export type CodigoRevision =
   | 'neto_invalido' | 'total_no_cuadra' | 'ajuste_redondeo_excesivo'
   | 'unidad_invalida' | 'fecha_invalida' | 'fechas_invertidas' | 'bitacora_repetida'
   | 'estructura_invalida' | 'sin_renglones' | 'descripcion_vacia'
-  | 'monto_nulo' | 'monto_no_numerico' | 'monto_negativo' | 'monto_decimales' | 'monto_excesivo'
+  | 'monto_nulo' | 'monto_ambiguo' | 'monto_no_numerico' | 'monto_negativo' | 'monto_decimales' | 'monto_excesivo'
   | 'concepto_desconocido' | 'concepto_lado_inesperado' | 'contrato_interno';
 
 export interface MotivoRevision {
@@ -111,6 +116,45 @@ export interface ConfigMuestraTms {
   conceptosAdicionales?: CatalogoConceptos;
 }
 
+export interface AdvertenciaMuestra {
+  codigo: 'campo_desconocido';
+  /** Nombre del campo fuera del contrato (`Poliza`, `Percepciones[].Foo`); nunca su valor. */
+  campo: string;
+}
+
+/** Tope de advertencias por bitácora. */
+export const MAX_ADVERTENCIAS_BITACORA = 10;
+const MAX_LARGO_CAMPO_ADVERTENCIA = 40;
+
+const CAMPOS_BITACORA_CONOCIDOS: ReadonlySet<string> = new Set([
+  'BitacoraID', 'Operador', 'Unidad', 'Fecha', 'Percepciones', 'Deducciones', 'NumeroEmpleado', 'TipoOperador', 'Poliza', 'NumeroPago', 'Neto', 'Folio',
+  'NumeroLiquidacion', // ignorado a propósito y documentado (ver cabecera): no es una errata del integrador
+]);
+const CAMPOS_FECHA_CONOCIDOS: ReadonlySet<string> = new Set(['Inicia', 'Termina']);
+const SINONIMO_MONTO = { Percepciones: 'Cargo', Deducciones: 'Abono' } as const;
+
+/** Nombres de campo fuera del contrato en una bitácora. Solo nombres (recortados y sin caracteres de control), sin duplicados, con tope. */
+export function advertenciasDeCampos(raw: Record<string, unknown>): AdvertenciaMuestra[] {
+  const vistos = new Set<string>();
+  const salida: AdvertenciaMuestra[] = [];
+  const avisar = (ruta: string) => {
+    if (salida.length >= MAX_ADVERTENCIAS_BITACORA) return;
+    const campo = ruta.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, MAX_LARGO_CAMPO_ADVERTENCIA);
+    if (campo === '' || vistos.has(campo)) return;
+    vistos.add(campo);
+    salida.push({ codigo: 'campo_desconocido', campo });
+  };
+  for (const k of Object.keys(raw)) if (!CAMPOS_BITACORA_CONOCIDOS.has(k)) avisar(k);
+  if (esObjeto(raw.Fecha)) for (const k of Object.keys(raw.Fecha)) if (!CAMPOS_FECHA_CONOCIDOS.has(k)) avisar(`Fecha.${k}`);
+  for (const bloque of ['Percepciones', 'Deducciones'] as const) {
+    const lista = raw[bloque];
+    if (!Array.isArray(lista)) continue;
+    const permitidos = new Set(['Descripcion', 'Monto', SINONIMO_MONTO[bloque]]);
+    for (const r of lista) if (esObjeto(r)) for (const k of Object.keys(r)) if (!permitidos.has(k)) avisar(`${bloque}[].${k}`);
+  }
+  return salida;
+}
+
 export interface ResultadoBitacoraMuestra {
   /** `BitacoraID` como texto; vacío si no se pudo leer. */
   bitacoraId: string;
@@ -128,6 +172,8 @@ export interface ResultadoBitacoraMuestra {
   netoCentavos: number | null;
   /** Categoría de cada renglón reconocido (`otros` para diésel/urea; la renombra la config del contralor). */
   categorias: Array<{ donde: string; categoria: string }>;
+  /** Avisos que NO cambian la aceptación (hoy: campos fuera del contrato). Vacío si no hay. */
+  advertencias: AdvertenciaMuestra[];
 }
 
 export class EnvoltorioInvalido extends CampoInvalido {
@@ -331,13 +377,16 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
   const ausentes: string[] = [];
   const motivo = (codigo: CodigoRevision, campo: string, detalle: string) => { revision.push({ codigo, campo, detalle }); };
   const vacio = (bitacoraId: string): ResultadoBitacoraMuestra => ({
-    bitacoraId, desglose: null, revision, requiereRevision: true, noDisponible: [...NO_DISPONIBLE_MUESTRA, ...ausentes], ignorados, periodoMx: null, netoCentavos: null, categorias,
+    bitacoraId, desglose: null, revision, requiereRevision: true, noDisponible: [...NO_DISPONIBLE_MUESTRA, ...ausentes], ignorados, periodoMx: null, netoCentavos: null, categorias, advertencias,
   });
+  let advertencias: AdvertenciaMuestra[] = [];
 
   if (!esObjeto(raw)) {
     motivo('fila_invalida', 'cuerpo', 'La fila no es un objeto.');
     return vacio('');
   }
+
+  advertencias = advertenciasDeCampos(raw);
 
   // BitacoraID
   const bitacora = bitacoraIdDe(raw.BitacoraID);
@@ -411,8 +460,17 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
       const donde = `${clave}[${i}]`;
       if (!esObjeto(r)) { motivo('estructura_invalida', donde, 'El renglón tiene que ser un objeto.'); montosMalos = true; return; }
       const desc = typeof r.Descripcion === 'string' ? r.Descripcion.trim() : '';
-      const m = centavosDeMontoMuestra(r.Monto);
-      if (!m.ok) { motivo(m.codigo, `${donde}.Monto`, m.detalle); montosMalos = true; return; }
+      const sinonimo = SINONIMO_MONTO[clave];
+      const hayMonto = r.Monto !== undefined && r.Monto !== null;
+      const haySinonimo = r[sinonimo] !== undefined && r[sinonimo] !== null;
+      if (hayMonto && haySinonimo && r.Monto !== r[sinonimo]) {
+        motivo('monto_ambiguo', `${donde}.Monto`, `Vienen Monto y ${sinonimo} con valores distintos; manda solo uno (no se adivina ni se suman).`);
+        montosMalos = true;
+        return;
+      }
+      const campoMonto = !hayMonto && haySinonimo ? sinonimo : 'Monto';
+      const m = centavosDeMontoMuestra(r[campoMonto]);
+      if (!m.ok) { motivo(m.codigo, `${donde}.${campoMonto}`, m.detalle); montosMalos = true; return; }
       if (m.centavos === 0) { ignorados.push({ donde, motivo: 'monto en cero' }); return; }
       if (desc === '') { motivo('descripcion_vacia', `${donde}.Descripcion`, 'El renglón no trae descripción.'); montosMalos = true; return; }
       const c = reconocer(desc, config.conceptosAdicionales);
@@ -420,7 +478,7 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
       else {
         categorias.push({ donde, categoria: c.categoria });
         if (c.lado !== 'ambos' && c.lado !== lado) motivo('concepto_lado_inesperado', `${donde}.Descripcion`, `Concepto «${c.categoria}» llega en ${clave}; normalmente va del otro lado.`);
-        if (c.categoria === 'ajuste_redondeo' && m.centavos >= 100) motivo('ajuste_redondeo_excesivo', `${donde}.Monto`, 'Un ajuste de redondeo («Dif en registro») es de centavos (menos de 1.00); este no lo es: revisar en el origen.');
+        if (c.categoria === 'ajuste_redondeo' && m.centavos >= 100) motivo('ajuste_redondeo_excesivo', `${donde}.${campoMonto}`, 'Un ajuste de redondeo («Dif en registro») es de centavos (menos de 1.00); este no lo es: revisar en el origen.');
       }
       centavosPorBloque[lado] += m.centavos;
       bloques[lado].push({ concepto: desc, monto: m.centavos / 100 });
@@ -487,7 +545,7 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
   }
   return {
     bitacoraId: bitacora, desglose, revision, requiereRevision: revision.length > 0, noDisponible: [...NO_DISPONIBLE_MUESTRA, ...ausentes], ignorados, periodoMx,
-    netoCentavos: netoCalculado, categorias,
+    netoCentavos: netoCalculado, categorias, advertencias,
   };
 }
 

@@ -20,11 +20,11 @@ Revisado contra `desgloses/route.ts`, `desglose_muestra_recepcion.ts`, `desglose
 | Punto acordado | Qué hace hoy | Veredicto |
 |---|---|---|
 | Arreglos `Percepciones` / `Deducciones` | Cada renglón es `{ "Descripcion": texto, "Monto": número }`. Los dos bloques traen montos **positivos**; el bloque da el signo. Monto 0 se ignora con nota; negativo, nulo, texto o más de 2 decimales mandan **esa** bitácora a revisión. | Cumple. |
-| Cargo mayor que cero / abono mayor que cero | El campo que se lee es `Monto`. Los nombres `Cargo` y `Abono` **no se leen**: un renglón con `Cargo` y sin `Monto` queda en revisión con `monto_nulo`. | **Diferencia a confirmar.** Si el origen manda `Cargo` en percepciones y `Abono` en deducciones, aceptarlos como sinónimo de `Monto` es un cambio de una línea más su prueba, compatible hacia atrás. No se hizo porque la muestra del 5-nov trae `Monto`. |
+| Cargo mayor que cero / abono mayor que cero | Resuelto (14-nov-2026). En `Percepciones` el monto es `Monto` y, si no viene, `Cargo`; en `Deducciones`, `Monto` y, si no viene, `Abono`. Con `Monto` y el sinónimo **distintos**: `en_revision` con `monto_ambiguo` (no se adivina ni se suma). El signo lo da el arreglo; `Abono` en percepciones o `Cargo` en deducciones no valen. Sin sinónimos, igual que antes (`monto_nulo`). | Cumple. Compatible hacia atrás. |
 | Ráfaga de 70 | Tope de 100 bitácoras, 100 renglones por bloque y 2 MB por petición (101 es 400 sin procesar nada). Límite de 240 peticiones por minuto por flota. | Cumple en cantidad. **Riesgo de tiempo:** la ruta procesa en serie y tiene 60 s de límite; cada bitácora real genera su Excel y lo sube a almacenamiento. 70 en una sola petición real no está medido. Recomendación: dos peticiones de 35 (el script lo hace por omisión). En simulación no hay Excel ni almacenamiento y 70 es holgado. |
 | Reintentos idempotentes | Clave `BIT-<BitacoraID>`. Misma clave y mismo contenido: estado `idempotente`, no inserta ni reenvía. Un fallo de infraestructura a mitad es 500 y es seguro reintentar **todo**. | Cumple. |
 | Mismo `BitacoraID` con otro contenido | No sobrescribe: estado `correccion_pendiente` y una persona decide. | Cumple. El formato de muestra no puede mandar una corrección explícita (`-R<n>`); solo el contrato interno lleva `correccion`. |
-| Campos desconocidos | Dentro de una bitácora se **ignoran** (el formato de muestra los tolera). En el sobre (`formato`, `version`, `bitacoras`) un campo extra es 400. Un cuerpo que mezcla formato de muestra y contrato interno es 400. | Cumple. Ojo: un nombre de campo mal escrito (por ejemplo `Poliza` como `Póliza`) no da error; la bitácora simplemente queda sin ese dato. Por eso la etapa B compara campo por campo. |
+| Campos desconocidos | Dentro de una bitácora se **ignoran** (la aceptación no cambia), pero ahora se **avisan**: `resultados[i].advertencias` = `[{ codigo: 'campo_desconocido', campo }]`, solo el nombre del campo (nunca el valor), máx. 10 por bitácora, sin repetidos; la llave solo sale si hay alguna. En el sobre (`formato`, `version`, `bitacoras`) un campo extra sigue siendo 400. Un cuerpo que mezcla formato de muestra y contrato interno es 400. | Cumple. Una errata como `Póliza` ya no pasa en silencio: queda en `advertencias`. La etapa B puede apoyarse en ellas además de la comparación campo por campo. |
 | Errores claros por registro | `resultados` trae una entrada por bitácora, en el orden enviado: `indice`, `bitacora`, `folio`, `estado` y `motivos` (código y nombre del campo, nunca valores personales). Una bitácora mala no tumba a las demás. | Cumple con el formato de muestra. El contrato interno, en cambio, valida **todo antes de escribir** y un solo error es 400 para el lote completo. |
 | Conceptos sin cambiar | El catálogo de conceptos es cerrado (`CATALOGO_CONCEPTOS_MUESTRA`). Un concepto fuera del catálogo se **conserva** pero manda la bitácora a revisión (`concepto_desconocido`). El Excel muestra la `Descripcion` original. | Cumple, con condición: el catálogo real de RH lo entrega el cliente y se agrega con un cambio de código. |
 | Seis tipos de operador | `foraneo`, `local`, `permisionario`, `rabon`, `posturero`, `cargador` (tolera mayúsculas y acentos). Por omisión solo foráneo y local reciben correo; los demás quedan `retenida` con `tipo_sin_regla` hasta habilitarlos en la configuración de la flota. | Cumple. |
@@ -38,8 +38,10 @@ encendidos, y la flota con «Activar el envío» y canal `correo`. Para que acti
 poner antes una **fecha de corte** futura en la configuración: toda bitácora cuyo periodo termine antes de esa fecha nace con sus
 entregas en `omitida`. El cambio de variable de plataforma es un despliegue; agruparlo con otros cambios (regla de builds).
 
-Conclusión: **no se cambió código de la ruta.** La única diferencia real es `Cargo`/`Abono` frente a `Monto` (a confirmar con el
-cliente) y el riesgo de tiempo de una petición real de 70 (se mitiga con dos peticiones y se mide en la etapa D).
+Conclusión: la diferencia de `Cargo`/`Abono` frente a `Monto` quedó cerrada con sinónimos estrictos y los campos desconocidos ahora
+se avisan en `advertencias` (ambos cambios aditivos, sin renombrar nada). Lo que sigue abierto es el riesgo de tiempo de una
+petición real de 70 (se mitiga con dos peticiones y se mide en la etapa D) y confirmar con el cliente que `Cargo`/`Abono` es lo que
+manda el origen.
 
 ## 3. Plan por etapas
 
@@ -183,7 +185,9 @@ Sobre: `{ "formato": "muestra-tms", "version": 1, "bitacoras": [ … ] }` o una 
 | `en_revision` `operador_no_coincide` | Nombre y número apuntan a personas distintas | Corregir en el origen. |
 | `en_revision` `concepto_desconocido` | Descripción que no está en el catálogo | Agregarla al catálogo (cambio de código) sin renombrarla. |
 | `en_revision` `concepto_lado_inesperado` | Concepto de deducción en percepciones o al revés | Corregir el lado en el origen. |
-| `en_revision` `monto_nulo` / `monto_no_numerico` | Renglón sin `Monto` (o con `Cargo`/`Abono`), o monto como texto | Mandar `Monto` numérico, o acordar el alias. |
+| `en_revision` `monto_nulo` / `monto_no_numerico` | Renglón sin `Monto` ni su sinónimo (`Cargo` en percepciones, `Abono` en deducciones), `Abono`/`Cargo` del lado contrario, o monto como texto | Mandar `Monto` (o el sinónimo del lado correcto) numérico. |
+| `en_revision` `monto_ambiguo` | Vienen `Monto` y `Cargo`/`Abono` con valores distintos | Mandar solo uno de los dos. |
+| `advertencias` `campo_desconocido` | Un campo que no pertenece al contrato (p. ej. `Póliza` mal escrito); no cambia el estado | Corregir el nombre en el origen; el campo se ignoró. |
 | `en_revision` `monto_decimales` / `monto_negativo` | Más de 2 decimales o signo negativo | Mandar positivo con dos decimales; el bloque da el signo. |
 | `en_revision` `total_no_cuadra` | `Neto` distinto de percepciones menos deducciones | Corregir el neto o quitarlo. |
 | `en_revision` `fecha_invalida` / `fechas_invertidas` | Formato de fecha o `Termina` anterior a `Inicia` | `yyyy-MM-dd HH:mm:ss`. |
