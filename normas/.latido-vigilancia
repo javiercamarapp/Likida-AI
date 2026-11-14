@@ -1,36 +1,47 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-13 (viernes)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-11-12 (63 días, ~9 viernes de cuota
+  de diésel, incluye la ventana trimestral del 01-oct) sin barrer.
+  Sigue arrancando en 09-11 para la próxima corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable_hoy — hoy es viernes pero el bloqueo de red
+  impide verificar la cuota de esta semana y las ~9 semanas previas
+  desde el 05-sep.
+etag_sat: no_evaluable — hoy no es lunes, y aunque lo fuera el mismo
+  bloqueo de red lo impediría (ver abajo).
+deriva_ley_check: no_aplica_hoy — no es día 1 de trimestre (próxima:
+  01-ene-2027); la ventana del 01-oct-2026 ya pasó sin poder correrse.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — CUARTA corrida consecutiva bloqueada (12-sep, 15-sep y 20-sep
+  reportaron el mismo corte; esta corrida lo confirma 54 días después,
+  sin ningún latido intermedio registrado). Probado de nuevo con dos
+  rutas independientes: curl directo por HTTPS_PROXY y la herramienta
+  WebFetch (infraestructura de Anthropic, no el proxy de la sesión) —
+  AMBAS bloqueadas. curl: "CONNECT tunnel failed, response 403" contra
+  sidofqa.segob.gob.mx/dof/sidof/notas, www.sat.gob.mx/minisitio/...,
+  www.diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf, y www.google.com como
+  control (también 403 — confirma que es un bloqueo de política general
+  del entorno, no que el SIDOF/SAT/diputados estén caídos o bloqueados
+  específicamente). WebFetch: "getaddrinfo ENOTFOUND sidofqa.segob.gob.mx"
+  — el dominio no está en la lista de hosts permitidos de esta sesión en
+  absoluto. /root/.ccr/__agentproxy/status confirma que el proxy SÍ
+  funciona (atiende otros dominios, p.ej. GitHub — `gh api` y
+  `git ls-remote origin` respondieron con éxito en esta misma corrida) y
+  que el rechazo es "connect_rejected" por política, no una caída de red.
+  Conclusión: esta rutina programada corre en un entorno cuya lista de
+  egreso NO incluye sidofqa.segob.gob.mx, sat.gob.mx ni diputados.gob.mx
+  — los tres dominios que `references/fuentes.md` identifica como
+  únicas fuentes vivas. Sin esos dominios habilitados, esta rutina no
+  puede ejecutar ninguna de sus tres vigilancias (diaria, semanal,
+  trimestral) en ESTE tipo de entorno, por diseño del sandbox, no por un
+  fallo transitorio. Requiere intervención humana: permitir
+  sidofqa.segob.gob.mx, www.sat.gob.mx y www.diputados.gob.mx (y
+  cualquier otro de references/fuentes.md) en la política de egreso del
+  entorno programado que dispara este trigger, o mover el trigger a un
+  entorno con esos dominios permitidos. No se leyó ninguna nota del DOF
+  en ninguna corrida registrada de esta rutina hasta hoy. No se tocó
+  ninguna ficha de normas/.
