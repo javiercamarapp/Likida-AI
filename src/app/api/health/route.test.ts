@@ -69,7 +69,7 @@ describe('/api/health', () => {
     expect(r.status).toBe(503);
     const c = await r.json();
     expect(c.ok).toBe(false);
-    expect(Object.keys(c).sort()).toEqual(['checks', 'hora', 'migracion', 'ok', 'status', 'version']);
+    expect(Object.keys(c).sort()).toEqual(['checks', 'hora', 'migracion', 'ok', 'status', 'version', 'webhooks']);
     expect(c.status).toBe('degraded');
     // AUDITORÍA 24, OP-P4: once crons que nunca latieron no son «unknown»:
     // son crons muertos, y el operador se entera por su canal.
@@ -92,6 +92,22 @@ describe('/api/health', () => {
     const c = await r.json();
     expect(r.status).toBe(200);
     expect(c).toMatchObject({ ok: true, status: 'ok', checks: { db: 'ok', crons: 'ok' } });
+  });
+
+  it('refleja las alertas del webhook de liquidaciones SIN degradar el status (un cliente no tumba el health)', async () => {
+    dbFalla = false;
+    const ahora = new Date().toISOString();
+    const webhookLiq = {
+      evaluadoEn: ahora, fallos: { estado: 'alerta', cincoxx: 4, otros: 0 }, token: { estado: 'ok', llavesInvalidas: 0 },
+      silencio: { estado: 'ok', umbralHoras: 20, flotas: [] }, avisado: { fallos: false },
+    };
+    latidos = [...CRONS].map((id) => ({ id, ultimo_latido: ahora, estado: 'ok', ...(id === 'guardia' ? { detalle: { webhookLiq } } : {}) }));
+    const r = await GET(peticion());
+    const c = await r.json();
+    expect(r.status).toBe(200);
+    expect(c.status).toBe('ok');
+    expect(c.webhooks.liquidaciones).toMatchObject({ estado: 'alerta', alertas: ['fallos'], sinAvisar: true, evaluadoEn: ahora });
+    expect(c.webhooks.liquidaciones.canal).toEqual({ correo: expect.any(Boolean), whatsapp: expect.any(Boolean) });
   });
 
   beforeEach(() => { latidos = []; permitido = true; });
