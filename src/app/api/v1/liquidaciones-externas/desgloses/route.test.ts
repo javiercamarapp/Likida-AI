@@ -224,7 +224,7 @@ describe('el resultado', () => {
     await postear({ desgloses: [DESGLOSE()] });
     const args = recibir.mock.calls[0];
     expect(args[2]).toBeUndefined(); // dependencias por omisión: solo recibe y programa
-    expect(args[3]).toEqual({ sistemaOrigen: 'desglose-bitacora-api' });
+    expect(args[3]).toEqual({ sistemaOrigen: 'desglose-bitacora-api', cacheConfig: expect.any(Map) }); // la configuración se lee una vez por petición
   });
 });
 
