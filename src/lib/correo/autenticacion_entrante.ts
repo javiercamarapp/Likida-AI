@@ -45,7 +45,13 @@ function metodosDe(valor: string): Metodo[] {
       const i = f.indexOf('=');
       if (i <= 0) continue;
       const clave = f.slice(0, i).toLowerCase();
-      if (clave === 'smtp.mailfrom' || clave === 'header.d' || clave === 'header.i' || clave === 'header.from') {
+      // A48-SEG-01: `envelope-from` es la misma cosa que `smtp.mailfrom` escrita
+      // como la escriben varios MTA (y como la escribe `Received-SPF`). Sin
+      // leerla, el método se quedaba sin dominio y `alineado(null)` lo daba por
+      // alineado: la MISMA suplantación se rechazaba con formato Google y se
+      // daba por verificada con el otro. La política de alineación no puede
+      // depender de cómo escriba la clave el proveedor.
+      if (clave === 'smtp.mailfrom' || clave === 'envelope-from' || clave === 'header.d' || clave === 'header.i' || clave === 'header.from') {
         const v = f.slice(i + 1).replace(/[;"]/g, '').toLowerCase();
         dominio = v.includes('@') ? v.slice(v.lastIndexOf('@') + 1) : v.replace(/^@/, '');
         break;

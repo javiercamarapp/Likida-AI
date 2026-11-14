@@ -63,7 +63,7 @@ function conTotal(total: number | null): { total: number | null; nota?: string }
 const PARAM_MODO = {
   type: 'object',
   properties: {
-    modo: { type: 'string', enum: ['semanal', 'mensual', 'historico'], description: 'Ventana: últimos 7 días, últimos 30, o todo el histórico.' },
+    modo: { type: 'string', enum: ['semanal', 'mensual', 'historico'], description: 'Ventana EXACTA, en semanas (`SEMANAS_POR_MODO` de analytics.ts): `semanal` = últimas 5 semanas; `mensual` = últimas 13 semanas (~3 meses); `historico` = últimas 52 semanas (~1 año) en serie_gasto y serie_liquidado, y SIN cota (todo el histórico de la flota) en top_rutas. Al declararle la ventana al usuario, di estas semanas y no «la última semana» ni «el último mes».' },
   },
   required: ['modo'],
   additionalProperties: false,

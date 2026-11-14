@@ -1279,6 +1279,7 @@ export const resto = {
   'op.mf_en_riesgo': 'En riesgo / perdido · {ventana}',
   'op.mf_recuperable': 'Recuperable pidiendo factura · {ventana}',
   'op.mf_causas': 'Causas principales del ejercicio',
+  'op.mf_causas_no_leidas': 'No se pudieron leer las causas del ejercicio. No es que no haya: la lectura falló.',
   'op.sf_titulo': 'No hay ninguna flota dada de alta.',
   'op.sf_cuerpo': 'Este panel apunta a <code>{tenantId}</code> (el uuid de <code>DEMO_TENANT_ID</code>), y esa fila no existe en la tabla <code>tenant</code>. Lo de abajo son ceros de una flota inexistente, no cifras de un cliente: sirve para mirar cómo se ve el panel, no para leer un número.',
   'op.sf_alta': 'Dar de alta una flota',

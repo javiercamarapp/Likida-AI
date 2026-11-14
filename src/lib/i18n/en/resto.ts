@@ -1281,6 +1281,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.mf_en_riesgo': 'At risk / lost · {ventana}',
   'op.mf_recuperable': 'Recoverable by requesting an invoice · {ventana}',
   'op.mf_causas': 'Top causes this fiscal year',
+  'op.mf_causas_no_leidas': 'The causes for this fiscal year could not be read. It is not that there are none: the read failed.',
   'op.sf_titulo': 'No fleet has been registered.',
   'op.sf_cuerpo': 'This panel points to <code>{tenantId}</code> (the uuid of <code>DEMO_TENANT_ID</code>), and that row does not exist in the <code>tenant</code> table. What is below are zeros from a fleet that does not exist, not a customer\'s figures: it is for seeing how the panel looks, not for reading a number.',
   'op.sf_alta': 'Register a fleet',

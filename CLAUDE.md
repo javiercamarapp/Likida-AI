@@ -9,16 +9,23 @@ entrega la liquidación en PDF.
 - `/admin` — la consola interna de Likida (superadmin). Costo de IA, flotas, agentes.
   Cruza TODOS los tenants a propósito (`lib/admin/negocio.ts` es la única
   función con ese permiso).
-- `/dashboard` — el panel del CLIENTE (flota_admin, contador, encargado). ~31
-  páginas,
-  todas filtradas al tenant. Reusa los componentes de `/admin` (`ui/kit`,
-  `ui/graficas`, `charts`) — no hay una segunda librería de UI.
+- `/dashboard` — el panel del CLIENTE (flota_admin, contador, encargado).
+  **73 páginas** (`find src/app/dashboard -name page.tsx | wc -l`), todas
+  filtradas al tenant. **La librería de UI viva es `src/app/ui-v2/`**: en
+  `/dashboard` hay **433** imports de `ui-v2` contra **4** referencias al kit
+  v1 de `/admin` (`grep -rn "ui-v2/" src/app/dashboard --include=*.tsx | wc -l`).
+  Hasta la ronda 52 este párrafo decía lo contrario —«reusa los componentes de
+  `/admin` (`ui/kit`, `ui/graficas`, `charts`), no hay una segunda librería»—
+  y mandaba a cada agente a la librería equivocada; `admin/ui/charts` ni
+  siquiera existe. Para una pantalla nueva: `ui-v2`.
 
 ## Reglas que NO se rompen
 
 **Nunca inventar una cifra.** Es la regla que define al producto: el contralor
 va a cruzar lo que ve contra su PDF y su contador. Si no hay dato real:
-- se dice qué falta y por qué (`dashboard/pendiente.tsx`, `EstadoVacio`),
+- se dice qué falta y por qué (`EstadoVacio`; el antiguo
+  dashboard/pendiente.tsx SE BORRÓ en `07978e98` y esta línea siguió
+  nombrándolo como si existiera hasta la ronda 52),
 - no se rellena con datos de ejemplo, ni con ceros que parezcan medición.
 Una estimación se puede mostrar, pero declarada y con su supuesto a la vista
 (ver `MINUTOS_CAPTURA_MANUAL` en `lib/likida/analytics.ts`).
@@ -32,8 +39,10 @@ fiscal que se lee distinto en dos pantallas se lee como dos cálculos.
 
 **Fallar cerrado y decirlo.** supabase-js reporta errores POR VALOR: sin
 comprobar `error` explícitamente, una base caída se lee como "no hay nada", y
-el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
-`traerTodo()` en `analytics.ts` (PostgREST recorta a 1,000 filas en silencio).
+el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()`
+(`lib/likida/pg.ts:33`) y `traerTodo()` (`pg.ts:203`) — **viven en `pg.ts`, no
+en `analytics.ts`**, que ni siquiera importa `traerTodo` (PostgREST recorta a
+1,000 filas en silencio).
 
 ## Trampas ya pisadas (no volver a caer)
 
@@ -44,7 +53,10 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 - `wa_mensaje_procesado` NO tiene `tenant_id`: no se puede atribuir a una flota.
 - `viaje.estatus` solo admite `abierto | en_cuadre | liquidado` (constraint
   `viaje_estatus_dominio`). `app_user.rol`: superadmin, flota_admin, contador,
-  encargado, vendedor (`operador` se retiró en la 0086; `vendedor` entró en la 0105).
+  encargado, vendedor, **nomina** (`operador` se retiró en la 0086; `vendedor`
+  entró en la 0105; **`nomina` entró en la 0949** — son SEIS, no cinco).
+  De ese dominio depende `is_superadmin()` y con ella la RLS de las tablas de
+  negocio: la lista corta hacía que un agente diera por inválido un rol real.
 - `cliente`, `unidad`, `tarifa`, `factura_emitida`, `pago_recibido`, `posicion` y
   `geocerca` SÍ EXISTEN (migs. 0047-0050), y `viaje` tiene `km_recorridos` e
   `ingreso_flete`. **Están vacías, pero YA NO por falta de escritor** — la
@@ -69,9 +81,14 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
     operadores, unidades y jefes de tráfico (`app_user.terminal_id`, 0460) y las
     plantillas de carga masiva traen la columna «patio». Un jefe con patio solo
     corrige lo de su patio (`lib/auth/patio.ts`).
-  - Siguen SIN escritor: `geocerca` (solo lectores: estadías, briefing,
-    facturación), `portal_credencial`, `invitacion`, y las muertas de facto
-    `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
+  - **`geocerca` TAMBIÉN tiene escritor desde el 1-oct-2026** (la misma ola W2
+    que le dio escritor a `terminal`, y esta línea tardó seis semanas en
+    decirlo): `peajes/repo.ts:846` hace el upsert y `:858` el alta/baja, desde
+    `/dashboard/agentes/peajes/configuracion`; y la RPC
+    `importar_sitios_conductor` la escribe desde `conductor/repo_validacion.ts:148`.
+    Si vas a «construir el escritor de geocercas», ya existe.
+  - Siguen SIN escritor: `portal_credencial`, `invitacion`, y las muertas de
+    facto `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
   - La base entera está en cero (0 viajes, 14-ago-2026) porque **no hay
     clientes en producción todavía**, no porque falte código.
 
@@ -103,8 +120,16 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 ## Cómo se verifica
 
 1. `npx tsc --noEmit -p .` y `npx eslint src/` — limpios.
-2. `npx vitest run` — ~2,880 pruebas (la cifra crece; no la cites de memoria).
-3. **Mirar el render.** Medir no sustituye a mirar. Las páginas están detrás de
+2. **`npm run lint:ratchet` — es LA COMPUERTA REAL.** Es lo que corren
+   `ci.yml:72` y `deploy-preview-promote.yml:182`; `npx eslint src/` puede dar
+   exit 0 mientras ésta da exit 1, y entonces CI bloquea aunque el paso 1 se
+   vea verde. Pide `npm ci` antes. **No la "arregles" con
+   `npm run lint:ratchet -- --write`**: `lint-ratchet.mjs:49-53` reescribe la
+   línea base con lo medido, sin comparar, o sea absorbe los avisos nuevos en
+   vez de señalarlos.
+3. `npx vitest run` — ~34,400 pruebas en ~2,300 archivos (la cifra crece; no la
+   cites de memoria: hasta la ronda 52 esta línea decía «~2,880», 12× menos).
+4. **Mirar el render.** Medir no sustituye a mirar. Las páginas están detrás de
    sesión, así que para verlas: `npm run build` compila todas, y para un
    screenshot se levanta un preview temporal bajo `src/app/zzz-preview-*` que
    importe el componente REAL (nunca una copia — una copia verifica la copia),

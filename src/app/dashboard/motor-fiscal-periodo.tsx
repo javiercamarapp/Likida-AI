@@ -51,8 +51,11 @@ export interface CausaMotor { titulo: string; n: number; monto: number }
  * `resumirPerdidas` vive en `fiscal.ts`, que importa `supabaseAdmin` a nivel de módulo: un Client Component no puede importar ese
  * archivo en tiempo de ejecución (arrastraría el service-role al bundle del navegador), así que el cálculo llega ya hecho, como
  * datos planos. Las causas son las del ejercicio (no ciclan con el periodo) y se rotulan así.
+ *
+ * `causas === null` significa «la lectura de las causas falló», y NO es lo mismo que `[]` («no hay causas»): las causas y las series
+ * son dos lecturas independientes, así que una puede caerse sin la otra, y entonces se dice (A50-FIS-04).
  */
-export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Modo, ResumenSimple> | null; causas?: readonly CausaMotor[] }) {
+export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Modo, ResumenSimple> | null; causas?: readonly CausaMotor[] | null }) {
   const { t } = useT('resto', restoEs);
   const [modoLocal, setModoLocal] = useState<Modo>('semanal');
   const compartido = useContext(PeriodoCtx);
@@ -65,7 +68,8 @@ export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Mod
   const ventana: Record<Modo, string> = {
     semanal: t('op.mf_ventana_semanal'), mensual: t('op.mf_ventana_mensual'), historico: t('op.mf_ventana_historico'),
   };
-  const top = causas.slice(0, 3);
+  // A50-FIS-04: `causas === null` es «no se pudo leer», no «no hay causas».
+  const top = (causas ?? []).slice(0, 3);
 
   return (
     <div className="rv-cont__motor">
@@ -84,6 +88,7 @@ export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Mod
           <dd>{mxn(r.montoRecuperable)}</dd>
         </div>
       </dl>
+      {causas === null && <p className="rv-cont__nota">{t('op.mf_causas_no_leidas')}</p>}
       {top.length > 0 && (
         <BarList
           etiqueta={t('op.mf_causas')}

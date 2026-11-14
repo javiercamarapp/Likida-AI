@@ -411,12 +411,31 @@ export async function generarLiquidacionPDF(
     // tinta neutra: el color es parte de la afirmación, y pintar de verde una
     // cifra que depende de cuatro condiciones sin verificar es prometer con el
     // formato lo que el texto matiza.
+    //
+    // AUDITORÍA 48 · FIS-48-01 — EL DESCARGO NO CABÍA, Y NO SE CORTABA: SE
+    // SUPERPONÍA. El `asegurar(90)` de arriba solo mide el arranque de la
+    // sección; el bloque entero (tres renglones, el descargo de peaje de ~5
+    // líneas y los pies generales) pasa de 180 pt. Los bucles de pies no
+    // volvían a medir, así que con 15+ comprobantes la condición del estímulo
+    // («…y no ser parte relacionada (LISR art. 179)») se dibujaba ENCIMA de
+    // «Generado por Likida» y de la leyenda del art. 52 del CFF, y pdf-lib no
+    // detecta colisión: la CIFRA salía legible y su CONDICIÓN no. Es el único
+    // freno a que «Estímulo de peaje 50% · $6,200.00» se lea como un derecho
+    // ganado, y el motor no conoce ninguna de las cuatro condiciones de la LIF
+    // (H5/H6 de `normas/lif-2026-20-A.yaml`).
+    //
+    // Se mide renglón por renglón, igual que «LO QUE SE LE REEMBOLSA AL
+    // OPERADOR» más abajo: el texto salta de hoja con su título en vez de
+    // pisar el pie.
+    const contAcreditable = () => { if (asegurar(11)) seccionTitulo('ACREDITABLE / RECUPERABLE (cont.)'); };
     for (const f of acreditable.filas) {
+      contAcreditable();
       text(f.label, M + 14, y, 9.5, font, INK);
       right(f.valor, cMonto, y, 9.5, bold, f.tono === 'bueno' ? GREEN : INK);
       y -= 16;
       for (const pie of f.pies) {
         for (const linea of envolver(pie, 135)) {
+          contAcreditable();
           text(linea, M + 22, y + 2, 7, font, MUTED);
           y -= 9;
         }
@@ -425,6 +444,7 @@ export async function generarLiquidacionPDF(
     y -= 2;
     for (const pie of acreditable.piesGenerales) {
       for (const linea of envolver(pie, 135)) {
+        contAcreditable();
         text(linea, M + 14, y, 7, font, MUTED);
         y -= 9;
       }

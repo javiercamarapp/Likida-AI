@@ -113,6 +113,26 @@ export async function atenderCorreoPeajes(token: string, correo: CorreoEntrante,
   const autenticacion = autenticacionDeRemitente(correo.headers as CabecerasEntrantes, dir ? dir.slice(dir.lastIndexOf('@') + 1) : null);
   if (autenticacion === 'rechazado') {
     logger.warn('peajes_correo.remitente_sin_spf_dkim', { emailId: correo.emailId, tenantId });
+    // AUDITORÍA 48 · FIS-48-02 — NO BASTA EL LOG. Este descarte se lleva el
+    // corte del proveedor, y el reenvío automático —la forma normal de entrada,
+    // la que sugiere la propia pantalla de Configuración— rompe SPF. Sin
+    // corrida, `desglose_peaje` se queda sin la fila, la bitácora de la fr. II
+    // de la regla 9.1.8 de la RMF no existe para ese periodo y NINGUNA pantalla
+    // lo dice: los peajes del mes valen menos y el papel no dice qué falta.
+    //
+    // Se anota como el caso MENOR que ya estaba anotado 57 líneas abajo
+    // (A37-A2-16: «lo que NO se recibe se anota con su nombre y motivo, la
+    // oficina no abre los logs»). Va ANTES de reclamar el correo a propósito:
+    // la respuesta es 200, así que el proveedor no reintenta y la corrida no se
+    // duplica. Sin la dirección del remitente: es un dato personal y el
+    // `email_id` alcanza para rastrearlo en Resend.
+    const nombres = adjuntos.map((a) => `«${nombreAdjuntoSeguro(a.filename)}»`).join('; ');
+    const ahora = new Date();
+    await registrarCorrida(tenantId, 'peajes', {
+      inicio: ahora, fin: ahora, estado: 'parcial', disparo: 'correo',
+      resumen: { recibidos: 0, duplicados: 0, ignorados: adjuntos.length },
+      error: `Llegó un correo al buzón de peajes y no se recibió: el remitente no pasó SPF ni DKIM. No entraron: ${nombres}. Si el proveedor lo manda bien, revisa que no venga reenviado automáticamente; si lo reenvías tú, adjunta los archivos en un correo nuevo.`.slice(0, 500),
+    });
     return { status: 200, cuerpo: { ok: true, ignorado: 'remitente_no_autenticado' } };
   }
   if (autenticacion === 'sin_informacion') {
