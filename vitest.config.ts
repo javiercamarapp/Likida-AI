@@ -19,7 +19,7 @@ export default defineConfig({
     },
   },
   test: {
-    setupFiles: ['./src/test/salidas_flota_permisiva.ts'],
+    setupFiles: ['./src/test/salidas_flota_permisiva.ts', './src/test/canal_envio_plataforma.ts'],
     // `.claude/worktrees/` no está en .gitignore, y sin este exclude vitest
     // escanea DENTRO de un worktree activo al correr desde la raíz del repo —
     // una segunda copia de cada archivo de prueba corriendo en paralelo con
