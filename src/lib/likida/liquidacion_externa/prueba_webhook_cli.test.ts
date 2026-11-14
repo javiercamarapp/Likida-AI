@@ -107,6 +107,15 @@ describe('ejecución', () => {
     expect(r.resumen).toMatchObject({ enviadas: 70, aceptadas: 70, duplicadas: 0, rechazadas: 0, modo: 'simulacion' });
     expect(salida.join('\n')).not.toContain(TOKEN);
   });
+  it('mide el tiempo de cada petición y lo imprime; avisa si una va cerca del límite de la función', async () => {
+    const { d, salida } = deps(todoRecibida);
+    const r = await ejecutarPrueba(args(['--n', '70']), d);
+    expect(r.resumen?.tiemposMs).toHaveLength(2);
+    expect(salida.join('\n')).toMatch(/Tiempo por petición: 1=\d+\.\d s, 2=\d+\.\d s/);
+    expect(salida.join('\n')).not.toMatch(/AVISO/);
+    const l = formatearResumen({ modo: 'real', peticiones: 1, enviadas: 70, aceptadas: 70, duplicadas: 0, rechazadas: 0, causas: {}, estados: {}, fallos: [], reintentoIdempotente: null, tiemposMs: [45_000] });
+    expect(l.join('\n')).toMatch(/máximo 45\.0 s.*AVISO.*60 s/);
+  });
   it('modo real no manda la cabecera de simulación', async () => {
     const { d, f } = deps(todoRecibida);
     await ejecutarPrueba(args(['--n', '2', '--real', '--confirmo-escritura']), d);

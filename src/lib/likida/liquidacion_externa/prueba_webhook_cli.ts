@@ -17,6 +17,8 @@ export const MAX_POR_PETICION = 100;
 export const MAX_TOTAL = 500;
 const POR_PETICION_DEFECTO = 35;
 const TIEMPO_MAX_MS = 70_000;
+/** A partir de aquí una petición va cerca del tope de 60 s de la función: se avisa en el resumen. */
+const LIMITE_AVISO_MS = 40_000;
 
 export const USO = `Uso:
   node scripts/probar-webhook-liquidaciones.mjs --url <https://…> [--n 5] [--lote 35] [--semilla 1]
@@ -201,6 +203,8 @@ export interface ResumenPrueba {
   /** Peticiones que no obtuvieron una respuesta de datos (error HTTP o de red). */
   fallos: Array<{ peticion: number; status: number | null; codigo: string }>;
   reintentoIdempotente: boolean | null;
+  /** Milisegundos de cada petición del lote (sin contar el reintento), en el orden enviado. */
+  tiemposMs?: number[];
 }
 
 export interface DepsPrueba {
@@ -247,6 +251,10 @@ export function formatearResumen(r: ResumenPrueba): string[] {
   ];
   if (Object.keys(r.causas).length > 0) l.push(`Causas de rechazo: ${Object.entries(r.causas).map(([k, v]) => `${k}=${v}`).join(', ')}`);
   for (const f of r.fallos) l.push(`Petición ${f.peticion} sin datos: estado ${f.status ?? 'sin respuesta'} (${f.codigo})`);
+  if (r.tiemposMs && r.tiemposMs.length > 0) {
+    const max = Math.max(...r.tiemposMs);
+    l.push(`Tiempo por petición: ${r.tiemposMs.map((t, i) => `${i + 1}=${(t / 1000).toFixed(1)} s`).join(', ')}  ·  máximo ${(max / 1000).toFixed(1)} s${max >= LIMITE_AVISO_MS ? '  ·  AVISO: cerca del límite de 60 s de la función' : ''}`);
+  }
   if (r.reintentoIdempotente !== null) l.push(`Reintento idempotente: ${r.reintentoIdempotente ? 'sí' : 'NO'}`);
   return l;
 }
@@ -276,11 +284,13 @@ export async function ejecutarPrueba(args: ArgsPrueba, d: DepsPrueba): Promise<{
 
   const resumen: ResumenPrueba = {
     modo: args.simular ? 'simulacion' : 'real', peticiones: 0, enviadas: 0, aceptadas: 0, duplicadas: 0, rechazadas: 0,
-    causas: {}, estados: {}, fallos: [], reintentoIdempotente: null,
+    causas: {}, estados: {}, fallos: [], reintentoIdempotente: null, tiemposMs: [],
   };
   const mandar = async (lote: Array<Record<string, unknown>>, nPeticion: number) => {
     resumen.peticiones += 1;
+    const t0 = performance.now();
     const r = await enviarLote(args.url, token, { formato: 'muestra-tms', version: 1, bitacoras: lote }, args.simular, d.fetch);
+    resumen.tiemposMs?.push(Math.round(performance.now() - t0));
     const res = r.json && typeof r.json.datos === 'object' && r.json.datos !== null ? ((r.json.datos as Record<string, unknown>).resultados as unknown) : undefined;
     if (r.status === null || r.status >= 300 || !Array.isArray(res)) {
       resumen.fallos.push({ peticion: nPeticion, status: r.status, codigo: redactar(r.codigo, token) });
