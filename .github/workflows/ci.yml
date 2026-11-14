@@ -6,6 +6,10 @@
 # secretos, y por eso puede correr en cada push sin costo.
 name: CI
 
+# COSTO (21-nov-2026, repo que pasa a privado: 3,000 min/mes incluidos; ver docs/operacion/ci-costos.md):
+# lo de abajo (disparar en TODAS las ramas) se reemplazó: lo pesado corre en PR, en push a master y a mano;
+# las ramas sin PR corren solo `ci-rapido.yml` (typecheck + lint). Lo que sigue es el motivo histórico.
+#
 # EN TODAS LAS RAMAS, y no solo en master/main.
 #
 # El disparador anterior era `branches: [master, main]`, así que un push a
@@ -19,9 +23,14 @@ name: CI
 # encabezado). Que el PR corra otra vez es duplicado a propósito: es la corrida
 # que decide el merge, y el `concurrency` de abajo ya cancela lo que quedó atrás.
 on:
+  # COSTO (privado: 3,000 min/mes incluidos): antes `push: '**'` + `pull_request` corrían los jobs pesados DOS veces
+  # por cada push a una rama con PR. Ahora lo pesado corre en el PR, en push a master y a mano; las ramas sin PR
+  # tienen solo `ci-rapido.yml` (typecheck + lint). `labeled` permite forzar la corrida completa con `ci-completo`.
   push:
-    branches: ['**']
+    branches: [master, main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
 
 # Un push nuevo cancela la corrida anterior de la misma rama: no sirve de nada
 # esperar el resultado de un commit que ya quedó atrás.
@@ -44,7 +53,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # FILTRO DE CAMBIOS (docs/operacion/ci-costos.md). El workflow SIEMPRE se dispara y este job conserva su nombre de
+      # check (requerido por el ruleset de master): si el PR no toca nada relevante, los pasos pesados se omiten y el job
+      # termina en verde en segundos. NUNCA `paths:` a nivel de `on:`: un check requerido sin reportar bloquea el merge.
+      # En push a master, workflow_dispatch o con la etiqueta `ci-completo` corre todo.
+      - name: Filtro de cambios (¿aplica este check a este PR?)
+        id: cambios
+        run: node scripts/ci/cambios-ci.mjs verificar
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ETIQUETAS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.cambios.outputs.relevante == 'true'
         with:
           node-version: 22
           cache: npm
@@ -52,26 +74,32 @@ jobs:
       # `npm ci` y no `npm install`: instala exactamente el lockfile y falla si
       # se desincronizó del package.json, que es justo lo que se quiere saber.
       - run: npm ci
+        if: steps.cambios.outputs.relevante == 'true'
 
       # Caché del navegador: sin ella cada corrida descargaba Chromium. Medido el 22-oct-2026: el paso tardó
       # 0.4 min con red buena y 11.6 min con red lenta, y tres corridas (master y dos PR) pasaron del límite.
       # La clave lleva la versión de Playwright; si se actualiza sin tocar la clave, `install` baja la que falte.
       - name: Caché de Chromium (Playwright)
+        if: steps.cambios.outputs.relevante == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-1.63.0-chromium
 
       - name: Chromium para las pruebas de navegador
+        if: steps.cambios.outputs.relevante == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Typecheck
+        if: steps.cambios.outputs.relevante == 'true'
         run: npm run typecheck
 
       - name: Lint
+        if: steps.cambios.outputs.relevante == 'true'
         run: npm run lint:ratchet
 
       - name: Tests offline de resiliencia (sin credenciales)
+        if: steps.cambios.outputs.relevante == 'true'
         run: bash scripts/test-resiliencia.sh
 
       # CON COBERTURA, y no `npm test` a secas: el umbral de `vitest.config.ts`
@@ -87,6 +115,7 @@ jobs:
       # deduplicador de CFDI existían y nadie las corría más que Javier en su
       # máquina. El paso de abajo las recupera.
       - name: Tests (con umbral de cobertura)
+        if: steps.cambios.outputs.relevante == 'true'
         run: npm run test:coverage
 
       # LAS PRUEBAS DE TIEMPO, SIN INSTRUMENTAR — lo que el paso de arriba salta.
@@ -95,12 +124,24 @@ jobs:
       # si alguien añade un `skipIf(LIKIDA_COBERTURA)` en un archivo que este
       # comando no alcanza, que es como se perdieron estas dos.
       - name: Pruebas de tiempo (sin cobertura)
+        if: steps.cambios.outputs.relevante == 'true'
         run: npx vitest run fundamento duplicados
 
       # El build va al final porque es el más lento, y porque los tres de arriba
       # atrapan casi todo lo que lo haría fallar. Ya cazó un fallo real que solo
       # aparecía aquí: Turbopack no resolvía el .wasm del lector de códigos.
+      # Caché de Next (.next/cache), recomendada por Next: clave por lockfile + fuente; restore-keys reutiliza la última.
+      - name: Caché de build de Next
+        if: steps.cambios.outputs.relevante == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .next/cache
+          key: nextjs-ci-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.ts', 'src/**/*.tsx') }}
+          restore-keys: |
+            nextjs-ci-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
       - name: Build
+        if: steps.cambios.outputs.relevante == 'true'
         run: npm run build
         env:
           # El build no llama a nadie, pero Next evalúa los módulos y algunos
@@ -121,6 +162,7 @@ jobs:
       # acaba de pasar, visita solo rutas públicas y falla ante página vacía,
       # overlay de Next o errores de consola/hidratación.
       - name: Iniciar servidor para Playwright smoke
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           nohup npm run start -- --hostname 127.0.0.1 --port 3000 > "$RUNNER_TEMP/likida-next.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/likida-next.pid"
@@ -132,12 +174,13 @@ jobs:
           exit 1
 
       - name: Playwright smoke público (sin secretos)
+        if: steps.cambios.outputs.relevante == 'true'
         run: npm run test:smoke
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
 
       - name: Logs del smoke si falla
-        if: failure()
+        if: ${{ (failure()) && steps.cambios.outputs.relevante == 'true' }}
         run: |
           if [ -f "$RUNNER_TEMP/likida-next.log" ]; then
             cat "$RUNNER_TEMP/likida-next.log"
@@ -156,6 +199,7 @@ jobs:
       # sigue siendo bloqueante y fail-closed: tras tres reportes inconclusos el
       # job queda rojo, pero el log distingue proveedor caído de CVE real.
       - name: Auditoría runtime high/critical (con reintentos acotados)
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           for intento in 1 2 3; do
             : > "$RUNNER_TEMP/npm-audit-runtime.json"
@@ -182,6 +226,7 @@ jobs:
       # runtime del producto. Se acota a 2 minutos para que una caída del mismo
       # proveedor tampoco consuma el timeout completo del job.
       - name: Auditoría de dependencias de DESARROLLO (visible, no bloqueante)
+        if: steps.cambios.outputs.relevante == 'true'
         id: audit-dev
         continue-on-error: true
         timeout-minutes: 2
@@ -194,9 +239,10 @@ jobs:
           exit 0
 
       - name: Publicar reporte de auditoría dev
-        if: always()
+        if: ${{ (always()) && steps.cambios.outputs.relevante == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: npm-audit-dev
           path: ${{ runner.temp }}/npm-audit-dev.json
           if-no-files-found: warn
+          retention-days: 7
