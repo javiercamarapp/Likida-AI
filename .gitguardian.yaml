@@ -14,3 +14,9 @@ secret:
       # carta_porte_docs/plataforma_json.test.ts; nombre de la constante
       # (VALOR_SECRETO) es lo que atrapan los escáneres por entropía, no
       # el contenido.
+  # Diccionarios de interfaz es/en: solo textos visibles («Solo el dueño de la flota genera o rota el secreto.»,
+  # «Generar secreto», «Tokens usados»). Incidente 39929166 (commit 71bf7734f) triado a mano el 11-nov-2026 y
+  # autorizado por el dueño. Mismo alcance que la excepción de .gitleaks.toml.
+  ignored-paths:
+    - "src/lib/i18n/es/*.ts"
+    - "src/lib/i18n/en/*.ts"
