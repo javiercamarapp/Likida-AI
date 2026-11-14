@@ -5,6 +5,7 @@ import { detalleLatidos, esHuecoDeConfiguracion, esContrapresionDeclarada, esApa
 import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/alerta';
 import { resumenWebhookParaHealth, type ResumenWebhookHealth } from '@/lib/likida/liquidacion_externa/alertas_webhook';
 import { logger } from '@/lib/logger';
+import { resumirErrorDeBase } from '@/lib/likida/error_base';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { cotejarMigracion } from './migracion';
 import { medirRuta } from '@/lib/observability/latencia';
@@ -62,6 +63,15 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
+/** El «por qué» que el propio cron dejó en su latido (`motivo`, `codigo` o `error`), recortado, para que el correo de `cron.estado_no_ok` diga qué pasó y no solo quién. Vacío si no dejó nada. */
+function causaDeLatido(detalle: Record<string, unknown>): string {
+  for (const llave of ['motivo', 'codigo', 'error']) {
+    const v = detalle[llave];
+    if (typeof v === 'string' && v.trim() !== '') return `: ${resumirErrorDeBase(v, 120)}`;
+  }
+  return '';
+}
+
 export function GET(req: NextRequest) {
   return medirRuta('health', () => manejarGET(req));
 }
@@ -221,7 +231,7 @@ async function manejarGET(req: NextRequest) {
           estados: regresiones.map((c) => latidos[c].ultimoEstado),
         });
         await alertarOperador('cron.estado_no_ok', {
-          error: `Cron con resultado no sano: ${regresiones.map((c) => `${c} (${latidos[c].ultimoEstado})`).join(', ')}`,
+          error: `Cron con resultado no sano: ${regresiones.map((c) => `${c} (${latidos[c].ultimoEstado}${causaDeLatido(latidos[c].detalle)})`).join(', ')}`,
           codigo: 'cron_estado_no_ok',
         });
       }

@@ -139,6 +139,16 @@ describe('/api/health', () => {
     latidos = [];
   });
 
+  it('el correo de cron.estado_no_ok trae la causa que dejó el propio cron, no solo su nombre', async () => {
+    dbFalla = false;
+    alertarOperador.mockClear();
+    const ahora = new Date().toISOString();
+    latidos = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps']
+      .map((id) => ({ id, ultimo_latido: ahora, estado: id === 'gps' ? 'fallo' : 'ok', ...(id === 'gps' ? { detalle: { codigo: 'interruptor_ilegible' } } : {}) }));
+    await GET(peticion());
+    expect(alertarOperador).toHaveBeenCalledWith('cron.estado_no_ok', expect.objectContaining({ error: expect.stringContaining('gps (fallo: interruptor_ilegible)') }));
+  });
+
   it('un latido fresco en fallo también degrada: frescura no oculta el resultado', async () => {
     dbFalla = false;
     alertarOperador.mockClear();
