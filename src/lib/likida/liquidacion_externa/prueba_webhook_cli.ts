@@ -133,7 +133,7 @@ const fechaHora = (ms: number, hora: string) => {
 };
 
 export function operadoresFicticios(n: number): OperadorPrueba[] {
-  return Array.from({ length: n }, (_, i) => ({ numeroEmpleado: String(9001 + i), nombre: `Operador Ficticio ${String(i + 1).padStart(3, '0')}` }));
+  return new Array(n).fill(0).map((_, i) => ({ numeroEmpleado: String(9001 + i), nombre: `Operador Ficticio ${String(i + 1).padStart(3, '0')}` }));
 }
 
 export function validarPadron(crudo: unknown): { ok: true; padron: OperadorPrueba[] } | { ok: false; error: string } {
