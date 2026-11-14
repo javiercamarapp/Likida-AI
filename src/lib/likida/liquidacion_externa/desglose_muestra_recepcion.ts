@@ -33,7 +33,7 @@ import { leerInterruptor, type LecturaInterruptor, type NombreInterruptor } from
 import type { DesgloseBitacora } from './desglose_contrato';
 import {
   CONTRATO_MUESTRA_TMS, convertirBitacoraMuestra,
-  type CodigoRevision, type MotivoRevision, type PadronOperadores, type ResultadoBitacoraMuestra,
+  type AdvertenciaMuestra, type CodigoRevision, type MotivoRevision, type PadronOperadores, type ResultadoBitacoraMuestra,
 } from './desglose_muestra_tms';
 import type { ConfigCorreo, TipoExcepcion } from './repo_correo';
 
@@ -108,7 +108,7 @@ export interface RevisionMuestra {
 }
 
 export type PreparadoMuestra =
-  | { ok: true; desgloses: DesgloseBitacora[]; /** Posición en el lote de cada desglose de `desgloses` (misma longitud y orden). */ indices: number[]; revisiones: RevisionMuestra[] }
+  | { ok: true; desgloses: DesgloseBitacora[]; /** Posición en el lote de cada desglose de `desgloses` (misma longitud y orden). */ indices: number[]; revisiones: RevisionMuestra[]; /** Avisos por posición en el lote (solo las que tienen alguno). */ advertencias: Map<number, AdvertenciaMuestra[]> }
   | { ok: false; mensaje: string };
 
 /** Valida el sobre y convierte cada bitácora. Nunca lanza por datos malos de una bitácora: la manda a revisión. */
@@ -155,7 +155,9 @@ export function prepararMuestraTms(cuerpo: Record<string, unknown>, padron: Padr
   const desgloses: DesgloseBitacora[] = [];
   const indices: number[] = [];
   const revisiones: RevisionMuestra[] = [];
+  const advertencias = new Map<number, AdvertenciaMuestra[]>();
   resultados.forEach((r, indice) => {
+    if (r.advertencias.length > 0) advertencias.set(indice, r.advertencias);
     const motivos = [...r.revision];
     if (r.bitacoraId !== '' && (veces.get(r.bitacoraId) ?? 0) > 1) {
       motivos.push({ codigo: 'bitacora_repetida', campo: 'BitacoraID', detalle: 'La misma bitácora viene más de una vez en el lote; no se adivina cuál vale.' });
@@ -163,7 +165,7 @@ export function prepararMuestraTms(cuerpo: Record<string, unknown>, padron: Padr
     if (motivos.length === 0 && r.desglose !== null) { desgloses.push(r.desglose); indices.push(indice); }
     else revisiones.push({ indice, bitacora: r.bitacoraId === '' ? null : r.bitacoraId, motivos });
   });
-  return { ok: true, desgloses, indices, revisiones };
+  return { ok: true, desgloses, indices, revisiones, advertencias };
 }
 
 // ── Registrar las revisiones en la bandeja de excepciones existente ─────────

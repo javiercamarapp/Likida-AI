@@ -43,7 +43,7 @@ import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora } f
 import { leerPadronOperadores } from '@/lib/likida/liquidacion_externa/repo';
 import { recibirDesglose } from '@/lib/likida/liquidacion_externa/desglose_recibir';
 import {
-  estadoDeConflicto, estadoDeRecepcion, leerSimulacion, type ResultadoBitacoraApi,
+  estadoDeConflicto, estadoDeRecepcion, leerSimulacion, type AdvertenciaResultado, type ResultadoBitacoraApi,
 } from '@/lib/likida/liquidacion_externa/desglose_resultados';
 import { DesgloseEnConflicto, abrirExcepcion, listarExcepciones, resolverExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { claveDeBitacora, claveDeLiquidacion } from '@/lib/likida/liquidacion_externa/desglose_contrato';
@@ -142,6 +142,7 @@ export async function POST(req: Request) {
   let preparado: Preparado;
   let sistemaOrigen = SISTEMA_ORIGEN;
   let enRevision: NonNullable<RespuestaDesgloses['enRevision']> | undefined;
+  let advertenciasMuestra = new Map<number, AdvertenciaResultado[]>();
   let clavesMuestraLimpias: string[] = [];
   try {
     if (esFormatoMuestraTms(cuerpo.cuerpo)) {
@@ -158,6 +159,7 @@ export async function POST(req: Request) {
       sistemaOrigen = SISTEMA_ORIGEN_MUESTRA_TMS;
       clavesMuestraLimpias = m.desgloses.map((d) => claveDeBitacora(undefined, d.bitacora));
       enRevision = resumenRevisiones(m.revisiones);
+      advertenciasMuestra = m.advertencias;
     } else {
       preparado = preparar(cuerpo.cuerpo);
     }
@@ -184,8 +186,12 @@ export async function POST(req: Request) {
   const salida: RespuestaDesgloses = { recibidas: 0, idempotentes: 0, retenidas: 0, excepciones: [], resultados: [] };
   if (enRevision !== undefined) salida.enRevision = enRevision;
   if (simular) salida.simulada = true;
+  const conAdvertencias = (i: number): { advertencias?: AdvertenciaResultado[] } => {
+    const a = advertenciasMuestra.get(i);
+    return a !== undefined && a.length > 0 ? { advertencias: a.map((x) => ({ codigo: x.codigo, campo: x.campo })) } : {};
+  };
   for (const rev of enRevision ?? []) {
-    salida.resultados.push({ indice: rev.indice, bitacora: rev.bitacora, estado: 'en_revision', motivos: rev.motivos.map((m) => ({ codigo: m.codigo, campo: m.campo })) });
+    salida.resultados.push({ indice: rev.indice, bitacora: rev.bitacora, estado: 'en_revision', motivos: rev.motivos.map((m) => ({ codigo: m.codigo, campo: m.campo })), ...conAdvertencias(rev.indice) });
   }
   try {
     for (const [pos, d] of preparado.desgloses.entries()) {
@@ -205,11 +211,11 @@ export async function POST(req: Request) {
         const clave = typeof d.numeroLiquidacion === 'string' && d.numeroLiquidacion !== ''
           ? claveDeLiquidacion(d.terminal, d.numeroLiquidacion) : claveDeBitacora(d.terminal, d.bitacora);
         salida.excepciones.push({ clave, motivo: 'bitacora_duplicada' });
-        salida.resultados.push({ ...base, ...estadoDeConflicto() });
+        salida.resultados.push({ ...base, ...estadoDeConflicto(), ...conAdvertencias(indice) });
         continue;
       }
       const { estado, motivos } = estadoDeRecepcion(r);
-      salida.resultados.push({ ...base, estado, ...(motivos.length > 0 ? { motivos } : {}) });
+      salida.resultados.push({ ...base, estado, ...(motivos.length > 0 ? { motivos } : {}), ...conAdvertencias(indice) });
       switch (r.estado) {
         case 'simulada':
           // Vista previa: cuenta como lo que pasaría, sin haber escrito nada.

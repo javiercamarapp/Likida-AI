@@ -30,6 +30,9 @@ export const ESTADOS_ENTREGADA: ReadonlySet<EstadoBitacora> = new Set<EstadoBita
 
 export interface MotivoResultado { codigo: string; campo?: string }
 
+/** Aviso que no cambia el estado: hoy solo `campo_desconocido` (nombre del campo, jamás su valor). */
+export interface AdvertenciaResultado { codigo: string; campo?: string }
+
 export interface ResultadoBitacoraApi {
   /** Posición de la bitácora en el lote enviado (0 = primera). */
   indice: number;
@@ -39,6 +42,8 @@ export interface ResultadoBitacoraApi {
   folio?: string;
   estado: EstadoBitacora;
   motivos?: MotivoResultado[];
+  /** Solo formato `muestra-tms` y solo si hay alguna: avisos que no cambian el `estado` (campos fuera del contrato; máximo 10). */
+  advertencias?: AdvertenciaResultado[];
 }
 
 const unicos = (xs: readonly string[]): string[] => [...new Set(xs)];
