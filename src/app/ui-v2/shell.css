@@ -195,7 +195,7 @@
 /* Punto de invitación (hay un recorrido nuevo): 6 px arriba a la derecha de la píldora, como Rovaq */
 [data-ui="v2"] .rv-guia__punto { position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--senal); box-shadow: 0 0 0 2px var(--ui-surface); }
 /* Título de la topbar (icono de 15 px + nombre exacto de la entrada del menú) y disparador visible del buscador ⌘K */
-[data-ui="v2"] .rv-cab-esc__izq { display: flex; align-items: center; gap: 8px; min-width: 0; }
+[data-ui="v2"] .rv-cab-esc__izq { display: flex; align-items: center; gap: 10px; min-width: 0; }
 [data-ui="v2"] .rv-cab-esc__titulo { display: inline-flex; align-items: center; gap: 8px; min-width: 0; margin-left: 4px; color: var(--ink); font: 600 13px/1 var(--font-sans-ui, inherit); }
 [data-ui="v2"] .rv-cab-esc__titulo > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-ui="v2"] .rv-cab-esc__titulo > svg { flex: none; color: var(--muted); }

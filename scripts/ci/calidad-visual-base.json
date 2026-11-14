@@ -1,24 +1,11 @@
 {
   "//": "Base que SOLO BAJA (F22). Cada entrada es un defecto o excepción conocida de hoy; una guarda nueva que falle por algo que NO está aquí rompe el CI. Al arreglar una, bórrala de la lista (el test falla si la base trae entradas que ya no existen).",
   "colisiones": [
-    ".rv-cab-esc__izq|gap",
-    ".rv-demo__hilo|flex",
-    ".rv-demo|height",
     ".rv-esq-dos|gap",
-    ".rv-estado__tabla td|padding",
-    ".rv-estado__tabla th[scope=\"row\"]|padding",
     ".rv-ic__estado|row-gap",
-    ".rv-kpi__cab|position",
     ".rv-marco|gap",
     ".rv-marco|padding",
-    ".rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo|height",
-    ".rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo|margin",
-    ".rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo|overflow",
-    ".rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo|position",
-    ".rv-pub__main:has(> .rv-legal__doc) .rv-pub__titulo|width",
-    ".rv-pub__main:has(> .rv-legal__doc) > header::before|display",
-    ".rv-tarjeta|padding",
-    ".ven-tablero|gap"
+    ".rv-tarjeta|padding"
   ],
   "alturasAViewport": [
     "src/app/admin/mapa-prospectos/cerebro.css::|.cer-mapacard .cer-zona:fullscreen",

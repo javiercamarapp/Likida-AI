@@ -118,7 +118,6 @@
 }
 
 /* ── Cabecera de escritorio: botón «Guía» como el de Rovaq (píldora de 28, borde 1, fondo suave, texto atenuado) ── */
-[data-ui="v2"] .rv-cab-esc__izq { display: flex; align-items: center; gap: 10px; min-width: 0; }
 [data-ui="v2"] .rv-cab-esc .rv-guia__btn {
   height: 28px; padding: 0 9px 0 7px; gap: 5px; border-radius: 999px; background: var(--ui-soft); color: var(--muted); font: 500 12px/1 var(--font-sans-ui, inherit);
 }
