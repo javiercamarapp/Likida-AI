@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
+import { errorDeBaseSinRespuesta, resumirErrorDeBase } from './error_base';
 
 /**
  * Verifica que la migración 0005 (mutex try_lock_viaje + unique(viaje_id)) esté
@@ -28,20 +29,24 @@ import { acotada } from './presupuesto';
  * vacío. Sin respuesta no se afirma nada sobre el esquema.
  */
 function sinRespuesta(error: { code?: string; message?: string }): boolean {
-  if (error.code) return false;
-  return /fetch failed|network|timeout|abort|ECONN|EAI_AGAIN|socket/i.test(error.message ?? '');
+  return errorDeBaseSinRespuesta(error);
 }
+
+/** Una corrida lanza ~12 sondeos en paralelo: si la base no contesta, fallan TODOS y salían 12 avisos idénticos por arranque en frío (435 en tres meses). Se dice una vez por corrida. */
+let avisadoSinVerificar = false;
 
 /** Un solo sitio donde se decide qué se dice ante un error de probe. */
 function reportarProbe(error: { code?: string; message?: string }, faltaMsg: string): void {
   if (sinRespuesta(error)) {
+    if (avisadoSinVerificar) return;
+    avisadoSinVerificar = true;
     logger.warn('startup.migraciones_sin_verificar', {
       msg: 'NO se pudo verificar el esquema: la base no respondió. Esto NO dice que falte ninguna migración — dice que no se pudo preguntar. Revisa conectividad con Supabase.',
-      err: error.message,
+      err: resumirErrorDeBase(error.message),
     });
     return;
   }
-  logger.error('startup.migraciones', { msg: faltaMsg, code: error.code, err: error.message });
+  logger.error('startup.migraciones', { msg: faltaMsg, code: error.code, err: resumirErrorDeBase(error.message) });
 }
 
 /**
@@ -61,6 +66,7 @@ function reportarProbe(error: { code?: string; message?: string }, faltaMsg: str
 type Sondeo = () => Promise<boolean>;
 
 export async function verificarMigracionesCriticas(): Promise<void> {
+  avisadoSinVerificar = false;
   try {
     const admin = supabaseAdmin();
     // NINGÚN `return` temprano entre los sondeos. Los cuatro salían al primer
@@ -330,6 +336,6 @@ export async function verificarAvisoDePrivacidad(): Promise<void> {
     });
   } catch (e) {
     // Igual que los sondeos de migración: sin env/DB durante el build, no rompe.
-    logger.warn('startup.aviso_privacidad_skip', { err: e instanceof Error ? e.message : String(e) });
+    logger.warn('startup.aviso_privacidad_skip', { err: resumirErrorDeBase(e instanceof Error ? e.message : String(e)) });
   }
 }

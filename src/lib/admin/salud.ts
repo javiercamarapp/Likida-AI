@@ -22,6 +22,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
+import { resumirErrorDeBase } from '@/lib/likida/error_base';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
@@ -196,7 +197,7 @@ export async function registrarLatido(cron: CronId, estado: EstadoLatido, detall
       // A1 (ronda 19): el código salió antes que la 0701 → el CHECK de cron_latido no admite 'guardia' (23514). Se dice
       // una vez, con código estable, y se sigue: la guardia no lanza en bucle (el aviso de /api/health es el respaldo).
       if ((error as { code?: string }).code === '23514') logger.error('cron.latido_migracion_pendiente', { cron, codigo: 'migracion_0701_pendiente', err: error.message });
-      else logger.warn('cron.latido_sin_escribir', { cron, err: error.message });
+      else logger.warn('cron.latido_sin_escribir', { cron, err: resumirErrorDeBase(error.message) });
     }
   } catch (e) {
     logger.warn('cron.latido_sin_escribir', { cron, err: e instanceof Error ? e.message : String(e) });
@@ -437,9 +438,9 @@ export async function registrarLatencia(tipo: 'ruta' | 'cron', nombre: string, m
     const { error } = await acotada(supabaseAdmin().from('latencia_muestra').insert({
       tipo, nombre: nombre.slice(0, 120), ms: Math.min(Math.round(ms), 3_600_000), ok,
     }), 'registrarLatencia');
-    if (error) logger.warn('latencia.sin_escribir', { tipo, nombre, err: error.message });
+    if (error) logger.warn('latencia.sin_escribir', { tipo, nombre, err: resumirErrorDeBase(error.message) });
   } catch (e) {
-    logger.warn('latencia.sin_escribir', { tipo, nombre, err: e instanceof Error ? e.message : String(e) });
+    logger.warn('latencia.sin_escribir', { tipo, nombre, err: resumirErrorDeBase(e instanceof Error ? e.message : String(e)) });
   }
 }
 
