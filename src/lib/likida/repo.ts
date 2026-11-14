@@ -2419,7 +2419,8 @@ export interface SenalesWebhookLiq {
 export async function leerSenalesWebhookLiq(ahoraMs: number, ventanaMs: number): Promise<SenalesWebhookLiq> {
   const db = supabaseAdmin();
   const desdeVentana = new Date(ahoraMs - ventanaMs).toISOString();
-  const seguro = async <T>(f: () => PromiseLike<{ data: T | null; error: { message: string } | null }>, etiqueta: string): Promise<T | null> => {
+  // Declaración (no flecha genérica): el cargador mínimo de scripts/tms/verificar-local.mjs lee `async <T>(` como JSX.
+  async function seguro<T>(f: () => PromiseLike<{ data: T | null; error: { message: string } | null }>, etiqueta: string): Promise<T | null> {
     try {
       const r = (await acotada(f() as never, etiqueta)) as unknown as { data: T | null; error: { message: string } | null };
       if (r.error) { logger.warn('liqext.senales_webhook_fallo', { etiqueta, err: r.error.message }); return null; }
@@ -2428,7 +2429,7 @@ export async function leerSenalesWebhookLiq(ahoraMs: number, ventanaMs: number):
       logger.warn('liqext.senales_webhook_fallo', { etiqueta, err: e instanceof Error ? e.message : String(e) });
       return null;
     }
-  };
+  }
   const [filas, rechazos, llaves] = await Promise.all([
     seguro<Array<{ tenant_id: string; created_at: string }>>(() => db.from('liquidacion_externa')
       .select('tenant_id, created_at').in('sistema_origen', [...ORIGENES_WEBHOOK_ENTRADA])
@@ -2436,10 +2437,10 @@ export async function leerSenalesWebhookLiq(ahoraMs: number, ventanaMs: number):
       .order('created_at', { ascending: false }).order('id').limit(1000), 'liqext.senal_recepciones'),
     seguro<Array<{ repeticiones: number | null; detalle: { status?: unknown } | null }>>(() => db.from('evento_seguridad')
       .select('repeticiones, detalle').eq('origen', 'api_v1').eq('tipo', 'otro')
-      .eq('detalle->>recurso', RECURSO_WEBHOOK_LIQ).gte('creado_en', desdeVentana).order('creado_en', { ascending: false }).limit(1000), 'liqext.senal_rechazos'),
+      .eq('detalle->>recurso', RECURSO_WEBHOOK_LIQ).gte('creado_en', desdeVentana).order('creado_en', { ascending: false }).order('id').limit(1000), 'liqext.senal_rechazos'),
     seguro<Array<{ repeticiones: number | null }>>(() => db.from('evento_seguridad')
       .select('repeticiones').eq('origen', 'api_v1').eq('tipo', 'llave_invalida')
-      .eq('detalle->>ruta', RUTA_WEBHOOK_LIQ).gte('creado_en', desdeVentana).limit(1000), 'liqext.senal_llaves'),
+      .eq('detalle->>ruta', RUTA_WEBHOOK_LIQ).gte('creado_en', desdeVentana).order('creado_en', { ascending: false }).order('id').limit(1000), 'liqext.senal_llaves'),
   ]);
   let ultimaPorTenant: SenalesWebhookLiq['ultimaPorTenant'] = null;
   if (filas) {
