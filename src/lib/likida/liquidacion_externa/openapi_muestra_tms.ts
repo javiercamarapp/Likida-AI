@@ -26,8 +26,8 @@ export const ESQUEMAS_MUESTRA_TMS = {
       Folio: { oneOf: [{ type: 'string', maxLength: 40 }, { type: 'integer', minimum: 0 }], description: 'El número de bitácora que conoce el operador; se muestra en el Excel, el asunto del correo y el panel.' },
       Unidad: { type: 'string' },
       Fecha: { type: 'object', properties: { Inicia: { type: 'string', description: '`yyyy-MM-dd HH:mm:ss`, hora de México.' }, Termina: { type: 'string', description: '`yyyy-MM-dd HH:mm:ss`, hora de México.' } }, required: ['Inicia', 'Termina'] },
-      Percepciones: { type: 'array', maxItems: 100, items: { type: 'object', properties: { Descripcion: { type: 'string' }, Monto: { type: 'number', minimum: 0 } }, required: ['Descripcion', 'Monto'] } },
-      Deducciones: { type: 'array', maxItems: 100, items: { type: 'object', properties: { Descripcion: { type: 'string' }, Monto: { type: 'number', minimum: 0 } }, required: ['Descripcion', 'Monto'] } },
+      Percepciones: { type: 'array', maxItems: 100, items: { type: 'object', properties: { Descripcion: { type: 'string' }, Monto: { type: 'number', minimum: 0 }, Cargo: { type: 'number', minimum: 0, description: 'Sinónimo de `Monto` SOLO si `Monto` no viene. Si vienen los dos con valores distintos, la bitácora queda en revisión (`monto_ambiguo`).' } }, required: ['Descripcion'] } },
+      Deducciones: { type: 'array', maxItems: 100, items: { type: 'object', properties: { Descripcion: { type: 'string' }, Monto: { type: 'number', minimum: 0 }, Abono: { type: 'number', minimum: 0, description: 'Sinónimo de `Monto` SOLO si `Monto` no viene. Si vienen los dos con valores distintos, la bitácora queda en revisión (`monto_ambiguo`).' } }, required: ['Descripcion'] } },
     },
     required: ['BitacoraID', 'Fecha'],
   },
@@ -47,6 +47,7 @@ export const PROPIEDADES_RESULTADO_MUESTRA = {
     folio: { type: 'string', description: 'El `Folio` que mandaste, si lo mandaste.' },
     estado: { type: 'string', enum: ['recibida', 'retenida', 'idempotente', 'correccion_pendiente', 'en_revision', 'no_guardada'], description: '`recibida`: guardada y programada. `retenida`: guardada, no sale hasta que una persona la libere. `idempotente`: ya estaba igual. `correccion_pendiente`: ya estaba con otro contenido, una persona decide (Likida ya tiene una versión). `en_revision`: no se guardó, algún dato no pasó la validación. `no_guardada`: no se guardó (operador sin alta, sin póliza o bitácora duplicada).' },
     motivos: { type: 'array', items: { type: 'object', properties: { codigo: { type: 'string' }, campo: { type: 'string', description: 'Solo en `en_revision`: la ruta del campo (jamás su valor).' } }, required: ['codigo'] } },
+    advertencias: { type: 'array', maxItems: 10, description: 'Solo formato `muestra-tms` y solo si hay alguna. Avisos que NO cambian el `estado`: `campo_desconocido` con el nombre del campo que no pertenece al contrato (jamás su valor), por ejemplo una errata como `Póliza`. Se ignora ese campo y la bitácora sigue su curso.', items: { type: 'object', properties: { codigo: { type: 'string', enum: ['campo_desconocido'] }, campo: { type: 'string' } }, required: ['codigo', 'campo'] } },
   }, required: ['indice', 'bitacora', 'estado'] } },
   simulada: { type: 'boolean', enum: [true], description: 'Solo con la cabecera `Likida-Simular: si`: nada se escribió.' },
 };

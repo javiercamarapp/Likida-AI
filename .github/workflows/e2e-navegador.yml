@@ -39,9 +39,14 @@
 name: E2E navegador (app propia)
 
 on:
+  # COSTO (privado: 3,000 min/mes incluidos): antes `push: '**'` + `pull_request` corrían los jobs pesados DOS veces
+  # por cada push a una rama con PR. Ahora lo pesado corre en el PR, en push a master y a mano; las ramas sin PR
+  # tienen solo `ci-rapido.yml` (typecheck + lint). `labeled` permite forzar la corrida completa con `ci-completo`.
   push:
-    branches: ['**']
+    branches: [master, main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -60,17 +65,32 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # FILTRO DE CAMBIOS (docs/operacion/ci-costos.md). El workflow SIEMPRE se dispara y este job conserva su nombre de
+      # check (requerido por el ruleset de master): si el PR no toca nada relevante, los pasos pesados se omiten y el job
+      # termina en verde en segundos. NUNCA `paths:` a nivel de `on:`: un check requerido sin reportar bloquea el merge.
+      # En push a master, workflow_dispatch o con la etiqueta `ci-completo` corre todo.
+      - name: Filtro de cambios (¿aplica este check a este PR?)
+        id: cambios
+        run: node scripts/ci/cambios-ci.mjs e2e
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ETIQUETAS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.cambios.outputs.relevante == 'true'
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
+        if: steps.cambios.outputs.relevante == 'true'
 
       # La versión del CLI se pinnea a la que generó supabase/config.toml:
       # el esquema del config cambia entre menores y "latest" es cómo un
       # martes cualquiera el workflow amanece rojo sin que nadie tocara nada.
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        if: steps.cambios.outputs.relevante == 'true'
         with:
           version: 2.115.0
 
@@ -78,12 +98,14 @@ jobs:
       # concurrente fuera de la transacción y aplica las migraciones restantes.
       # Después siembra el demo; conserva configuración y archivos originales.
       - name: Supabase local (migraciones, preflight concurrente y seed)
+        if: steps.cambios.outputs.relevante == 'true'
         run: node scripts/ci/e2e/iniciar-pila.mjs
 
       # Las llaves de la pila local, al entorno del job. Fail closed: si el
       # formato de status cambia y algo llega vacío, el paso truena aquí con
       # el nombre de la variable — no tres pasos después con un 401 mudo.
       - name: Llaves de la pila local → entorno del job
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           supabase status -o json > "$RUNNER_TEMP/supabase-status.json"
           node - "$RUNNER_TEMP/supabase-status.json" >> "$GITHUB_ENV" <<'NODE'
@@ -115,6 +137,7 @@ jobs:
       # verificaciones que hoy pasan (ver la cabecera de
       # scripts/ci/e2e/grants-locales.sql).
       - name: Los GRANT que el Supabase local no trae de fábrica
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
             -v ON_ERROR_STOP=1 -v es_local=si -f scripts/ci/e2e/grants-locales.sql
@@ -122,12 +145,24 @@ jobs:
       # Los usuarios de Auth (@likida.test), la Flota E2E B y el PDF del
       # bucket — lo que seed.sql no puede sembrar. Ver la cabecera del script.
       - name: Sembrar identidades E2E y PDF de la liquidación
+        if: steps.cambios.outputs.relevante == 'true'
         run: node scripts/ci/e2e/sembrar-e2e.mjs
 
       # Build PROPIO de este workflow: las NEXT_PUBLIC_* se hornean en el
       # bundle del cliente, así que el build de ci.yml (placeholders) no
       # sirve aquí — este apunta al Supabase del runner.
+      # Caché de Next (.next/cache); prefijo propio: este build hornea NEXT_PUBLIC_* de la pila local.
+      - name: Caché de build de Next
+        if: steps.cambios.outputs.relevante == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .next/cache
+          key: nextjs-e2e-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.ts', 'src/**/*.tsx') }}
+          restore-keys: |
+            nextjs-e2e-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
       - name: Build apuntado a la pila local
+        if: steps.cambios.outputs.relevante == 'true'
         run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_URL }}
@@ -145,12 +180,14 @@ jobs:
       # 0.4 min con red buena y 11.6 min con red lenta, y tres corridas (master y dos PR) pasaron del límite.
       # La clave lleva la versión de Playwright; si se actualiza sin tocar la clave, `install` baja la que falte.
       - name: Caché de Chromium (Playwright)
+        if: steps.cambios.outputs.relevante == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-1.63.0-chromium
 
       - name: Chromium para Playwright
+        if: steps.cambios.outputs.relevante == 'true'
         run: npx playwright install --with-deps chromium
 
       # Mismo patrón que el smoke de ci.yml: nohup + espera por condición.
@@ -167,6 +204,7 @@ jobs:
       # Con TODO en `localhost` (server, config.toml, PLAYWRIGHT_BASE_URL)
       # el mismatch desaparece.
       - name: Iniciar el servidor bajo prueba
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           nohup npm run start -- --hostname localhost --port 3000 > "$RUNNER_TEMP/likida-next.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/likida-next.pid"
@@ -184,6 +222,7 @@ jobs:
           OPENROUTER_API_KEY: e2e-placeholder
 
       - name: Suite de navegador (pruebas-navegador/)
+        if: steps.cambios.outputs.relevante == 'true'
         run: npx playwright test
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
@@ -199,7 +238,7 @@ jobs:
       # En el teléfono, v2 NO tiene aside visible (una sola navegación a la vez): movil.nav.ts busca el menú con
       # `abrirNavegacion` (pruebas-navegador/apoyo/navegacion.ts), que abre la hoja «Más» en v2; así corre entera en las dos pasadas.
       - name: Reiniciar el servidor con la UI v2 forzada
-        if: ${{ !cancelled() }}
+        if: ${{ (!cancelled()) && steps.cambios.outputs.relevante == 'true' }}
         run: |
           # `$!` es el PID de `npm`, no el del `next-server` hijo: matar solo el PID de npm deja vivo al servidor v1 en el
           # puerto 3000 (la segunda pasada corrió contra ÉL: v2 jamás arrancó por EADDRINUSE, el curl de espera contestó el v1
@@ -227,7 +266,7 @@ jobs:
           OPENROUTER_API_KEY: e2e-placeholder
 
       - name: Suite de navegador con la UI v2 forzada (escritorio + Pixel 7)
-        if: ${{ !cancelled() }}
+        if: ${{ (!cancelled()) && steps.cambios.outputs.relevante == 'true' }}
         run: >
           npx playwright test
           --output=pruebas-navegador/.artefactos-v2
@@ -243,7 +282,7 @@ jobs:
       # CI: reporte HTML, trazas y screenshots de Playwright, y el log del
       # servidor Next.
       - name: Artefactos de la falla (reporte, trazas, log del servidor)
-        if: failure()
+        if: ${{ (failure()) && steps.cambios.outputs.relevante == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: e2e-navegador-falla

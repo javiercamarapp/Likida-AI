@@ -1,0 +1,57 @@
+# CI RÁPIDO para ramas SIN PR (docs/operacion/ci-costos.md).
+#
+# Antes, cada push a cualquier rama disparaba `ci.yml`, `ci-postgres.yml` y `e2e-navegador.yml` completos (~45 min
+# de runner), y al abrir el PR corrían otra vez. Ahora lo pesado corre solo en el PR y en master; para el trabajo
+# autónomo que aterriza en ramas `claude/*` sin PR queda esta corrida liviana (typecheck + lint, ~3-4 min) que
+# conserva la señal temprana. Si la rama YA tiene un PR abierto, no hace nada (lo cubre el PR): ~10 s.
+#
+# NO es un check requerido y su job se llama distinto a propósito (`rapido`), para no confundirse con `verificar`.
+name: CI rápido (ramas sin PR)
+
+on:
+  push:
+    branches-ignore: [master, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  rapido:
+    name: rapido (typecheck + lint)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Falla abierto: si la API no contesta, se corre igual.
+      - name: ¿La rama ya tiene un PR abierto?
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY_OWNER}:${GITHUB_REF_NAME}" --jq length 2>/dev/null || echo 0)
+          echo "PR abiertos para ${GITHUB_REF_NAME}: ${n}"
+          if [ "${n:-0}" -gt 0 ]; then echo "abierto=true" >> "$GITHUB_OUTPUT"; echo "Cubierta por el CI del PR; no se repite aquí." >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - if: steps.pr.outputs.abierto != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - if: steps.pr.outputs.abierto != 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - if: steps.pr.outputs.abierto != 'true'
+        run: npm ci
+
+      - name: Typecheck
+        if: steps.pr.outputs.abierto != 'true'
+        run: npm run typecheck
+
+      - name: Lint
+        if: steps.pr.outputs.abierto != 'true'
+        run: npm run lint:ratchet

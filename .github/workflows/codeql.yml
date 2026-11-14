@@ -31,6 +31,14 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+    # COSTO: no es un check requerido, así que `paths-ignore` es seguro aquí. Docs y SQL no se analizan (JS/TS).
+    # PARA APAGAR CodeQL en repo privado (sin licencia GitHub Code Security / GHAS): ver docs/operacion/ci-costos.md
+    # (deshabilitar el workflow en Actions, o borrar este archivo). El preflight de abajo lo hace fallar en privado
+    # sin GHAS a propósito, para no mostrar un verde falso.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'supabase/**/*.sql'
   schedule:
     - cron: '23 7 * * 1'
 

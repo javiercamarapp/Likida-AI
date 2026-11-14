@@ -54,9 +54,14 @@
 name: CI Postgres (aislamiento entre tenants)
 
 on:
+  # COSTO (privado: 3,000 min/mes incluidos): antes `push: '**'` + `pull_request` corrían los jobs pesados DOS veces
+  # por cada push a una rama con PR. Ahora lo pesado corre en el PR, en push a master y a mano; las ramas sin PR
+  # tienen solo `ci-rapido.yml` (typecheck + lint). `labeled` permite forzar la corrida completa con `ci-completo`.
   push:
-    branches: ['**']
+    branches: [master, main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -96,7 +101,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # FILTRO DE CAMBIOS (docs/operacion/ci-costos.md). El workflow SIEMPRE se dispara y este job conserva su nombre de
+      # check (requerido por el ruleset de master): si el PR no toca nada relevante, los pasos pesados se omiten y el job
+      # termina en verde en segundos. NUNCA `paths:` a nivel de `on:`: un check requerido sin reportar bloquea el merge.
+      # En push a master, workflow_dispatch o con la etiqueta `ci-completo` corre todo.
+      - name: Filtro de cambios (¿aplica este check a este PR?)
+        id: cambios
+        run: node scripts/ci/cambios-ci.mjs postgres
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ETIQUETAS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.cambios.outputs.relevante == 'true'
         with:
           node-version: 22
           cache: npm
@@ -106,8 +124,10 @@ jobs:
       # `npm ci` es barato con cache y deja el árbol consistente si algún
       # paso futuro lo necesitara.
       - run: npm ci
+        if: steps.cambios.outputs.relevante == 'true'
 
       - name: psql (cliente) — verificar o instalar
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           if ! command -v psql >/dev/null 2>&1; then
             sudo apt-get update -qq
@@ -119,6 +139,7 @@ jobs:
       # el mismo Postgres efímero que recibió las migraciones y pg_prove queda
       # en el runner para que un `not ok` haga fallar el job de forma real.
       - name: pgTAP — extensión del servidor y runner TAP
+        if: steps.cambios.outputs.relevante == 'true'
         env:
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
         run: |
@@ -147,6 +168,7 @@ jobs:
       # Ver la cabecera de ese archivo para el detalle de cada pieza y por
       # qué es fiel (o no) a Supabase real.
       - name: Andamio de CI (roles, auth.uid(), storage mínimo)
+        if: steps.cambios.outputs.relevante == 'true'
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/pruebas-aislamiento/andamio_ci.sql
 
       # ── Las migraciones, TODAS, en orden, una por una ──────────────────
@@ -155,6 +177,7 @@ jobs:
       # la secuencia completa; `supabase db push` corre contra una base que
       # ya trae acumulado el estado de todas las anteriores, nunca desde cero.
       - name: Migraciones (todas, sobre base virgen)
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           set -e
           n=0
@@ -183,6 +206,7 @@ jobs:
       # Estado REAL de las migraciones (0946-0948): cero grants abiertos, default ACL cerrada, sin políticas de storage, credenciales
       # sin SELECT de columna. Corre ANTES de restituir los grants previos a la 0947 (solo en esta base efímera).
       - name: Capa 0 — privilegios de tabla (anon/authenticated)
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           node scripts/ci/correr-verificaciones.mjs supabase/pruebas-aislamiento/capa0_grants_tablas.sql | tee -a "$GITHUB_STEP_SUMMARY"
@@ -193,10 +217,12 @@ jobs:
       # H3 (verificación del PR #766): el camino de LOGIN bajo los grants REALES de la 0947 (sin restituir nada): app_user se lee con el JWT
       # de usuario y cualquier otra tabla da 42501.
       - name: Login bajo los grants de la 0947 (authenticated solo lee app_user)
+        if: steps.cambios.outputs.relevante == 'true'
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/pruebas-aislamiento/login_bajo_grants_0947.sql
 
       # 0949: el rol `nomina` bajo esos mismos grants (producción ya los tiene): lee solo su fila de app_user, 42501 en dinero y operación.
       - name: Rol nomina bajo los grants de la 0947
+        if: steps.cambios.outputs.relevante == 'true'
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/pruebas-aislamiento/nomina_bajo_grants_0947.sql
 
       # Devuelve a la base efímera los privilegios que había ANTES de la 0947 (producción los tiene revocados): la batería de abajo
@@ -205,15 +231,18 @@ jobs:
       # X-02 banco multi-tenant, fase estatica: politicas, funciones SECURITY DEFINER y vistas bajo los grants REALES (antes de
       # restituir los previos, que tambien devuelven las ACL de funciones). Ver supabase/tests/banco_tenant/LEEME.md.
       - name: Banco multi-tenant — fase estática (políticas, funciones, vistas)
+        if: steps.cambios.outputs.relevante == 'true'
         run: node scripts/ci/banco-tenant.mjs --fase=estatica
 
       - name: Grants previos a la 0947 (solo base efímera)
+        if: steps.cambios.outputs.relevante == 'true'
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/ci/grants_previos_0947_restaurar.sql
 
       # Contratos acumulados de retención 0332/0335/0338. Corren sobre la misma
       # base efímera y dentro del mismo job: cero workflow o ejecución adicional.
       # Los SQL hacen rollback; los scripts de dos sesiones limpian sus tenants.
       - name: DB retención — exactitud, deadlines, locks y concurrencia
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0330_db_producto_uso_red.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0330_db_retencion_0104_red.sql
@@ -455,6 +484,7 @@ jobs:
       # Este archivo no es informativo: pg_prove interpreta el TAP y falla
       # ante cualquier `not ok`, plan incompleto o error SQL.
       - name: Capa 0 — pgTAP leases y fencing de WhatsApp/tools
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           pg_prove --dbname="$DATABASE_URL" --verbose supabase/tests/wa_leases_fencing.sql
           # A37-L-docs-ux-calidad-06: aislamiento y bitácora de tenant_perfil (pgTAP; necesita la extensión, así que va ANTES del drop).
@@ -484,6 +514,7 @@ jobs:
       # batería NO tumbaba el job. Por eso los `echo` de las cercas van
       # SUELTOS y el código de salida se lee del arreglo, no del grupo.
       - name: Capa 1 — batería de aislamiento (RLS estático + dinámico)
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           node scripts/ci/correr-verificaciones.mjs \
@@ -497,6 +528,7 @@ jobs:
       # con los grants previos restituidos (RLS como capa independiente). Y el canario: objetos abiertos a propósito que el
       # banco DEBE detectar (si no, el banco está ciego).
       - name: Banco multi-tenant — fase dinámica (flota A contra flota B)
+        if: steps.cambios.outputs.relevante == 'true'
         run: |
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           BANCO_TENANT_SALIDA="$RUNNER_TEMP/banco-dinamica.json" node scripts/ci/banco-tenant.mjs --fase=dinamica | tee -a "$GITHUB_STEP_SUMMARY"
@@ -505,4 +537,5 @@ jobs:
           exit $ec
 
       - name: Banco multi-tenant — canario (el banco detecta lo abierto a propósito)
+        if: steps.cambios.outputs.relevante == 'true'
         run: node scripts/ci/banco-tenant.mjs --fase=canario

@@ -41,11 +41,11 @@ begin
   select registrar_geocerca_huerfana into p from public.agente_conductor_config where tenant_id = ta;
   if p is not false then raise exception '0820: la perilla debía nacer apagada'; end if;
 
-  -- (b) dominio de tipo y unicidad
+  -- (b) dominio de tipo y unicidad. Fechas RELATIVAS: con una fecha fija la fila vencía (retención de 30 días) y la prueba falló en toda la CI desde el 14-nov-2026.
   insert into public.evento_geocerca_huerfano (tenant_id, unidad_id, geocerca_id, tipo, en, despacho_ref)
-    values (ta, ua, ga, 'entrada', '2026-10-15 12:00:00+00', 'D-1');
+    values (ta, ua, ga, 'entrada', (now() - interval '5 days'), 'D-1');
   insert into public.evento_geocerca_huerfano (tenant_id, unidad_id, geocerca_id, tipo, en)
-    values (ta, ua, ga, 'salida', '2026-10-15 13:00:00+00');
+    values (ta, ua, ga, 'salida', (now() - interval '5 days' + interval '1 hour'));
   begin
     insert into public.evento_geocerca_huerfano (tenant_id, unidad_id, geocerca_id, tipo, en) values (ta, ua, ga, 'pasada', now());
     raise exception '0820: el CHECK dejó pasar un tipo inventado';
@@ -59,11 +59,11 @@ begin
     raise exception '0820: despacho_ref vacío';
   exception when check_violation then null; end;
   begin
-    insert into public.evento_geocerca_huerfano (tenant_id, unidad_id, geocerca_id, tipo, en) values (ta, ua, ga, 'entrada', '2026-10-15 12:00:00+00');
+    insert into public.evento_geocerca_huerfano (tenant_id, unidad_id, geocerca_id, tipo, en) values (ta, ua, ga, 'entrada', (now() - interval '5 days'));
     raise exception '0820: el mismo cruce entró dos veces';
   exception when unique_violation then null; end;
   insert into public.evento_geocerca_huerfano (tenant_id, unidad_id, geocerca_id, tipo, en)
-    values (ta, ua, ga, 'entrada', '2026-10-15 12:00:00+00') on conflict (tenant_id, unidad_id, geocerca_id, tipo, en) do nothing;
+    values (ta, ua, ga, 'entrada', (now() - interval '5 days')) on conflict (tenant_id, unidad_id, geocerca_id, tipo, en) do nothing;
   if (select count(*) from public.evento_geocerca_huerfano where tenant_id = ta) <> 2 then
     raise exception '0820: guardar dos veces el mismo cruce duplicó la fila';
   end if;
