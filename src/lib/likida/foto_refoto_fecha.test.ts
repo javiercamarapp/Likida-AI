@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL BUCLE ENTERO DE LA RE-FOTO, POR `processInbound`. 1-ago-2026.
@@ -123,6 +123,16 @@ const WALMART_MAL = {
   id: 'g-walmart', concepto: 'alimentacion', monto: 45, fecha: '2026-01-08', folio: '05461',
   ocrExtra: { emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV', fechaImpresa: '01/08/26' },
 };
+
+// Congela SOLO `Date` en 2026-08-10: `fechaDudosa` tolera el ejercicio anterior solo en enero, y desde
+// 2027-02-01 los tickets de 2026-08-01 serian «otro ejercicio» por el reloj real, no por un defecto.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-08-10T18:00:00Z');
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 describe('processInbound — pedir la re-foto y saber recibirla', () => {
   beforeEach(() => {
