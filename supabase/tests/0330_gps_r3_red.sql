@@ -8,7 +8,7 @@ begin
   end if;
 end $$;
 -- Un estado ajeno y sin outbox debe quedar durable, no depender de retry HTTP.
-select public.registrar_estado_wa_meta('wamid.r3.ajeno', 'delivered', null, '2026-09-04T12:00:00Z');
+select public.registrar_estado_wa_meta('wamid.r3.ajeno', 'delivered', null, (date_trunc('day', now() - interval '2 days') + interval '12 hours 00 minutes'));
 do $$ begin
   if not exists (select 1 from public.wa_meta_receipt where wamid='wamid.r3.ajeno' and provider_status='delivered') then
     raise exception 'RED R3-2: receipt ajeno no durable';
@@ -24,9 +24,9 @@ begin
   if not exists (select 1 from public.wa_meta_receipt where wamid='wamid.r3.ajeno' and reconciliado_en is not null) then raise exception 'RED R3-3: receipt no reconciliado'; end if;
 end $$;
 do $$ begin
-  perform public.registrar_estado_wa_meta('wamid.r3.ajeno','failed','tardío','2026-09-04T12:01:00Z');
+  perform public.registrar_estado_wa_meta('wamid.r3.ajeno','failed','tardío',(date_trunc('day', now() - interval '2 days') + interval '12 hours 01 minutes'));
   if (select provider_status from public.wa_meta_receipt where wamid='wamid.r3.ajeno') <> 'delivered' then raise exception 'monotonicidad delivered→failed rota'; end if;
-  perform public.registrar_estado_wa_meta('wamid.r3.ajeno','read',null,'2026-09-04T12:02:00Z');
+  perform public.registrar_estado_wa_meta('wamid.r3.ajeno','read',null,(date_trunc('day', now() - interval '2 days') + interval '12 hours 02 minutes'));
   if (select provider_status from public.wa_meta_receipt where wamid='wamid.r3.ajeno') <> 'read' then raise exception 'failed/read no recupera'; end if;
 end $$;
 
@@ -57,16 +57,16 @@ begin
   insert into public.wa_outbox(dedupe_key,payload,estado,provider_message_id,provider_status,
                                provider_status_en,enviada_en)
   values ('gps:r3:t1-t2','{}','sent','wamid.r3.t1-t2','accepted',
-          '2026-09-04T12:00:00Z','2026-09-04T12:00:00Z') returning id into o;
-  perform public.registrar_estado_wa_meta('wamid.r3.t1-t2','failed','retryable:temporal','2026-09-04T12:01:00Z');
-  perform public.registrar_estado_wa_meta('wamid.r3.t1-t2','delivered',null,'2026-09-04T12:05:00Z');
+          (date_trunc('day', now() - interval '2 days') + interval '12 hours 00 minutes'),(date_trunc('day', now() - interval '2 days') + interval '12 hours 00 minutes')) returning id into o;
+  perform public.registrar_estado_wa_meta('wamid.r3.t1-t2','failed','retryable:temporal',(date_trunc('day', now() - interval '2 days') + interval '12 hours 01 minutes'));
+  perform public.registrar_estado_wa_meta('wamid.r3.t1-t2','delivered',null,(date_trunc('day', now() - interval '2 days') + interval '12 hours 05 minutes'));
   if not exists (select 1 from public.wa_outbox where id=o and estado='sent' and provider_status='delivered'
-      and enviada_en='2026-09-04T12:00:00Z' and provider_status_en='2026-09-04T12:05:00Z'
-      and delivered_en='2026-09-04T12:05:00Z' and ultimo_error is null) then
+      and enviada_en=(date_trunc('day', now() - interval '2 days') + interval '12 hours 00 minutes') and provider_status_en=(date_trunc('day', now() - interval '2 days') + interval '12 hours 05 minutes')
+      and delivered_en=(date_trunc('day', now() - interval '2 days') + interval '12 hours 05 minutes') and ultimo_error is null) then
     raise exception 'RED R3-7: failed-delivered falsifico T1/T2 o dejo error';
   end if;
   if not exists (select 1 from public.wa_meta_receipt where wamid='wamid.r3.t1-t2'
-      and provider_status='delivered' and recibido_en='2026-09-04T12:05:00Z' and error is null) then
+      and provider_status='delivered' and recibido_en=(date_trunc('day', now() - interval '2 days') + interval '12 hours 05 minutes') and error is null) then
     raise exception 'RED R3-8: ledger no conserva el evento efectivo de entrega';
   end if;
 end $$;
@@ -76,13 +76,13 @@ declare o uuid;
 begin
   insert into public.wa_outbox(dedupe_key,payload,estado,provider_message_id,provider_status)
   values ('gps:r3:terminal-absorbe','{}','sent','wamid.r3.terminal','accepted') returning id into o;
-  perform public.registrar_estado_wa_meta('wamid.r3.terminal','failed','terminal:destinatario','2026-09-04T12:10:00Z');
-  perform public.registrar_estado_wa_meta('wamid.r3.terminal','failed','retryable:duplicado','2026-09-04T12:11:00Z');
+  perform public.registrar_estado_wa_meta('wamid.r3.terminal','failed','terminal:destinatario',(date_trunc('day', now() - interval '2 days') + interval '12 hours 10 minutes'));
+  perform public.registrar_estado_wa_meta('wamid.r3.terminal','failed','retryable:duplicado',(date_trunc('day', now() - interval '2 days') + interval '12 hours 11 minutes'));
   if not exists (select 1 from public.wa_outbox where id=o and estado='dead'
       and provider_status='failed' and ultimo_error='terminal:destinatario') then
     raise exception 'RED R3-9: terminal revivio con un failed retryable tardio';
   end if;
-  perform public.registrar_estado_wa_meta('wamid.r3.terminal','delivered',null,'2026-09-04T12:12:00Z');
+  perform public.registrar_estado_wa_meta('wamid.r3.terminal','delivered',null,(date_trunc('day', now() - interval '2 days') + interval '12 hours 12 minutes'));
   if not exists (select 1 from public.wa_outbox where id=o and estado='dead' and provider_status='failed') then
     raise exception 'RED R3-10: terminal revivio con estado incompatible tardio';
   end if;
@@ -97,16 +97,16 @@ begin
   insert into public.wa_outbox(dedupe_key,payload,estado,provider_message_id,provider_status,
                                provider_status_en,enviada_en,delivered_en)
   values ('gps:samsara:33000000-0000-4000-8000-000000000020:t2-before-link','{}','sent',
-          'wamid.r3.t2-before-link','delivered','2026-09-04T12:31:00Z',
-          '2026-09-04T12:30:00Z','2026-09-04T12:31:00Z') returning id into o;
+          'wamid.r3.t2-before-link','delivered',(date_trunc('day', now() - interval '2 days') + interval '12 hours 31 minutes'),
+          (date_trunc('day', now() - interval '2 days') + interval '12 hours 30 minutes'),(date_trunc('day', now() - interval '2 days') + interval '12 hours 31 minutes')) returning id into o;
   insert into public.evento_seguridad_flota(tenant_id,proveedor,evento_id_externo,grave,ocurrido_en,
       claim_token,claim_worker,claim_expires_at,intentos)
   values ('33000000-0000-4000-8000-000000000020','samsara','t2-before-link',true,
-          '2026-09-04T12:29:00Z',c,'r3-test',clock_timestamp()+interval '1 minute',1);
+          (date_trunc('day', now() - interval '2 days') + interval '12 hours 29 minutes'),c,'r3-test',clock_timestamp()+interval '1 minute',1);
   ok := public.finalizar_evento_seguridad('33000000-0000-4000-8000-000000000020','samsara',
-    't2-before-link',c,true,null,'pending',o,null,null,'2026-09-04T12:32:00Z');
+    't2-before-link',c,true,null,'pending',o,null,null,(date_trunc('day', now() - interval '2 days') + interval '12 hours 32 minutes'));
   if not ok or not exists (select 1 from public.evento_seguridad_flota where evento_id_externo='t2-before-link'
-      and aviso_estado='sent' and procesado_en='2026-09-04T12:31:00Z') then
+      and aviso_estado='sent' and procesado_en=(date_trunc('day', now() - interval '2 days') + interval '12 hours 31 minutes')) then
     raise exception 'RED R3-17: receipt-before-link sello con T1 o no convergio';
   end if;
 
@@ -117,9 +117,9 @@ begin
   insert into public.evento_seguridad_flota(tenant_id,proveedor,evento_id_externo,grave,ocurrido_en,
       claim_token,claim_worker,claim_expires_at,intentos)
   values ('33000000-0000-4000-8000-000000000020','samsara','retryable-before-link',true,
-          '2026-09-04T12:29:00Z',c,'r3-test',clock_timestamp()+interval '1 minute',1);
+          (date_trunc('day', now() - interval '2 days') + interval '12 hours 29 minutes'),c,'r3-test',clock_timestamp()+interval '1 minute',1);
   ok := public.finalizar_evento_seguridad('33000000-0000-4000-8000-000000000020','samsara',
-    'retryable-before-link',c,true,null,'pending',o,null,null,'2026-09-04T12:32:00Z');
+    'retryable-before-link',c,true,null,'pending',o,null,null,(date_trunc('day', now() - interval '2 days') + interval '12 hours 32 minutes'));
   if not ok or not exists (select 1 from public.evento_seguridad_flota where evento_id_externo='retryable-before-link'
       and aviso_estado='pending' and procesado_en is null) then
     raise exception 'RED R3-18: failed retryable se convirtio en dead al vincular';
@@ -133,10 +133,10 @@ begin
   insert into public.wa_outbox(dedupe_key,payload,estado,provider_message_id,provider_status)
   values ('gps:r3:batch','{}','pending','wamid.r3.batch','accepted') returning id into o;
   insert into public.wa_meta_receipt(wamid,provider_status,recibido_en)
-  values ('wamid.r3.batch','delivered','2026-09-04T12:20:00Z');
+  values ('wamid.r3.batch','delivered',(date_trunc('day', now() - interval '2 days') + interval '12 hours 20 minutes'));
   n := public.reconciliar_wa_meta_receipts(10);
   if n < 1 or not exists (select 1 from public.wa_outbox where id=o and estado='sent'
-      and provider_status='delivered' and delivered_en='2026-09-04T12:20:00Z') then
+      and provider_status='delivered' and delivered_en=(date_trunc('day', now() - interval '2 days') + interval '12 hours 20 minutes')) then
     raise exception 'RED R3-11: batch delivered no forzo sent/T2';
   end if;
 end $$;

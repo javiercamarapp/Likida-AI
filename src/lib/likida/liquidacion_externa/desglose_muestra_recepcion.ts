@@ -36,6 +36,7 @@ import {
   type AdvertenciaMuestra, type CodigoRevision, type MotivoRevision, type PadronOperadores, type ResultadoBitacoraMuestra,
 } from './desglose_muestra_tms';
 import type { ConfigCorreo, TipoExcepcion } from './repo_correo';
+import { CONCURRENCIA_DESGLOSES, mapAcotado } from './concurrencia';
 
 export const BANDERA_MUESTRA_TMS = 'LIKIDA_TMS_MUESTRA';
 /** Única versión del sobre que se entiende hoy (SUPUESTO). */
@@ -201,12 +202,14 @@ export interface DepsRegistroRevision {
 export async function registrarRevisionesMuestra(
   tenantId: string, revisiones: readonly RevisionMuestra[], claveDe: (bitacora: string) => string, d: DepsRegistroRevision,
 ): Promise<number> {
-  let n = 0;
-  for (const rev of revisiones) {
-    if (rev.bitacora === null) continue;
+  // Una bitácora en revisión abre 1 o 2 excepciones; si todo el lote cae en revisión (p. ej. un padrón sin dar de alta) eran 70+ aperturas
+  // en serie. Se abren unas cuantas a la vez; cada una es independiente (otra clave) y un fallo se propaga como antes.
+  const abiertas = await mapAcotado(revisiones, CONCURRENCIA_DESGLOSES, async (rev) => {
+    if (rev.bitacora === null) return 0;
     const clave = claveDe(rev.bitacora);
     const operador = rev.motivos.filter((m) => CODIGOS_OPERADOR.has(m.codigo));
     const otros = rev.motivos.filter((m) => !CODIGOS_OPERADOR.has(m.codigo));
+    let n = 0;
     if (operador.length > 0) {
       const ambiguo = operador.find((m) => m.codigo === 'operador_homonimo');
       const motivo = ambiguo ? motivoOperadorDe(ambiguo.codigo, ambiguo.campo) : motivoOperadorDe(operador[0].codigo, operador[0].campo);
@@ -219,8 +222,9 @@ export async function registrarRevisionesMuestra(
       }, d.ahora());
       n += 1;
     }
-  }
-  return n;
+    return n;
+  });
+  return abiertas.reduce((a, b) => a + b, 0);
 }
 
 export interface DepsCierreRevision {
@@ -235,13 +239,13 @@ export interface DepsCierreRevision {
 export async function cerrarRevisionesResueltas(
   tenantId: string, claves: readonly string[], d: DepsCierreRevision,
 ): Promise<number> {
-  let n = 0;
-  for (const clave of claves) {
-    for (const tipo of ['operador_no_encontrado', 'mapeo_invalido'] as const) {
-      try { n += await d.resolverExcepciones(tenantId, clave, tipo, d.ahora()); } catch { /* no bloquea; la excepción queda abierta */ }
-    }
-  }
-  return n;
+  // 2 lecturas por bitácora: en serie, 70 bitácoras eran 140 consultas una tras otra antes de empezar a guardar.
+  const pares: Array<[string, TipoExcepcion]> = [];
+  for (const clave of claves) for (const tipo of ['operador_no_encontrado', 'mapeo_invalido'] as const) pares.push([clave, tipo]);
+  const cerradas = await mapAcotado(pares, CONCURRENCIA_DESGLOSES, async ([clave, tipo]) => {
+    try { return await d.resolverExcepciones(tenantId, clave, tipo, d.ahora()); } catch { return 0; /* no bloquea; la excepción queda abierta */ }
+  });
+  return cerradas.reduce((a, b) => a + b, 0);
 }
 
 /** Lo que la respuesta de la ruta cuenta de cada revisión: índice, bitácora y motivos genéricos (sin valores personales). */

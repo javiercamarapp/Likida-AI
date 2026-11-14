@@ -329,6 +329,9 @@ const BITACORA_PERSONAS_LIKIDA = ".from('app_user').select('id, nombre').in('rol
 const BITACORA_NOMBRES_ACTORES = ".from('app_user').select('id, nombre').in('id', actores)";
 const SOPORTE_AVISOS_SLA = ".from('bitacora_auditoria').select('entidad_id, ocurrio_en').eq('accion', ACCIONES_AVISO.sla).in('entidad_id', [...ticketIds].slice(0, 200)).order('ocurrio_en', { ascending: false }).order('id', { ascending: false }).limit(500)";
 const SILENCIO_VIAJES_ABIERTOS = ".from('viaje').select('id', { count: 'exact', head: true }).eq('estatus', 'abierto')";
+// Alertas del webhook de liquidaciones de entrada (guardia): rechazos y llaves inválidas contra UNA ruta, de cualquier flota o de ninguna.
+const WEBHOOK_LIQ_RECHAZOS = ".from('evento_seguridad').select('repeticiones, detalle').eq('origen', 'api_v1').eq('tipo', 'otro').eq('detalle->>recurso', RECURSO_WEBHOOK_LIQ).gte('creado_en', desdeVentana).order('creado_en', { ascending: false }).order('id').limit(1000)";
+const WEBHOOK_LIQ_LLAVES = ".from('evento_seguridad').select('repeticiones').eq('origen', 'api_v1').eq('tipo', 'llave_invalida').eq('detalle->>ruta', RUTA_WEBHOOK_LIQ).gte('creado_en', desdeVentana).order('creado_en', { ascending: false }).order('id').limit(1000)";
 const EXENCIONES_CONSULTA = [{
   archivo: 'src/lib/likida/fuentes/leer.ts', tabla: 'viaje', cadena: SILENCIO_VIAJES_ABIERTOS,
   razon: 'F19, regla de silencio del webhook de WhatsApp: el webhook es UNO para todas las flotas (un solo número de Likida), así que cuenta (head:true, sin devolver filas ni datos de nadie) los viajes abiertos de TODAS las flotas para decidir si el canal callado es una alerta; la pantalla de salud de /admin (superadmin) la llama sin flota; el panel de una flota (conexiones) pasa su tenant_id y la consulta se acota a sus viajes. Las demás lecturas de leer.ts llevan .eq(tenant_id).'
@@ -356,6 +359,12 @@ const EXENCIONES_CONSULTA = [{
 }, {
   archivo: 'src/lib/likida/repo.ts', tabla: 'agente_corrida', cadena: DUNNING_CORRIDA,
   razon: 'La última corrida del agente cobranza_saas se lee POR AGENTE a través de todas las flotas a propósito: el agente barre `factura_saas` de toda la plataforma y su corrida es del AGENTE (tenant NULL), igual que reportes.ts, backoffice.ts y direccion.ts. La lee solo /admin/cobranza (`await requireSuperadmin()` dentro de la página; la prueba de la página lo exige). No exime ninguna otra consulta de repo.ts.',
+}, {
+  archivo: 'src/lib/likida/repo.ts', tabla: 'evento_seguridad', cadena: WEBHOOK_LIQ_RECHAZOS,
+  razon: 'Cuenta los rechazos del webhook de liquidaciones de entrada en la ventana de la guardia (cron con CRON_SECRET, cada 15 min): la guardia es UNA para toda la plataforma y mira la ruta, no una flota; se ancla por origen, tipo, el recurso exacto del webhook y la ventana, y solo devuelve repeticiones y el status, nunca el actor ni el contenido.'
+}, {
+  archivo: 'src/lib/likida/repo.ts', tabla: 'evento_seguridad', cadena: WEBHOOK_LIQ_LLAVES,
+  razon: 'Cuenta las llaves inválidas contra la ruta del webhook de liquidaciones de entrada en la ventana de la guardia (cron con CRON_SECRET): una llave inválida no identifica flota (tenant_id NULL), así que filtrar por tenant_id devolvería siempre 0 y la alerta de intentos con llave falsa no existiría; solo devuelve repeticiones.'
 }, {
   archivo: 'src/lib/likida/agentes/corridas.ts', tabla: 'agente_corrida', cadena: CORRIDAS_PAUSA_POR_FALLOS,
   razon: 'El cortacircuitos del runner de sistema (`leerPausaPorFallos`, solo lo llama despachar tras puertaCron) decide si PAUSAR a un agente de LIKIDA tras N fallos seguidos: la racha es del AGENTE, no de una flota (sus corridas son de tenant NULL o de cualquier flota), y filtrar por una flota ocultaría la racha real. Solo lee (estado, inicio, error) para decidir pausar o no, nada llega a una pantalla de flota. Las demás consultas de corridas.ts SÍ filtran tenant_id y no quedan exentas.',

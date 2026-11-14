@@ -2395,3 +2395,69 @@ export async function getUltimaCorridaDunningPlataforma(): Promise<CorridaDunnin
     resumen: (r.resumen as Record<string, unknown> | null) ?? null,
   };
 }
+
+// ── señales del webhook de liquidaciones de entrada (alertas de la guardia; ver liquidacion_externa/alertas_webhook.ts) ──────────────────
+
+/** Lo que `desglose-bitacora-api` y `muestra-tms` dejan en `sistema_origen` al recibir por el webhook de entrada. */
+export const ORIGENES_WEBHOOK_ENTRADA = ['desglose-bitacora-api', 'tms-muestra-tms'] as const;
+/** Marca que ponen los rechazos del webhook en `evento_seguridad.detalle.recurso`. */
+export const RECURSO_WEBHOOK_LIQ = 'webhook_liquidaciones';
+const RUTA_WEBHOOK_LIQ = '/api/v1/liquidaciones-externas/desgloses';
+/** Hasta dónde mira atrás la última recepción por flota: una flota callada más de 30 días ya no es un incidente, es historia. */
+const DIAS_RECEPCION_VIGENTE = 30;
+
+export interface SenalesWebhookLiq {
+  /** Última recepción por flota en los últimos 30 días. `[]` = nunca (o hace más de 30 días): no hay silencio que medir. */
+  ultimaPorTenant: Array<{ tenantId: string; ultima: string }> | null;
+  /** Rechazos del webhook en la ventana, por clase de status (suma `repeticiones`). */
+  rechazos: { cincoxx: number; otros: number } | null;
+  /** Llaves inválidas contra la ruta del webhook en la ventana. */
+  llavesInvalidas: number | null;
+}
+
+/** Cada lectura falla POR VALOR (`null`), nunca lanza: la guardia dice «sin medir», jamás «todo bien». */
+export async function leerSenalesWebhookLiq(ahoraMs: number, ventanaMs: number): Promise<SenalesWebhookLiq> {
+  const db = supabaseAdmin();
+  const desdeVentana = new Date(ahoraMs - ventanaMs).toISOString();
+  // Declaración (no flecha genérica): el cargador mínimo de scripts/tms/verificar-local.mjs lee `async <T>(` como JSX.
+  async function seguro<T>(f: () => PromiseLike<{ data: T | null; error: { message: string } | null }>, etiqueta: string): Promise<T | null> {
+    try {
+      const r = (await acotada(f() as never, etiqueta)) as unknown as { data: T | null; error: { message: string } | null };
+      if (r.error) { logger.warn('liqext.senales_webhook_fallo', { etiqueta, err: r.error.message }); return null; }
+      return r.data ?? [] as unknown as T;
+    } catch (e) {
+      logger.warn('liqext.senales_webhook_fallo', { etiqueta, err: e instanceof Error ? e.message : String(e) });
+      return null;
+    }
+  }
+  const [filas, rechazos, llaves] = await Promise.all([
+    seguro<Array<{ tenant_id: string; created_at: string }>>(() => db.from('liquidacion_externa')
+      .select('tenant_id, created_at').in('sistema_origen', [...ORIGENES_WEBHOOK_ENTRADA])
+      .gte('created_at', new Date(ahoraMs - DIAS_RECEPCION_VIGENTE * 86_400_000).toISOString())
+      .order('created_at', { ascending: false }).order('id').limit(1000), 'liqext.senal_recepciones'),
+    seguro<Array<{ repeticiones: number | null; detalle: { status?: unknown } | null }>>(() => db.from('evento_seguridad')
+      .select('repeticiones, detalle').eq('origen', 'api_v1').eq('tipo', 'otro')
+      .eq('detalle->>recurso', RECURSO_WEBHOOK_LIQ).gte('creado_en', desdeVentana).order('creado_en', { ascending: false }).order('id').limit(1000), 'liqext.senal_rechazos'),
+    seguro<Array<{ repeticiones: number | null }>>(() => db.from('evento_seguridad')
+      .select('repeticiones').eq('origen', 'api_v1').eq('tipo', 'llave_invalida')
+      .eq('detalle->>ruta', RUTA_WEBHOOK_LIQ).gte('creado_en', desdeVentana).order('creado_en', { ascending: false }).order('id').limit(1000), 'liqext.senal_llaves'),
+  ]);
+  let ultimaPorTenant: SenalesWebhookLiq['ultimaPorTenant'] = null;
+  if (filas) {
+    const porTenant = new Map<string, string>();
+    for (const f of filas) if (!porTenant.has(f.tenant_id)) porTenant.set(f.tenant_id, f.created_at); // vienen de la más nueva a la más vieja
+    ultimaPorTenant = [...porTenant].map(([tenantId, ultima]) => ({ tenantId, ultima }));
+  }
+  const suma = (n: number | null | undefined) => (typeof n === 'number' && n > 0 ? n : 1);
+  return {
+    ultimaPorTenant,
+    rechazos: rechazos
+      ? rechazos.reduce((a, r) => {
+        const st = Number(r.detalle?.status);
+        if (st >= 500) a.cincoxx += suma(r.repeticiones); else a.otros += suma(r.repeticiones);
+        return a;
+      }, { cincoxx: 0, otros: 0 })
+      : null,
+    llavesInvalidas: llaves ? llaves.reduce((a, r) => a + suma(r.repeticiones), 0) : null,
+  };
+}

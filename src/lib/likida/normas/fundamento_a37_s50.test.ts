@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { guardiaFundamento } from './fundamento';
+
+// Congela SOLO `Date` en 2026-12-01 (RFA 2026, `exigibleHasta` 2026-12-31, vigente): sin esto la
+// prueba caduca el 2027-01-01 por una regla de producto correcta, no por un defecto.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-12-01T18:00:00Z');
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 // A37-S50-01 (ALTO): al restaurar las citas protegidas, `/ (\d+) /` tomaba
 // cualquier número suelto rodeado de espacios del mensaje como si fuera un

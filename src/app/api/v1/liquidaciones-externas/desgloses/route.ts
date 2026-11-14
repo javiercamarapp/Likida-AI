@@ -39,13 +39,16 @@ import { abrir, errorApi } from '../../_comun';
 import { leerCuerpo, traducirFalla, CampoInvalido } from '../../_escritura';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
+import { registrarRechazoWebhookLiq } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import { leerPadronOperadores } from '@/lib/likida/liquidacion_externa/repo';
 import { recibirDesglose } from '@/lib/likida/liquidacion_externa/desglose_recibir';
+import { CONCURRENCIA_DESGLOSES, mapAcotado, type CachePeticion } from '@/lib/likida/liquidacion_externa/concurrencia';
 import {
   estadoDeConflicto, estadoDeRecepcion, leerSimulacion, type AdvertenciaResultado, type ResultadoBitacoraApi,
 } from '@/lib/likida/liquidacion_externa/desglose_resultados';
-import { DesgloseEnConflicto, abrirExcepcion, listarExcepciones, resolverExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
+import { DesgloseEnConflicto, abrirExcepcion, listarExcepciones, resolverExcepcion, type ConfigCorreo } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { claveDeBitacora, claveDeLiquidacion } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import {
   cerrarRevisionesResueltas, esFormatoMuestraTms, muestraTmsHabilitada, prepararMuestraTms, registrarRevisionesMuestra, resumenRevisiones, SISTEMA_ORIGEN_MUESTRA_TMS,
@@ -128,7 +131,7 @@ function preparar(cuerpo: Record<string, unknown>): Preparado {
   return { ok: true, desgloses: validos, indices: validos.map((_, i) => i), correccion };
 }
 
-export async function POST(req: Request) {
+async function procesar(req: Request): Promise<Response> {
   const acceso = await abrir(req, 'administracion');
   if (!acceso.ok) return acceso.respuesta;
 
@@ -193,14 +196,21 @@ export async function POST(req: Request) {
   for (const rev of enRevision ?? []) {
     salida.resultados.push({ indice: rev.indice, bitacora: rev.bitacora, estado: 'en_revision', motivos: rev.motivos.map((m) => ({ codigo: m.codigo, campo: m.campo })), ...conAdvertencias(rev.indice) });
   }
+  // Se procesan unas cuantas bitácoras a la vez (`CONCURRENCIA_DESGLOSES`): cada una hace ~12 consultas en serie y 70 una tras otra
+  // pasaban de los 60 s de la función con la latencia real de la nube. Cada tarea devuelve lo suyo y el conteo se arma después,
+  // en el orden del lote, para que la respuesta no dependa de quién termina primero.
+  type Procesada = { resultado: ResultadoBitacoraApi; recibidas: number; retenidas: number; idempotentes: number; excepciones: Array<{ clave: string; motivo: string }> };
+  const cacheConfig: CachePeticion<ConfigCorreo> = new Map();
+  let procesadas: Procesada[];
   try {
-    for (const [pos, d] of preparado.desgloses.entries()) {
+    procesadas = await mapAcotado(preparado.desgloses, CONCURRENCIA_DESGLOSES, async (d, pos): Promise<Procesada> => {
       const indice = preparado.indices[pos] ?? pos;
       const base = { indice, bitacora: d.bitacora, ...(d.folio !== undefined ? { folio: d.folio } : {}) };
+      const p: Procesada = { resultado: { ...base, estado: 'en_revision' }, recibidas: 0, retenidas: 0, idempotentes: 0, excepciones: [] };
       let r: Awaited<ReturnType<typeof recibirDesglose>>;
       try {
         r = await recibirDesglose(acceso.tenantId, d, undefined, {
-          sistemaOrigen,
+          sistemaOrigen, cacheConfig,
           ...(simular ? { simular: true } : {}),
           ...(preparado.correccion ? { correccion: { motivo: preparado.correccion.motivo, actor: String(acceso.rol) } } : {}),
         });
@@ -210,44 +220,71 @@ export async function POST(req: Request) {
         if (!(e instanceof DesgloseEnConflicto)) throw e;
         const clave = typeof d.numeroLiquidacion === 'string' && d.numeroLiquidacion !== ''
           ? claveDeLiquidacion(d.terminal, d.numeroLiquidacion) : claveDeBitacora(d.terminal, d.bitacora);
-        salida.excepciones.push({ clave, motivo: 'bitacora_duplicada' });
-        salida.resultados.push({ ...base, ...estadoDeConflicto(), ...conAdvertencias(indice) });
-        continue;
+        p.excepciones.push({ clave, motivo: 'bitacora_duplicada' });
+        p.resultado = { ...base, ...estadoDeConflicto(), ...conAdvertencias(indice) };
+        return p;
       }
       const { estado, motivos } = estadoDeRecepcion(r);
-      salida.resultados.push({ ...base, estado, ...(motivos.length > 0 ? { motivos } : {}), ...conAdvertencias(indice) });
+      p.resultado = { ...base, estado, ...(motivos.length > 0 ? { motivos } : {}), ...conAdvertencias(indice) };
       switch (r.estado) {
         case 'simulada':
           // Vista previa: cuenta como lo que pasaría, sin haber escrito nada.
-          if (r.retenida) salida.retenidas += 1;
-          else salida.recibidas += 1;
+          if (r.retenida) p.retenidas += 1;
+          else p.recibidas += 1;
           break;
         case 'creada':
-          if (r.retenida) salida.retenidas += 1;
-          else salida.recibidas += 1;
-          for (const motivo of r.excepciones) salida.excepciones.push({ clave: r.claveExterna, motivo });
+          if (r.retenida) p.retenidas += 1;
+          else p.recibidas += 1;
+          for (const motivo of r.excepciones) p.excepciones.push({ clave: r.claveExterna, motivo });
           break;
         case 'idempotente':
-          salida.idempotentes += 1;
+          p.idempotentes += 1;
           break;
         case 'correccion_pendiente':
-          salida.excepciones.push({ clave: r.claveExterna, motivo: 'correccion_pendiente' });
+          p.excepciones.push({ clave: r.claveExterna, motivo: 'correccion_pendiente' });
           break;
         case 'operador_no_encontrado':
-          salida.excepciones.push({ clave: r.claveExterna, motivo: 'operador_no_encontrado' });
+          p.excepciones.push({ clave: r.claveExterna, motivo: 'operador_no_encontrado' });
           break;
         case 'sin_poliza':
-          salida.excepciones.push({ clave: r.claveExterna, motivo: 'sin_poliza' });
+          p.excepciones.push({ clave: r.claveExterna, motivo: 'sin_poliza' });
           break;
       }
-    }
+      return p;
+    });
   } catch (e) {
-    logger.warn('v1.liquidaciones_externas.desgloses.parcial', { tenant: acceso.tenantId, procesados: salida.recibidas + salida.retenidas + salida.idempotentes });
+    logger.warn('v1.liquidaciones_externas.desgloses.parcial', { tenant: acceso.tenantId, lote: preparado.desgloses.length });
     return traducirFalla('v1.liquidaciones_externas.desgloses.post', acceso.tenantId, e);
+  }
+  for (const p of procesadas) {
+    salida.resultados.push(p.resultado);
+    salida.recibidas += p.recibidas; salida.retenidas += p.retenidas; salida.idempotentes += p.idempotentes;
+    for (const x of p.excepciones) salida.excepciones.push(x);
   }
 
   salida.resultados.sort((a, b) => a.indice - b.indice);
   // Simulación: nunca 201 (no se creó nada).
   const status = !simular && salida.recibidas + salida.retenidas > 0 ? 201 : 200;
   return NextResponse.json({ datos: salida }, { status });
+}
+
+/**
+ * La ruta, con la vigilancia por fuera: todo rechazo (≠ 401, que ya deja `llave_invalida`) o fallo queda contado para las alertas de la
+ * guardia. Registrar es best-effort y NO cambia la respuesta; un lanzamiento no capturado sigue siendo el 500 de Next.
+ */
+export async function POST(req: Request) {
+  // El área sigue siendo `abrir(req, 'administracion')`, que llama `procesar` (arriba): el guardia de áreas del OpenAPI la lee de este bloque.
+  let res: Response;
+  try {
+    res = await procesar(req);
+  } catch (e) {
+    await esperarRegistro(registrarRechazoWebhookLiq({ status: 500, codigo: 'excepcion_no_capturada' }));
+    throw e;
+  }
+  if (res.status >= 400 && res.status !== 401) {
+    let codigo: string | null = null;
+    try { codigo = ((await res.clone().json()) as { error?: { codigo?: string } })?.error?.codigo ?? null; } catch { /* sin cuerpo JSON */ }
+    await esperarRegistro(registrarRechazoWebhookLiq({ status: res.status, codigo }));
+  }
+  return res;
 }

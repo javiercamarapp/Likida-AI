@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { detalleLatidos, esHuecoDeConfiguracion, esContrapresionDeclarada, esApagadoPorInterruptor, diasApagado, DIAS_APAGADO_ALERTA, type CronId } from '@/lib/admin/salud';
 import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/alerta';
+import { resumenWebhookParaHealth, type ResumenWebhookHealth } from '@/lib/likida/liquidacion_externa/alertas_webhook';
 import { logger } from '@/lib/logger';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { cotejarMigracion } from './migracion';
@@ -129,8 +130,11 @@ async function manejarGET(req: NextRequest) {
   let cronCheck: 'ok' | 'degraded' | 'config_ausente' | 'apagado' | 'unknown' = 'unknown';
   // H759-9: la antigüedad (días) del apagado por interruptor más viejo; `null` si nada está apagado o no se sabe desde cuándo.
   let apagadoDias: number | null = null;
+  // Webhook de liquidaciones de entrada: informativo, NO entra al `status` (un cliente que falla o calla no degrada la plataforma).
+  let webhooks: ResumenWebhookHealth = resumenWebhookParaHealth(null);
   try {
     const latidos = await detalleLatidos();
+    webhooks = resumenWebhookParaHealth(latidos.guardia?.detalle);
     const ids = Object.keys(latidos) as CronId[];
     const vencidos = ids.filter((c) => latidos[c].estado === 'vencido');
     const sinLatido = ids.filter((c) => latidos[c].estado === 'sin_latido');
@@ -279,6 +283,7 @@ async function manejarGET(req: NextRequest) {
     // OP-P1: `{ base, codigo, atras }` — números de migración, no datos de
     // negocio. `motivo` solo cuando algo no cuadra, y dice qué aplicar.
     migracion,
+    webhooks: { liquidaciones: webhooks },
     hora: new Date().toISOString(),
   };
   return NextResponse.json(cuerpo, {

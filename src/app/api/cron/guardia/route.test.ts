@@ -68,6 +68,13 @@ vi.mock('@/lib/seguridad/avisos', () => ({
   anonimizarRedEventosSeguridad: () => anonimizarRedEventosSeguridad(),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// Alertas del webhook de liquidaciones: su lógica tiene prueba propia (alertas_webhook.test.ts); aquí solo el cableado.
+let webhookLiq: { estado: string; detalle?: unknown } = { estado: 'apagado' };
+const correrAlertasWebhookLiq = vi.fn(async (..._a: unknown[]) => webhookLiq);
+vi.mock('@/lib/likida/liquidacion_externa/alertas_webhook', async () => {
+  const real = await vi.importActual<typeof import('@/lib/likida/liquidacion_externa/alertas_webhook')>('@/lib/likida/liquidacion_externa/alertas_webhook');
+  return { ...real, correrAlertasWebhookLiq: (...a: unknown[]) => correrAlertasWebhookLiq(...a) };
+});
 
 const { GET } = await import('./route');
 const llamar = () => GET(new Request('https://app.likida.ai/api/cron/guardia'));
@@ -75,6 +82,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, unknown>;
 const ok = { estado: 'ok', ultimoEstado: 'ok' };
 
 beforeEach(() => {
+  webhookLiq = { estado: 'apagado' }; correrAlertasWebhookLiq.mockClear();
   autorizado = 'si'; global = 'encendido'; clasificacion = vacia; latidoPrevio = null; lecturaLatido = 'ok'; memoriaDeEstado.olvidar();
   sondeo = { respondio: true, httpStatus: 200, status: 'ok', db: 'ok', crons: 'ok', migracionAlDia: true };
   latidos = { 'wa-pendientes': ok, 'wa-outbox': ok, 'buzon-entrega': ok };
@@ -376,5 +384,25 @@ describe('el barrido de seguridad (CT-SEG-11)', () => {
     await llamar();
     expect(anonimizarRedEventosSeguridad).toHaveBeenCalledTimes(1);
     expect(registrarLatido).toHaveBeenLastCalledWith('guardia', 'ok', expect.objectContaining({ seguridad: { avisos: barrido, redAnonimizada: 4 } }));
+  });
+});
+
+describe('alertas del webhook de liquidaciones', () => {
+  const detalle = { evaluadoEn: 'x', fallos: { estado: 'ok' }, token: { estado: 'ok' }, silencio: { estado: 'sin_uso' }, avisado: {} };
+  it('cada pasada lo corre y apagado no deja huella en el latido', async () => {
+    await llamar();
+    expect(correrAlertasWebhookLiq).toHaveBeenCalledTimes(1);
+    expect(registrarLatido.mock.calls.at(-1)![2] as Record<string, unknown>).not.toHaveProperty('webhookLiq');
+  });
+  it('su resultado va al latido', async () => {
+    webhookLiq = { estado: 'ok', detalle };
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('guardia', 'ok', expect.objectContaining({ webhookLiq: detalle }));
+  });
+  it('fuera de turno conserva lo último evaluado (el health no parpadea)', async () => {
+    latidoPrevio = { ultimoLatido: new Date().toISOString(), estado: 'ok', detalle: { webhookLiq: detalle } } as never;
+    webhookLiq = { estado: 'omitido' };
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('guardia', 'ok', expect.objectContaining({ webhookLiq: expect.objectContaining({ silencio: { estado: 'sin_uso' } }) }));
   });
 });
