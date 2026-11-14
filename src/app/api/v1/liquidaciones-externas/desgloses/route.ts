@@ -39,6 +39,8 @@ import { abrir, errorApi } from '../../_comun';
 import { leerCuerpo, traducirFalla, CampoInvalido } from '../../_escritura';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
+import { registrarRechazoWebhookLiq } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import { leerPadronOperadores } from '@/lib/likida/liquidacion_externa/repo';
 import { recibirDesglose } from '@/lib/likida/liquidacion_externa/desglose_recibir';
@@ -128,7 +130,7 @@ function preparar(cuerpo: Record<string, unknown>): Preparado {
   return { ok: true, desgloses: validos, indices: validos.map((_, i) => i), correccion };
 }
 
-export async function POST(req: Request) {
+async function procesar(req: Request): Promise<Response> {
   const acceso = await abrir(req, 'administracion');
   if (!acceso.ok) return acceso.respuesta;
 
@@ -250,4 +252,25 @@ export async function POST(req: Request) {
   // Simulación: nunca 201 (no se creó nada).
   const status = !simular && salida.recibidas + salida.retenidas > 0 ? 201 : 200;
   return NextResponse.json({ datos: salida }, { status });
+}
+
+/**
+ * La ruta, con la vigilancia por fuera: todo rechazo (≠ 401, que ya deja `llave_invalida`) o fallo queda contado para las alertas de la
+ * guardia. Registrar es best-effort y NO cambia la respuesta; un lanzamiento no capturado sigue siendo el 500 de Next.
+ */
+export async function POST(req: Request) {
+  // El área sigue siendo `abrir(req, 'administracion')`, que llama `procesar` (arriba): el guardia de áreas del OpenAPI la lee de este bloque.
+  let res: Response;
+  try {
+    res = await procesar(req);
+  } catch (e) {
+    await esperarRegistro(registrarRechazoWebhookLiq({ status: 500, codigo: 'excepcion_no_capturada' }));
+    throw e;
+  }
+  if (res.status >= 400 && res.status !== 401) {
+    let codigo: string | null = null;
+    try { codigo = ((await res.clone().json()) as { error?: { codigo?: string } })?.error?.codigo ?? null; } catch { /* sin cuerpo JSON */ }
+    await esperarRegistro(registrarRechazoWebhookLiq({ status: res.status, codigo }));
+  }
+  return res;
 }
