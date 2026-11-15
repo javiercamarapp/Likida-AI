@@ -375,3 +375,21 @@ describe('alertarHuecoConfiguracion — el piso es de días, no de una hora', ()
     expect(JSON.stringify(correo.datos)).not.toContain('9993700779');
   });
 });
+
+describe('alertarOperador — aviso informativo (no es una falla)', () => {
+  it('con texto informativo el asunto no dice «Falló» y el tono es neutral; sin él sigue igual', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarOperador } = await cargar();
+    await alertarOperador('cron.vigilancia-normativa.hallazgos', { codigo: 'x' }, {
+      asunto: '[Likida] Vigilancia normativa: 5 publicaciones del DOF o del SAT por revisar',
+      titulo: '5 publicaciones por revisar', avance: 'No es una falla', parrafos: ['Lectura humana.'],
+    });
+    const correo = enviarCorreo.mock.calls[0][1] as Correo & { tono?: string };
+    expect(correo.asunto).not.toMatch(/Falló/);
+    expect(correo.tono).toBe('neutral');
+    await alertarOperador('cron.purgar', { error: 'x' });
+    const falla = enviarCorreo.mock.calls[1][1] as Correo & { tono?: string };
+    expect(falla.asunto).toBe('[Likida] Falló cron.purgar');
+    expect(falla.tono).toBe('urgente');
+  });
+});
