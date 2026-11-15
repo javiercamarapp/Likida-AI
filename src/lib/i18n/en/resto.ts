@@ -1263,6 +1263,8 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'ch.no_se_pudo_abrir_esa_conversacion': 'That conversation could not be opened — try again.',
   'ch.generacion_detenida_puedes_volver_a_preguntar': 'Generation stopped. You can ask again whenever you want.',
   'ch.no_se_pudo_conectar_con_el': 'could not connect to the analyst',
+  'ch.analista_respuesta_incompleta': 'The analyst did not finish answering: the response arrived incomplete',
+  'ch.analista_no_pudo_contestar': 'The analyst could not answer (error {estado})',
   'ch.el_copiloto_no_pudo_responder_en': 'The copilot could not respond at this time — try again.',
   'ch.grupo.hoy': 'Today',
   'ch.grupo.ayer': 'Yesterday',

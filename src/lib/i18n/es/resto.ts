@@ -1261,6 +1261,8 @@ export const resto = {
   'ch.no_se_pudo_abrir_esa_conversacion': 'No se pudo abrir esa conversación — inténtalo de nuevo.',
   'ch.generacion_detenida_puedes_volver_a_preguntar': 'Generación detenida. Puedes volver a preguntar cuando quieras.',
   'ch.no_se_pudo_conectar_con_el': 'no se pudo conectar con el analista',
+  'ch.analista_respuesta_incompleta': 'El analista no alcanzó a contestar: la respuesta llegó incompleta',
+  'ch.analista_no_pudo_contestar': 'El analista no pudo contestar (error {estado})',
   'ch.el_copiloto_no_pudo_responder_en': 'El copiloto no pudo responder en este momento — inténtalo de nuevo.',
   'ch.grupo.hoy': 'Hoy',
   'ch.grupo.ayer': 'Ayer',

@@ -282,6 +282,7 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
 export function motivoDeFallo(
   resp: { ok: boolean; status: number },
   d: Record<string, unknown> | null,
+  t: TResto = T_RESTO_ES,
 ): string | null {
   if (d && d.t === 'error' && typeof d.error === 'string') return d.error;
   // A44-AG-01: un 200 SIN payload no es una respuesta buena, es una VACÍA. El
@@ -290,9 +291,9 @@ export function motivoDeFallo(
   // carga de la página— sin aviso y sin Reintentar (`use-analista.ts:293`
   // cuelga `fallo` de que haya motivo). El otro cliente del MISMO endpoint ya
   // lo trata como fallo: `viajes-en-vivo/respuesta.ts:59`.
-  if (resp.ok) return d === null ? 'El analista no alcanzó a contestar: la respuesta llegó incompleta' : null;
+  if (resp.ok) return d === null ? t('ch.analista_respuesta_incompleta') : null;
   if (d && typeof d.error === 'string' && d.error.trim() !== '') return d.error;
-  return `El analista no pudo contestar (error ${resp.status})`;
+  return t('ch.analista_no_pudo_contestar', { estado: resp.status });
 }
 
 /**

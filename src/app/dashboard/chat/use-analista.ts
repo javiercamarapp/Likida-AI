@@ -258,7 +258,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
       // H4 (auditoría 24) + A41-AG-01: el fallo llega por DOS puertas — dentro del NDJSON (`{t:'error'}` con `resp.ok` en 200) y como
       // ESTADO HTTP (401/403/429/400/503, sin `t`). `motivoDeFallo` mira las dos; mirando sólo la primera, las respuestas con estado se
       // disfrazaban de respuesta normal. `respuestaLocal` lo declara antes de dar la de reserva — «fallar cerrado y decirlo».
-      const motivo = motivoDeFallo(resp, d);
+      const motivo = motivoDeFallo(resp, d, tx);
       const bloques = resp.ok && d && Array.isArray(d.bloques) ? (d.bloques as Array<Record<string, unknown>>) : null;
       const delAnalista = bloques !== null;
       const r: Respuesta = bloques
