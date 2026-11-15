@@ -7,7 +7,7 @@ import { registrarLatido, leerLatido, puertaCron } from '@/lib/admin/salud';
 import { ejecutarVigilancia, marcarAvisados } from '@/lib/likida/normas/vigilancia/ejecutar';
 import { leerEstado, estadoVacio, type EstadoVigilancia } from '@/lib/likida/normas/vigilancia/estado';
 import { traerReal, pausarReal } from '@/lib/likida/normas/vigilancia/http';
-import { detalleDeCorreo, AVISOS_POR_CORREO, MENSAJES } from '@/lib/likida/normas/vigilancia/aviso';
+import { detalleDeCorreo, textoDeCorreo, AVISOS_POR_CORREO, MENSAJES } from '@/lib/likida/normas/vigilancia/aviso';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -138,7 +138,7 @@ export async function GET(req: Request) {
     const porAvisar = estado.pendientes.slice(0, AVISOS_POR_CORREO);
     let avisoSalio = true;
     if (estado.pendientes.length > 0) {
-      avisoSalio = await alertarOperador(EVENTO_HALLAZGOS, detalleDeCorreo(estado.pendientes, r.ayer));
+      avisoSalio = await alertarOperador(EVENTO_HALLAZGOS, detalleDeCorreo(estado.pendientes, r.ayer), textoDeCorreo(estado.pendientes.length));
       if (avisoSalio) estado = marcarAvisados(estado, porAvisar);
     }
 

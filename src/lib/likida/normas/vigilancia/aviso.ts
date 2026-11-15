@@ -2,6 +2,7 @@
 // caracteres, por eso cada aviso es una llave propia (`aviso_01`…) y no un texto largo.
 
 import type { Aviso } from './estado';
+import type { TextoInformativo } from '@/lib/observability/alerta';
 
 /** Cuántas líneas caben en UN correo; el resto sale en el siguiente (siguen en `pendientes`). */
 export const AVISOS_POR_CORREO = 10;
@@ -25,3 +26,17 @@ export const MENSAJES = {
   fallosRepetidos: (corridas: number, fallos: Array<{ codigo: string; causa: string; dia?: string }>): string =>
     `La vigilancia normativa lleva ${corridas} corridas con fallo: ${fallos.map((f) => `${f.codigo}${f.dia ? ` (${f.dia})` : ''}: ${f.causa}`).join(' | ').slice(0, 600)}`,
 } as const;
+
+/** El correo de hallazgos NO es una falla: asunto y texto propios (sin «Falló» ni «Urgente»). */
+export function textoDeCorreo(cantidad: number): TextoInformativo {
+  const n = `${cantidad} publicación${cantidad === 1 ? '' : 'es'} del DOF o del SAT por revisar`;
+  return {
+    asunto: `[Likida] Vigilancia normativa: ${n}`,
+    titulo: n.charAt(0).toUpperCase() + n.slice(1),
+    avance: 'No es una falla: la vigilancia encontró publicaciones que tocan fichas de normas; la lectura es humana.',
+    parrafos: [
+      'La vigilancia normativa diaria encontró publicaciones o cambios que tocan fichas de `normas/`. Este correo no indica ninguna falla del sistema.',
+      'La rutina no modificó ninguna ficha: cada línea trae la liga a la fuente y las fichas relacionadas para que alguien las lea y decida si hay que actualizarlas.',
+    ],
+  };
+}
