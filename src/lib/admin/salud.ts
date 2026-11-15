@@ -26,7 +26,7 @@ import { resumirErrorDeBase } from '@/lib/likida/error_base';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia', 'tms'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia', 'tms', 'vigilancia-normativa'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -109,6 +109,10 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // El sincronizador del sistema de transporte del cliente (T-TMS-12): lee (solo lee) viajes, liquidaciones, peajes y
   // posiciones de las flotas que lo tienen conectado, probado y con mapeo activo. Cada 10 minutos; sin flotas, no hace nada.
   tms: 10 * 60_000,
+  // La vigilancia normativa (DOF por SIDOF, anticipadas del SAT, deriva de ley). DIARIA, 13:30 UTC (≈ 7:30 CDMX): el DOF
+  // publica una vez al día (más las extraordinarias, que el barrido del día siguiente recoge) y el cron barre desde el
+  // último día leído, así que una corrida perdida se pone al día sola. Mismo piso que `purgar`: un día + 20 min.
+  'vigilancia-normativa': 86_400_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */

@@ -7,6 +7,8 @@ description: Vigila el DOF, el minisitio del SAT y los textos de ley en diputado
 
 Las fichas de `normas/` no se rompen con un error: se vuelven mentira en silencio. El SAT publica, el código sigue igual, y el PDF del contralor sigue citando un artículo que ya dice otra cosa.
 
+> **Estado de ejecución (14-nov-2026):** la vigilancia ahora corre como **cron de producción** — `GET /api/cron/vigilancia-normativa`, diario 13:30 UTC (≈ 7:30 CDMX), código en `src/lib/likida/normas/vigilancia/`. Hace las tres vigilancias de abajo (DOF por SIDOF, `ETag` del SAT los lunes, `Last-Modified` de las leyes cada trimestre), cruza cada día contra `diarios/porFecha` (anti-silencio), guarda su cursor en `cron_latido.detalle` y manda UN correo al operador con los hallazgos. **Solo avisa**: nunca toca `normas/` ni `estado_verificacion`. Esta rutina remota queda de **respaldo** (la política de egreso del entorno de Anthropic le bloquea el acceso a los hosts); no escribas `normas/.latido-*` desde el cron, que ese archivo es de la rutina remota.
+
 Esta rutina no interpreta la ley. **Detecta que algo se movió y señala qué código depende de eso.** La lectura la hace un humano — que la regla 2.9 de la RFA le abra una excepción a LISR 27-III es una relación que se establece leyendo, no diffeando.
 
 ## CRITICAL

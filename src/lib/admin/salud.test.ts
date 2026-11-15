@@ -129,6 +129,8 @@ describe('CADENCIA_MS espeja vercel.json', () => {
       '40 6 * * 1': 7 * 86_400_000,
       // T-TMS-12: el sincronizador del sistema de transporte del cliente, cada 10 minutos (opt-in por flota).
       '*/10 * * * *': 600_000,
+      // Vigilancia normativa: diaria, 13:30 UTC (≈ 7:30 CDMX), lejos de la estampida de los minutos 0/5/15 y del 15 4 de purgar.
+      '30 13 * * *': 86_400_000,
     };
     for (const c of cfg.crons) {
       const id = c.path.replace('/api/cron/', '') as keyof typeof CADENCIA_MS;
