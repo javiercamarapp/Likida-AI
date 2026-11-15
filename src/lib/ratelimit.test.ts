@@ -91,13 +91,16 @@ describe('rateLimit registra el bloqueo en evento_seguridad', () => {
     const { rateLimit: rl, reiniciarLimites: reiniciar } = await import('./ratelimit');
     reiniciar();
     expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(true);
-    expect(registrar).not.toHaveBeenCalled(); // pasar no deja evento
+    // Solo se cuenta la categoría de ESTA prueba: los bloqueos de las pruebas anteriores (acceso, relleno…) registran en segundo plano
+    // y su import dinámico puede resolver tarde, ya contra este simulacro; no son de esta prueba.
+    const deLead = () => registrar.mock.calls.filter((c) => c[0] === 'lead').length;
+    expect(deLead()).toBe(0); // pasar no deja evento
     expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(false);
     expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(false);
     expect(await rl('lead:198.51.100.2', 1, 60_000)).toBe(true);
     expect(await rl('lead:198.51.100.2', 1, 60_000)).toBe(false);
     // Espera por CONDICIÓN (el registro es un import dinámico en segundo plano: bajo carga tarda más de 1 s, el default de waitFor).
-    await vi.waitFor(() => expect(registrar).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    await vi.waitFor(() => expect(deLead()).toBe(1), { timeout: 10_000 });
     expect(registrar).toHaveBeenCalledWith('lead'); // la IP no sale de aquí
     vi.doUnmock('@/lib/seguridad/registro_acceso');
   });
@@ -116,7 +119,7 @@ describe('rateLimit registra el bloqueo en evento_seguridad', () => {
     expect(await rl('lead:control', 1, 60_000)).toBe(false);
     await vi.waitFor(() => expect(registrar).toHaveBeenCalledWith('lead'), { timeout: 10_000 });
     expect(registrar).not.toHaveBeenCalledWith('login');
-    expect(registrar).toHaveBeenCalledTimes(1);
+    expect(registrar.mock.calls.filter((c) => c[0] === 'lead')).toHaveLength(1); // solo el control; otras categorías son de pruebas anteriores
     vi.doUnmock('@/lib/seguridad/registro_acceso');
   });
 

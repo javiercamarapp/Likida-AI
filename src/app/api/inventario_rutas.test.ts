@@ -293,7 +293,11 @@ import { join, relative, sep } from 'node:path';
 //   `preferencias/idioma/route.test.ts`.
 // 117 → 118 (F14-B): `api/admin/caso-examen/route.ts` — GET de solo lectura que descarga un caso de examen REDACTADO de un renglón de Escalaciones.
 // Su puerta: `sesionSuperadmin()`; no escribe nada y falla cerrado (422) si tras redactar queda un dato con forma personal.
-const RUTAS_APP_REVISADAS = 118;
+// 118 → 119 (vigilancia normativa): `api/cron/vigilancia-normativa/route.ts` — cron diario de solo lectura. Su puerta: `puertaCron`
+//   (CRON_SECRET, tiempo constante; sin él 500 + alerta; bearer equivocado 401 sin escribir nada), palanca `global` fail-closed (ilegible = 500 +
+//   latido `fallo`) y latido en todo camino de salida. No acepta cuerpo ni parámetros; solo GET/HEAD a fuentes públicas (SIDOF, SAT, diputados)
+//   con User-Agent genérico; nunca toca fichas ni `normas/`. Prueba: `cron/vigilancia-normativa/route.test.ts`.
+const RUTAS_APP_REVISADAS = 119;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

@@ -67,10 +67,10 @@ const PERMITIDOS = [
 ] as const;
 /**
  * PLATAFORMA: no iteran flotas con datos operativos. `runner` despacha los agentes de Likida (CRM/prospección con
- * tenant NULL y reportes internos de Likida) y `portales-vivos` mide la salud de portales públicos. No hay flota que
+ * tenant NULL y reportes internos de Likida) `portales-vivos` mide la salud de portales públicos y `vigilancia-normativa` lee fuentes públicas (DOF/SAT/diputados). No hay flota que
  * saltar; se declaran aquí para que la clasificación sea explícita y no un olvido.
  */
-const PLATAFORMA = ['runner', 'portales-vivos'] as const;
+const PLATAFORMA = ['runner', 'portales-vivos', 'vigilancia-normativa'] as const;
 
 const cronsDeVercel: string[] = (JSON.parse(readFileSync('vercel.json', 'utf8')).crons as Array<{ path: string }>)
   .map((c) => nombreDeCron(c.path));

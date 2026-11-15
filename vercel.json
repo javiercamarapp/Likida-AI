@@ -86,6 +86,10 @@
     {
       "path": "/api/cron/tms",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/vigilancia-normativa",
+      "schedule": "30 13 * * *"
     }
   ]
 }

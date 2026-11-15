@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { detalleLatidos, esHuecoDeConfiguracion, esContrapresionDeclarada, esApagadoPorInterruptor, diasApagado, DIAS_APAGADO_ALERTA, type CronId } from '@/lib/admin/salud';
+import { detalleLatidos, esHuecoDeConfiguracion, esContrapresionDeclarada, esApagadoPorInterruptor, esIntegracionNoContratada, diasApagado, DIAS_APAGADO_ALERTA, type CronId } from '@/lib/admin/salud';
 import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/alerta';
+import { resumenWebhookParaHealth, type ResumenWebhookHealth } from '@/lib/likida/liquidacion_externa/alertas_webhook';
 import { logger } from '@/lib/logger';
+import { resumirErrorDeBase } from '@/lib/likida/error_base';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { cotejarMigracion } from './migracion';
 import { medirRuta } from '@/lib/observability/latencia';
@@ -61,6 +63,15 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
+/** El «por qué» que el propio cron dejó en su latido (`motivo`, `codigo` o `error`), recortado, para que el correo de `cron.estado_no_ok` diga qué pasó y no solo quién. Vacío si no dejó nada. */
+function causaDeLatido(detalle: Record<string, unknown>): string {
+  for (const llave of ['motivo', 'codigo', 'error']) {
+    const v = detalle[llave];
+    if (typeof v === 'string' && v.trim() !== '') return `: ${resumirErrorDeBase(v, 120)}`;
+  }
+  return '';
+}
+
 export function GET(req: NextRequest) {
   return medirRuta('health', () => manejarGET(req));
 }
@@ -129,8 +140,11 @@ async function manejarGET(req: NextRequest) {
   let cronCheck: 'ok' | 'degraded' | 'config_ausente' | 'apagado' | 'unknown' = 'unknown';
   // H759-9: la antigüedad (días) del apagado por interruptor más viejo; `null` si nada está apagado o no se sabe desde cuándo.
   let apagadoDias: number | null = null;
+  // Webhook de liquidaciones de entrada: informativo, NO entra al `status` (un cliente que falla o calla no degrada la plataforma).
+  let webhooks: ResumenWebhookHealth = resumenWebhookParaHealth(null);
   try {
     const latidos = await detalleLatidos();
+    webhooks = resumenWebhookParaHealth(latidos.guardia?.detalle);
     const ids = Object.keys(latidos) as CronId[];
     const vencidos = ids.filter((c) => latidos[c].estado === 'vencido');
     const sinLatido = ids.filter((c) => latidos[c].estado === 'sin_latido');
@@ -183,6 +197,11 @@ async function manejarGET(req: NextRequest) {
       else if (cronCheck !== 'degraded') cronCheck = configAusente.length > 0 ? 'config_ausente' : 'ok';
       if (configAusente.length > 0) {
         for (const c of configAusente) {
+          // Integración opcional que nadie ha contratado: estado correcto, visible en `checks.crons` y en el panel, sin correo ni warn en cada ping.
+          if (esIntegracionNoContratada(latidos[c].detalle)) {
+            logger.info('health.cron_integracion_no_contratada', { codigo: `cron_integracion_no_contratada:${c}`, ruta: `/api/cron/${c}` });
+            continue;
+          }
           // Código controlado por el catálogo: sobrevive al saneador sin
           // enviar la prosa potencialmente privada del motivo a Sentry.
           logger.warn('health.cron_config_ausente', {
@@ -212,7 +231,7 @@ async function manejarGET(req: NextRequest) {
           estados: regresiones.map((c) => latidos[c].ultimoEstado),
         });
         await alertarOperador('cron.estado_no_ok', {
-          error: `Cron con resultado no sano: ${regresiones.map((c) => `${c} (${latidos[c].ultimoEstado})`).join(', ')}`,
+          error: `Cron con resultado no sano: ${regresiones.map((c) => `${c} (${latidos[c].ultimoEstado}${causaDeLatido(latidos[c].detalle)})`).join(', ')}`,
           codigo: 'cron_estado_no_ok',
         });
       }
@@ -279,6 +298,7 @@ async function manejarGET(req: NextRequest) {
     // OP-P1: `{ base, codigo, atras }` — números de migración, no datos de
     // negocio. `motivo` solo cuando algo no cuadra, y dice qué aplicar.
     migracion,
+    webhooks: { liquidaciones: webhooks },
     hora: new Date().toISOString(),
   };
   return NextResponse.json(cuerpo, {

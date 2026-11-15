@@ -130,10 +130,12 @@ describe('registrar revisiones en la bandeja existente', () => {
     const r = ok(sobre([una({ Operador: 'Homónimo Ficticio', Fecha: null }), una({ BitacoraID: 900004, Operador: 'Nadie Ficticio' }), 7]));
     const n = await registrarRevisionesMuestra('t-1', r.revisiones, (b) => `BIT-${b}`, { abrirExcepcion, ahora: () => new Date('2026-11-05T12:00:00Z') });
     expect(n).toBe(3);
-    const llamadas = abrirExcepcion.mock.calls as unknown as Array<[string, string, string, Record<string, unknown>]>;
+    // Las aperturas van varias a la vez: el orden entre bitácoras no es contrato, el contenido sí.
+    const llamadas = (abrirExcepcion.mock.calls as unknown as Array<[string, string, string, Record<string, unknown>]>)
+      .slice().sort((a, b) => `${a[1]}|${a[2]}`.localeCompare(`${b[1]}|${b[2]}`));
     expect(llamadas.map((c) => [c[0], c[1], c[2]])).toEqual([
-      ['t-1', 'BIT-900001', 'operador_no_encontrado'], ['t-1', 'BIT-900001', 'mapeo_invalido'], ['t-1', 'BIT-900004', 'operador_no_encontrado']]);
-    expect(llamadas[0][3]).toMatchObject({ motivo: 'nombre_ambiguo' });
+      ['t-1', 'BIT-900001', 'mapeo_invalido'], ['t-1', 'BIT-900001', 'operador_no_encontrado'], ['t-1', 'BIT-900004', 'operador_no_encontrado']]);
+    expect(llamadas[1][3]).toMatchObject({ motivo: 'nombre_ambiguo' });
     expect(llamadas[2][3]).toMatchObject({ motivo: 'nombre_sin_alta' });
     expect(JSON.stringify(llamadas)).not.toMatch(/Ficticio/);
   });

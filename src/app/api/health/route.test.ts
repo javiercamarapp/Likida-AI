@@ -69,7 +69,7 @@ describe('/api/health', () => {
     expect(r.status).toBe(503);
     const c = await r.json();
     expect(c.ok).toBe(false);
-    expect(Object.keys(c).sort()).toEqual(['checks', 'hora', 'migracion', 'ok', 'status', 'version']);
+    expect(Object.keys(c).sort()).toEqual(['checks', 'hora', 'migracion', 'ok', 'status', 'version', 'webhooks']);
     expect(c.status).toBe('degraded');
     // AUDITORÍA 24, OP-P4: once crons que nunca latieron no son «unknown»:
     // son crons muertos, y el operador se entera por su canal.
@@ -92,6 +92,22 @@ describe('/api/health', () => {
     const c = await r.json();
     expect(r.status).toBe(200);
     expect(c).toMatchObject({ ok: true, status: 'ok', checks: { db: 'ok', crons: 'ok' } });
+  });
+
+  it('refleja las alertas del webhook de liquidaciones SIN degradar el status (un cliente no tumba el health)', async () => {
+    dbFalla = false;
+    const ahora = new Date().toISOString();
+    const webhookLiq = {
+      evaluadoEn: ahora, fallos: { estado: 'alerta', cincoxx: 4, otros: 0 }, token: { estado: 'ok', llavesInvalidas: 0 },
+      silencio: { estado: 'ok', umbralHoras: 20, flotas: [] }, avisado: { fallos: false },
+    };
+    latidos = [...CRONS].map((id) => ({ id, ultimo_latido: ahora, estado: 'ok', ...(id === 'guardia' ? { detalle: { webhookLiq } } : {}) }));
+    const r = await GET(peticion());
+    const c = await r.json();
+    expect(r.status).toBe(200);
+    expect(c.status).toBe('ok');
+    expect(c.webhooks.liquidaciones).toMatchObject({ estado: 'alerta', alertas: ['fallos'], sinAvisar: true, evaluadoEn: ahora });
+    expect(c.webhooks.liquidaciones.canal).toEqual({ correo: expect.any(Boolean), whatsapp: expect.any(Boolean) });
   });
 
   beforeEach(() => { latidos = []; permitido = true; });
@@ -121,6 +137,16 @@ describe('/api/health', () => {
     expect(JSON.stringify(c)).not.toContain('wa-pendientes');
     expect(alertarOperador).toHaveBeenCalledWith('cron.sin_latido', expect.objectContaining({ codigo: 'cron_sin_latido' }));
     latidos = [];
+  });
+
+  it('el correo de cron.estado_no_ok trae la causa que dejó el propio cron, no solo su nombre', async () => {
+    dbFalla = false;
+    alertarOperador.mockClear();
+    const ahora = new Date().toISOString();
+    latidos = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps']
+      .map((id) => ({ id, ultimo_latido: ahora, estado: id === 'gps' ? 'fallo' : 'ok', ...(id === 'gps' ? { detalle: { codigo: 'interruptor_ilegible' } } : {}) }));
+    await GET(peticion());
+    expect(alertarOperador).toHaveBeenCalledWith('cron.estado_no_ok', expect.objectContaining({ error: expect.stringContaining('gps (fallo: interruptor_ilegible)') }));
   });
 
   it('un latido fresco en fallo también degrada: frescura no oculta el resultado', async () => {
@@ -415,6 +441,19 @@ describe('OP-P4: un cron que nunca latió es degraded aunque haya un hueco decla
     const r = await GET(peticion());
     expect(r.status).toBe(200);
     expect((await r.json()).checks.crons).toBe('config_ausente');
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  // 14-nov-2026: `cron.config_ausente:escalar` (Cal.com) y `:descarga-sat` llegaban al correo del dueño por integraciones que nadie contrató.
+  it('integración NO CONTRATADA a propósito: sigue visible como config_ausente (200) pero NO manda correo de hueco', async () => {
+    latidos = frescos({
+      id: 'descarga-sat', ultimo_latido: new Date().toISOString(), estado: 'parcial',
+      detalle: { motivo: 'falta LIKIDA_SAT_PROVEEDOR en el servidor', configAusente: true, noContratada: true },
+    });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect((await r.json()).checks.crons).toBe('config_ausente');
+    expect(alertarHuecoConfiguracion).not.toHaveBeenCalled();
     expect(alertarOperador).not.toHaveBeenCalled();
   });
 });

@@ -22,10 +22,11 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
+import { resumirErrorDeBase } from '@/lib/likida/error_base';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia', 'tms'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia', 'tms', 'vigilancia-normativa'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -108,6 +109,10 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // El sincronizador del sistema de transporte del cliente (T-TMS-12): lee (solo lee) viajes, liquidaciones, peajes y
   // posiciones de las flotas que lo tienen conectado, probado y con mapeo activo. Cada 10 minutos; sin flotas, no hace nada.
   tms: 10 * 60_000,
+  // La vigilancia normativa (DOF por SIDOF, anticipadas del SAT, deriva de ley). DIARIA, 13:30 UTC (≈ 7:30 CDMX): el DOF
+  // publica una vez al día (más las extraordinarias, que el barrido del día siguiente recoge) y el cron barre desde el
+  // último día leído, así que una corrida perdida se pone al día sola. Mismo piso que `purgar`: un día + 20 min.
+  'vigilancia-normativa': 86_400_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
@@ -196,7 +201,7 @@ export async function registrarLatido(cron: CronId, estado: EstadoLatido, detall
       // A1 (ronda 19): el código salió antes que la 0701 → el CHECK de cron_latido no admite 'guardia' (23514). Se dice
       // una vez, con código estable, y se sigue: la guardia no lanza en bucle (el aviso de /api/health es el respaldo).
       if ((error as { code?: string }).code === '23514') logger.error('cron.latido_migracion_pendiente', { cron, codigo: 'migracion_0701_pendiente', err: error.message });
-      else logger.warn('cron.latido_sin_escribir', { cron, err: error.message });
+      else logger.warn('cron.latido_sin_escribir', { cron, err: resumirErrorDeBase(error.message) });
     }
   } catch (e) {
     logger.warn('cron.latido_sin_escribir', { cron, err: e instanceof Error ? e.message : String(e) });
@@ -329,6 +334,16 @@ export function esHuecoDeConfiguracion(valor: unknown): boolean {
 }
 
 /**
+ * Integración OPCIONAL que nadie ha contratado: el cron la declara (`detalle.noContratada`) solo cuando NO hay ni una sola de sus
+ * variables puestas (p. ej. `LIKIDA_SAT_PROVEEDOR` ausente, Cal.com sin API key ni secreto). Es un estado correcto, no un pendiente:
+ * sigue visible (`checks.crons='config_ausente'`, panel, log informativo) pero no genera correo al operador. Una configuración A MEDIAS
+ * (proveedor desconocido, host que no corresponde, solo uno de dos secretos) NO se declara así y sigue avisando.
+ */
+export function esIntegracionNoContratada(detalle: unknown): boolean {
+  return detalle !== null && typeof detalle === 'object' && (detalle as Record<string, unknown>).noContratada === true;
+}
+
+/**
  * Un `parcial` que es SOLO contrapresión de la bandeja: el runner está vivo (despachó al menos un agente, sin cortes seguidos) y frenó a los
  * demás porque hay piezas pendientes de aprobar (`aprobar es humano; el runner no fabrica encima`). Es un freno por diseño, no una regresión:
  * tumbar el health a 503 por esto dejaba «Salud de producción» en rojo sin que hubiera nada que arreglar en el código. Sigue visible
@@ -437,9 +452,9 @@ export async function registrarLatencia(tipo: 'ruta' | 'cron', nombre: string, m
     const { error } = await acotada(supabaseAdmin().from('latencia_muestra').insert({
       tipo, nombre: nombre.slice(0, 120), ms: Math.min(Math.round(ms), 3_600_000), ok,
     }), 'registrarLatencia');
-    if (error) logger.warn('latencia.sin_escribir', { tipo, nombre, err: error.message });
+    if (error) logger.warn('latencia.sin_escribir', { tipo, nombre, err: resumirErrorDeBase(error.message) });
   } catch (e) {
-    logger.warn('latencia.sin_escribir', { tipo, nombre, err: e instanceof Error ? e.message : String(e) });
+    logger.warn('latencia.sin_escribir', { tipo, nombre, err: resumirErrorDeBase(e instanceof Error ? e.message : String(e)) });
   }
 }
 

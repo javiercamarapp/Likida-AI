@@ -269,7 +269,11 @@ const LLAVES_SIN_REDACTAR = new Set([
   'uuid', 'uuidFiscal', 'uuidCfdi', 'folioFiscal',
 ]);
 
-export async function alertarOperador(evento: string, detalle: Record<string, unknown>): Promise<boolean> {
+/** Un aviso que NO es una falla (p. ej. los hallazgos de la vigilancia normativa): redacción propia, tono neutral y sin el
+ *  texto de «un proceso de fondo no completó su corrida». El piso, la redacción de datos y el canal son los mismos. */
+export type TextoInformativo = { asunto: string; titulo: string; avance: string; parrafos: string[] };
+
+export async function alertarOperador(evento: string, detalle: Record<string, unknown>, informativo?: TextoInformativo): Promise<boolean> {
   try {
     const para = process.env.ALERTA_EMAIL;
     const porWhatsApp = alertaWhatsAppConfigurada() && (esEventoDeDinero(evento) || esEventoDeGuardia(evento));
@@ -316,16 +320,16 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
     let salio = false;
     if (para) {
       const r = await enviarCorreo(para, {
-        asunto: `[Likida] Falló ${evento}`,
-        avance: 'Un proceso de fondo falló y va a reintentarse solo; el detalle va adentro.',
-        titulo: `Falló ${evento}`,
-        parrafos: [
+        asunto: informativo?.asunto ?? `[Likida] Falló ${evento}`,
+        avance: informativo?.avance ?? 'Un proceso de fondo falló y va a reintentarse solo; el detalle va adentro.',
+        titulo: informativo?.titulo ?? `Falló ${evento}`,
+        parrafos: informativo?.parrafos ?? [
           'Un proceso de fondo del sistema no completó su corrida. El trabajo se reintenta en la siguiente corrida programada; lo que este correo pide es mirar POR QUÉ falló, porque un cron que falla en silencio puede llevar días fallando.',
           'De este evento no va a llegar otro correo en la próxima hora aunque siga fallando; la serie completa está en Sentry.',
         ],
         datos,
         boton: { texto: 'Ver salud del sistema', href: `${APP}/admin/salud-sistema` },
-        tono: 'urgente',
+        tono: informativo ? 'neutral' : 'urgente',
         porQueLoRecibes: 'Recibes esta alerta porque ALERTA_EMAIL apunta a esta dirección: es el canal del operador del sistema, no de una flota.',
       });
       // `enviarCorreo` nunca lanza; devuelve el motivo. Aquí solo se deja

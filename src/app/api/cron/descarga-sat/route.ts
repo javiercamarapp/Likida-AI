@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { correrDescargaSat } from '@/lib/likida/sat_descarga/ciclo';
+import { satNoContratado } from '@/lib/likida/sat_descarga/index';
 import { avisarCierrePeaje } from '@/lib/likida/sat_descarga/peaje_cierre';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
@@ -174,6 +175,8 @@ export async function GET(req: Request) {
       // se clasifican igual sin depender de cómo esté redactado `motivo`.
       // A37-L-05: hueco declarado SOLO si es la única causa; con el peaje roto, errores o cortes es regresión.
       configAusente: !descarga.configurado && peajeError === null && !peajeParcial && errores === 0,
+      // Sin proveedor declarado = integración no contratada (a propósito): visible, pero sin correo (ver `esIntegracionNoContratada`).
+      noContratada: !descarga.configurado && satNoContratado() && peajeError === null && !peajeParcial && errores === 0,
       descargaSinTurno: descarga.sinTurno,
       peajeAvisadas: peaje?.avisadas ?? null,
       peajeSinTurno: peaje?.sinTurno ?? null,

@@ -33,6 +33,9 @@ permissions:
 
 jobs:
   avisar:
+    # COSTO: sin `[deploy` en el título no hay nada que avisar; saltar el job entero evita facturar 1 min por push
+    # (el paso de abajo conserva la regex exacta). No es un check requerido.
+    if: contains(github.event.pull_request.title, '[deploy')
     runs-on: ubuntu-24.04
     steps:
       - name: Detectar si un merge commit normal perdería el [deploy] del título

@@ -38,7 +38,7 @@ export const NO_CLASIFICADO = 'NO CLASIFICADO';
 
 // ── Declaraciones que la config del perfil NO contiene (y por qué) ─────────
 /** Crons que no recorren datos de ninguna flota (sondean portales externos / corren agentes de la propia compañía). */
-const CRONS_GLOBALES = ['portales-vivos', 'runner'];
+const CRONS_GLOBALES = ['portales-vivos', 'runner', 'vigilancia-normativa'];
 /** Rutas /v1 que no pasan por `abrir`: documentación pública, sin datos de ninguna flota. */
 const V1_SIN_DATOS = ['openapi'];
 /** Rutas de API sin sesión de flota: credenciales/protocolo, no leen ni escriben datos del tenant. */

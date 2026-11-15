@@ -1,4 +1,5 @@
 import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
+import { canalDeEnvio } from '@/lib/meta/canal_envio';
 import { opcionesDeEnvio, PLANTILLA } from '@/lib/meta/plantillas_catalogo';
 import { mxn, fechaMx, TZ_MX } from '@/lib/formato';
 import { logger } from '@/lib/logger';
@@ -171,8 +172,12 @@ export async function notificarAsignacion(args: {
     return { enviado: false, motivo: 'El viaje no tiene folio ni ruta: el aviso no le diría al chofer de qué viaje se trata.' };
   }
 
+  // Línea del tenant (si tiene una propia); sin ella, el entorno global de siempre. Falla cerrado si no se puede usar.
+  const elegido = await canalDeEnvio(args.tenantId);
+  if ('error' in elegido) return { enviado: false, motivo: elegido.error };
   const r = await sendTemplate(args.telefono as string, PLANTILLA_VIAJE, {
     parametros: piezasDeDatos(args.viaje),
+    ...(elegido.canal ? { canal: elegido.canal } : {}),
   });
 
   if (!r.ok) {
@@ -242,7 +247,9 @@ export async function notificarAsignacionConBotones(args: {
   }
 
   const opciones = opcionesDeEnvio(PLANTILLA.viajeAsignadoConfirmar, { cuerpo: parametrosAsignacionConBotones(args.viaje), idsBotones: args.viaje.viajeId });
-  const r = await sendTemplate(args.telefono as string, PLANTILLA.viajeAsignadoConfirmar, opciones);
+  const elegido = await canalDeEnvio(args.tenantId);
+  if ('error' in elegido) return { enviado: false, motivo: elegido.error };
+  const r = await sendTemplate(args.telefono as string, PLANTILLA.viajeAsignadoConfirmar, elegido.canal ? { ...opciones, canal: elegido.canal } : opciones);
   if (!r.ok) {
     logger.warn('viaje.aviso_botones_no_salio', { tenantId: args.tenantId, codigo: r.codigo });
     return { enviado: false, motivo: motivoDeFalloWhatsApp(r.error, r.codigo) };

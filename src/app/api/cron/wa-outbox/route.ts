@@ -6,7 +6,8 @@ import { conPool } from '@/lib/likida/lotes';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
-import { esReintentableMeta, esTokenMetaInvalido, sondearTokenWhatsApp, avisarTokenVencido } from '@/lib/meta/client';
+import { esReintentableMeta, esTokenMetaInvalido, sondearTokenWhatsApp, avisarTokenVencido, separarCanalDePayload } from '@/lib/meta/client';
+import type { Canal } from '@/lib/meta/canal';
 import { veredictoSalidasHaciaTelefono } from '@/lib/saas/salidas_flota';
 import { esTelefonoDemo, esDestinatarioBloqueado, ERROR_TELEFONO_DEMO, ERROR_TELEFONO_NO_ENVIABLE } from '@/lib/meta/telefono_demo';
 
@@ -159,6 +160,9 @@ export async function GET(req: Request) {
     let enviadas = 0;
     let fallidas = 0;
     let frenadas = 0;
+    // Líneas PROPIAS de tenant cuyo token ya se vio vencido en ESTA corrida: sus demás filas no llaman a Meta. El veredicto es
+    // por línea: no frena la cola global ni las salidas de otros tenants.
+    const lineasVencidas = new Set<string>();
     await conPool(salidas, 4, async (s) => {
       // El tenant demo nunca escribe a nadie: una salida con la marca de demo (28999…) muere aquí, sin llamar a Meta.
       // (No cuenta como `fallidas`: no es un fallo del canal, y volvería el latido «parcial» por algo esperado.)
@@ -178,11 +182,57 @@ export async function GET(req: Request) {
           return;
         }
       }
+      // LÍNEA de la salida: la fijó el productor al encolar (`_canal` en el payload, o las columnas de la fila), de modo que
+      // un reintento sale por la MISMA línea aunque el tenant cambie de número. Sin línea fijada = entorno global, igual que
+      // siempre. Una línea que no se puede resolver NUNCA cae a otra: se reintenta con backoff (y muere avisando).
+      const { payload: payloadMeta, lineaFijada } = separarCanalDePayload(s.payload);
+      const phoneNumberIdFila = lineaFijada?.phoneNumberId ?? s.phoneNumberId ?? null;
+      let canal: Canal | undefined;
+      if (phoneNumberIdFila || s.tenantId) {
+        try {
+          const modCanal = await import('@/lib/meta/canal');
+          if (phoneNumberIdFila) {
+            canal = (await modCanal.canalPorPhoneNumberId(phoneNumberIdFila))?.canal;
+            if (!canal) {
+              frenadas++;
+              await finalizarSalidaWhatsApp(s, undefined, 'retryable:linea_no_resuelta');
+              return;
+            }
+          } else {
+            const c = await modCanal.resolverCanal(s.tenantId);
+            canal = c.origen === 'tenant' ? c : undefined;
+          }
+        } catch (e) {
+          frenadas++;
+          logger.warn('cron.wa_outbox.linea_no_disponible', { id: s.id, error: e instanceof Error ? e.message : String(e) });
+          await finalizarSalidaWhatsApp(s, undefined, 'retryable:linea_no_disponible');
+          return;
+        }
+      }
+      if (canal) {
+        const llaveLinea = canal.lineaId ?? canal.phoneNumberId;
+        let vencida = lineasVencidas.has(llaveLinea);
+        if (!vencida) {
+          const sondeoLinea = await sondearTokenWhatsApp(Date.now(), canal);
+          if (sondeoLinea.estado === 'vencido') {
+            await avisarTokenVencido('sondeo', sondeoLinea.codigo, sondeoLinea.status, canal);
+            lineasVencidas.add(llaveLinea);
+            vencida = true;
+          }
+        }
+        if (vencida) {
+          frenadas++;
+          await finalizarSalidaWhatsApp(s, undefined, 'retryable:linea_token_vencido');
+          return;
+        }
+      }
+      const urlPhoneId = canal ? canal.phoneNumberId : phoneId;
+      const tokenEnvio = canal ? canal.token : token;
       try {
-        const r = await fetch(`${GRAPH}/${phoneId}/messages`, {
-          method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        const r = await fetch(`${GRAPH}/${urlPhoneId}/messages`, {
+          method: 'POST', headers: { Authorization: `Bearer ${tokenEnvio}`, 'Content-Type': 'application/json' },
           // Última defensa del 132018: filas viejas del outbox con parámetros crudos.
-          body: JSON.stringify(sanearPayloadWhatsApp(s.payload)), signal: AbortSignal.timeout(10_000),
+          body: JSON.stringify(sanearPayloadWhatsApp(payloadMeta)), signal: AbortSignal.timeout(10_000),
         });
         const body = await r.text();
         if (!r.ok) {
@@ -191,7 +241,13 @@ export async function GET(req: Request) {
           try { metaCodigo = Number((JSON.parse(body) as { error?: { code?: number } }).error?.code); } catch { /* cuerpo no JSON */ }
           const codigoMeta = Number.isFinite(metaCodigo) ? metaCodigo : undefined;
           // El 190 NO es terminal para la fila: es del token, y se arregla renovándolo.
-          const retryable = esReintentableMeta(codigoMeta, r.status) || esTokenMetaInvalido(codigoMeta, r.status);
+          const tokenInvalido = esTokenMetaInvalido(codigoMeta, r.status);
+          const retryable = esReintentableMeta(codigoMeta, r.status) || tokenInvalido;
+          if (tokenInvalido && canal) {
+            // 190 en una línea PROPIA: se marca ESA línea (y se avisa); las demás filas de otros tenants siguen saliendo.
+            lineasVencidas.add(canal.lineaId ?? canal.phoneNumberId);
+            await avisarTokenVencido('envio', codigoMeta, r.status, canal);
+          }
           const codigo = retryable ? 'retryable:' : 'terminal:';
           await finalizarYAvisarSiMurio(s, undefined, `${codigo}HTTP ${r.status}: ${body.slice(0, 300)}`);
           return;

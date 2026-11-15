@@ -2,7 +2,9 @@ name: E2E WebKit iPhone 14 (nocturno)
 
 on:
   schedule:
-    - cron: '23 8 * * *'
+    # COSTO: era diario (~8 min × 30). Lunes y jueves bastan: WebKit iPhone es una red de regresión visual de
+    # Safari, y el E2E de Chromium ya corre en cada PR/merge. `workflow_dispatch` sigue disponible.
+    - cron: '23 8 * * 1,4'
   workflow_dispatch:
 
 concurrency:

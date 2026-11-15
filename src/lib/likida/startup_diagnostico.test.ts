@@ -62,6 +62,29 @@ describe('diagnóstico de migraciones', () => {
     expect(meta.msg).not.toContain('FALTA');
   });
 
+  // 14-nov-2026 ~19:00 UTC (cambio de cómputo de Supabase): la base devolvió la página HTML de Cloudflare, sin `code`.
+  // El arranque dijo «FALTA la migración 0132…» con el HTML pegado en `err`, una vez por sondeo.
+  it('una página HTML del proxy (sin código) es «no se pudo verificar», UNA vez por corrida y sin pegar el HTML', async () => {
+    const html = '<!DOCTYPE html>\n<html lang="en-US"><head><title>db.example.co | 522: Connection timed out</title></head><body>Cloudflare Ray ID</body></html>';
+    rpc.mockResolvedValue({ error: { code: '', message: html } });
+    from.mockReturnValue(tabla({ error: { code: '', message: html } }));
+    await verificarMigracionesCriticas();
+
+    expect(error).not.toHaveBeenCalled();
+    expect(warn.mock.calls.filter((c) => c[0] === 'startup.migraciones_sin_verificar')).toHaveLength(1);
+    const [, meta] = warn.mock.calls[0] as [string, { msg: string; err: string }];
+    expect(meta.msg).toContain('NO se pudo verificar');
+    expect(meta.err).not.toContain('<');
+  });
+
+  it('un timeout de consulta con código 57014 o el tope propio «sin respuesta en» tampoco son «falta la migración»', async () => {
+    rpc.mockResolvedValue({ error: { code: '57014', message: 'canceling statement due to statement timeout' } });
+    from.mockReturnValue(tabla({ error: { message: 'sin respuesta en 8000 ms (tope de consulta)' } }));
+    await verificarMigracionesCriticas();
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('startup.migraciones_sin_verificar', expect.anything());
+  });
+
   it('si falta el lector catalogal 0326 SÍ se reporta como error', async () => {
     // PostgREST contesta con código cuando la función no existe: hubo respuesta.
     rpc.mockImplementation(async (nombre: string) => (nombre === 'garantias_arranque_faltantes'

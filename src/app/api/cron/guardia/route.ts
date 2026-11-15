@@ -3,6 +3,7 @@ import { clasificacionDeGuardia, decidirApp, decidirAvisos, decidirBaseCaida, es
 import { COMPONENTES_ESTADO, detalleLatidos, leerLatido, puertaCron, purgarObservabilidad, registrarEstado, registrarLatido, type EstadoLatido } from '@/lib/admin/salud';
 import { componentesDesdeHealth, componentesDesdeLatidos, esVentanaDeMantenimiento, medicionVacia, sondearHealth, sondeoCiego } from '@/lib/admin/estado';
 import { alertasIaDeDetalle, alertasIaEncendidas, correrAlertasIa } from '@/lib/admin/alertas-ia';
+import { correrAlertasWebhookLiq, webhookLiqDeDetalle } from '@/lib/likida/liquidacion_externa/alertas_webhook';
 import { lineasAgrupadas } from '@/lib/admin/agrupar-alertas';
 import { correrDiagnostico, estadoDiagnosticoDeDetalle, avisoTopeDiagnostico, evaluarQuemaSegura, lineasDeQuemaNueva, resumenQuema, quemaCompacta, quemaDeDetalle, ultimoCambioVisto } from '@/lib/admin/guardia-mejora';
 import { leerInterruptor } from '@/lib/likida/interruptores';
@@ -272,6 +273,14 @@ export async function GET(req: Request) {
     if (Date.now() < vence - 6_000) alertasIa = await correrAlertasIa(inicio, alertasIaPrevias);
     const alertasIaVigente = alertasIa.estado === 'ok' ? alertasIa.detalle : alertasIa.estado === 'omitido' && alertasIaEncendidas() ? alertasIaPrevias : null;
 
+    // ── 6b. Webhook de liquidaciones de entrada ────────────────────────────
+    // Fallos/rechazos, llave inválida repetida y silencio del cliente (tras su primer uso). Cada 15 min, encendido por omisión
+    // (ALERTAS_WEBHOOK_LIQ=apagado lo apaga). Sin canal de alerta queda en el latido y en /api/health. No lanza.
+    const webhookLiqPrevio = webhookLiqDeDetalle(detallePrevioCrudo);
+    let webhookLiq: Awaited<ReturnType<typeof correrAlertasWebhookLiq>> = { estado: 'omitido' };
+    if (Date.now() < vence - 6_000) webhookLiq = await correrAlertasWebhookLiq(inicio, webhookLiqPrevio);
+    const webhookLiqVigente = webhookLiq.estado === 'ok' ? webhookLiq.detalle : webhookLiq.estado === 'omitido' ? webhookLiqPrevio : null;
+
     // ── 7. Quema del presupuesto de error (F14-A) ──────────────────────────
     // Dos ventanas sobre los SLO que ya mide la guardia, sin cron nuevo. Sin muestra = `sin_medir` (no alerta ni tranquiliza).
     // Avisa solo la TRANSICIÓN a página. No lanza.
@@ -307,10 +316,10 @@ export async function GET(req: Request) {
       }
     }
 
-    const parcial = cortadoPorReloj || alertasIa.estado === 'error' || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal || gobiernoIa?.estado === 'error';
+    const parcial = cortadoPorReloj || webhookLiq.estado === 'error' || alertasIa.estado === 'error' || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal || gobiernoIa?.estado === 'error';
     const estado: EstadoLatido = parcial ? 'parcial' : 'ok';
     // `componentes` va en el latido: es lo que lee /estado para el estado ACTUAL (con la hora del propio latido).
-    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(alertasIaVigente ? { alertasIa: alertasIaVigente } : {}), ...(quemaDetalle ? { quema: quemaDetalle } : {}), ...(diagnosticoDetalle ?? {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
+    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(alertasIaVigente ? { alertasIa: alertasIaVigente } : {}), ...(webhookLiqVigente ? { webhookLiq: webhookLiqVigente } : {}), ...(quemaDetalle ? { quema: quemaDetalle } : {}), ...(diagnosticoDetalle ?? {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
     logger.info('cron.guardia.ok', { ...detalleBandeja, componentes: JSON.stringify(medicion), parcial });
     await registrarLatido('guardia', estado, detalle);
     return NextResponse.json({ corrio: true, parcial, ...detalleBandeja, componentes: medicion });

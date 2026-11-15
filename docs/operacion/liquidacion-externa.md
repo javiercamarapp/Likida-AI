@@ -89,6 +89,22 @@ opcional, pesa hasta 1 MB ya decodificado).
   el chofer pudo haberla visto; una corrección va con otra clave, p. ej.
   `…-R1`). `Idempotency-Key` es opcional.
 
+## `POST /v1/liquidaciones-externas/desgloses` (formato `muestra-tms`): montos y avisos
+
+Detalle completo del formato en `prueba-liquidaciones.md`. Dos reglas de la bitácora (14-nov-2026):
+
+- **`Cargo` y `Abono` como sinónimo de `Monto`, con rigor.** En `Percepciones` el monto es `Monto` y, si no viene, `Cargo`. En
+  `Deducciones` es `Monto` y, si no viene, `Abono`. «Viene» es presente y distinto de `null`. Si vienen `Monto` y el sinónimo con
+  valores **distintos**, esa bitácora queda `en_revision` con el motivo `monto_ambiguo` (no se elige ni se suman). Con el mismo valor
+  se acepta. El signo lo decide el arreglo, nunca el nombre del campo: `Abono` en `Percepciones` o `Cargo` en `Deducciones` no son
+  sinónimos. Negativo, cero, nulo y más de dos decimales siguen igual que con `Monto` (el motivo apunta al campo que se leyó).
+- **`advertencias` por bitácora.** Los campos que no pertenecen al contrato siguen sin cambiar la aceptación (se ignoran), pero
+  `resultados[i].advertencias` los avisa: `[{ "codigo": "campo_desconocido", "campo": "Póliza" }]`. Solo trae el **nombre** del campo
+  (jamás su valor), con ruta estable para anidados (`Fecha.Zona`, `Percepciones[].Nota`), sin repetidos y máximo 10 por bitácora
+  (nombres de hasta 40 caracteres, sin caracteres de control). La llave `advertencias` solo aparece cuando hay alguna, en cualquier
+  estado (también `en_revision` y en simulación). `NumeroLiquidacion` está documentado como ignorado a propósito y no genera aviso.
+  Es un campo nuevo: ninguno de los anteriores cambió de nombre ni de significado.
+
 ## `GET /v1/liquidaciones-externas`
 
 Área `dinero`. Paginación **solo por cursor** (`despues`). Filtros: `estado`,

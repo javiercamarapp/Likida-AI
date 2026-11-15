@@ -86,6 +86,11 @@ export interface EstadoDescargaSat {
   motivo: string | null;
 }
 
+/** ¿Nadie contrató la descarga masiva? Solo si NO hay proveedor declarado: un valor mal escrito o a medias es un error de configuración, no «no contratado». */
+export function satNoContratado(): boolean {
+  return (process.env.LIKIDA_SAT_PROVEEDOR?.trim() ?? '') === '';
+}
+
 export function estadoDescargaSat(): EstadoDescargaSat {
   const proveedor = process.env.LIKIDA_SAT_PROVEEDOR?.trim() ?? '';
   if (proveedor === '') {

@@ -32,6 +32,7 @@ import {
   MARCA_RETENIDA_OMITIDA, type ConfigGuardasEnvio, type MotivoRetencion, type Renombre,
 } from './desglose_reglas';
 import { generarDesgloseXlsx } from './desglose_xlsx';
+import { leerUnaVez, type CachePeticion } from './concurrencia';
 import { leerPolizaProvisional, POLIZA_PROVISIONAL, MOTIVO_POLIZA_PROVISIONAL, MARCA_POLIZA_PROVISIONAL } from './poliza_provisional';
 import { resolverDestinatarios, resolverRevisores, type MotivoFaltante } from './correo_destinatarios';
 import { hoyMx } from '@/lib/formato';
@@ -181,6 +182,8 @@ export interface OpcionesDesglose {
   correccion?: { motivo: string; actor: string };
   /** A1-01: vista previa. Hace TODO el cálculo (idempotencia, operador, reglas, destinatarios) pero no escribe nada: devuelve `simulada`. */
   simular?: boolean;
+  /** Lectura de la configuración compartida por las bitácoras de UNA petición (se crea por petición). Sin ella se lee por bitácora. */
+  cacheConfig?: CachePeticion<ConfigCorreo>;
 }
 
 /** Tope de correcciones encadenadas de una misma bitácora (`-R1`…`-R20`): más allá es un error de integración, no una corrección. */
@@ -372,7 +375,7 @@ export async function recibirDesglose(
   }
 
   // (4) reglas del contralor y guardas previas al envío (sobre lo que el operador va a ver)
-  const config = await deps.leerConfig(tenantId);
+  const config = opciones.cacheConfig ? await leerUnaVez(opciones.cacheConfig, tenantId, () => deps.leerConfig(tenantId)) : await deps.leerConfig(tenantId);
   const omision = motivoDeOmision(d, config);
   const vista = presentar(d, config);
   const base = guardasPreEnvio({ ...d, ...vista }, guardasDeConfig(config));

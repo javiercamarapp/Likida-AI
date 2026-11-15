@@ -440,6 +440,11 @@ const HEX64_B = 'b'.repeat(64);
 export const BASES_EXPLICITAS = {
   // 0290/0932 operador_telefono_forma (10-15 digitos), 0460 invitacion_coherente y 0462 fallo_coherente (todo NULL = pendiente).
   'public.operador': { a: { telefono: '529990000001' }, b: { telefono: '529990000002' } },
+  // 1006: token cifrado con forma de cofre v2 ('v2.' + ...) y phone_number_id UNICO global (una flota no puede repetir el de la otra).
+  'public.tenant_whatsapp_linea': {
+    a: { phone_number_id: 'banco-pn-a', token_cifrado: 'v2.banco.a.a' },
+    b: { phone_number_id: 'banco-pn-b', token_cifrado: 'v2.banco.b.b' },
+  },
   // 0050/0480: radio entre 25 y 100000 y tipo de pareja con el catalogo por omision ('peajes'): punto_interes vale en ambos.
   'public.geocerca': { a: { tipo: 'punto_interes', radio_m: '100' }, b: { tipo: 'punto_interes', radio_m: '100' } },
   // 0053/0291: tipo del dominio ARCO y titular presente (operador_id o titular_ref).

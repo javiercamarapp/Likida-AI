@@ -29,6 +29,7 @@ import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { datoInvalido } from './errores';
 import { acotada } from './presupuesto';
+import { esRespuestaHtml, resumirErrorDeBase } from './error_base';
 
 /** El catálogo completo: 'global' + los 7 agentes del dominio de
  *  `agente_corrida` (0102 + ventas en 0105). El CHECK de la 0110 vigila lo
@@ -242,6 +243,10 @@ export async function leerInterruptor(nombre: NombreInterruptor): Promise<Lectur
 async function gritarIlegible(nombre: NombreInterruptor, err: string, codigo: string): Promise<void> {
   lecturasIlegiblesSeguidas += 1;
   const lecturasSeguidas = lecturasIlegiblesSeguidas;
+  // Cuando la base no contesta, supabase-js entrega la página HTML del proxy como `message`: ni al log ni al correo.
+  // El código también: el hash del HTML cambia con cada Ray ID y cada incidente parecería nuevo.
+  if (esRespuestaHtml(err)) codigo = 'base_respuesta_html';
+  err = resumirErrorDeBase(err);
   logger.error('interruptores.lectura_fallo', { interruptor: nombre, err, codigo, lecturasSeguidas });
   if (lecturasSeguidas >= LECTURAS_ILEGIBLES_PARA_ALERTA) {
     await alertarOperador('interruptores.lectura_fallo', {

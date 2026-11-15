@@ -7,6 +7,9 @@ export interface SalidaOutbox {
   payload: Record<string, unknown>;
   intentos: number;
   leaseToken: string;
+  /** Línea fijada en la fila al encolar (columnas que añade la migración de líneas por tenant); ausentes = línea de plataforma. */
+  tenantId?: string | null;
+  phoneNumberId?: string | null;
 }
 
 export interface SalidaOutboxDedupe {
@@ -177,8 +180,10 @@ export async function reclamarSalidasWhatsApp(limite = 25): Promise<SalidaOutbox
     p_limite: limite, p_lease_seconds: WA_OUTBOX_LEASE_SECONDS,
   }), 'wa.outbox.reclamar');
   if (error) throw new Error(`reclamarSalidasWhatsApp: ${error.message}`);
-  return ((data ?? []) as Array<{ id: string; payload: Record<string, unknown>; intentos: number; lease_token: string }>).map((f) => ({
+  return ((data ?? []) as Array<{ id: string; payload: Record<string, unknown>; intentos: number; lease_token: string; tenant_id?: string | null; phone_number_id?: string | null }>).map((f) => ({
     id: String(f.id), payload: f.payload, intentos: Number(f.intentos), leaseToken: String(f.lease_token),
+    ...(f.tenant_id ? { tenantId: String(f.tenant_id) } : {}),
+    ...(f.phone_number_id ? { phoneNumberId: String(f.phone_number_id) } : {}),
   }));
 }
 

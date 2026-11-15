@@ -174,3 +174,17 @@ export async function registrarMfaFallido(a: { veredicto: string; destino: strin
     });
   });
 }
+
+/**
+ * Un rechazo o fallo del webhook de liquidaciones de entrada (400 validación, 403, 409, 429, 5xx). Lo cuenta la guardia
+ * (`alertas_webhook.ts`). Los 401 NO entran: la puerta común ya los registra como `llave_invalida`. Solo status y código, nunca el cuerpo.
+ */
+export async function registrarRechazoWebhookLiq(a: { status: number; codigo?: string | null }): Promise<void> {
+  return seguro(async () => {
+    await registrarEventoSeguridad({
+      origen: 'api_v1', tipo: 'otro', severidad: a.status >= 500 ? 'media' : 'info',
+      actor: `status:${a.status}`,
+      detalle: { recurso: 'webhook_liquidaciones', ruta: '/api/v1/liquidaciones-externas/desgloses', status: a.status, ...(a.codigo ? { codigo: a.codigo } : {}) },
+    });
+  });
+}
