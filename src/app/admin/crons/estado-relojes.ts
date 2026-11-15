@@ -32,6 +32,7 @@ export const nombreReloj = (t: TSistema = T_SISTEMA_ES): Record<CronId, string> 
   'carta-porte-docs': t('crons_estado_relojes.documentos_de_carta_porte'),
   guardia: t('crons_estado_relojes.guardia_de_produccion'),
   tms: t('crons_estado_relojes.sistema_de_transporte_del_cliente'),
+  'vigilancia-normativa': t('crons_estado_relojes.vigilancia_normativa'),
 });
 export const NOMBRE_RELOJ = nombreReloj();
 
@@ -57,6 +58,7 @@ export const oficioReloj = (t: TSistema = T_SISTEMA_ES): Record<CronId, string> 
   'carta-porte-docs': t('crons_estado_relojes.extrae_los_documentos_de_carta_porte'),
   guardia: t('crons_estado_relojes.la_guardia_de_produccion_clasifica_lo'),
   tms: t('crons_estado_relojes.lee_solo_lectura_los_viajes_liquidaciones'),
+  'vigilancia-normativa': t('crons_estado_relojes.vigila_el_dof_el_sat_y_las_leyes'),
 });
 export const OFICIO_RELOJ = oficioReloj();
 

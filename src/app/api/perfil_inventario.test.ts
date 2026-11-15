@@ -88,7 +88,7 @@ describe('crons: cada cron del repo está clasificado', () => {
   /** Mixto: sigue corriendo para los cinco agentes y salta lo de stand-by por sección. */
   const MIXTO: Record<string, RegExp> = { escalar: /tenantsConPerfil\(\)[\s\S]*tenantsConPerfil\(\)[\s\S]*tenantsConPerfil\(\)/ };
   /** Globales: no recorren datos de ninguna flota (sondean portales externos, corren agentes de la propia compañía). */
-  const GLOBAL = ['portales-vivos', 'runner'];
+  const GLOBAL = ['portales-vivos', 'runner', 'vigilancia-normativa'];
   /** Callback de QStash del cron de facturar: procesa el lote que el cron (ya filtrado) encoló. */
   const CALLBACK = ['facturar'];
 
