@@ -44,6 +44,16 @@ for f in "${rango[@]}"; do
     echo "0809: la migración $f NO se puede reaplicar:"; cat "${TMPDIR:-/tmp}/0809_reaplicar.err"; exit 1
   fi
 done
+# Las migraciones POSTERIORES al rango que reescriben el CHECK de dominio de `cron_latido` se reaplican DESPUÉS, en orden.
+# La 0784 (dentro del rango) fija ese CHECK con la lista que tenía entonces y cada cron nuevo (1007…) lo ensancha: reaplicar
+# solo la vieja lo encogería, cosa que en una base real no ocurre porque las migraciones corren en orden. Reaplicarlas en
+# orden reproduce el estado real y deja la huella intacta; si alguna NO fuera reaplicable, el ON_ERROR_STOP lo delata.
+posteriores=($(cd "$raiz/supabase/migrations" && ls -1 [0-9][0-9][0-9][0-9]_*cron_latido*.sql 2>/dev/null | awk '{ p = substr($0, 1, 4); if (p > "0809") print }'))
+for f in ${posteriores[@]+"${posteriores[@]}"}; do
+  if ! "${psql_cmd[@]}" -f "$raiz/supabase/migrations/$f" >/dev/null 2>"${TMPDIR:-/tmp}/0809_reaplicar.err"; then
+    echo "0809: la migración $f NO se puede reaplicar:"; cat "${TMPDIR:-/tmp}/0809_reaplicar.err"; exit 1
+  fi
+done
 despues="$(huella)"
 [[ "$antes" = "$despues" ]] || { echo "0809: reaplicar el rango cambió el catálogo (antes $antes, después $despues)"; exit 1; }
 
