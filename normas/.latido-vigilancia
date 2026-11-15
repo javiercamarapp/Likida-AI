@@ -1,36 +1,43 @@
----
-fecha_corrida: 2026-09-20 (domingo)
-ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+fecha_corrida: 2026-11-15 (domingo)
+ultimo_dia_barrido: 2026-09-10 — sin avance. Sigue siendo la misma marca que
+  el latido anterior (corrida del 20-sep-2026): ninguna corrida de esta
+  rutina remota ha podido leer una sola nota del DOF desde entonces.
+rango_pendiente: 2026-09-11 — 2026-11-14 (65 días naturales, incluye el
+  trimestre completo jul-oct→oct-ene: el chequeo de deriva de ley del
+  01-oct-2026 nunca se evaluó desde aquí) sin barrer.
 notas_revisadas: 0 — ningún endpoint respondió.
-anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
-  no hay con qué cruzar.
+anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha no
+  hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable_hoy — hoy no es viernes; los ~9 viernes entre
+  11-sep y 13-nov tampoco se pudieron verificar desde esta rutina (mismo
+  bloqueo). Ver nota abajo: ya no es la única vigilancia de esto.
+etag_sat: no_aplica_hoy — no es lunes (y aunque lo fuera, bloqueado).
+deriva_ley_check: no_evaluado — correspondía el 01-oct-2026 y no se pudo
+  evaluar; sigue pendiente desde esta rutina.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — bloqueo de política de egreso, SIN CAMBIO respecto a las corridas
+  de 12-sep, 15-sep y 20-sep-2026. Reverificado hoy por dos rutas
+  independientes: (1) curl por HTTPS_PROXY contra sidofqa.segob.gob.mx,
+  www.sat.gob.mx y www.google.com (control) — las tres "CONNECT tunnel
+  failed, response 403"; /__agentproxy/status confirma "connect_rejected"
+  por política, sin fallos de red recientes (no es una caída del sitio).
+  (2) WebFetch (infraestructura propia de Anthropic, no el proxy de la
+  sesión) contra el mismo endpoint SIDOF — ENOTFOUND / fuera del dominio
+  permitido de la sesión. Ambas rutas coinciden: es bloqueo de política,
+  no timeout ni caída del origen.
+
+  NOTA IMPORTANTE — esto ya no es la única cobertura. Desde el 14-nov-2026
+  existe `GET /api/cron/vigilancia-normativa` (src/lib/likida/normas/
+  vigilancia/), corriendo en producción (Vercel) diario a las 13:30 UTC,
+  SIN pasar por el proxy de esta sesión — hace el mismo barrido de 7 días
+  × 3 ediciones, el ETag del SAT los lunes y la deriva de ley trimestral,
+  con su propio anti-silencio y correo al operador vía `alertarOperador`.
+  Su estado vive en `cron_latido.detalle.vigilancia`, no en este archivo:
+  esta rutina remota NO puede leerlo (no tiene acceso a la base desde
+  aquí) y por diseño ya no debe escribir aquí lo que ese cron reporte.
+  Esta corrida solo pudo confirmar que el camino REMOTO sigue ciego; no
+  pudo confirmar ni negar que el cron de producción esté cubriendo el
+  hueco. No se tocó ninguna ficha de normas/. No se abre PR (sin
+  hallazgos propios, solo el mismo bloqueo ya conocido y ya mitigado por
+  el cron).
