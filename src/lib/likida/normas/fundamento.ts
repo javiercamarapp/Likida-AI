@@ -488,8 +488,13 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
   // A39-S50-01: una ficha cuyo `exigibleHasta` ya pasó (RFA 2026 desde el 1-ene-2027) se puede NOMBRAR para decir que ya no rige,
   // nunca para sostener una afirmación en presente. Una oración que la cita sin marca de pasado se trata como cita no autorizada.
   const dia = hoyMx(hoy);
+  // W43: lo que se quita por vencida se AVISA (vigencia por confirmar); sin sucesora verificada no se inventa otra vigencia.
+  const finesDeVigencia = new Set<string>();
   for (const id of citadas) {
-    if (ok.has(id) && exigibleVencida(NORMAS[id]?.exigibleHasta, dia) && citaVencidaEnPresente(id, reply)) ok.delete(id);
+    if (ok.has(id) && exigibleVencida(NORMAS[id]?.exigibleHasta, dia) && citaVencidaEnPresente(id, reply)) {
+      ok.delete(id);
+      finesDeVigencia.add(NORMAS[id]?.exigibleHasta ?? '');
+    }
   }
   const sobran = citadas.filter((id) => !ok.has(id));
   if (sobran.length === 0 && !suavizar) return { reply, forzado: false, quitadas: [] };
@@ -563,7 +568,27 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
   // ── 5. Se devuelven las protegidas a su sitio ─────────────────────────────
   texto = texto.replace(/ (\d+) /g, (_m, n) => guardado[Number(n)] ?? '');
 
-  return { reply: limpiar(texto), forzado: true, quitadas: sobran };
+  const limpio = limpiar(texto);
+  const aviso = avisoVigenciaPorConfirmar([...finesDeVigencia].filter(Boolean).sort());
+  return { reply: aviso ? `${limpio}\n\n${aviso}` : limpio, forzado: true, quitadas: sobran };
+}
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** "2026-12-31" -> "31 de diciembre de 2026". */
+function fechaLarga(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d} de ${MESES[(m ?? 1) - 1] ?? ''} de ${y}`;
+}
+
+/**
+ * Aviso cuando se quitó la cita de una resolución anual vencida. No nombra la norma (la guardia la acaba de retirar) ni afirma que
+ * exista o no una resolución sucesora: solo dice lo único verificado — cuándo terminó la vigencia — y manda a confirmar.
+ */
+function avisoVigenciaPorConfirmar(fines: string[]): string {
+  if (fines.length === 0) return '';
+  const cuando = fines.map(fechaLarga).join(' y ');
+  return `Nota: la resolución de facilidades que sustentaba esta afirmación concluyó su vigencia el ${cuando}; su continuidad para el ejercicio en curso está por confirmar. Verifícala con tu contador o en el portal del SAT antes de decidir.`;
 }
 
 /**
