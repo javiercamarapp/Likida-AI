@@ -650,7 +650,11 @@ export async function GET(req: Request) {
       detalle: corteDuro
         ? { cortesSeguidos, cortados, corteDuro: enVuelo }
         : configAusente
-          ? { cortesSeguidos, cortados, configAusente: true, motivo: 'Cal.com no configurado: faltan API key o webhook secret' }
+          ? {
+            cortesSeguidos, cortados, configAusente: true, motivo: 'Cal.com no configurado: faltan API key o webhook secret',
+            // Ni API key ni secreto = nadie contrató Cal.com (a propósito): visible, sin correo (ver `esIntegracionNoContratada`). Con solo uno puesto, sigue avisando.
+            noContratada: !process.env.CALCOM_API_KEY && !process.env.CALCOM_WEBHOOK_SECRET,
+          }
           : { cortesSeguidos, cortados },
     };
     return respuesta;

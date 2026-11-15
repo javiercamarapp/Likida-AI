@@ -170,6 +170,20 @@ describe('cron descarga-sat — la corrida', () => {
       expect.objectContaining({ configAusente: true }));
   });
 
+  it('sin LIKIDA_SAT_PROVEEDOR = no contratada (sin correo); con un proveedor mal escrito = configuración a medias, sigue avisando', async () => {
+    const vacio = { corrio: false, motivo: 'La descarga masiva no está configurada…', configurado: false, flotas: 0, resumenes: [], sinTurno: 0 };
+    vi.stubEnv('LIKIDA_SAT_PROVEEDOR', '');
+    try {
+      correrDescargaSat.mockResolvedValueOnce(vacio);
+      await GET(new Request(URL_CRON, CON_SECRETO));
+      expect(registrarLatido).toHaveBeenLastCalledWith('descarga-sat', 'parcial', expect.objectContaining({ configAusente: true, noContratada: true }));
+      vi.stubEnv('LIKIDA_SAT_PROVEEDOR', 'proveedor_inventado');
+      correrDescargaSat.mockResolvedValueOnce(vacio);
+      await GET(new Request(URL_CRON, CON_SECRETO));
+      expect(registrarLatido).toHaveBeenLastCalledWith('descarga-sat', 'parcial', expect.objectContaining({ configAusente: true, noContratada: false }));
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('A37-L-05: sin configurar Y el aviso de peaje falla → alerta al operador y NO es config_ausente', async () => {
     correrDescargaSat.mockResolvedValueOnce({
       corrio: false, motivo: 'La descarga masiva no está configurada…', configurado: false, flotas: 0, resumenes: [], sinTurno: 0,

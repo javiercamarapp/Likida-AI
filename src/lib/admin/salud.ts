@@ -22,6 +22,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
+import { resumirErrorDeBase } from '@/lib/likida/error_base';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
@@ -196,7 +197,7 @@ export async function registrarLatido(cron: CronId, estado: EstadoLatido, detall
       // A1 (ronda 19): el código salió antes que la 0701 → el CHECK de cron_latido no admite 'guardia' (23514). Se dice
       // una vez, con código estable, y se sigue: la guardia no lanza en bucle (el aviso de /api/health es el respaldo).
       if ((error as { code?: string }).code === '23514') logger.error('cron.latido_migracion_pendiente', { cron, codigo: 'migracion_0701_pendiente', err: error.message });
-      else logger.warn('cron.latido_sin_escribir', { cron, err: error.message });
+      else logger.warn('cron.latido_sin_escribir', { cron, err: resumirErrorDeBase(error.message) });
     }
   } catch (e) {
     logger.warn('cron.latido_sin_escribir', { cron, err: e instanceof Error ? e.message : String(e) });
@@ -329,6 +330,16 @@ export function esHuecoDeConfiguracion(valor: unknown): boolean {
 }
 
 /**
+ * Integración OPCIONAL que nadie ha contratado: el cron la declara (`detalle.noContratada`) solo cuando NO hay ni una sola de sus
+ * variables puestas (p. ej. `LIKIDA_SAT_PROVEEDOR` ausente, Cal.com sin API key ni secreto). Es un estado correcto, no un pendiente:
+ * sigue visible (`checks.crons='config_ausente'`, panel, log informativo) pero no genera correo al operador. Una configuración A MEDIAS
+ * (proveedor desconocido, host que no corresponde, solo uno de dos secretos) NO se declara así y sigue avisando.
+ */
+export function esIntegracionNoContratada(detalle: unknown): boolean {
+  return detalle !== null && typeof detalle === 'object' && (detalle as Record<string, unknown>).noContratada === true;
+}
+
+/**
  * Un `parcial` que es SOLO contrapresión de la bandeja: el runner está vivo (despachó al menos un agente, sin cortes seguidos) y frenó a los
  * demás porque hay piezas pendientes de aprobar (`aprobar es humano; el runner no fabrica encima`). Es un freno por diseño, no una regresión:
  * tumbar el health a 503 por esto dejaba «Salud de producción» en rojo sin que hubiera nada que arreglar en el código. Sigue visible
@@ -437,9 +448,9 @@ export async function registrarLatencia(tipo: 'ruta' | 'cron', nombre: string, m
     const { error } = await acotada(supabaseAdmin().from('latencia_muestra').insert({
       tipo, nombre: nombre.slice(0, 120), ms: Math.min(Math.round(ms), 3_600_000), ok,
     }), 'registrarLatencia');
-    if (error) logger.warn('latencia.sin_escribir', { tipo, nombre, err: error.message });
+    if (error) logger.warn('latencia.sin_escribir', { tipo, nombre, err: resumirErrorDeBase(error.message) });
   } catch (e) {
-    logger.warn('latencia.sin_escribir', { tipo, nombre, err: e instanceof Error ? e.message : String(e) });
+    logger.warn('latencia.sin_escribir', { tipo, nombre, err: resumirErrorDeBase(e instanceof Error ? e.message : String(e)) });
   }
 }
 

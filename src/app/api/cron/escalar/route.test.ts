@@ -387,8 +387,21 @@ describe('el reloj se reparte y los cortes repetidos se gritan', () => {
     expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', {
       cortesSeguidos: 0, cortados: 0, configAusente: true,
       motivo: 'Cal.com no configurado: faltan API key o webhook secret',
+      noContratada: true,
     });
     expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  it('Cal.com con solo UNO de sus dos secretos es configuración a medias: configAusente pero NO noContratada (sigue avisando)', async () => {
+    vi.stubEnv('CALCOM_API_KEY', 'una-llave');
+    try {
+      ejecutarMantenimientoCalcom.mockResolvedValueOnce({
+        configured: false, completa: false, provisionado: false, revisadas: 0,
+        cortadasPorReloj: 0, ledger: { configured: false, revisados: 0, recuperados: 0, restantes: 0 },
+      });
+      await GET(peticion('Bearer secreto-de-prueba'));
+      expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', expect.objectContaining({ configAusente: true, noContratada: false }));
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it('Cal.com sin configurar Y un fallo real en otro motor: sigue siendo `fallo` — el hueco declarado no enmascara una regresión', async () => {

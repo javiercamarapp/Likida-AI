@@ -112,6 +112,15 @@ describe('estaApagado — sin fila = encendido, error = apagado', () => {
       expect.objectContaining({ interruptor: 'agente:facturas', err: 'fetch failed' }));
   });
 
+  it('una página HTML del proxy (base caída) no se pega en el log: se resume y lleva un código estable', async () => {
+    const html = '<!DOCTYPE html>\n<html><head><title>db.example.co | 522: Connection timed out</title></head><body>Ray ID: abc123</body></html>';
+    colas.set('interruptor', [{ data: null, error: { message: html } }]);
+    expect(await estaApagado('global')).toBe(true);
+    const [, meta] = logs.error.mock.calls.find((c: unknown[]) => c[0] === 'interruptores.lectura_fallo') as [string, { err: string; codigo: string }];
+    expect(meta.err).not.toContain('<');
+    expect(meta.codigo).toBe('base_respuesta_html');
+  });
+
   it('FAIL-CLOSED también para el camino que LANZA (cliente sin configurar)', async () => {
     fromRevienta = 'Supabase service-role no configurado';
     expect(await estaApagado('global')).toBe(true);
