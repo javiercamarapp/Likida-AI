@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GET } from './route';
+import { TIPOS_OPERADOR } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 
 /**
  * Este documento es lo que convierte "tenemos una API" en un SDK generado. Si
@@ -209,6 +210,24 @@ describe('el POST de desgloses documenta el formato muestra-tms (piloto del webh
     expect(campos).not.toContain('NumeroLiquidacion');
     const estados = d.components.schemas.ResultadoDesgloses.properties.datos.properties.resultados.items.properties.estado.enum;
     expect(estados).toEqual(['recibida', 'retenida', 'idempotente', 'correccion_pendiente', 'en_revision', 'no_guardada']);
+  });
+
+  it('A53-BE-03: la `enum` de `tipoOperador` es la del validador, no una copia a mano', async () => {
+    // El servidor acepta `TIPOS_OPERADOR` (`desglose_contrato.ts:29`), el mismo
+    // dominio que el CHECK de la migración 1004 y que la muestra del contrato.
+    // Cuando el documento publica MENOS, el generador del integrador rechaza
+    // un valor que la API sí acepta — y `tipoOperador` decide si la
+    // liquidación sale o queda retenida, así que la copia a mano cuesta dinero.
+    // La `enum` se deriva, como el archivo ya hace con TIPOS_CONCEPTO, MONEDAS
+    // y ESTADOS_LIQ_EXTERNA.
+    const d = await doc() as { paths: Record<string, any> }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const op = d.paths['/v1/liquidaciones-externas/desgloses'].post;
+    const props = op.requestBody.content['application/json'].schema.oneOf[1]
+      .properties.desgloses.items.properties;
+    expect(props.tipoOperador.enum).toEqual([...TIPOS_OPERADOR]);
+    // Y la prosa del mismo endpoint no puede contradecir a su propia `enum`.
+    const faltanEnLaProsa = TIPOS_OPERADOR.filter((t) => !String(op.description).includes(t));
+    expect(faltanEnLaProsa, `la descripción no nombra estos tipos: ${faltanEnLaProsa.join(', ')}`).toEqual([]);
   });
 });
 
