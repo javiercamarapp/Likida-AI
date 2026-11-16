@@ -1,0 +1,6 @@
+/* Back-office › Contabilidad. Solo lo que el sistema de piezas no trae: la rejilla de renglones del asiento manual y el hash corto. */
+[data-ui="v2"] .ct-lineas { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+[data-ui="v2"] .ct-lineas__leyenda { padding: 0; margin-bottom: 4px; font-size: var(--t-small); font-weight: 600; color: var(--muted); }
+[data-ui="v2"] .ct-lineas__fila { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: start; }
+@media (max-width: 719px) { [data-ui="v2"] .ct-lineas__fila { grid-template-columns: minmax(0, 1fr); } }
+[data-ui="v2"] .ct-hash { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--t-small); color: var(--muted); }

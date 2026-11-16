@@ -65,6 +65,6 @@ describe('guarda de numeración de migraciones', () => {
     const { declarados, reservados } = parsearNumeracion(readFileSync('supabase/migrations/NUMERACION-SALTADA.md', 'utf8'));
     const total = declarados.reduce((s: number, [a, b]: number[]) => s + (b - a + 1), 0);
     expect(total).toBeGreaterThanOrEqual(412);
-    expect(reservados).toEqual([[950, 959], [960, 974], [975, 984], [985, 989], [990, 999]]);
+    expect(reservados).toEqual([[950, 959], [960, 974], [975, 984], [985, 989], [990, 999], [1008, 1019]]);
   });
 });

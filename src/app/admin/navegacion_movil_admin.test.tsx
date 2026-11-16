@@ -32,7 +32,7 @@ describe('Navegación móvil de /admin: cabecera, barra inferior y hoja «Más»
     expect(destinosBarraAdmin()).toHaveLength(4);
   });
 
-  it('todos los destinos existen en el mapa de rutas y la hoja cubre las cuatro secciones completas', () => {
+  it('todos los destinos existen en el mapa de rutas y la hoja cubre las cinco secciones completas', () => {
     const hrefs = new Set([...SECCIONES.flatMap((s) => s.items.map((i) => i.href)), '/admin']);
     for (const d of destinosBarraAdmin()) expect(hrefs.has(d.href)).toBe(true);
     expect(MENU_ADMIN.grupos.map((g) => g.titulo)).toEqual(SECCIONES.map((s) => s.titulo));

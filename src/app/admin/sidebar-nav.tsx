@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronRight, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
+import { LayoutGrid, ChevronRight, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity, Landmark } from 'lucide-react';
 import { type Item, COPILOTO, SECCIONES, entradaDeRuta } from './rutas';
 import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
 import { useRequiereAccion } from './cabecera-admin';
@@ -24,7 +24,7 @@ import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vist
 // Icono de CADA sección: en el riel (72 px) solo se ve una sección abierta a la vez y las demás se reducen a su icono (antes el riel
 // pintaba las 43 páginas seguidas, la lista se cortaba a medias y se encimaba con el pie).
 const ICONO_SECCION: Record<string, typeof Workflow> = {
-  Agentes: Workflow, Negocio: Briefcase, Control: SlidersHorizontal, Sistema: Activity,
+  Agentes: Workflow, Negocio: Briefcase, Control: SlidersHorizontal, 'Back-office': Landmark, Sistema: Activity,
 };
 
 function idSeccion(titulo: string): string {
@@ -98,7 +98,7 @@ export function MarcaAdmin() {
   );
 }
 
-// Las secciones salen de `rutas.ts` (SECCIONES: Agentes, Negocio, Control, Sistema), la misma fuente del rótulo de área de cada pantalla.
+// Las secciones salen de `rutas.ts` (SECCIONES: Agentes, Negocio, Control, Back-office, Sistema), la misma fuente del rótulo de área de cada pantalla.
 const TITULOS_ADMIN: Array<[string, Item[]]> = SECCIONES.map((s) => [s.titulo, s.items]);
 
 export default function SidebarNav() {

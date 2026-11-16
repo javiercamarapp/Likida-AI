@@ -26,6 +26,18 @@ import { acotada } from '@/lib/likida/presupuesto';
 
 /** Lo que `entidad` puede decir. Ampliar AQUÍ, no en el llamador. */
 export type EntidadBitacora =
+  // Back-office propio de Likida (15-nov-2026): cada acto de dinero, cierre o contrato del superadmin deja rastro.
+  | 'bo_entidad'
+  | 'bo_cierre'
+  | 'bo_gasto'
+  | 'bo_proveedor'
+  | 'bo_comision'
+  | 'bo_pago_vendedor'
+  | 'bo_contrato'
+  | 'bo_contratista'
+  | 'bo_obligacion'
+  | 'bo_asiento'
+  | 'bo_tesoreria'
   | 'tenant'
   | 'app_user'
   | 'operador'

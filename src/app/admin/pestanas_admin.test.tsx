@@ -62,6 +62,15 @@ describe('áreas y pestañas del árbol final', () => {
     expect(v?.pestanas.map((p) => p.nombre)).toEqual(['Estado', 'Relojes', 'Observabilidad', 'Corridas', 'Capacidad']);
     expect(v?.actual).toBe('/admin/corridas');
   });
+  it('Back-office es una sección propia: el área y las seis pestañas salen de rutas.ts, y la entidad cuelga de la misma barra', () => {
+    expect(areaDeRutaAdmin('/admin/back-office')).toBe('Back-office');
+    expect(areaDeRutaAdmin('/admin/back-office/cierre')).toBe('Back-office');
+    expect(areaDeRutaAdmin('/admin/back-office/entidad')).toBe('Back-office');
+    const v = pestanasDeRuta('/admin/back-office/cierre');
+    expect(v?.pestanas.map((p) => p.nombre)).toEqual(['Tablero', 'Cierre mensual', 'Contabilidad', 'Gastos', 'Comisiones', 'Contratos']);
+    expect(v?.actual).toBe('/admin/back-office/cierre');
+    expect(pestanasDeRuta('/admin/back-office')?.actual).toBe('/admin/back-office');
+  });
   it('Clientes (sin pestañas) y su ficha no pintan barra', () => {
     expect(pestanasDeRuta('/admin/flotas')).toBeNull();
     expect(pestanasDeRuta('/admin/flotas/xyz')).toBeNull();
