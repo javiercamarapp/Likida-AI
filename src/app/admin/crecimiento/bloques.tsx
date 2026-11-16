@@ -20,6 +20,7 @@ import './embudo.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { trAdminDineroEs } from '@/lib/i18n/tr_admin';
+import { NotaVacia } from '../nota-vacia';
 // ═══════════════════════════════════════════════════════════════════════════
 // BLOQUES DE CRECIMIENTO (R9c): cada bloque es un componente de servidor async con su propia lectura, envuelto por `page.tsx` en su
 // propio <Suspense> con un esqueleto compacto: un bloque lento ya no bloquea la página. Las lecturas son las MISMAS de antes (ninguna
@@ -74,7 +75,7 @@ export async function BloqueEmbudoAdquisicion() {
     return <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion')} estado="error" mensaje={ta('crecimiento_bloques.no_se_pudo_leer_2')} reintentar />;
   }
   if (prospectos.total === 0) {
-    return <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion')} estado="vacio" mensaje={ta('crecimiento_bloques.sin_prospectos_en_el')} detalle={ta('crecimiento_bloques.aparecen_cuando_el_cerebro')} contenida />;
+    return <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion')} contenida><NotaVacia titulo={ta('crecimiento_bloques.sin_prospectos_en_el')}>{ta('crecimiento_bloques.aparecen_cuando_el_cerebro')}</NotaVacia></Tarjeta>;
   }
   const { porEstado } = prospectos;
   // (16) Barras proporcionales y de color SOLO para las etapas con prospectos; las que valen 0 se dicen en UNA línea en vez de diez
@@ -85,7 +86,7 @@ export async function BloqueEmbudoAdquisicion() {
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion_prospectos', { total: numero(prospectos.total) })}>
       {/* Barra de 6 px, radio 999 y pista tenue (Rovaq `barlist`), con la cifra exacta a la derecha. */}
-      <BarList etiqueta={ta('crecimiento_bloques.prospectos_por_estado')} matiz={8} items={conGente.map((e) => ({ clave: e.clave, etiqueta: e.etiqueta, valor: e.valor, texto: numero(e.valor) }))} />
+      <BarList etiqueta={ta('crecimiento_bloques.prospectos_por_estado')} matiz={7} items={conGente.map((e) => ({ clave: e.clave, etiqueta: e.etiqueta, valor: e.valor, texto: numero(e.valor) }))} />
       {vacias.length > 0 && (
         <p className="adm-din-nota">{ta('crecimiento_bloques.sin_prospectos_todavia_en', { etapas: vacias.map((e) => e.etiqueta).join(', ') })}</p>
       )}
@@ -181,7 +182,7 @@ export async function BloqueActivacion() {
         <p className="adm-din-nota">{t('crecimiento.activacion.ceros')}</p>
       ) : (
         <BarList
-          etiqueta={ta('crecimiento_bloques.flotas_por_etapa_de')} matiz={8}
+          etiqueta={ta('crecimiento_bloques.flotas_por_etapa_de')} matiz={3}
           items={[
             { clave: 'altas', etiqueta: ta('crecimiento_bloques.flotas_dadas_de_alta'), valor: embudoActivacion.altas, texto: numero(embudoActivacion.altas) },
             ...[
@@ -289,9 +290,9 @@ export async function BloqueUso() {
 
 export function BloqueComisiones({ ta = trAdminDineroEs }: { ta?: TrDe<'admin_dinero'> } = {}) {
   return (
-    <Tarjeta titulo={ta('crecimiento_bloques.comisiones_de_vendedores')} estado="vacio" mensaje={ta('crecimiento_bloques.falta_aun_no_hay')}
-      detalle={ta('crecimiento_bloques.el_esquema_solo_existe', { Math: Math.round(COMISION_PRIMER_MES * 100), Math2: Math.round(COMISION_RECURRENTE * 100) })}
-      contenida />
+    <Tarjeta titulo={ta('crecimiento_bloques.comisiones_de_vendedores')} contenida>
+      <NotaVacia tono="warn" titulo={ta('crecimiento_bloques.falta_aun_no_hay')}>{ta('crecimiento_bloques.el_esquema_solo_existe', { Math: Math.round(COMISION_PRIMER_MES * 100), Math2: Math.round(COMISION_RECURRENTE * 100) })}</NotaVacia>
+    </Tarjeta>
   );
 }
 

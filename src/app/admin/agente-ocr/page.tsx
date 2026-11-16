@@ -16,6 +16,7 @@ import '../sistema.css';
 
 import { getT } from '@/lib/i18n/servidor';
 import { rico } from '@/lib/i18n/rico';
+import '../compacto-lote-a.css';
 export const dynamic = 'force-dynamic';
 
 /**

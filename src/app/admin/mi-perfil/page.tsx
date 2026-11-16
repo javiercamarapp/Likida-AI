@@ -11,6 +11,7 @@ import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import AvatarUploader from './avatar-uploader';
 import { descartarAvataresViejos } from '@/lib/perfil/avatar_huerfanos';
 import '../resumen.css';
+import '../pulido-c.css';
 
 export const dynamic = 'force-dynamic';
 

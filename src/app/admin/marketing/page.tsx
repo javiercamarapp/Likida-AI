@@ -21,6 +21,7 @@ import { SubirReferencia, type ResultadoReferencia } from './subir-referencia';
 import { TarjetaPieza, type ResultadoPublicar } from './tarjeta-pieza';
 
 import { getT } from '@/lib/i18n/servidor';
+import { NotaVacia } from '../nota-vacia';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -197,7 +198,7 @@ export default async function EstudioMarketingPage() {
         {pendientes === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudieron_leer')}</EstadoError>
         ) : pendientes.length === 0 ? (
-          <p className="adm-vacio-linea">{t('marketing.nada_pendiente_ahora_mismo')}</p>
+          <NotaVacia>{t('marketing.nada_pendiente_ahora_mismo')}</NotaVacia>
         ) : (
           <div className="adm-din-rejilla adm-din-rejilla--compacta">
             {pendientes.map((p) => <TarjetaPieza key={p.id} pieza={p} publicar={accionPublicarPieza} rechazar={accionRechazarPieza} />)}
@@ -219,7 +220,7 @@ export default async function EstudioMarketingPage() {
         {hooks === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudo_leer')}</EstadoError>
         ) : hooks.length === 0 ? (
-          <p className="adm-vacio-linea">{t('marketing.sin_hooks_guardados_todavia')}</p>
+          <NotaVacia>{t('marketing.sin_hooks_guardados_todavia')}</NotaVacia>
         ) : (
           <div className="adm-din-rejilla adm-din-rejilla--compacta">
             {hooks.map((h) => (
@@ -241,7 +242,7 @@ export default async function EstudioMarketingPage() {
         {referencias === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudo_leer_2')}</EstadoError>
         ) : referencias.length === 0 ? (
-          <p className="adm-vacio-linea">{t('marketing.sin_personajes_ni_lugares')}</p>
+          <NotaVacia>{t('marketing.sin_personajes_ni_lugares')}</NotaVacia>
         ) : (
           <div className="adm-din-rejilla adm-din-rejilla--compacta">
             {referencias.map((r) => (

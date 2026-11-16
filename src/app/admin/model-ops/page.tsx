@@ -9,6 +9,7 @@ import { DonaMini, BarList } from '@/app/ui-v2/graficas';
 import { TarjetaFase } from '../tarjeta-fase';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 

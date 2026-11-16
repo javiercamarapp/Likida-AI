@@ -95,10 +95,18 @@
 /* F26 ronda 4: tabla y avisos dentro de una tarjeta (radio 12, borde 1 px, padding 14); el vacío, punteado dentro de ella (Rovaq `ac-vacio`). */
 .bj-caja { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .bj-caja .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
-.bj-caja .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; background: transparent; }
+.bj-caja .rv-vacio.rv-vacio:not([data-pantalla]) { flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 2px 10px; max-height: none; padding: 10px 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--ui-sunken, var(--canvas)); text-align: left; }
+.bj-caja .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__texto { flex: 1 1 14rem; min-width: 0; max-width: none; font-size: var(--t-small); }
 
 /* F26 ronda 4: el vacío dentro de una tarjeta va punteado (Rovaq `ac-vacio`: 1 px, radio 8, 20×14). */
-[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+/* aud16c: el vacío de una tarjeta es UNA línea compacta (icono + título + apoyo en fila) con superficie propia (--ui-sunken) y borde sólido visible: nunca un recuadro alto, punteado y del mismo gris que el fondo. */
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) { flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 2px 10px; max-height: none; padding: 10px 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--ui-sunken, var(--canvas)); text-align: left; }
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__icono { display: inline-flex; flex: none; color: var(--muted); }
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__icono svg { width: 16px; height: 16px; }
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__texto { flex: 1 1 14rem; min-width: 0; max-width: none; font-size: var(--t-small); }
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__accion { margin: 0 0 0 auto; }
+/* Una tarjeta cuyo único contenido es ese vacío no se estira a la altura de su vecina (sin hueco bajo la línea). */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .rv-vacio:only-child) { align-self: start; height: auto; }
 
 /* F26 ronda 5 · Aprobaciones: UNA tarjeta «Por decidir» con las dos colas como subsecciones (antes dos tarjetas con vacío completo cada una). */
 .bj-grupos { display: flex; flex-direction: column; gap: 12px; }
@@ -131,3 +139,33 @@
 
 /* pul9: los sellos de procedencia van debajo de las tarjetas, como en el resto de pantallas. */
 .bj-procedencia { margin-bottom: 8px; }
+
+/* ── aud16c · Lote C: contraste, color con propósito y movimiento sobrio (solo tokens) ── */
+/* Chips y cajas que antes eran gris sobre gris: superficie propia (sunken) con borde visible. */
+.bj-chips-fuente > li { border-color: var(--line2, var(--line)); background: var(--ui-sunken, var(--canvas)); }
+.bj-item__borrador { border-color: var(--line2, var(--line)); background: var(--ui-sunken, var(--canvas)); }
+.bj-pieza__marco { background: var(--ui-sunken, var(--canvas)); border-bottom: 1px solid var(--line); }
+.bj-piezas--compacta .bj-pieza__marco { border-bottom: 0; border-right: 1px solid var(--line); }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__conteo { border: 1px solid var(--line2, var(--line)); background: var(--ui-sunken, var(--canvas)); }
+/* El estado va con color Y texto: la nota de una pieza o de un aviso se pinta como un chip tintado, no como texto suelto. */
+.bj-sub[data-tono] { padding: 4px 8px; border-radius: 8px; line-height: 1.4; }
+.bj-sub[data-tono="warn"] { background: var(--warnbg); }
+.bj-sub[data-tono="bad"] { background: var(--badbg); }
+.bj-sub[data-tono="ok"] { background: var(--okbg); }
+.bj-item__aviso { padding: 4px 8px; border-radius: 8px; background: var(--badbg); }
+.bj-item--envio { gap: 6px 10px; }
+.bj-caja { padding: 14px; }
+.bj-grupos, .bj-lote, .bj-panel { gap: var(--ui-rhythm, 12px); }
+
+/* Entrada escalonada (120-220 ms, solo opacity/transform) y hover/press de las piezas y filas de la Bandeja. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes aud16c-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .bj-cola > .bj-item, .bj-piezas > .bj-pieza, .bj-chips-fuente > li, .bj-caja { animation: aud16c-entra 180ms var(--ui-ease, ease-out) backwards; }
+  .bj-cola > .bj-item:nth-child(2), .bj-piezas > .bj-pieza:nth-child(2), .bj-chips-fuente > li:nth-child(2) { animation-delay: 30ms; }
+  .bj-cola > .bj-item:nth-child(3), .bj-piezas > .bj-pieza:nth-child(3), .bj-chips-fuente > li:nth-child(3) { animation-delay: 60ms; }
+  .bj-cola > .bj-item:nth-child(4), .bj-piezas > .bj-pieza:nth-child(4), .bj-chips-fuente > li:nth-child(4) { animation-delay: 90ms; }
+  .bj-cola > .bj-item:nth-child(n+5), .bj-piezas > .bj-pieza:nth-child(n+5), .bj-chips-fuente > li:nth-child(n+5) { animation-delay: 120ms; }
+  .bj-pieza, .bj-item { transition: transform 140ms var(--ui-ease, ease-out), border-color 140ms var(--ui-ease, ease-out); }
+  .bj-pieza:hover, .bj-item:hover { transform: translateY(-1px); border-color: var(--line2, var(--line)); }
+  .bj-pieza:active, .bj-item:active { transform: none; }
+}

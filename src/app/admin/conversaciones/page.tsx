@@ -18,6 +18,7 @@ import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
 import '../resumen.css';
 import './conversaciones.css';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 

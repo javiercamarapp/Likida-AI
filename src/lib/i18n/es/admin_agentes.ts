@@ -246,4 +246,5 @@ export const admin_agentes = {
   'pul9.depto_ventas': 'Ventas',
   'pul9.sin_palanca_tip': 'Este agente no tiene una palanca propia que mover.',
   'pul9.calidad_resumen': 'Resumen de calidad',
+  'aud16a.contador_agentes': '{n} agentes',
 } as const;

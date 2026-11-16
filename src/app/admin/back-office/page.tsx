@@ -15,6 +15,7 @@ import { RejillaAreas, TarjetaAutomatizacion, TarjetaMetricas } from './tarjetas
 import '../dinero.css';
 import '../resumen.css';
 import './tablero.css';
+import { NotaVacia } from '../nota-vacia';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,13 +113,14 @@ export default async function BackOfficePage() {
   const barras = f.estado !== 'ok'
     ? <Tarjeta key="barras" titulo={t('portada.g_cobrado_mes')} estado={f.estado === 'error' ? 'error' : 'vacio'} mensaje={f.estado === 'error' ? t('portada.no_se_pudo_leer') : t('bo.no_disponible')} reintentar />
     : f.dato.serieCobrado === null
-      ? <Tarjeta key="barras" titulo={t('portada.g_cobrado_mes')} estado="vacio" mensaje={t('portada.lista_recortada')} />
+      ? <Tarjeta key="barras" titulo={t('portada.g_cobrado_mes')} contenida><NotaVacia titulo={t('portada.lista_recortada')} /></Tarjeta>
       : (
         <Tarjeta key="barras" titulo={t('portada.g_cobrado_mes')} elevar entra="tarjeta">
           <Columnas
             datos={f.dato.serieCobrado.map((s) => ({ etiqueta: etiquetaMesCorta(s.periodo, idioma), valor: s.cent / 100 }))}
-            etiqueta={t('portada.g_cobrado_mes')} formato="mxn" matiz={8}
+            etiqueta={t('portada.g_cobrado_mes')} formato="mxn" matiz={3}
           />
+          <ul className="aud16b-leyenda"><li><i data-m="3" aria-hidden="true" />{t('portada.g_cobrado_mes')}</li></ul>
         </Tarjeta>
       );
 
@@ -127,7 +129,7 @@ export default async function BackOfficePage() {
   const dona = f.estado !== 'ok'
     ? <Tarjeta key="dona" titulo={t('portada.g_estado_mes')} estado={f.estado === 'error' ? 'error' : 'vacio'} mensaje={f.estado === 'error' ? t('portada.no_se_pudo_leer') : t('bo.no_disponible')} reintentar />
     : e === null || totalMes === 0
-      ? <Tarjeta key="dona" titulo={t('portada.g_estado_mes')} estado="vacio" mensaje={t('portada.g_estado_mes_vacio')} detalle={t('portada.g_estado_mes_vacio_detalle')} />
+      ? <Tarjeta key="dona" titulo={t('portada.g_estado_mes')} contenida><NotaVacia titulo={t('portada.g_estado_mes_vacio')}>{t('portada.g_estado_mes_vacio_detalle')}</NotaVacia></Tarjeta>
       : (
         <Tarjeta key="dona" titulo={t('portada.g_estado_mes')} elevar entra="tarjeta">
           <DonaMini

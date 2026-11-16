@@ -12,6 +12,7 @@ import { getT } from '@/lib/i18n/servidor';
 import type { TSistema } from '@/lib/i18n/sistema_tr';
 import '../sistema.css';
 import './actividad-codigo.css';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 

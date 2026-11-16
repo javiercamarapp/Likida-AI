@@ -66,6 +66,9 @@
 
 /* ── Estado vacío v2 ───────────────────────────────────────────────────── */
 .rv-vacio { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 32px 16px; border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--surface); }
+/* 16-nov-2026: en v2 el vacío tiene borde sólido y menos relleno (antes punteado, se confundía con el fondo). v1 queda intacto. */
+[data-ui="v2"] .rv-vacio { padding: 24px 16px; border-style: solid; }
+[data-ui="v2"] .rv-vacio[data-compacto] { padding: 10px 14px; background: var(--ui-surface, var(--surface)); border: 1px solid var(--ui-line-strong, var(--line2)); border-left: 3px solid var(--info); border-radius: 8px; }
 .rv-vacio[data-compacto] { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; gap: 4px 12px; padding: 12px 14px; background: transparent; border-width: 1.5px; border-style: dotted; }
 .rv-vacio__arte { width: 160px; height: 96px; color: var(--ink2, var(--ink)); }
 .rv-vacio__titulo { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); }

@@ -90,10 +90,10 @@ export default async function ContratosPage({ searchParams }: { searchParams: Pr
     />,
   ] : [
     <Tarjeta key="meses" titulo={t('contratos.g_meses')} elevar entra="tarjeta">
-      <Columnas datos={meses.map((m) => ({ etiqueta: m.mes, valor: m.n }))} etiqueta={t('contratos.g_meses')} formato="numero" matiz={8} vacio={t('contratos.g_meses_vacio')} />
+      <Columnas datos={meses.map((m) => ({ etiqueta: m.mes, valor: m.n }))} etiqueta={t('contratos.g_meses')} formato="numero" matiz={5} vacio={t('contratos.g_meses_vacio')} />
     </Tarjeta>,
     <Tarjeta key="tipo" titulo={t('contratos.g_tipo')} elevar entra="tarjeta">
-      <BarList etiqueta={t('contratos.g_tipo')} matiz={8} items={porTipo.map((x) => ({ clave: x.k, etiqueta: t(`contratos.tipo_${x.k}` as const), valor: x.n }))} />
+      <BarList etiqueta={t('contratos.g_tipo')} matiz={5} items={porTipo.map((x) => ({ clave: x.k, etiqueta: t(`contratos.tipo_${x.k}` as const), valor: x.n }))} />
     </Tarjeta>,
   ];
 

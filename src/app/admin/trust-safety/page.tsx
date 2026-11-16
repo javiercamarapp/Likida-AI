@@ -177,11 +177,11 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
       {/* ── Dos gráficas con lo medido: severidad a 30 días y eventos por fuente ── */}
       <FilaTarjetas variante="6-6" className="adm-ctl-pareja adm-ctl-pareja--libre">
         {resumen === null ? (
-          <Tarjeta titulo={tc('ctl.ts_sev_titulo')} estado="error" mensaje={t('trust_safety.no_se_pudieron_leer_los_conteos')} />
+          <Tarjeta entra="tarjeta" titulo={tc('ctl.ts_sev_titulo')} estado="error" mensaje={t('trust_safety.no_se_pudieron_leer_los_conteos')} />
         ) : resumen.d30.alta + resumen.d30.media + resumen.d30.info === 0 ? (
-          <Tarjeta titulo={tc('ctl.ts_sev_titulo')} estado="vacio" mensaje={tc('ctl.ts_sev_vacio')} detalle={tc('ctl.ts_sev_vacio_detalle')} />
+          <Tarjeta entra="tarjeta" titulo={tc('ctl.ts_sev_titulo')} estado="vacio" mensaje={tc('ctl.ts_sev_vacio')} detalle={tc('ctl.ts_sev_vacio_detalle')} />
         ) : (
-          <Tarjeta titulo={tc('ctl.ts_sev_titulo')}>
+          <Tarjeta entra="tarjeta" titulo={tc('ctl.ts_sev_titulo')}>
             <div className="adm-ctl-grafica">
               <DonaMini etiqueta={tc('ctl.ts_sev_titulo')} centro={numero(resumen.d30.alta + resumen.d30.media + resumen.d30.info, idioma)}
                 gajos={[
@@ -193,9 +193,9 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
           </Tarjeta>
         )}
         {cobertura === null ? (
-          <Tarjeta titulo={tc('ctl.ts_fuente_titulo')} estado="error" mensaje={t('trust_safety.no_se_pudo_medir_la_cobertura')} />
+          <Tarjeta entra="tarjeta" titulo={tc('ctl.ts_fuente_titulo')} estado="error" mensaje={t('trust_safety.no_se_pudo_medir_la_cobertura')} />
         ) : (
-          <Tarjeta titulo={tc('ctl.ts_fuente_titulo')}>
+          <Tarjeta entra="tarjeta" titulo={tc('ctl.ts_fuente_titulo')}>
             <div className="adm-ctl-grafica">
               <BarList etiqueta={tc('ctl.ts_fuente_titulo')} formato={(v) => numero(v, idioma)}
                 items={cobertura.map((f) => ({ clave: f.id, etiqueta: f.titulo, valor: f.emite ? f.filas30d : null }))} />
@@ -205,7 +205,7 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
       </FilaTarjetas>
 
       {/* ── La cobertura REAL, medida ── */}
-      <Tarjeta titulo={t('trust_safety.cobertura_que_fuentes_escriben_aqui_y')}>
+      <Tarjeta entra="tarjeta" titulo={t('trust_safety.cobertura_que_fuentes_escriben_aqui_y')}>
         {cobertura === null ? (
           <EstadoError>{t('trust_safety.no_se_pudo_medir_la_cobertura')}</EstadoError>
         ) : (
@@ -228,7 +228,7 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
       </Tarjeta>
 
       {/* ── La lista ── */}
-      <Tarjeta titulo={t('trust_safety.eventos_registrados')}>
+      <Tarjeta entra="tarjeta" titulo={t('trust_safety.eventos_registrados')}>
         {eventos === null ? (
           <EstadoError>{t('trust_safety.no_se_pudieron_leer_los_eventos')}</EstadoError>
         ) : eventos.length === 0 ? (
@@ -246,7 +246,7 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
       </Tarjeta>
 
       {/* ── Lo que este panel NO afirma — la lista de pendientes sale de la MISMA cobertura medida, no de texto fijo ── */}
-      <Tarjeta titulo={t('trust_safety.que_se_registra_y_que_esta')}>
+      <Tarjeta entra="tarjeta" titulo={t('trust_safety.que_se_registra_y_que_esta')}>
         <p className="adm-ctl-nota-sup">{rico(t('trust_safety.emite_significa_solo_que_existe_codigo'), { e0: (c) => <code className="adm-ctl-codigo">{c}</code> })}</p>
         {cobertura === null ? (
           <p className="adm-ctl-nota-sup">{t('trust_safety.sin_la_medicion_de_cobertura_no')}</p>

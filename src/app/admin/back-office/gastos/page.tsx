@@ -133,7 +133,7 @@ export default async function GastosPage({ searchParams }: { searchParams?: Prom
     <Tarjeta key="mes" titulo={t('gastos.g_por_mes')} estado={gastos.estado === 'ok' ? 'ok' : gastos.estado === 'error' ? 'error' : 'vacio'} mensaje={t('bo.no_disponible')} detalle={t('gastos.g_sin_dato_detalle')} reintentar>
       <Columnas
         datos={mesesGrafica.map((m) => ({ etiqueta: `${m.periodo.slice(5, 7)}/${m.periodo.slice(2, 4)}`, valor: m.totalCent === null ? null : m.totalCent / 100 }))}
-        etiqueta={t('gastos.g_por_mes')} formato="mxnCompacto" matiz={8} alto={120} variacion={false} vacio={t('gastos.g_sin_captura')}
+        etiqueta={t('gastos.g_por_mes')} formato="mxnCompacto" matiz={2} alto={120} variacion={false} vacio={t('gastos.g_sin_captura')}
       />
       <p className="adm-din-nota">{t('gastos.g_por_mes_nota')}</p>
     </Tarjeta>,
@@ -142,7 +142,7 @@ export default async function GastosPage({ searchParams }: { searchParams?: Prom
         <p className="adm-din-nota">{t('gastos.g_sin_gastos_mes')}</p>
       ) : (
         <BarList
-          etiqueta={t('gastos.g_por_proveedor')} matiz={8}
+          etiqueta={t('gastos.g_por_proveedor')} matiz={2}
           items={porProveedor.slice(0, 8).map((p) => ({ clave: p.clave, etiqueta: p.etiqueta, valor: p.totalCent / 100, texto: mxn(p.totalCent / 100) }))}
         />
       )}

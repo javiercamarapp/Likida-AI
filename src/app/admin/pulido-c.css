@@ -1,0 +1,58 @@
+/* aud16c · Lote C del superadmin: Equipo, Mi perfil, Flotas (lista y ficha), Elegir flota y Notificaciones. Solo tokens (sin hex, sin style=);
+   los tamaños de letra salen de --t-*. Los matices que no existen como token se declaran aquí, locales y a inicio de línea. */
+
+/* ── Equipo · «Invitar integrante»: rejilla de 2 columnas con rótulo sobre control (antes una columna estrecha con vacío a la derecha). ── */
+[data-ui="v2"] .adm-forma-filas form > .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 0; border-top-width: 0; align-items: start; }
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila-control { justify-content: flex-start; }
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila .rv-esq__fila-control :is(input, select) { width: 100%; max-width: none; }
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila-rotulo { font-size: var(--t-body); }
+@media (max-width: 640px) { [data-ui="v2"] .adm-forma-filas form > .grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Botón de envío de los formularios finos: el primario lleva la marca; si está bloqueado conserva el borde punteado que ya trae resumen.css. */
+[data-ui="v2"] .adm-forma-filas button[type="submit"]:not(:disabled),
+[data-ui="v2"] section.adm-flota-alta .adm-forma-fina button[type="submit"]:not(:disabled) { background: var(--btn-bg); color: var(--btn-fg); border: 1px solid var(--btn-borde); }
+[data-ui="v2"] .adm-forma-filas button[type="submit"]:not(:disabled):hover,
+[data-ui="v2"] section.adm-flota-alta .adm-forma-fina button[type="submit"]:not(:disabled):hover { background: var(--btn-hover); }
+
+/* Los roles de Equipo: lista compacta con el punto de la marca (antes tinta fija) y tarjetas hermanas arriba, sin hueco. */
+[data-ui="v2"] .adm-roles li::before { background: var(--marca); }
+
+/* ── Mi perfil · las seis filas (foto, nombre, correo, rol, idioma, tema) en 2 columnas, rótulo sobre control. ── */
+@media (min-width: 640px) {
+  [data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) .rv-tarjeta__cuerpo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
+  [data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) .rv-esq__fila { grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; padding: 12px 0; border-top: 1px solid var(--ui-border); }
+  [data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) .rv-esq__fila:nth-child(-n+2) { border-top-width: 0; padding-top: 0; }
+  [data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) .rv-esq__fila-control { justify-content: flex-start; }
+}
+[data-ui="v2"] .adm-perfil-avatar__img { border: 1px solid var(--line2, var(--line)); }
+[data-ui="v2"] .adm-perfil-valor { display: inline-flex; align-items: center; min-height: 32px; font-weight: 500; }
+
+/* ── Flotas · vacíos de la ficha y de la lista: una línea con superficie propia, sin recuadro alto del mismo gris que el fondo. ── */
+[data-ui="v2"] .adm-ficha-sec .adm-vacio-linea.adm-vacio-linea,
+[data-ui="v2"] .rv-tarjeta .adm-vacio-linea.adm-vacio-linea { padding: 10px 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--ui-sunken, var(--canvas)); font-size: var(--t-small); line-height: 1.4; text-align: left; }
+[data-ui="v2"] .rv-tarjeta .adm-din-nota[role="status"] { padding: 10px 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--ui-sunken, var(--canvas)); }
+/* El buscador comparte línea y alto con los demás filtros de la barra (32 px, alineado al centro). */
+[data-ui="v2"] .rv-filtros { align-items: center; }
+[data-ui="v2"] .rv-filtros .rv-fl--buscar { align-self: center; }
+/* Acciones de fila: «Detalle» y «Abrir ficha» pegadas a la derecha, sin saltar de renglón. */
+[data-ui="v2"] .adm-flota-acciones { flex-wrap: nowrap; align-items: center; gap: 6px; white-space: nowrap; }
+/* Selector de flota: la fila elegida se marca con el color de estado (verde) además del chip «Activa». */
+[data-ui="v2"] .adm-res-fila[data-activa] .adm-res-fila__titulo { color: var(--ok); }
+
+/* ── Notificaciones · «sin leer» con el color de la señal; la lista entra escalonada. ── */
+[data-ui="v2"] .adm-notif .av-fila { border-color: var(--line2, var(--line)); }
+
+/* ── Movimiento sobrio (120-220 ms, solo opacity/transform) y solo con movimiento permitido ── */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes aud16c-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  [data-ui="v2"] .adm-notif .av-fila, [data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) .rv-esq__fila, [data-ui="v2"] .adm-roles li { animation: aud16c-entra 180ms var(--ui-ease, ease-out) backwards; }
+  [data-ui="v2"] .adm-notif .av-fila:nth-child(2), [data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) .rv-esq__fila:nth-child(2), [data-ui="v2"] .adm-roles li:nth-child(2) { animation-delay: 30ms; }
+  [data-ui="v2"] .adm-notif .av-fila:nth-child(3), [data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) .rv-esq__fila:nth-child(3), [data-ui="v2"] .adm-roles li:nth-child(3) { animation-delay: 60ms; }
+  [data-ui="v2"] .adm-notif .av-fila:nth-child(n+4), [data-ui="v2"] .rv-esq__cfg:has(.adm-perfil-avatar) .rv-esq__fila:nth-child(n+4), [data-ui="v2"] .adm-roles li:nth-child(n+4) { animation-delay: 90ms; }
+  /* Tarjetas con `entra="tarjeta"` en una fila: la segunda y la tercera llegan un instante después de la primera. */
+  [data-ui="v2"] .rv-fila-tarjetas > [data-entra="tarjeta"]:nth-child(2) { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-fila-tarjetas > [data-entra="tarjeta"]:nth-child(n+3) { animation-delay: 80ms; }
+  [data-ui="v2"] .adm-forma-filas button[type="submit"], [data-ui="v2"] section.adm-flota-alta .adm-forma-fina button[type="submit"] { transition: background-color 140ms var(--ui-ease, ease-out), transform 140ms var(--ui-ease, ease-out); }
+  [data-ui="v2"] .adm-forma-filas button[type="submit"]:not(:disabled):active, [data-ui="v2"] section.adm-flota-alta .adm-forma-fina button[type="submit"]:not(:disabled):active { transform: scale(.98); }
+}

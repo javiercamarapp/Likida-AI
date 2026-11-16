@@ -14,6 +14,7 @@ import '../sistema.css';
 import '../control.css';
 import { getT } from '@/lib/i18n/servidor';
 import './mcp-clientes.css';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 

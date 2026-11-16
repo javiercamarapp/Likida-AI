@@ -194,7 +194,7 @@ export function TarjetaAutomatizacion({ t, idioma }: { t: Tr; idioma: IdiomaForm
   }));
   return (
     <Tarjeta titulo={t('portada.automatizacion')} elevar entra="tarjeta">
-      <BarList items={items} etiqueta={t('portada.automatizacion')} maximo={100} matiz={8} formato={(v) => porcentaje(v, 0, idioma)} />
+      <BarList items={items} etiqueta={t('portada.automatizacion')} maximo={100} matiz={5} formato={(v) => porcentaje(v, 0, idioma)} />
       <p className="adm-din-nota">{t('portada.automatizacion_metodo', { corte: AUTOMATIZACION_CORTE })}</p>
     </Tarjeta>
   );

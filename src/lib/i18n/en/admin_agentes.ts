@@ -248,4 +248,5 @@ export const admin_agentes: Record<keyof typeof admin_agentesEs, string> = {
   'pul9.depto_ventas': 'Sales',
   'pul9.sin_palanca_tip': 'This agent has no lever of its own to switch.',
   'pul9.calidad_resumen': 'Quality summary',
+  'aud16a.contador_agentes': '{n} agents',
 };

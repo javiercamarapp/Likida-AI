@@ -27,11 +27,11 @@
    queda son los semáforos de estado (--ok/--warn/--bad, siempre con texto o icono) y la señal burdeos (--senal) de «requiere acción». */
 :root [data-ui="v2"] {
   /* Marco y superficies */
-  --bg: #f6f6f7;
+  --bg: #f8f5f0;
   --surface: #ffffff;
   --panel: var(--surface);
-  --canvas: #f1f1f2;
-  --canvas2: #f7f7f8;
+  --canvas: #f2eee7;
+  --canvas2: #f8f5f0;
 
   /* Tinta */
   --ink: #0e0e10;
@@ -40,27 +40,27 @@
   --faint: #66666d;
 
   /* Líneas y controles */
-  --line: #e6e6e8;
-  --line2: #d6d6d9;
-  --input: #8a8a90;
+  --line: #e7e0d4;
+  --line2: #d6ccbb;
+  --input: #76767e;
 
   /* --marca = TINTA como relleno neutro (anillo, interruptor, foco del recorrido, mosaicos de icono de KPI, barras): lo leen los
      componentes de B/C y el kit. */
-  --marca: #0e0e10;
+  --marca: #2a3f5f;
   --marca-fg: #ffffff;
-  --marca-hover: #3a3a40;
-  --accent: #0e0e10;
+  --marca-hover: #1c2c45;
+  --accent: #2a3f5f;
   --accent-fg: #ffffff;
   /* ◆ Botón primario = NEGRO (tinta; en oscuro invertido), compacto y sin azul; máx. 1 por pliegue (decisión de Javier, 31-oct).
      Secundario y tenue: superficie con borde de control (ver componentes.css). */
-  --btn-bg: #0e0e10;
+  --btn-bg: #c2410c;
   --btn-fg: #ffffff;
-  --btn-borde: #0e0e10;
-  --btn-hover: #3a3a40;
+  --btn-borde: #c2410c;
+  --btn-hover: #9a3412;
   /* Variante secundaria suave: gris muy claro. */
-  --btn-soft: #f1f1f2;
+  --btn-soft: #f2eee7;
   --btn-soft-fg: #3a3a40;
-  --btn-soft-hover: #e4e4e6;
+  --btn-soft-hover: #e7dfd2;
   --ctl-vacio-bd: #8a8a90;
   /* ◆ Señal «requiere acción» = burdeos, ≤2 % del área; nunca hover, relleno de botón ni «Salir».
      #a6264a sobre blanco mide ≥7:1. ÚNICO color de marca. */
@@ -74,15 +74,15 @@
   --bad: #ac2440;
   --badbg: #fdeef0;
   /* Tono «info» = NEUTRO (gris tinta). Sin azul de interfaz: decisión de Javier 31-oct-2026 (paleta negro/gris/blanco); el azul/petróleo queda solo en los colores de DATOS. */
-  --info: #3a3a40;
-  --infobg: #f1f1f2;
+  --info: #2a3f5f;
+  --infobg: #e8eef6;
 
   /* Rampa de gráficas (neutra) */
-  --g1: #f1f1f2;
-  --g2: #e4e4e6;
-  --g3: #8a8a90;
-  --g4: #3a3a40;
-  --g5: #0e0e10;
+  --g1: #eef2f7;
+  --g2: #dbe3ee;
+  --g3: #7f93ae;
+  --g4: #2a3f5f;
+  --g5: #17243a;
   /* Cascada (Waterfall): las bajas flotan con el gris medio (≥3:1 contra la superficie); --g2 se perdía en oscuro (#1f1f23 sobre #17171a) */
   --casc-baja: var(--g3);
 
@@ -91,17 +91,23 @@
      Las series DURAS (1, 2, 3, 5, 7) miden ≥3:1 contra la tarjeta (1.4.11). Las CLARAS (4, 6, 8) no llegan a 3:1 por construcción (en una escala de grises,
      ocho niveles no caben todos sobre el piso de 3:1): se identifican SIEMPRE por contorno --chart-borde (≥3:1, ver graficas.css) y llevan etiqueta de
      texto (regla E-10; nunca color solo). Ningún matiz es azul, teal ni naranja. */
-  --chart-1: #0e0e10; --chart-2: #8a8a90; --chart-3: #3a3a40; --chart-4: #b4b4ba;
-  --chart-5: #5a5a61; --chart-6: #a3a3ab; --chart-7: #707078; --chart-8: #d9d9dc;
+  --chart-1: #2a3f5f;
+  --chart-2: #c2410c;
+  --chart-3: #0f766e;
+  --chart-4: #b45309;
+  --chart-5: #6d4c9f;
+  --chart-6: #4d7c0f;
+  --chart-7: #2b6f9e;
+  --chart-8: #64748b;
   --chart-borde: #5a5a61;
-  --soft-1: #d0d0d4; --soft-2: #e4e4e6; --soft-3: #dadade; --soft-4: #eeeef0;
-  --soft-5: #e0e0e3; --soft-6: #f2f2f3; --soft-7: #e8e8ea;
-  --soft-8: #f6f6f7;
-  --ink-1: #0e0e10; --ink-2: #17171a; --ink-3: #0e0e10; --ink-4: #26262b;
-  --ink-5: #17171a; --ink-6: #26262b; --ink-7: #17171a;
-  --ink-8: #3a3a40;
+  --soft-1: #dbe3ee; --soft-2: #f8dccb; --soft-3: #cfe8e4; --soft-4: #f6e2c4;
+  --soft-5: #e3daf0; --soft-6: #dfeccb; --soft-7: #d3e4f0;
+  --soft-8: #e5e9ee;
+  --ink-1: #1b2b44; --ink-2: #7a2a06; --ink-3: #0a4a45; --ink-4: #6b3406;
+  --ink-5: #43286b; --ink-6: #2f4a08; --ink-7: #163f5f;
+  --ink-8: #334155;
   /* Filete superior de las tiras de KPI: NEGRO para todas las métricas (el color por métrica de la ola anterior queda anulado). */
-  --kpi-filete: #0e0e10;
+  --kpi-filete: #c2410c;
 
   /* Alias del sistema v2 (ESTILO-LIKIDA §1) */
   /* Ítem activo = fondo suave + barra izquierda NEGRA (--nav-activo-barra; en oscuro, blanca). El burdeos (--senal) es un
@@ -147,16 +153,16 @@
 
   /* Navegación: ítem activo = barra izquierda inset + fondo tinta al 7 % + peso 500. UN solo token para el color de la barra (--nav-activo-barra): NEGRA
      (decisión del dueño, 11-nov-2026, que anula el rojo de Rovaq; en oscuro, blanca). Cambiarlo aquí cambia todos los menús (aside, riel y hoja). Lo lee shell.css. */
-  --nav-activo-bg: color-mix(in srgb, var(--ink) 7%, transparent);
+  --nav-activo-bg: color-mix(in srgb, #2a3f5f 9%, transparent);
   --nav-activo-fg: var(--ink);
   --nav-activo-peso: 500;
-  --nav-activo-barra: #0e0e10;
+  --nav-activo-barra: #c2410c;
   /* Sombra suave del marco (sidebar flotante), como Vexa; las tarjetas del flujo siguen sin sombra. */
   --sh-marco: 0 1px 2px #0e0e1005, 0 8px 24px -16px #0e0e1020;
 
   --ui-canvas: var(--bg);
   /* Fondo HUNDIDO del contenido (Rovaq `--ui-sunken`): la tarjeta blanca flota sobre él dentro del marco (`.rv-col`). */
-  --ui-sunken: #f1f1f2;
+  --ui-sunken: #f2eee7;
   --ui-surface: var(--surface);
   --ui-soft: var(--canvas);
   --ui-elevated: #ffffff;
@@ -164,7 +170,7 @@
   --ui-line-strong: var(--line2);
   --ui-input: var(--input);
   --ui-secondary: var(--ink2);
-  --ui-focus: var(--ink);
+  --ui-focus: #2a3f5f;
   --ui-scrim: var(--scrim);
   --ui-tip-bg: var(--tip);
   --ui-tip-ink: var(--tip-ink);
@@ -196,13 +202,13 @@
 
   /* Texto sobre un segmento relleno con el matiz n de datos */
   --on-1: #ffffff;
-  --on-2: #0e0e10;
+  --on-2: #ffffff;
   --on-3: #ffffff;
-  --on-4: #0e0e10;
+  --on-4: #ffffff;
   --on-5: #ffffff;
-  --on-6: #0e0e10;
+  --on-6: #ffffff;
   --on-7: #ffffff;
-  --on-8: #0e0e10;
+  --on-8: #ffffff;
 
   /* Neutros de gráfica */
   --chart-barra: #2f2f33;
@@ -332,32 +338,32 @@
 /* Oscuro: negro neutro, sin matiz cálido. */
 :root[data-theme="dark"] [data-ui="v2"].tema-neutro,
 :root[data-theme="dark"] [data-ui="v2"] {
-  --bg: #0e0e10;
-  --surface: #17171a;
-  --canvas: #1f1f23;
-  --canvas2: #17171a;
+  --bg: #13100e;
+  --surface: #1c1815;
+  --canvas: #241f1b;
+  --canvas2: #1c1815;
 
   --ink: #f4f4f5;
   --ink2: #d4d4d8;
   --muted: #a3a3ab;
   --faint: #9a9aa2;
 
-  --line: #26262b;
-  --line2: #34343a;
+  --line: #2e2823;
+  --line2: #3d352d;
   --input: #8b8b93;
 
-  --marca: #f4f4f5;
-  --marca-fg: #0e0e10;
-  --marca-hover: #ffffff;
-  --accent: #f4f4f5;
-  --accent-fg: #0e0e10;
-  --btn-bg: #f4f4f5;
-  --btn-fg: #0e0e10;
-  --btn-borde: #f4f4f5;
-  --btn-hover: #d4d4d8;
-  --btn-soft: #1f1f23;
+  --marca: #9db8e0;
+  --marca-fg: #0e1a2e;
+  --marca-hover: #c3d4ee;
+  --accent: #9db8e0;
+  --accent-fg: #0e1a2e;
+  --btn-bg: #fb923c;
+  --btn-fg: #1a0e05;
+  --btn-borde: #fb923c;
+  --btn-hover: #fdba74;
+  --btn-soft: #241f1b;
   --btn-soft-fg: #d4d4d8;
-  --btn-soft-hover: #2a2a2f;
+  --btn-soft-hover: #302a24;
   --ctl-vacio-bd: #7a7a82;
   --senal: #cc4a6c;
 
@@ -367,37 +373,43 @@
   --warnbg: #33281a;
   --bad: #ffb3c3;
   --badbg: #342127;
-  --info: #d6d6d9;
-  --infobg: #26262b;
+  --info: #9db8e0;
+  --infobg: #1d2838;
 
   /* Estado activo en oscuro (ver el bloque claro): gris profundo, anillo y texto claros. */
   --seg-activo-bg: #34343a;
   --seg-activo-borde: #f4f4f5;
   --seg-activo-fg: #f4f4f5;
   --seg-activo-hover: #3e3e45;
-  --nav-activo-barra: #f4f4f5;
-  --kpi-filete: #f4f4f5;
+  --nav-activo-barra: #fb923c;
+  --kpi-filete: #fb923c;
 
-  --g1: #17171a;
-  --g2: #1f1f23;
-  --g3: #8b8b93;
-  --g4: #d4d4d8;
-  --g5: #f4f4f5;
+  --g1: #1c1815;
+  --g2: #241f1b;
+  --g3: #7f93ae;
+  --g4: #9db8e0;
+  --g5: #e6eefa;
 
   /* Oscuro: la misma lógica invertida (1 blanco · 3 gris claro · 5 y 7 medios duros; 4, 6 y 8 son las series tenues, con contorno --chart-borde). */
-  --chart-1: #f4f4f5; --chart-2: #7f7f87; --chart-3: #c4c4ca; --chart-4: #55555c;
-  --chart-5: #a0a0a8; --chart-6: #66666e; --chart-7: #909098; --chart-8: #3a3a40;
+  --chart-1: #9db8e0;
+  --chart-2: #fb923c;
+  --chart-3: #5eead4;
+  --chart-4: #f0c987;
+  --chart-5: #c4b0ea;
+  --chart-6: #a3d36b;
+  --chart-7: #7ec0e8;
+  --chart-8: #94a3b8;
   --chart-borde: #a3a3ab;
-  --soft-1: #3e3e45; --soft-2: #2a2a2f; --soft-3: #34343a; --soft-4: #222226;
-  --soft-5: #2e2e33; --soft-6: #1f1f23; --soft-7: #27272c;
-  --soft-8: #1b1b1f;
-  --ink-1: #f4f4f5; --ink-2: #f4f4f5; --ink-3: #f4f4f5; --ink-4: #e4e4e6;
-  --ink-5: #f4f4f5; --ink-6: #e4e4e6; --ink-7: #f4f4f5;
-  --ink-8: #d6d6d9;
+  --soft-1: #263450; --soft-2: #4a2a12; --soft-3: #0f3b37; --soft-4: #4a3a14;
+  --soft-5: #36294f; --soft-6: #2a3d12; --soft-7: #16384f;
+  --soft-8: #232a36;
+  --ink-1: #dbe6f7; --ink-2: #fdd0aa; --ink-3: #b7f2e8; --ink-4: #fbe3b0;
+  --ink-5: #e2d8f6; --ink-6: #d6efb4; --ink-7: #c5e3f6;
+  --ink-8: #dbe3ee;
 
-  --ui-elevated: #1f1f23;
-  --ui-sunken: #0e0e10;
-  --carga-fondo: #0e0e10;
+  --ui-elevated: #241f1b;
+  --ui-sunken: #13100e;
+  --carga-fondo: #13100e;
   --tint-info: #1b1b1f;
   --tabla-cab-bg: #1f1f23;
   --tabla-cab-ink: #f4f4f5;
@@ -418,11 +430,11 @@
   --on-1: #0e0e10;
   --on-2: #0e0e10;
   --on-3: #0e0e10;
-  --on-4: #f4f4f5;
+  --on-4: #0e0e10;
   --on-5: #0e0e10;
-  --on-6: #f4f4f5;
+  --on-6: #0e0e10;
   --on-7: #0e0e10;
-  --on-8: #f4f4f5;
+  --on-8: #0e0e10;
 
   --chart-barra: #d2d2d6;
   --chart-fuerte: #f4f4f5;

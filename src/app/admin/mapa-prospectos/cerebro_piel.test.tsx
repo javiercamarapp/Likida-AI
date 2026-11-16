@@ -65,7 +65,7 @@ describe('Cerebro: contrato visual', () => {
     expect(css).toMatch(/\[data-urgencia="aldia"\][^{]*\{ --urg: var\(--cer-verde\); \}/);
     expect(css).toMatch(/\[data-urgencia="frio"\][^{]*\{ --urg: var\(--cer-gris\); \}/);
     // Burdeos, ocre y verde salen de los semáforos del sistema; el azul, el violeta y el naranja no existen como token y se declaran aquí, en oklch (sin hex).
-    expect(css).toMatch(/--cer-burdeos: var\(--senal\);/);
+    expect(css).toMatch(/--cer-burdeos: var\(--bad\);/);
     expect(css).toMatch(/--cer-ocre: var\(--warn\);/);
     expect(css).toMatch(/--cer-verde: var\(--ok\);/);
     for (const m of ['azul', 'violeta', 'naranja']) expect(css).toMatch(new RegExp(`--cer-${m}: oklch\\(`));

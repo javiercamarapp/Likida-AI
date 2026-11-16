@@ -26,6 +26,7 @@ import { getT } from '@/lib/i18n/servidor';
 import { corridaDe, haceTiempo, leerCorridas, resultadoCorrida } from './corrida-visual';
 import '../resumen.css';
 import './agentes.css';
+import '../compacto-lote-a.css';
 
 export type AccionAlta = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
 /** Apagar/encender la palanca de un agente, desde su propia fila (siempre con motivo). */
@@ -130,7 +131,12 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
     ...DEPARTAMENTOS.filter((d) => filas.some((f) => f.a.departamento === d.valor)).map((d) => ({ valor: d.valor as string, rotulo: d.rotulo as string })),
   ];
   const nFiltros = (estadoFiltro ? 1 : 0) + (deptoFiltro ? 1 : 0);
-  const filasVista = filas.filter((f) => (!estadoFiltro || f.real === estadoFiltro) && (!deptoFiltro || f.a.departamento === deptoFiltro));
+  // Los 61 de una vez, agrupados por departamento (orden estable dentro de cada uno).
+  const filasVista = filas
+    .filter((f) => (!estadoFiltro || f.real === estadoFiltro) && (!deptoFiltro || f.a.departamento === deptoFiltro))
+    .map((f, i) => ({ f, i, d: rotuloDepto.get(f.a.departamento) ?? f.a.departamento }))
+    .sort((x, y) => x.d.localeCompare(y.d, 'es') || x.i - y.i)
+    .map((x) => x.f);
   const paramsUrl = { pag: params.pag, estado: estadoFiltro || undefined, depto: deptoFiltro || undefined };
 
   // Éxito global de 30 días: suma de las corridas de TODOS los agentes que reportó la RPC (null = no se pudo leer; sin corridas = vacío, no 0 %).
@@ -322,20 +328,12 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
             },
           { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: costo30 === null ? null : usd(costo30), estado: costo30 === null ? 'error' : 'ok', nota: t('agentes_contenido.suma_de_los_agentes') },
       ]), t('agentes_contenido.observado'))}
-      agrupacion={(
-        <FilaTarjetas variante="6-6" className="adm-fila-pareja">
-          <Tarjeta titulo={t('agentes_contenido.graf_deptos')} estado={porDepto.length === 0 ? 'vacio' : 'ok'} mensaje={t('agentes_contenido.graf_deptos_vacio')}>
-            <BarList etiqueta={t('agentes_contenido.graf_deptos')} items={porDepto} formato={(v) => String(v)} />
-          </Tarjeta>
-          <Tarjeta titulo={t('agentes_contenido.graf_exito')} estado={exito === null ? 'error' : topCorridas.length === 0 ? 'vacio' : 'ok'} mensaje={exito === null ? t('agentes_contenido.graf_sin_lectura') : t('agentes_contenido.graf_exito_vacio')}>
-            <BarList etiqueta={t('agentes_contenido.graf_exito')} items={topCorridas} formato={(v) => String(v)} />
-          </Tarjeta>
-        </FilaTarjetas>
-      )}
     >
 
       <Tarjeta
         titulo={t('agentes_contenido.catalogo_de_agentes')}
+        entra="tarjeta"
+        acciones={<Chip tono="info">{t('aud16a.contador_agentes', { n: filasVista.length })}</Chip>}
         estado={agentes.length === 0 ? 'vacio' : 'ok'}
         mensaje={t('agentes_contenido.el_catalogo_esta_vacio')}
         detalle={t('agentes_contenido.da_de_alta_un')}
@@ -347,12 +345,20 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
           idFila={(f) => f.a.id}
           base="/admin/agentes"
           params={paramsUrl}
-          paginacion={{ tamano: 25 }}
           vacio={nFiltros > 0
             ? { titulo: t('agentes_contenido.bf_ninguno'), texto: t('agentes_contenido.bf_quita') }
             : { titulo: t('agentes_contenido.sin_agentes') }}
         />
       </Tarjeta>
+
+      <FilaTarjetas variante="6-6" className="adm-fila-pareja rv-agente-resumen">
+        <Tarjeta titulo={t('agentes_contenido.graf_deptos')} contenida entra="tarjeta" estado={porDepto.length === 0 ? 'vacio' : 'ok'} mensaje={t('agentes_contenido.graf_deptos_vacio')}>
+          <BarList etiqueta={t('agentes_contenido.graf_deptos')} items={porDepto} formato={(v) => String(v)} />
+        </Tarjeta>
+        <Tarjeta titulo={t('agentes_contenido.graf_exito')} contenida entra="tarjeta" estado={exito === null ? 'error' : topCorridas.length === 0 ? 'vacio' : 'ok'} mensaje={exito === null ? t('agentes_contenido.graf_sin_lectura') : t('agentes_contenido.graf_exito_vacio')}>
+          <BarList etiqueta={t('agentes_contenido.graf_exito')} items={topCorridas} formato={(v) => String(v)} />
+        </Tarjeta>
+      </FilaTarjetas>
 
       <Disclosure titulo={t('agentes_contenido.como_se_lee_el')} resumen={t('agentes_contenido.disc_resumen')}>
         <ul>
