@@ -58,10 +58,18 @@
 
 /* ── F26 ronda 4: todo bloque va en una tarjeta (radio 12, borde 1 px, padding 14), y el vacío dentro de ella va punteado (Rovaq `ac-vacio`) ── */
 [data-ui="v2"] .adm-sis-caja { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-[data-ui="v2"] .adm-sis-caja .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; background: transparent; }
-[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+[data-ui="v2"] .adm-sis-caja .rv-vacio.rv-vacio:not([data-pantalla]) { flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 2px 10px; max-height: none; padding: 10px 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--ui-sunken, var(--canvas)); text-align: left; }
+[data-ui="v2"] .adm-sis-caja .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__texto { flex: 1 1 14rem; min-width: 0; max-width: none; font-size: var(--t-small); }
+/* aud16c: el vacío de una tarjeta es UNA línea compacta (icono + título + apoyo en fila) con superficie propia (--ui-sunken) y borde sólido visible: nunca un recuadro alto, punteado y del mismo gris que el fondo. */
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) { flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 2px 10px; max-height: none; padding: 10px 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--ui-sunken, var(--canvas)); text-align: left; }
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__icono { display: inline-flex; flex: none; color: var(--muted); }
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__icono svg { width: 16px; height: 16px; }
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__texto { flex: 1 1 14rem; min-width: 0; max-width: none; font-size: var(--t-small); }
+[data-ui="v2"] .rv-tarjeta .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__accion { margin: 0 0 0 auto; }
+/* Una tarjeta cuyo único contenido es ese vacío no se estira a la altura de su vecina (sin hueco bajo la línea). */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .rv-vacio:only-child) { align-self: start; height: auto; }
 /* Vacío de una línea (1.5 px punteado, 12×14) cuando no hay serie que graficar: sin tarjetas altas medio vacías. */
-[data-ui="v2"] .adm-sis-vacio-linea { margin: 0; padding: 12px 14px; border: 1.5px dotted var(--line2, var(--line)); border-radius: 8px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+[data-ui="v2"] .adm-sis-vacio-linea { margin: 0; padding: 10px 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--ui-sunken, var(--canvas)); font-size: var(--t-small); line-height: 1.4; color: var(--muted); }
 [data-ui="v2"] .adm-sis-vacio-linea > b { font-weight: 600; color: var(--ink); }
 [data-ui="v2"] .adm-sis-caja .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 [data-ui="v2"] .adm-sis-cab-caja { display: flex; flex-direction: column; gap: 2px; }
@@ -83,7 +91,7 @@
 }
 
 /* F26 ronda 6: el vacío dentro de una tarjeta es el `ac-vacio` de Rovaq (1 px punteado, radio 8, 20×14) en TODA pantalla de sistema, no solo en las fases. */
-[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+/* (el vacío compacto de aud16c ya está declarado arriba) */
 
 /* F26 ronda 6: las dos tarjetas de la rejilla de una fase (gráfica + modelos) miden LO MISMO y no dejan hueco (Rovaq): la tabla de modelos se
    estira a la altura de su vecina y reparte sus filas; el vacío de una línea se centra en el alto sobrante. */
@@ -100,3 +108,28 @@
   [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
 }
 [data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.adm-fase-tabla.adm-fase-tabla--vacia { height: auto; align-self: start; }
+
+/* ── aud16c · Lote C: contraste, color con propósito y movimiento sobrio (solo tokens) ── */
+/* Cajas de texto, guías, mensajes y chips que se perdían contra el fondo: superficie propia (sunken) y borde visible. */
+[data-ui="v2"] .adm-sis-guia, [data-ui="v2"] .adm-sis-descripcion, [data-ui="v2"] .adm-sis-msg { border-color: var(--line2, var(--line)); background: var(--ui-sunken, var(--canvas)); }
+/* La nota interna de un ticket NO es del cliente: se distingue con el tinte de advertencia, no solo con un borde punteado. */
+[data-ui="v2"] .adm-sis-msg[data-interna] { border-style: solid; border-color: var(--aviso-linea-warn, var(--line2)); background: var(--warnbg); }
+[data-ui="v2"] .adm-bit-panel__id, [data-ui="v2"] .adm-bit-chip { border-color: var(--line2, var(--line)); background: var(--ui-sunken, var(--canvas)); }
+[data-ui="v2"] .adm-bit-chip__copiar:hover { background: var(--ui-soft, var(--surface)); }
+/* Ritmo único entre bloques y rejilla compacta: las filas de conector/ticket se acomodan según el ancho y no dejan huecos. */
+[data-ui="v2"] .adm-sis-rejilla { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--ui-rhythm, 12px); align-items: start; }
+[data-ui="v2"] .adm-sis-hilo { gap: 8px; }
+[data-ui="v2"] .adm-sis-bloque { gap: 8px; }
+[data-ui="v2"] .adm-sis-forma { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: none; align-items: start; }
+@media (max-width: 640px) { [data-ui="v2"] .adm-sis-forma { grid-template-columns: minmax(0, 1fr); } }
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes aud16c-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  [data-ui="v2"] .adm-sis-rejilla > .adm-sis-fila, [data-ui="v2"] .adm-sis-hilo > li, [data-ui="v2"] .adm-bit-panel, [data-ui="v2"] .adm-sis-caja { animation: aud16c-entra 180ms var(--ui-ease, ease-out) backwards; }
+  [data-ui="v2"] .adm-sis-rejilla > .adm-sis-fila:nth-child(2), [data-ui="v2"] .adm-sis-hilo > li:nth-child(2) { animation-delay: 30ms; }
+  [data-ui="v2"] .adm-sis-rejilla > .adm-sis-fila:nth-child(3), [data-ui="v2"] .adm-sis-hilo > li:nth-child(3) { animation-delay: 60ms; }
+  [data-ui="v2"] .adm-sis-rejilla > .adm-sis-fila:nth-child(n+4), [data-ui="v2"] .adm-sis-hilo > li:nth-child(n+4) { animation-delay: 90ms; }
+  [data-ui="v2"] .adm-sis-fila { transition: transform 140ms var(--ui-ease, ease-out), border-color 140ms var(--ui-ease, ease-out); }
+  [data-ui="v2"] .adm-sis-fila:hover { transform: translateY(-1px); border-color: var(--line2, var(--line)); }
+  [data-ui="v2"] .adm-sis-fila:active { transform: none; }
+}

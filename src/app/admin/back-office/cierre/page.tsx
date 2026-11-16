@@ -21,6 +21,7 @@ import { AYUDA_COMPROBACION, ROTULO_COMPROBACION, ROTULO_ESTADO_CIERRE, ROTULO_E
 import '../../dinero.css';
 import '../../resumen.css';
 import '../tablero.css';
+import { NotaVacia } from '../../nota-vacia';
 
 export const dynamic = 'force-dynamic';
 
@@ -118,18 +119,18 @@ export default async function CierrePage({ searchParams }: { searchParams?: Prom
   ];
   const graficaPuente = (
     <Tarjeta key="puente" titulo={t('cierre.g_puente')} elevar entra="tarjeta">
-      <BarList items={puente} etiqueta={t('cierre.g_puente')} matiz={8} formato={(v) => mxn(v, idioma)} />
+      <BarList items={puente} etiqueta={t('cierre.g_puente')} matiz={1} formato={(v) => mxn(v, idioma)} />
     </Tarjeta>
   );
   const margenes = c.margenes;
   const graficaMargen = margenes === null
-    ? <Tarjeta key="margen" titulo={t('cierre.g_margen')} estado="vacio" mensaje={t('bo.no_disponible')} />
+    ? <Tarjeta key="margen" titulo={t('cierre.g_margen')} contenida><NotaVacia tono="info" titulo={t('bo.no_disponible')} /></Tarjeta>
     : margenes.length === 0
-      ? <Tarjeta key="margen" titulo={t('cierre.g_margen')} estado="vacio" mensaje={t('cierre.g_margen_vacio')} detalle={t('cierre.g_margen_vacio_detalle')} />
+      ? <Tarjeta key="margen" titulo={t('cierre.g_margen')} contenida><NotaVacia titulo={t('cierre.g_margen_vacio')}>{t('cierre.g_margen_vacio_detalle')}</NotaVacia></Tarjeta>
       : (
         <Tarjeta key="margen" titulo={t('cierre.g_margen')} elevar entra="tarjeta">
           <BarList
-            etiqueta={t('cierre.g_margen')} matiz={8} formato={(v) => mxn(v, idioma)}
+            etiqueta={t('cierre.g_margen')} matiz={3} formato={(v) => mxn(v, idioma)}
             items={margenes.map((m): ItemBarList => ({
               clave: m.tenantId, etiqueta: m.nombre ?? m.tenantId.slice(0, 8), valor: pesos(m.margenCent), texto: txt(m.margenCent),
               nota: m.margenCent === null ? t('cierre.g_margen_sin_dato') : t('cierre.g_margen_nota', { ingreso: mxn((m.ingresosCent ?? 0) / 100, idioma), ia: mxn((m.costoIaCent ?? 0) / 100, idioma) }),

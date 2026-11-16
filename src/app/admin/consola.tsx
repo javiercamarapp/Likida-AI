@@ -1,9 +1,10 @@
 import { Suspense } from 'react';
 import { ShieldCheck } from 'lucide-react';
-import { EsqCifrasV2, EsqTarjetaV2, FilaTarjetas, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqCifrasV2, EsqTarjetaV2, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { Columnas, DonaMini, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import { uniformes } from './cifras-uniformes';
 import { observadas } from './sello-observado';
+import { NotaVacia } from './nota-vacia';
 import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { saludoTr } from '@/lib/i18n/operacion_tr';
@@ -46,12 +47,18 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
 
       {/* Un solo aviso FIJO arriba (el administrativo, en la cabecera). El semáforo de salud ya no es un segundo aviso entre las cifras
           y los paneles: vive dentro de «Operación», el panel que habla de la salud de los agentes. */}
-      <FilaTarjetas variante="8-4" className="adm-fila-pareja">
-        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
-        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
-      </FilaTarjetas>
-
-      <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueSeries /></Suspense>
+      {/* Dos columnas apiladas (izquierda 2/3: atención y facturas; derecha 1/3: dinero y liquidaciones): antes eran dos filas 8/4 y la tarjeta
+          más corta de cada fila dejaba un hueco debajo. Así cada columna se llena de arriba abajo sin vacíos entre tarjetas. */}
+      <div className="adm-res-cols">
+        <div className="adm-res-col">
+          <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
+          <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueSeries cual="facturas" /></Suspense>
+        </div>
+        <div className="adm-res-col">
+          <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
+          <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueSeries cual="liquidaciones" /></Suspense>
+        </div>
+      </div>
 
       <Suspense fallback={<EsqTablaV2 />}><BloqueCalidad semaforo={<Suspense fallback={null}><BloqueSemaforo /></Suspense>} /></Suspense>
 
@@ -131,22 +138,25 @@ async function BloqueNorte() {
 }
 
 /** Facturas por día (ventana fija de 30 días, y el rótulo lo dice) junto a la dona de liquidaciones por estatus. El gasto de IA por día vive en «Dinero». */
-async function BloqueSeries() {
+async function BloqueSeries({ cual }: { cual: 'facturas' | 'liquidaciones' }) {
   const { t } = await getT('admin_inicio');
   const [r, liq] = await Promise.all([resumenNegocio(), liquidaciones()]);
   const titulo = t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS });
   const facturas = r ? r.facturasPorDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.n })) : [];
   return (
-    <FilaTarjetas variante="8-4" className="adm-fila-pareja">
-      {r === null
+    <>
+      {cual === 'facturas' && (r === null
         ? <Tarjeta titulo={titulo} estado="error" reintentar />
         : r.facturasPorDia.some((d) => d.n > 0)
-          ? <Tarjeta titulo={titulo} elevar entra="tarjeta"><Columnas datos={facturas} etiqueta={t('consola.facturas_procesadas_por_dia_2')} formato="numero" matiz={1} /></Tarjeta>
-          : <Tarjeta titulo={titulo} elevar entra="tarjeta"><p className="adm-vacio-linea"><strong>{t('consola.sin_facturas_en_el')}</strong> {t('consola.cada_comprobante_que_pasa')}</p></Tarjeta>}
-      {liq.total === null || liq.enRevision === null
+          ? <Tarjeta titulo={titulo} elevar entra="tarjeta">
+              <Columnas datos={facturas} etiqueta={t('consola.facturas_procesadas_por_dia_2')} formato="numero" matiz={1} />
+              <ul className="aud16b-leyenda"><li><i data-m="1" aria-hidden="true" />{t('consola.facturas_procesadas_por_dia_2')}</li></ul>
+            </Tarjeta>
+          : <Tarjeta titulo={titulo} elevar entra="tarjeta"><NotaVacia titulo={t('consola.sin_facturas_en_el')}>{t('consola.cada_comprobante_que_pasa')}</NotaVacia></Tarjeta>)}
+      {cual === 'liquidaciones' && (liq.total === null || liq.enRevision === null
         ? <Tarjeta titulo={t('consola.liquidaciones_estatus')} estado="error" reintentar />
         : liq.total === 0
-          ? <Tarjeta titulo={t('consola.liquidaciones_estatus')} elevar entra="tarjeta"><p className="adm-vacio-linea">{t('consola.aun_no_hay_liquidaciones')}</p></Tarjeta>
+          ? <Tarjeta titulo={t('consola.liquidaciones_estatus')} elevar entra="tarjeta"><NotaVacia titulo={t('consola.aun_no_hay_liquidaciones')} /></Tarjeta>
           : (
             <Tarjeta titulo={t('consola.liquidaciones_estatus')} elevar entra="tarjeta">
               <DonaMini
@@ -156,8 +166,8 @@ async function BloqueSeries() {
                 formato="numero"
               />
             </Tarjeta>
-          )}
-    </FilaTarjetas>
+          ))}
+    </>
   );
 }
 

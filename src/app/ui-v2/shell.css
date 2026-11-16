@@ -93,10 +93,10 @@
 [data-ui="v2"] .rv-grupo[data-abierto] .rv-grupo__chev { transform: rotate(90deg); }
 [data-ui="v2"] .rv-grupo[data-estatico] .rv-grupo__cuerpo { display: block; }
 
-/* Ítem de navegación: alto 32, padding 6 10, gap 9, 13/500 (activo también 500), icono 16, radio 8; toque 44 por ::after */
+/* Ítem de navegación: alto 38 (antes 32), padding 6 10, gap 9, 13/500 (activo también 500), icono 16, radio 8; toque 44 por ::after */
 [data-ui="v2"] .rv-item {
   position: relative; display: flex; align-items: center; gap: 9px;
-  height: 32px; margin: 0 8px; padding: 6px 10px; border-radius: 8px;
+  height: 38px; margin: 0 8px; padding: 6px 10px; border-radius: 8px;
   font-size: 13px; font-weight: 500; line-height: 1; text-decoration: none; white-space: nowrap;
   color: var(--ui-secondary);
 }
@@ -106,7 +106,9 @@
 [data-ui="v2"] .rv-item__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* ◆ Activo de alto contraste (11-nov, punto 10 del dueño): barra izquierda INSET de 3 px NEGRA (blanca en oscuro) (--nav-activo-barra, un solo token para el color), fondo tinta al 7 % (--nav-activo-bg),
    texto --nav-activo-fg y peso 500 (--nav-activo-peso). Sin bloque negro ni blanco; el burdeos (--senal) sigue siendo solo «requiere acción». */
-[data-ui="v2"] .rv-item[aria-current="page"] { background: var(--nav-activo-bg); color: var(--nav-activo-fg); font-weight: var(--nav-activo-peso); box-shadow: inset 3px 0 0 var(--nav-activo-barra); }
+[data-ui="v2"] .rv-item[aria-current="page"] { background: var(--nav-activo-bg); color: var(--nav-activo-fg); font-weight: var(--nav-activo-peso); }
+/* La barra va como pieza propia (antes: sombra interna, que el radio de 8 px recortaba en curva): 3 px, alta como el icono, pegada al borde izquierdo. */
+[data-ui="v2"] .rv-item[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--nav-activo-barra); }
 [data-ui="v2"] .rv-item[aria-current="page"] .rv-item__ico { color: var(--nav-activo-fg); }
 [data-ui="v2"] .rv-item:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
 [data-ui="v2"] .rv-icono-boton:focus-visible,
@@ -200,15 +202,15 @@
 [data-ui="v2"] .rv-cab-esc__titulo > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-ui="v2"] .rv-cab-esc__titulo > svg { flex: none; color: var(--muted); }
 [data-ui="v2"] .rv-cab-esc__buscar {
-  position: relative; display: inline-flex; align-items: center; gap: 8px; height: 28px; box-sizing: border-box; padding: 0 6px 0 10px;
-  border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--muted);
-  font: 500 12px/1 var(--font-sans-ui, inherit); cursor: pointer;
+  position: relative; display: inline-flex; align-items: center; gap: 8px; height: 32px; box-sizing: border-box; padding: 0 8px 0 12px;
+  border: 1px solid var(--ui-line-strong, var(--ui-border)); border-radius: 8px; background: var(--ui-surface); color: var(--ui-secondary, var(--muted));
+  font: 500 13px/1 var(--font-sans-ui, inherit); cursor: pointer;
 }
 [data-ui="v2"] .rv-cab-esc__buscar::after { content: ""; position: absolute; inset: -6px; }
 [data-ui="v2"] .rv-cab-esc__buscar:hover { background: var(--ui-soft); color: var(--ink); }
 [data-ui="v2"] .rv-cab-esc__buscar:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
-[data-ui="v2"] .rv-cab-esc__buscar-txt { padding-right: 18px; }
-[data-ui="v2"] .rv-cab-esc__buscar kbd { padding: 2px 6px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-soft); color: var(--muted); font: 500 11px/1.2 var(--font-sans-ui, inherit); }
+[data-ui="v2"] .rv-cab-esc__buscar-txt { padding-right: 28px; }
+[data-ui="v2"] .rv-cab-esc__buscar kbd { padding: 2px 6px; border: 1px solid var(--ui-border); border-radius: 5px; background: transparent; color: var(--muted); font: 500 11px/1.2 var(--font-sans-ui, inherit); }
 /* Bajo 1024 px la topbar se queda con lo esencial: el campo del buscador se reduce a la lupa y el título cede ante la Guía */
 @media (max-width: 1023.98px) {
   [data-ui="v2"] .rv-cab-esc__buscar-txt, [data-ui="v2"] .rv-cab-esc__buscar kbd { display: none; }
@@ -325,7 +327,7 @@
   [data-ui="v2"] .rv-pagina-actual { margin-top: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--ui-border); }
   /* Pie GRIS como el de Rovaq (`.sidebar-footer`: fondo --ui-sunken, borde superior --ui-border, padding 10 8 8, sombra interior casi nula). Las tarjetas del pie
      (cuenta, acceso cruzado, píldoras) quedan blancas sobre él. El radio inferior sigue al del marco (12 menos el borde de 1). */
-  [data-ui="v2"] .rv-sb__pie { flex: none; box-sizing: border-box; padding: 10px 8px 8px; border-top: 1px solid var(--ui-border); background: var(--ui-sunken); box-shadow: inset 0 1px 3px #00000004; border-radius: 0 0 11px 11px; }
+  [data-ui="v2"] .rv-sb__pie { flex: none; box-sizing: border-box; padding: 14px 12px 12px; border-top: 1px solid var(--ui-border); background: var(--ui-sunken); box-shadow: inset 0 1px 3px #00000004; border-radius: 0 0 11px 11px; }
 
   /* La columna del contenido es una tarjeta: topbar fija arriba y contenido que scrollea por dentro */
   [data-ui="v2"] .rv-col {
@@ -336,10 +338,18 @@
 
   [data-ui="v2"] .rv-cab-esc {
     display: flex; align-items: center; gap: 12px; flex: none;
-    height: 44px; box-sizing: border-box; padding: 0 20px 0 12px; background: var(--ui-surface); border-bottom: 1px solid var(--ui-border);
+    height: 44px; box-sizing: border-box; padding: 0 24px 0 16px; background: var(--ui-surface); border-bottom: 1px solid var(--ui-border);
   }
   [data-ui="v2"] .rv-cab-esc .rv-icono-boton { width: 32px; height: 32px; }
-  [data-ui="v2"] .rv-item { height: 32px; }
+  /* 16-nov-2026: el sidebar se veía «todo pegado» (ítems de 32, 6 px entre secciones, encabezados mono sobre el borde). Más aire, como el de Rovaq:
+     ítem de 38 con 12 de margen lateral y 12 de relleno (el texto arranca a 24 px, igual que los encabezados), 12 px entre secciones y 12 px
+     arriba y abajo de la lista. El riel (≤1023 o plegado) conserva sus propias medidas (`.rv-sb .rv-item`, más específica). */
+  [data-ui="v2"] .rv-item { height: 38px; margin: 0 12px; padding: 0 12px; gap: 10px; }
+  [data-ui="v2"] .rv-grupo { margin-top: 12px; }
+  [data-ui="v2"] .rv-grupo__t { height: 28px; padding: 0 24px; }
+  [data-ui="v2"] .rv-grupo__tog { height: 36px; }
+  [data-ui="v2"] .rv-sb__marca { padding: 0 16px 0 24px; }
+  [data-ui="v2"] .rv-sb__nav { padding: 12px 0 14px; }
 }
 
 /* ── 768–1023: riel de íconos. El texto se oculta VISUALMENTE (conserva el nombre accesible) ── */

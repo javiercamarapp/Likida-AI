@@ -14,6 +14,7 @@ import { uniformes } from '../../cifras-uniformes';
 import { observadas } from '../../sello-observado';
 import { SeccionesFicha } from './secciones';
 import '../../resumen.css';
+import '../../pulido-c.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { trAdminFlotasEs } from '@/lib/i18n/tr_admin';

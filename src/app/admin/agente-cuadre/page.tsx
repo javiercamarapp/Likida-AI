@@ -10,6 +10,7 @@ import { TablaModelosFase } from '../tarjeta-fase';
 import '../sistema.css';
 import { numero as num, usd as dolares, fechaCorta } from '@/lib/formato';
 import { getT } from '@/lib/i18n/servidor';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 

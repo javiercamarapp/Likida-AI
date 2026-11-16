@@ -14,8 +14,8 @@ export const ANCHO_SIDEBAR_PX = 232;
 export const ANCHO_RIEL_PX = 72;
 export const ALTO_CABECERA_ESCRITORIO_PX = 44;
 export const ALTO_CABECERA_MOVIL_PX = 56;
-/** Alto de un ítem del menú. */
-export const ALTO_ITEM_PX = 32;
+/** Alto de un ítem del menú (16-nov-2026: 32 → 38; el sidebar se veía «todo pegado»). */
+export const ALTO_ITEM_PX = 38;
 // El ítem activo ya no lleva barra (controles finos K2-2, SPEC D8): fondo gris suave + peso 600. Se retiró GROSOR_SENAL_PX.
 
 /** Techo del pie fijo del sidebar: UN solo bloque (Puesta en marcha <6/6 + tarjeta de cuenta). Notificaciones, tema, perfil y ayuda ya no se apilan ahí. */

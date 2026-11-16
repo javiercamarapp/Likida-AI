@@ -14,6 +14,7 @@ import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos'
 import { uniformes } from '../cifras-uniformes';
 import { observadas } from '../sello-observado';
 import '../dinero.css';
+import '../aud16b.css';
 
 import { getT } from '@/lib/i18n/servidor';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -163,7 +164,8 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
         </Tarjeta>
         {estado ? (
           <Tarjeta titulo={t('cobranza.antiguedad_titulo')}>
-            <Columnas datos={tramos} etiqueta={t('cobranza.antiguedad_etiqueta')} formato="mxnCompacto" matiz={8} alto={120} variacion={false} />
+            <Columnas datos={tramos} etiqueta={t('cobranza.antiguedad_etiqueta')} formato="mxnCompacto" matiz={4} alto={120} variacion={false} />
+            <ul className="aud16b-leyenda"><li><i data-m="4" aria-hidden="true" />{t('cobranza.antiguedad_etiqueta')}</li></ul>
             <p className="adm-din-nota">{t('cobranza.antiguedad_nota')}</p>
           </Tarjeta>
         ) : null}

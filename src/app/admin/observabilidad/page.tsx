@@ -20,6 +20,7 @@ import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 

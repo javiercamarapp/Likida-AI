@@ -2,41 +2,99 @@
    sale de --etapa (una variable por etapa, con tokens --chart-n), el resto de la geometría, de aquí. Toda animación vive dentro de
    `prefers-reduced-motion: no-preference`: con `reduce` el mapa, las luces y los paneles quedan quietos y se leen igual. */
 
-/* El color por omisión de una etapa desconocida (declarado al inicio de línea: la guarda tokens_definidos lo busca así). */
-.cer-punto, .cer-pin, .cer-pop, .cer-pin-calle {
+/* El color por omisión de una etapa, un grupo o un nivel de urgencia desconocidos (declarado al inicio de línea: la guarda tokens_definidos lo busca así). */
+.cer-punto, .cer-pin, .cer-pop, .cer-pin-calle, .cer-urg, .cer-prospecto, .cer-ala__cerrable, .cer-onda, .cer-mono {
+  --cer-tono: var(--muted);
   --etapa: var(--muted);
+  --grupo: var(--muted);
+  --urg: var(--muted);
 }
 
-/* Paleta monocroma (decisión 10): las etapas se distinguen por la TINTA, de la más avanzada (negro) a la recién llegada (gris claro), y «Perdido» va
-   hueco. El orden es el del embudo (ORDEN_EMBUDO); la etiqueta de texto siempre acompaña al punto. */
-[data-etapa="negociacion"], .cer-e-negociacion { --etapa: color-mix(in srgb, var(--ink) 100%, var(--surface)); }
-[data-etapa="proposal"], .cer-e-proposal { --etapa: color-mix(in srgb, var(--ink) 93%, var(--surface)); }
-[data-etapa="pilot"], .cer-e-pilot { --etapa: color-mix(in srgb, var(--ink) 86%, var(--surface)); }
-[data-etapa="demo"], .cer-e-demo { --etapa: color-mix(in srgb, var(--ink) 79%, var(--surface)); }
-[data-etapa="appointment"], .cer-e-appointment { --etapa: color-mix(in srgb, var(--ink) 72%, var(--surface)); }
-[data-etapa="rescheduled"], .cer-e-rescheduled { --etapa: color-mix(in srgb, var(--ink) 65%, var(--surface)); }
-[data-etapa="no-show"], .cer-e-no-show { --etapa: color-mix(in srgb, var(--ink) 58%, var(--surface)); }
-[data-etapa="cancelled"], .cer-e-cancelled { --etapa: color-mix(in srgb, var(--ink) 51%, var(--surface)); }
-[data-etapa="contactado"], .cer-e-contactado { --etapa: color-mix(in srgb, var(--ink) 44%, var(--surface)); }
-[data-etapa="nuevo"], .cer-e-nuevo { --etapa: color-mix(in srgb, var(--ink) 37%, var(--surface)); }
-[data-etapa="won"], .cer-e-won { --etapa: color-mix(in srgb, var(--ink) 30%, var(--surface)); }
-[data-etapa="cerrado"], .cer-e-cerrado { --etapa: color-mix(in srgb, var(--ink) 23%, var(--surface)); }
+/* LOS MATICES (decisión de Javier, 16-nov: el Cerebro vuelve a llevar color para reconocer empresas, urgencia y etapa; reemplaza la rampa monocroma de la
+   decisión 10, que solo rige para el resto del sistema). Verde, ocre y burdeos salen de los semáforos del sistema (--ok, --warn, --senal); azul, violeta y
+   naranja no existen como token (la paleta de datos es de grises), así que viven AQUÍ, en oklch (sin hex), con su variante para el tema oscuro. Los ocho
+   tonos de empresa (--cer-tono-n) son categóricos: mismo brillo y croma, distinto matiz. */
+[data-ui="v2"] {
+  --cer-azul: oklch(50% 0.16 255);
+  --cer-violeta: oklch(49% 0.17 298);
+  --cer-naranja: oklch(60% 0.15 55);
+  --cer-ocre: var(--warn);
+  --cer-verde: var(--ok);
+  --cer-burdeos: var(--bad);
+  --cer-gris: var(--muted);
+  --cer-tono-1: oklch(46% 0.14 25);
+  --cer-tono-2: oklch(46% 0.12 70);
+  --cer-tono-3: oklch(46% 0.12 120);
+  --cer-tono-4: oklch(46% 0.11 165);
+  --cer-tono-5: oklch(46% 0.10 205);
+  --cer-tono-6: oklch(46% 0.14 255);
+  --cer-tono-7: oklch(46% 0.15 300);
+  --cer-tono-8: oklch(46% 0.15 345);
+}
+:root[data-theme="dark"] [data-ui="v2"] {
+  --cer-azul: oklch(74% 0.14 255);
+  --cer-violeta: oklch(75% 0.14 298);
+  --cer-naranja: oklch(76% 0.14 55);
+  --cer-tono-1: oklch(76% 0.12 25);
+  --cer-tono-2: oklch(76% 0.11 70);
+  --cer-tono-3: oklch(76% 0.11 120);
+  --cer-tono-4: oklch(76% 0.10 165);
+  --cer-tono-5: oklch(76% 0.09 205);
+  --cer-tono-6: oklch(76% 0.12 255);
+  --cer-tono-7: oklch(76% 0.13 300);
+  --cer-tono-8: oklch(76% 0.13 345);
+}
+
+/* ETAPA → matiz por familia: inicio (nuevo, contactado) azul · cita (cita, demo, reprogramada) violeta · propuesta (propuesta, negociación, piloto) naranja ·
+   cierre (ganado, cliente) verde · caída (no llegó, cancelada) ocre · perdido, gris y hueco. La etiqueta de texto siempre acompaña al punto. */
+[data-etapa="nuevo"], .cer-e-nuevo { --etapa: var(--cer-azul); }
+[data-etapa="contactado"], .cer-e-contactado { --etapa: var(--cer-azul); }
+[data-etapa="appointment"], .cer-e-appointment { --etapa: var(--cer-violeta); }
+[data-etapa="demo"], .cer-e-demo { --etapa: var(--cer-violeta); }
+[data-etapa="rescheduled"], .cer-e-rescheduled { --etapa: var(--cer-violeta); }
+[data-etapa="proposal"], .cer-e-proposal { --etapa: var(--cer-naranja); }
+[data-etapa="negociacion"], .cer-e-negociacion { --etapa: var(--cer-naranja); }
+[data-etapa="pilot"], .cer-e-pilot { --etapa: var(--cer-naranja); }
+[data-etapa="won"], .cer-e-won { --etapa: var(--cer-verde); }
+[data-etapa="cerrado"], .cer-e-cerrado { --etapa: var(--cer-verde); }
+[data-etapa="no-show"], .cer-e-no-show { --etapa: var(--cer-ocre); }
+[data-etapa="cancelled"], .cer-e-cancelled { --etapa: var(--cer-ocre); }
 [data-etapa="perdido"], .cer-e-perdido, [data-etapa="lost"], .cer-e-lost { --etapa: var(--surface); }
-.cer-punto[data-etapa="perdido"], .cer-punto[data-etapa="lost"] { box-shadow: inset 0 0 0 1.5px var(--muted); }
-.cer-pin[data-etapa="perdido"], .cer-pin[data-etapa="lost"] { stroke: var(--muted); stroke-width: 1.2px; }
-/* ── (historial) El color de cada etapa del embudo (los mismos 14 estados que COLOR_EMBUDO; la prueba `cerebro_piel.test.ts` los cruza) ── */
+.cer-punto[data-etapa="perdido"], .cer-punto[data-etapa="lost"] { box-shadow: inset 0 0 0 1.5px var(--cer-gris); }
+/* El mismo reparto por grupo (leyenda y luces) y por nivel de urgencia: burdeos pide acción, ocre pide atención, verde está al día, gris está frío. */
+[data-grupo="inicio"] { --grupo: var(--cer-azul); }
+[data-grupo="cita"] { --grupo: var(--cer-violeta); }
+[data-grupo="propuesta"] { --grupo: var(--cer-naranja); }
+[data-grupo="cierre"] { --grupo: var(--cer-verde); }
+[data-grupo="caida"] { --grupo: var(--cer-ocre); }
+[data-grupo="perdido"] { --grupo: var(--surface); }
+[data-urgencia="urgente"], .cer-u-urgente { --urg: var(--cer-burdeos); }
+[data-urgencia="atencion"], .cer-u-atencion { --urg: var(--cer-ocre); }
+[data-urgencia="aldia"], .cer-u-aldia { --urg: var(--cer-verde); }
+[data-urgencia="frio"], .cer-u-frio { --urg: var(--cer-gris); }
 
 .cer-raiz { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
 
-/* La rampa SECUENCIAL del mapa de color (un solo matiz, de claro a oscuro; la de Rovaq es verde y aquí sale del mismo token --chart-3). Cinco pasos:
-   el 0 es «sin prospectos». Los límites de cada paso los calcula `limitesRampa` y la leyenda los enseña tal cual. */
+/* La rampa SECUENCIAL del mapa de color: un matiz por estado, de claro a oscuro. Por omisión el gris del sistema (densidad de la cartera); con «Colorear por»
+   el matiz es el del nivel de urgencia (urgentes por estado) o el del grupo de etapa predominante. Cinco pasos: el 0 es «sin prospectos». Los límites de cada
+   paso los calcula `limitesRampa` y la leyenda los enseña tal cual. */
 .cer-raiz {
-  --cer-m1: color-mix(in srgb, var(--chart-3, var(--muted)) 16%, var(--surface));
-  --cer-m2: color-mix(in srgb, var(--chart-3, var(--muted)) 34%, var(--surface));
-  --cer-m3: color-mix(in srgb, var(--chart-3, var(--muted)) 54%, var(--surface));
-  --cer-m4: color-mix(in srgb, var(--chart-3, var(--muted)) 78%, var(--surface));
-  --cer-m5: color-mix(in srgb, var(--chart-3, var(--muted)) 100%, var(--ink) 18%);
+  --cer-matiz: var(--chart-3, var(--muted));
 }
+.cer-raiz, .cer-estado, .cer-rampa {
+  --cer-m1: color-mix(in srgb, var(--cer-matiz) 16%, var(--surface));
+  --cer-m2: color-mix(in srgb, var(--cer-matiz) 34%, var(--surface));
+  --cer-m3: color-mix(in srgb, var(--cer-matiz) 54%, var(--surface));
+  --cer-m4: color-mix(in srgb, var(--cer-matiz) 78%, var(--surface));
+  --cer-m5: color-mix(in srgb, var(--cer-matiz) 100%, var(--ink) 18%);
+}
+.cer-estado[data-matiz="urgente"], .cer-rampa[data-matiz="urgente"] { --cer-matiz: var(--cer-burdeos); }
+.cer-estado[data-matiz="inicio"] { --cer-matiz: var(--cer-azul); }
+.cer-estado[data-matiz="cita"] { --cer-matiz: var(--cer-violeta); }
+.cer-estado[data-matiz="propuesta"] { --cer-matiz: var(--cer-naranja); }
+.cer-estado[data-matiz="cierre"] { --cer-matiz: var(--cer-verde); }
+.cer-estado[data-matiz="caida"] { --cer-matiz: var(--cer-ocre); }
+.cer-estado[data-matiz="perdido"] { --cer-matiz: var(--cer-gris); }
 
 /* Mapa + ranking: dos columnas donde cabe; apilados en pantallas chicas. */
 .cer-cuerpo { display: grid; gap: var(--ui-rhythm); grid-template-columns: minmax(0, 1fr); align-items: stretch; min-width: 0; }
@@ -50,7 +108,7 @@
 .cer-toggle[aria-pressed="true"]:hover { background: var(--seg-activo-hover); }
 
 /* ── La zona del mundo ── */
-.cer-zona { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); height: clamp(360px, calc(100dvh - 17rem), 960px); }
+.cer-zona { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); height: calc(100dvh - 17rem); min-height: 480px; }
 .cer-zona:fullscreen { height: 100vh; border-radius: 0; }
 .cer-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 .cer-svg:active { cursor: grabbing; }
@@ -64,7 +122,16 @@
 .cer-estado[data-activo="true"] { stroke: var(--ink); }
 .cer-estado[data-sobre="true"] { stroke: var(--ink); }
 .cer-estado[data-apagado="true"] { opacity: .18; }
-.cer-pin { fill: var(--etapa); stroke: var(--surface); opacity: .95; pointer-events: none; }
+.cer-pin { fill: var(--etapa); stroke: var(--surface); opacity: .95; pointer-events: none; transform-box: fill-box; transform-origin: center; }
+/* «Colorear por»: con urgencia, la luz toma el nivel (el frío se atenúa, no desaparece); con etapa, el grupo; perdido va hueco y la caída con borde discontinuo. */
+.cer-raiz[data-colorear="urgencia"] .cer-pin { fill: var(--urg); }
+.cer-raiz[data-colorear="urgencia"] .cer-pin[data-urgencia="frio"] { fill-opacity: .5; }
+.cer-raiz[data-colorear="etapa"] .cer-pin { fill: var(--grupo); }
+.cer-raiz[data-colorear="etapa"] .cer-pin[data-grupo="perdido"] { fill: var(--surface); stroke: var(--muted); stroke-width: 1.2px; }
+.cer-raiz[data-colorear="etapa"] .cer-pin[data-grupo="caida"] { stroke: var(--ink); stroke-dasharray: 1.2 0.9; }
+/* El anillo que se expande de las luces urgentes: invisible en reposo y con movimiento reducido; solo cuenta con «Colorear por: urgencia». */
+.cer-onda { fill: none; stroke: var(--cer-burdeos); opacity: 0; pointer-events: none; transform-box: fill-box; transform-origin: center; }
+.cer-raiz[data-colorear="etapa"] .cer-onda { display: none; }
 .cer-ala, .cer-tip, .cer-nota-luces, .cer-nota-sin-punto, .cer-cabeza-panel { background: var(--surface); border: 1px solid var(--line); }
 
 /* El ala izquierda solo existe donde sobra pantalla (pantallas de 1900 px o más): en laptop taparía el país. */
@@ -76,11 +143,18 @@
 .cer-ala__fila { display: flex; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); padding: 3px 0; }
 .cer-ala__fila b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .cer-ala__fila span:nth-child(2) { flex: 1; }
-.cer-ala__cerrable { padding: 5px 0; font-size: var(--t-small); line-height: 1.35; }
+.cer-ala__cerrable { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 10px; padding: 6px 0; font-size: var(--t-small); line-height: 1.35; }
+.cer-ala__cerrable .cer-mono { width: 28px; height: 28px; font-size: var(--t-micro); }
+.cer-ala__cerrable .cer-urg { grid-column: 2; justify-self: start; }
+.cer-ala__txt { min-width: 0; }
 .cer-ala__cerrable p { margin: 0; }
-.cer-ala__cerrable p:first-child { color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cer-ala__cerrable p:last-child { color: var(--muted); }
+.cer-ala__txt p:first-child { color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cer-ala__txt p:last-child { color: var(--muted); }
 .cer-punto { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: var(--etapa); flex: none; }
+.cer-punto--urg { background: var(--urg); }
+.cer-punto--grupo { background: var(--grupo); }
+.cer-punto--grupo[data-grupo="perdido"] { box-shadow: inset 0 0 0 1.5px var(--cer-gris); }
+.cer-punto--grupo[data-grupo="caida"] { box-shadow: inset 0 0 0 1.5px var(--ink); }
 
 /* Rótulos del mapa: código del estado y cifra, con el color de texto que le toca a cada paso de la rampa. */
 .cer-rotulo { font-weight: 600; fill: var(--ink); stroke: var(--surface); paint-order: stroke; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
@@ -88,7 +162,7 @@
 
 /* El ranking lateral */
 .cer-rank { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
-@media (min-width: 1100px) { .cer-rank { height: clamp(360px, calc(100dvh - 17rem), 960px); overflow-y: auto; } }
+@media (min-width: 1100px) { .cer-rank { height: calc(100dvh - 17rem); min-height: 480px; overflow-y: auto; } }
 .cer-rank > .cer-rank__bloque:last-child { flex: 1 1 auto; align-content: flex-start; }
 .cer-rank__bloque { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .cer-rank__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -100,10 +174,10 @@
 [data-ui="v2"] .rv-btn.cer-rank__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 .cer-rank__nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cer-rank__pista { display: block; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
-.cer-rank__barra { fill: var(--chart-3, var(--muted)); }
+.cer-rank__barra { fill: var(--chart-3, var(--muted)); transform-box: fill-box; transform-origin: left center; }
 [data-ui="v2"] .rv-btn.cer-rank__fila b { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; min-width: 32px; }
 .cer-rank__cifra { margin: 0; font-size: var(--t-body); color: var(--muted); }
-.cer-rank__cifra b { font-size: 22px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cer-rank__cifra b { font-size: var(--t-kpi); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* La leyenda de la rampa: cinco muestras con su rango real. */
 .cer-rampa { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--t-micro); color: var(--muted); }
@@ -130,17 +204,20 @@
 .cer-cabeza-panel { pointer-events: auto; align-self: flex-end; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 999px; }
 .cer-cabeza-panel strong { font-size: var(--t-body); font-weight: 600; color: var(--ink); }
 .cer-cabeza-panel span { font-size: var(--t-small); color: var(--muted); font-variant-numeric: tabular-nums; }
-.cer-lista { pointer-events: auto; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+.cer-lista { pointer-events: auto; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
 .cer-lista::-webkit-scrollbar { width: 5px; }
 .cer-lista::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 16%, transparent); border-radius: 99px; }
 .cer-aviso-lista { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: var(--t-small); color: var(--muted); }
 
 /* ── La tarjeta de un prospecto ── */
-.cer-prospecto { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.cer-prospecto { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+/* El acento de urgencia en el borde izquierdo: color + (junto a él) el texto del nivel en la píldora. */
+.cer-prospecto::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--urg); }
 .cer-prospecto--plana { background: var(--canvas); }
 .cer-prospecto[data-nuevo="true"] { border-color: var(--ink); }
-.cer-prospecto__cab { display: flex; align-items: flex-start; gap: 8px; }
-.cer-prospecto__cab .cer-punto { margin-top: 5px; }
+.cer-prospecto__cab { display: flex; align-items: flex-start; gap: 12px; }
+.cer-prospecto__titulo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cer-prospecto__estado { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; }
 .cer-prospecto__nombre { display: block; font-size: var(--t-body); font-weight: 600; color: var(--ink); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cer-prospecto__nombre:hover { text-decoration: underline; }
 .cer-prospecto__meta { margin: 0; font-size: var(--t-micro); color: var(--muted); }
@@ -219,6 +296,8 @@
 .cer-calles__cab span { font-size: var(--t-small); color: var(--muted); }
 .cer-calles__cab button { margin-left: auto; }
 .cer-calles__mapa { flex: 1; min-height: 0; }
+.cer-pop__nombre { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.cer-pop .cer-mono { width: 28px; height: 28px; font-size: var(--t-micro); }
 .cer-pop { min-width: 220px; font-size: var(--t-body); line-height: 1.45; color: var(--ink); }
 .cer-pop__linea { display: block; }
 .cer-pop__tenue { display: block; margin-top: 4px; font-size: var(--t-micro); color: var(--muted); max-width: 260px; }
@@ -226,19 +305,71 @@
 .cer-pop__acciones a, .cer-pop__acciones span { display: inline-block; padding: 3px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--canvas); color: var(--ink); font-size: var(--t-small); font-weight: 600; text-decoration: none; }
 .cer-pop__acciones span { opacity: .5; }
 .cer-pin-calle { fill: var(--etapa); stroke: var(--surface); stroke-width: 2px; fill-opacity: .95; }
+.cer-raiz[data-colorear="urgencia"] .cer-pin-calle { fill: var(--urg); }
 
-/* ── Movimiento (todo aquí dentro; con `reduce` el mapa queda quieto) ── */
+/* ── Movimiento (todo aquí dentro; con `reduce` el mapa queda quieto y se lee igual: solo transform y opacity, más el color) ── */
 @media (prefers-reduced-motion: no-preference) {
-  .cer-estado { opacity: 0; animation: cer-entra .6s cubic-bezier(.22, 1, .36, 1) forwards; transition: fill .3s, opacity .5s, stroke .2s; }
+  /* Entrada escalonada de los estados (ocho escalones de 40 ms) y elevación al pasar el cursor. */
+  .cer-estado { opacity: 0; transform-box: fill-box; transform-origin: center; animation: cer-entra .6s cubic-bezier(.22, 1, .36, 1) forwards; transition: fill .4s, opacity .5s, stroke .2s, transform .25s cubic-bezier(.22, 1, .36, 1); }
   .cer-estado[data-apagado="true"] { opacity: .18; animation: none; }
-  .cer-pin[data-urgente="true"] { animation: cer-pulso 2.6s ease-in-out infinite; }
+  .cer-estado[data-sobre="true"] { transform: scale(1.012); }
+  path.cer-estado:nth-of-type(8n + 1) { animation-delay: 0ms; }
+  path.cer-estado:nth-of-type(8n + 2) { animation-delay: 40ms; }
+  path.cer-estado:nth-of-type(8n + 3) { animation-delay: 80ms; }
+  path.cer-estado:nth-of-type(8n + 4) { animation-delay: 120ms; }
+  path.cer-estado:nth-of-type(8n + 5) { animation-delay: 160ms; }
+  path.cer-estado:nth-of-type(8n + 6) { animation-delay: 200ms; }
+  path.cer-estado:nth-of-type(8n + 7) { animation-delay: 240ms; }
+  path.cer-estado:nth-of-type(8n) { animation-delay: 280ms; }
+  /* Las luces aparecen con un «pop» elástico; las urgentes laten y su anillo se expande; las recién llegadas destellan. El color cambia suave con el conmutador. */
+  .cer-pin { animation: cer-pop .55s cubic-bezier(.34, 1.56, .64, 1) backwards; transition: fill .4s, fill-opacity .4s; }
+  .cer-pin[data-urgente="true"] { animation: cer-pop .55s cubic-bezier(.34, 1.56, .64, 1) backwards, cer-pulso 2.6s ease-in-out .6s infinite; }
   .cer-pin[data-nuevo="true"] { animation: cer-llega 1.1s cubic-bezier(.22, 1, .36, 1) 3; }
+  .cer-onda { animation: cer-onda 2.4s cubic-bezier(.22, 1, .36, 1) infinite; }
+  /* El panel del estado se desliza; sus tarjetas suben una tras otra, y al pasar el cursor se elevan con sombra. */
   .cer-panel { animation: cer-panel .42s cubic-bezier(.22, 1, .36, 1); }
-  .cer-rank__barra { transition: width .4s cubic-bezier(.22, 1, .36, 1); }
+  .cer-prospecto { animation: cer-sube .45s cubic-bezier(.22, 1, .36, 1) backwards; transition: transform .25s cubic-bezier(.22, 1, .36, 1), box-shadow .25s; }
+  .cer-prospecto:hover { transform: translateY(-2px); box-shadow: 0 8px 20px color-mix(in srgb, var(--ink) 10%, transparent); }
+  .cer-lista > .cer-prospecto:nth-child(2), .cer-grid > .cer-prospecto:nth-child(2) { animation-delay: 40ms; }
+  .cer-lista > .cer-prospecto:nth-child(3), .cer-grid > .cer-prospecto:nth-child(3) { animation-delay: 80ms; }
+  .cer-lista > .cer-prospecto:nth-child(4), .cer-grid > .cer-prospecto:nth-child(4) { animation-delay: 120ms; }
+  .cer-lista > .cer-prospecto:nth-child(5), .cer-grid > .cer-prospecto:nth-child(5) { animation-delay: 160ms; }
+  .cer-lista > .cer-prospecto:nth-child(6), .cer-grid > .cer-prospecto:nth-child(6) { animation-delay: 200ms; }
+  .cer-lista > .cer-prospecto:nth-child(n + 7), .cer-grid > .cer-prospecto:nth-child(n + 7) { animation-delay: 240ms; }
+  .cer-prospecto[data-urgencia="urgente"]::before { animation: cer-latido-borde 2.6s ease-in-out infinite; }
+  .cer-urg[data-urgencia="urgente"] svg { animation: cer-latido 1.6s ease-in-out infinite; }
+  /* El ranking crece con barras animadas (una tras otra) y la leyenda de color entra suave. */
+  .cer-rank__barra { transition: width .4s cubic-bezier(.22, 1, .36, 1); animation: cer-barra .7s cubic-bezier(.22, 1, .36, 1) backwards; }
+  .cer-rank__lista li:nth-child(2) .cer-rank__barra { animation-delay: 50ms; }
+  .cer-rank__lista li:nth-child(3) .cer-rank__barra { animation-delay: 100ms; }
+  .cer-rank__lista li:nth-child(4) .cer-rank__barra { animation-delay: 150ms; }
+  .cer-rank__lista li:nth-child(5) .cer-rank__barra { animation-delay: 200ms; }
+  .cer-rank__lista li:nth-child(6) .cer-rank__barra { animation-delay: 250ms; }
+  .cer-rank__lista li:nth-child(7) .cer-rank__barra { animation-delay: 300ms; }
+  .cer-rank__lista li:nth-child(8) .cer-rank__barra { animation-delay: 350ms; }
+  .cer-rank__lista li:nth-child(9) .cer-rank__barra { animation-delay: 400ms; }
+  .cer-rank__lista li:nth-child(10) .cer-rank__barra { animation-delay: 450ms; }
+  .cer-leyenda-color li { animation: cer-sube .4s cubic-bezier(.22, 1, .36, 1) backwards; }
+  .cer-leyenda-color li:nth-child(2) { animation-delay: 50ms; }
+  .cer-leyenda-color li:nth-child(3) { animation-delay: 100ms; }
+  .cer-leyenda-color li:nth-child(4) { animation-delay: 150ms; }
+  .cer-leyenda-color li:nth-child(5) { animation-delay: 200ms; }
+  .cer-leyenda-color li:nth-child(6) { animation-delay: 250ms; }
+  /* Mientras llega el detalle: brillo que cruza el esqueleto y barrido fino sobre el mapa. */
+  .cer-esq__tarjeta::after { animation: cer-brillo 1.4s ease-in-out infinite; }
+  .cer-zona[data-cargando]::after { animation: cer-barrido 1.6s ease-in-out infinite; }
   @keyframes cer-entra { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes cer-pulso { 0%, 100% { opacity: .95; } 50% { opacity: .35; } }
+  @keyframes cer-pop { from { opacity: 0; transform: scale(.2); } }
+  @keyframes cer-pulso { 0%, 100% { opacity: .95; } 50% { opacity: .7; } }
+  @keyframes cer-onda { 0% { opacity: .6; transform: scale(1); } 100% { opacity: 0; transform: scale(3.4); } }
   @keyframes cer-llega { 0% { opacity: 0; } 35% { opacity: 1; } 65% { opacity: .25; } 100% { opacity: .95; } }
   @keyframes cer-panel { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+  @keyframes cer-sube { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes cer-latido { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }
+  @keyframes cer-latido-borde { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+  @keyframes cer-barra { from { transform: scaleX(0); } }
+  @keyframes cer-brillo { to { transform: translateX(100%); } }
+  @keyframes cer-barrido { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 }
 
 /* Popups de Leaflet: el cromo del popup toma las superficies del sistema (claro y oscuro) en vez del blanco de la librería. */
@@ -253,11 +384,11 @@
 .cer-sello .rv-kpi__punto { margin-right: 0; }
 .cer-mapacard .cer-barra__resumen { flex: 1 1 200px; }
 .cer-mapacard .cer-cuerpo { gap: 0; }
-.cer-mapacard .cer-zona { border: 0; border-radius: 0; height: clamp(360px, calc(100dvh - 20rem), 720px); }
+.cer-mapacard .cer-zona { border: 0; border-radius: 0; height: calc(100dvh - 20rem); min-height: 440px; }
 .cer-mapacard .cer-zona:fullscreen { height: 100vh; }
 .cer-mapacard .cer-rank { padding: 14px; gap: 0; border-left: 1px solid var(--line); }
 @media (max-width: 1099px) { .cer-mapacard .cer-rank { border-left: 0; border-top: 1px solid var(--line); } .cer-mapacard .cer-zona { min-height: 360px; height: 60dvh; } }
-@media (min-width: 1100px) { .cer-mapacard .cer-rank { height: clamp(360px, calc(100dvh - 20rem), 720px); } }
+@media (min-width: 1100px) { .cer-mapacard .cer-rank { height: calc(100dvh - 20rem); min-height: 440px; } }
 /* Los bloques del ranking ya no son tarjetas dentro de la tarjeta: se separan con un filete. */
 .cer-mapacard .cer-rank__bloque { background: transparent; border: 0; border-radius: 0; padding: 0 0 14px; }
 .cer-mapacard .cer-rank__bloque + .cer-rank__bloque { padding-top: 14px; border-top: 1px solid var(--line); }
@@ -266,32 +397,47 @@
 @media (min-width: 1900px) { .cer-zoom { left: 332px; } }
 [data-ui="v2"] .rv-btn.cer-zoom__btn { width: 32px; min-height: 32px; height: 32px; padding: 0; justify-content: center; background: var(--surface); border: 1px dotted var(--input); border-radius: 8px; }
 [data-ui="v2"] .rv-btn.cer-zoom__btn:hover { background: var(--canvas); }
-/* Familias de luces: la FORMA (llena, anillo, discontinua) distingue lo que dos grises no separan. */
-.cer-pin[data-familia="cierre"] { fill: var(--ink); }
-.cer-pin[data-familia="avanzado"] { fill: color-mix(in srgb, var(--ink) 62%, var(--surface)); }
-.cer-pin[data-familia="contacto"] { fill: var(--surface); stroke: var(--ink); }
-.cer-pin[data-familia="nuevo"] { fill: color-mix(in srgb, var(--ink) 24%, var(--surface)); }
-.cer-pin[data-familia="caida"] { fill: var(--surface); stroke: var(--muted); stroke-dasharray: 1.2 0.9; }
-.cer-punto[data-familia="cierre"] { background: var(--ink); }
-.cer-punto[data-familia="avanzado"] { background: color-mix(in srgb, var(--ink) 62%, var(--surface)); }
-.cer-punto[data-familia="contacto"] { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink); }
-.cer-punto[data-familia="nuevo"] { background: color-mix(in srgb, var(--ink) 24%, var(--surface)); }
-.cer-punto[data-familia="caida"] { background: var(--surface); box-shadow: none; border: 1.5px dashed var(--muted); }
-.cer-familias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.cer-familias li { display: flex; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); }
-.cer-familias li span { flex: 1; min-width: 0; }
-.cer-familias li b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* La leyenda de color (luces y mapa): muestra + texto + conteo. La compacta flota sobre el mapa; la ancha vive en el ranking. */
+.cer-leyenda-color { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cer-leyenda-color li { display: flex; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); }
+.cer-leyenda-color li span { flex: 1; min-width: 0; }
+.cer-leyenda-color li b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cer-leyenda-color--compacta { flex-direction: row; flex-wrap: wrap; gap: 4px 12px; }
+.cer-leyenda-color--compacta li { flex: none; gap: 6px; font-size: var(--t-micro); }
+.cer-leyenda-color--compacta li span { flex: none; }
+.cer-leyenda-mapa { position: absolute; left: 12px; bottom: 12px; z-index: 12; max-width: calc(100% - 24px); padding: 6px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); pointer-events: none; }
+@media (min-width: 1900px) { .cer-leyenda-mapa { left: 332px; } }
+/* «Colorear por»: etiqueta y control de dos opciones en la barra del mapa. */
+.cer-colorear { display: inline-flex; align-items: center; gap: 8px; }
+.cer-colorear__rotulo { font-size: var(--t-micro); font-weight: 500; letter-spacing: .66px; text-transform: uppercase; color: var(--muted); }
+/* La identidad de la empresa: monograma con tono categórico (1 a 8) por nombre. */
+.cer-mono { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: 8px; font-size: var(--t-small); font-weight: 600; letter-spacing: .02em; color: var(--cer-tono); background: color-mix(in srgb, var(--cer-tono) 13%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cer-tono) 30%, var(--surface)); }
+.cer-mono[data-tono="1"] { --cer-tono: var(--cer-tono-1); }
+.cer-mono[data-tono="2"] { --cer-tono: var(--cer-tono-2); }
+.cer-mono[data-tono="3"] { --cer-tono: var(--cer-tono-3); }
+.cer-mono[data-tono="4"] { --cer-tono: var(--cer-tono-4); }
+.cer-mono[data-tono="5"] { --cer-tono: var(--cer-tono-5); }
+.cer-mono[data-tono="6"] { --cer-tono: var(--cer-tono-6); }
+.cer-mono[data-tono="7"] { --cer-tono: var(--cer-tono-7); }
+.cer-mono[data-tono="8"] { --cer-tono: var(--cer-tono-8); }
+/* El nivel de urgencia: píldora con icono y texto (el color nunca va solo). */
+.cer-urg { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px 0 6px; border-radius: 999px; font-size: var(--t-micro); font-weight: 600; line-height: 1; white-space: nowrap; color: var(--urg); background: color-mix(in srgb, var(--urg) 11%, var(--surface)); border: 1px solid color-mix(in srgb, var(--urg) 28%, var(--surface)); }
+.cer-urg svg { flex: none; }
+.cer-etapa { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-small); font-weight: 500; color: var(--ink2); }
+/* El esqueleto del detalle: tarjetas con brillo mientras llega /api/admin/mapa-prospectos. */
+.cer-esq { display: flex; flex-direction: column; gap: 12px; }
+.cer-esq__tarjeta { display: block; position: relative; overflow: hidden; height: 112px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.cer-esq__tarjeta::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 8%, transparent), transparent); transform: translateX(-100%); }
+.cer-zona[data-cargando]::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; z-index: 12; pointer-events: none; background: linear-gradient(90deg, transparent, var(--ink), transparent); opacity: .35; }
 /* Segunda fila: embudo y tabla equivalente con el mismo alto (la tabla desplaza dentro de su tarjeta). */
-/* Cada tarjeta mide lo suyo (antes se estiraban al alto del embudo de 14 filas y «Cobertura» quedaba casi vacía). */
-.cer-fila-baja { align-items: start; }
-.cer-fila-baja > .rv-tarjeta { height: auto; }
+.cer-fila-baja { align-items: stretch; }
+.cer-fila-baja > .rv-tarjeta { height: 100%; }
 .cer-tabla-estados .rv-tabla { max-height: 340px; }
 /* Vacío dentro de una tarjeta (Rovaq ac-vacio): borde punteado de 1 px, radio 8, relleno 20×14; nunca sin borde dentro de una tarjeta alta. */
-[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
 
 /* Ronda 7 — Ficha de prospecto (Rovaq FI): la tira de cifras lleva el MISMO filete superior de 3 px negro que las demás tiras; solo la Ficha 360
    de flotas (pf-tile) va sin filete. Se acota por la tarjeta «Ficha» del prospecto (.cer-ficha__datos). */
 [data-ui="v2"] .rv-esq--ficha:has(.cer-ficha__datos) .rv-esq__cifras-sueltas .rv-kpi { border-top: 3px solid var(--ink); }
 
 /* Vacío de una línea (Rovaq ac-vacio): caja punteada, radio 8, relleno 20×14. */
-[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }
+[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: var(--t-body); line-height: 1.4; color: var(--muted); text-align: center; }

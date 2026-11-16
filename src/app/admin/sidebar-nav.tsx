@@ -33,11 +33,13 @@ function idSeccion(titulo: string): string {
 
 function Fila({ item, pathname }: { item: Item; pathname: string }) {
   const nombre = etiquetaNav(useT('shell', shellEs), item.nombre);
+  // El `title` nativo solo sirve en el RIEL (donde el texto está oculto): expandido dibujaba un recuadro oscuro encima del logo.
+  const { riel } = useRiel();
   // La entrada está activa en su ruta Y en la de cualquiera de sus pestañas (p. ej. «Agentes» también en /admin/agente-ocr).
   const activo = entradaDeRuta(pathname)?.href === item.href;
   return (
     <li>
-      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={nombre} aria-label={nombre}>
+      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={riel ? nombre : undefined} aria-label={nombre}>
         <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
         <span className="rv-item__txt">{nombre}</span>
       </Link>

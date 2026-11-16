@@ -102,7 +102,7 @@ export default async function IntegracionesPage() {
       ]), t('a1r4.observado'))}
     >
       <FilaTarjetas variante="4-8">
-        <Tarjeta titulo={t('integraciones.grafica_estado')}>
+        <Tarjeta entra="tarjeta" titulo={t('integraciones.grafica_estado')}>
           <DonaMini
             etiqueta={t('integraciones.grafica_estado')}
             centro={String(conectores.length)}
@@ -115,7 +115,7 @@ export default async function IntegracionesPage() {
             ]}
           />
         </Tarjeta>
-        <Tarjeta titulo={t('integraciones.conectores')}>
+        <Tarjeta entra="tarjeta" titulo={t('integraciones.conectores')}>
           <TablaRenglones
             renglones={conectores} etiqueta={t('integraciones.conectores')}
             columnas={{ servicio: t('salud_sistema.col_servicio'), estado: t('salud_sistema.estado'), significa: t('salud_sistema.col_significa'), enlace: t('salud_sistema.col_enlace') }}
@@ -127,16 +127,16 @@ export default async function IntegracionesPage() {
       {r === null ? (
         <EstadoError reintentar>{t('integraciones.no_se_pudo_leer_el_gasto')}</EstadoError>
       ) : r.porModelo.length === 0 ? (
-        <Tarjeta titulo={t('integraciones.proveedores_de_modelos_de_ia')} estado="vacio" mensaje={t('integraciones.sin_llamadas_registradas_todavia')} detalle={t('integraciones.aparecen_aqui_los_modelos_en_cuanto')} contenida />
+        <Tarjeta entra="tarjeta" titulo={t('integraciones.proveedores_de_modelos_de_ia')} estado="vacio" mensaje={t('integraciones.sin_llamadas_registradas_todavia')} detalle={t('integraciones.aparecen_aqui_los_modelos_en_cuanto')} contenida />
       ) : (
         <FilaTarjetas variante="6-6">
-          <Tarjeta titulo={t('integraciones.grafica_gasto')}>
+          <Tarjeta entra="tarjeta" titulo={t('integraciones.grafica_gasto')}>
             <BarList
               etiqueta={t('integraciones.grafica_gasto')}
               items={[...r.porModelo].sort((a, b) => b.costoUsd - a.costoUsd).slice(0, 6).map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: usd(m.costoUsd), nota: t('integraciones.n_llamadas', { n: numero(m.n, idioma) }) }))}
             />
           </Tarjeta>
-          <Tarjeta titulo={t('integraciones.proveedores_de_modelos_de_ia')}>
+          <Tarjeta entra="tarjeta" titulo={t('integraciones.proveedores_de_modelos_de_ia')}>
             <p className="adm-sis-nota">{t('integraciones.no_es_un_catalogo_de_lo')}</p>
             <TablaBase etiqueta={t('integraciones.modelos_que_ya_corrieron')} columnas={columnasModelo(t, idioma)} filas={r.porModelo} idFila={(m) => m.modelo} densa tarjetaMovil />
           </Tarjeta>

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Aviso } from './componentes/aviso';
 import { Chip } from './componentes/chip';
 
-// L9a (verificador M2): --info/--infobg/--tint-info pasaron de petróleo a gris neutro (decisión de Javier: sin azul). Ningún estado
+// L9a (verificador M2): --info/--infobg/--tint-info pasaron del gris neutro (31-oct) al marino de marca #2a3f5f (decisión de Javier, 16-nov). Ningún estado
 // informativo puede depender SOLO del color: cada tono lleva un icono propio y texto. Auditoría de usos en el PR #786.
 const TONOS = ['info', 'warn', 'error', 'ok'] as const;
 
@@ -27,13 +27,14 @@ describe('estados informativos sin depender solo del color', () => {
     expect(html).toContain('En curso');
   });
 
-  it('el tono info ya no es de matiz azul: --info/--infobg/--tint-info son grises (sin saturación) en claro y oscuro', () => {
-    const css = readFileSync('src/app/ui-v2/tokens.css', 'utf8');
-    for (const n of ['info', 'infobg', 'tint-info']) {
-      for (const m of css.matchAll(new RegExp(`--${n}:\\s*#([0-9a-fA-F]{6})`, 'g'))) {
-        const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
-        expect(Math.max(r, g, b) - Math.min(r, g, b), `--${n}: #${m[1]} no es neutro`).toBeLessThanOrEqual(12);
-      }
+  it('el tono info es el marino de MARCA (lista blanca de tokens.css): --info #2a3f5f/#9db8e0, --infobg #e8eef6/#1d2838; --tint-info sigue neutro', () => {
+    const css = readFileSync('src/app/ui-v2/tokens.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const lee = (n: string) => [...css.matchAll(new RegExp(`--${n}:\\s*#([0-9a-fA-F]{6})`, 'g'))].map((m) => m[1].toLowerCase());
+    expect(lee('info')).toEqual(['2a3f5f', '9db8e0']);
+    expect(lee('infobg')).toEqual(['e8eef6', '1d2838']);
+    for (const h of lee('tint-info')) {
+      const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+      expect(Math.max(r, g, b) - Math.min(r, g, b), `--tint-info: #${h} no es neutro`).toBeLessThanOrEqual(12);
     }
   });
 });

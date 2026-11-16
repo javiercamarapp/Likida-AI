@@ -4,6 +4,7 @@ import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { NavegacionFilas } from './navegacion-teclado';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import '../resumen.css';
+import '../pulido-c.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL SELECTOR DE FLOTA — la pantalla que mató al tenant implícito.

@@ -14,6 +14,7 @@ import { MESES_CAJA_REQUERIDOS, puedeAbrirPuestoFijo, UMBRAL_NETO_MENSUAL_MXN } 
 import { accionCrearContratista, accionDesactivarContratista } from './acciones';
 import '../../dinero.css';
 import '../../resumen.css';
+import { NotaVacia } from '../../nota-vacia';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,10 +61,10 @@ export default async function ContratistasPage() {
     />,
   ] : [
     <Tarjeta key="esquema" titulo={t('contratistas.g_esquema')} elevar entra="tarjeta">
-      <BarList etiqueta={t('contratistas.g_esquema')} matiz={8} items={porEsquema.map((x) => ({ clave: x.k, etiqueta: t(`contratistas.esquema_${x.k}` as const), valor: x.n }))} />
+      <BarList etiqueta={t('contratistas.g_esquema')} matiz={5} items={porEsquema.map((x) => ({ clave: x.k, etiqueta: t(`contratistas.esquema_${x.k}` as const), valor: x.n }))} />
     </Tarjeta>,
     porCfdi.length === 0
-      ? <Tarjeta key="cfdi" titulo={t('contratistas.g_cfdi')} estado="vacio" contenida mensaje={t('contratistas.g_cfdi_vacio')} />
+      ? <Tarjeta key="cfdi" titulo={t('contratistas.g_cfdi')} contenida><NotaVacia titulo={t('contratistas.g_cfdi_vacio')} /></Tarjeta>
       : (
         <Tarjeta key="cfdi" titulo={t('contratistas.g_cfdi')} elevar entra="tarjeta">
           <DonaMini etiqueta={t('contratistas.g_cfdi')} formato="numero" matiz={8} gajos={porCfdi.map((x) => ({ etiqueta: rotuloCfdi(x.k, t), valor: x.n }))} />

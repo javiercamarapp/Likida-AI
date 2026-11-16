@@ -101,6 +101,6 @@ test.describe('con la UI v2 forzada', () => {
     // `body` transiciona el fondo al cambiar de tema: leer el estilo justo después de poner data-theme da un color a medio
     // camino (prueba intermitente). `expect.poll` reintenta hasta que la transición termina; no se debilita lo que se mide:
     // el valor final sigue siendo el negro neutro #0e0e10 de la paleta (ESTILO-LIKIDA §1).
-    await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor), { timeout: 5000 }).toBe('rgb(14, 14, 16)');
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor), { timeout: 5000 }).toBe('rgb(19, 16, 14)'); // fondo oscuro cálido #13100e (16-nov-2026)
   });
 });

@@ -16,6 +16,7 @@ import { rico } from '@/lib/i18n/rico';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import type { Idioma } from '@/lib/i18n/idioma';
 import './calidad-evals.css';
+import '../compacto-lote-a.css';
 export const dynamic = 'force-dynamic';
 
 /**

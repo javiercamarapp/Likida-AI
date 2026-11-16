@@ -188,14 +188,14 @@ export default async function ContabilidadPage({ searchParams }: { searchParams?
             { etiqueta: t('contab.g_costos'), valor: aPesos(resultados.costosCent) },
             { etiqueta: t('contab.g_gastos'), valor: aPesos(resultados.gastosCent) },
           ]}
-          etiqueta={t('contab.g_resultados')} formato="mxnCompacto" matiz={8} alto={120} variacion={false}
+          etiqueta={t('contab.g_resultados')} formato="mxnCompacto" matiz={1} alto={120} variacion={false}
         />
       ) : null}
     </Tarjeta>,
     <Tarjeta key="mayor" titulo={t('contab.g_mayor')} {...(sinLibro ? lecturaGraficas : gBalanza.length > 0 ? {} : vacioMes)}>
       {gBalanza.length > 0 ? (
         <BarList
-          etiqueta={t('contab.g_mayor')} matiz={8}
+          etiqueta={t('contab.g_mayor')} matiz={1}
           items={gBalanza.map((f) => ({ clave: f.cuenta, etiqueta: `${f.cuenta} · ${f.nombre}`, valor: Math.abs(aPesos(f.saldoCent)), texto: mxn(aPesos(f.saldoCent)) }))}
         />
       ) : null}
@@ -203,7 +203,7 @@ export default async function ContabilidadPage({ searchParams }: { searchParams?
     <Tarjeta key="costos" titulo={t('contab.g_costos_gastos')} {...(sinLibro ? lecturaGraficas : gCostos.length > 0 ? {} : vacioMes)}>
       {gCostos.length > 0 && resultados ? (
         <DonaMini
-          etiqueta={t('contab.g_costos_gastos')} matiz={8}
+          etiqueta={t('contab.g_costos_gastos')} matiz={2}
           gajos={gCostos.map((c) => ({ etiqueta: `${c.cuenta} · ${c.nombre}`, valor: aPesos(c.montoCent) }))}
           centro={mxn(aPesos(resultados.costosCent + resultados.gastosCent))}
         />

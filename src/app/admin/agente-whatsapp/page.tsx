@@ -9,6 +9,7 @@ import { numero as num, usd as dolares, fechaCorta } from '@/lib/formato';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { TablaModelosFase } from '../tarjeta-fase';
 import '../sistema.css';
+import '../compacto-lote-a.css';
 import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';

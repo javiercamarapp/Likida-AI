@@ -135,21 +135,24 @@ describe('cascada (Waterfall) en la capa v2', () => {
 });
 
 describe('identidad Rovaq · tokens del paquete B1 (10-nov-2026)', () => {
-  it('fondo hundido del contenido, sombra del marco, --line2 oscuro y cabecera de tabla en negro', () => {
-    expect(tok).toMatch(/--ui-sunken: #f1f1f2;/);
-    expect(tok).toMatch(/--ui-sunken: #0e0e10;/);
+  it('fondo hundido del contenido, sombra del marco, --line2 oscuro cálido y cabecera de tabla (paleta de marca 16-nov)', () => {
+    expect(tok).toMatch(/--ui-sunken: #f2eee7;/);
+    expect(tok).toMatch(/--ui-sunken: #13100e;/);
     expect(tok).toMatch(/--sh-marco: 0 1px 2px #0e0e1005, 0 8px 24px -16px #0e0e1020;/);
     expect(tok).toMatch(/--sh-marco: none;/);
-    expect(tok).toMatch(/--line2: #34343a;/);
+    expect(tok).toMatch(/--line2: #d6ccbb;/);
+    expect(tok).toMatch(/--line2: #3d352d;/);
     // Cabecera de tabla (punto 10 del dueño, 11-nov; anula el petróleo de Rovaq): texto NEGRO sobre fondo neutro; en oscuro, texto claro.
     expect(tok).toMatch(/--tabla-cab-bg: #f1f1f2;\s*--tabla-cab-ink: #0e0e10;/);
     expect(tok).toMatch(/--tabla-cab-bg: #1f1f23;\s*--tabla-cab-ink: #f4f4f5;/);
     const shell = readFileSync(join(__dirname, 'shell.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(shell).toMatch(/\.rv-col \{[^}]*background: var\(--ui-sunken\)/);
   });
-  it('botón primario NEGRO por decisión del dueño (sin azul) y segmentado 500', () => {
-    expect(tok).toMatch(/--btn-bg: #0e0e10;/);
-    expect(tok).toMatch(/--btn-hover: #3a3a40;/);
+  it('botón primario NARANJA de marca #c2410c (hover #9a3412; oscuro #fb923c/#fdba74) por decisión del dueño 16-nov y segmentado 500', () => {
+    expect(tok).toMatch(/--btn-bg: #c2410c;/);
+    expect(tok).toMatch(/--btn-hover: #9a3412;/);
+    expect(tok).toMatch(/--btn-bg: #fb923c;/);
+    expect(tok).toMatch(/--btn-hover: #fdba74;/);
     expect(readFileSync(join(__dirname, 'piezas.css'), 'utf8')).toMatch(/\.rv-seg__btn \{[^}]*font-weight: 500/);
   });
   it('cifra de KPI con tracking -.03em en la capa v2', () => {

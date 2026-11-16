@@ -24,6 +24,7 @@ import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 import { rico } from '@/lib/i18n/rico';
 import { nombreEtapaTr, nombreGiroTr } from '@/lib/i18n/rotulos_tr';
 import type { TSistema } from '@/lib/i18n/sistema_tr';
+import { NotaVacia } from '../../nota-vacia';
 
 const CONFIANZA_TONO = { alta: 'ok', media: 'warn', baja: 'neutral' } as const;
 const confianzaLabel = (t: TSistema): Record<string, string> => ({ alta: t('mapa_prospectos_detalle.confianza_alta'), media: t('mapa_prospectos_detalle.confianza_media'), baja: t('mapa_prospectos_detalle.confianza_baja') });
@@ -110,9 +111,9 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
       {/* ── Decisores ──────────────────────────────────────────────────── */}
       <Tarjeta titulo={p.personas.length > 0 ? t(p.personas.length > 1 ? 'mapa_prospectos_detalle.decisores_investigados' : 'mapa_prospectos_detalle.decisor_investigado') : t('mapa_prospectos_detalle.decisor')}
         >
-        {/* Vacío de una línea (Rovaq ac-vacio: caja punteada compacta), no una tarjeta alta de ~300 px junto a «Ficha». */}
+        {/* Vacío de una línea (Rovaq ac-vacio: nota compacta), no una tarjeta alta de ~300 px junto a «Ficha». */}
         {p.personas.length === 0 && !p.contacto && (
-          <p className="adm-vacio-linea"><strong>{t('mapa_prospectos_detalle.sin_decisor_confirmado')}</strong> {t('mapa_prospectos_detalle.ningun_agente_ha_encontrado_un_decisor')}</p>
+          <NotaVacia tono="warn" titulo={t('mapa_prospectos_detalle.sin_decisor_confirmado')}>{t('mapa_prospectos_detalle.ningun_agente_ha_encontrado_un_decisor')}</NotaVacia>
         )}
         {p.personas.length === 0 && p.contacto && <p className="cer-prospecto__contacto">{p.contacto}</p>}
         {p.personas.length > 0 && (

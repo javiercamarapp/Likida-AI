@@ -20,6 +20,7 @@ import { AltaFlota } from './alta';
 import '../dinero.css';
 import '../resumen.css';
 import './flotas.css';
+import '../pulido-c.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
@@ -170,14 +171,14 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
     >
       {filas.length > 0 ? (
         <FilaTarjetas variante="6-6">
-          <Tarjeta titulo={t('flotas.mix_planes_titulo')}>
+          <Tarjeta entra="tarjeta" titulo={t('flotas.mix_planes_titulo')}>
             <BarList
               etiqueta={t('flotas.mix_planes_etiqueta')}
               items={[...filas.reduce((m, f) => m.set(f.plan, (m.get(f.plan) ?? 0) + 1), new Map<string, number>())]
                 .sort((a, b) => b[1] - a[1]).map(([plan, n]) => ({ clave: plan, etiqueta: plan, valor: n, texto: numero(n) }))}
             />
           </Tarjeta>
-          <Tarjeta titulo={t('flotas.mix_arranque_titulo')}>
+          <Tarjeta entra="tarjeta" titulo={t('flotas.mix_arranque_titulo')}>
             <DonaMini
               etiqueta={t('flotas.mix_arranque_etiqueta')} centro={`${numero(filas.length)} ${t('flotas.mix_centro')}`} formato="numero"
               gajos={[
@@ -206,7 +207,7 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
       {/* Alta de una flota: bloque propio bajo la tabla (Rovaq «Crear organización»). La acción es la MISMA (`accionCrearFlota`, con su puerta,
           su segundo factor y su bitácora); `?alta=1` (el enlace de antes) baja hasta aquí por el ancla. */}
       <section id="alta-flota" className="adm-flota-alta">
-        <Tarjeta titulo={t('flotas.dar_de_alta_una')}>
+        <Tarjeta entra="tarjeta" titulo={t('flotas.dar_de_alta_una')}>
           <p className="adm-eyebrow">{t('flotas.eb_nuevo_espacio')}</p>
           <p className="adm-din-nota">{t('flotas.plan_datos_fiscales_y')}</p>
           <AltaFlota accion={accionCrearFlota} planes={planes} t={t} />

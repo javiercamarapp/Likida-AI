@@ -39,7 +39,10 @@ describe('shell.css ↔ marco-v2.ts', () => {
     expect(activo).toContain('background: var(--nav-activo-bg)');
     expect(activo).toContain('color: var(--nav-activo-fg)');
     expect(activo).toContain('font-weight: var(--nav-activo-peso)');
-    expect(activo).toContain('box-shadow: inset 3px 0 0 var(--nav-activo-barra)');
+    // 16-nov-2026: la barra pasó de sombra interna (el radio de 8 px la recortaba en curva) a una pieza propia (::before) de 3 px, por el mismo token.
+    const barra = regla('[data-ui="v2"] .rv-item[aria-current="page"]::before');
+    expect(barra).toContain('width: 3px');
+    expect(barra).toContain('background: var(--nav-activo-barra)');
     expect(regla('[data-ui="v2"] .rv-puesta[aria-current="page"]')).not.toMatch(/box-shadow|inset/);
     expect(activo).not.toMatch(/background:\s*var\(--marca\)/);
     expect(regla('[data-ui="v2"] .rv-fila', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`padding: ${MARCO_PX}px`);
@@ -125,30 +128,62 @@ describe('clases del menú de cuenta', () => {
   });
 });
 
-describe('paleta: cromo negro/gris/blanco, color en los datos como Vexa (decisión de Javier, 31-oct)', () => {
-  const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
-  it('primario negro, barra del activo NEGRA (blanca en oscuro) y señal burdeos como acento puntual', () => {
-    expect(tokens).toMatch(/--btn-bg:\s*#0e0e10/); // primario negro
-    expect(tokens).toMatch(/--marca:\s*#0e0e10/);
-    expect(tokens).toMatch(/--ink:\s*#0e0e10/);
-    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--nav-activo-barra\)/); // alias que sigue a la barra negra
-    expect(tokens).toMatch(/--nav-activo-barra:\s*#0e0e10/);
-    expect(tokens).toMatch(/--nav-activo-barra:\s*#f4f4f5/); // oscuro: blanca
+describe('paleta de MARCA de Likida: naranja ladrillo, azul marino y crema (decisión de Javier, 16-nov; anula 31-oct y 11-nov)', () => {
+  const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const oscuro = tokens.slice(tokens.indexOf(':root[data-theme="dark"] [data-ui="v2"].tema-neutro'));
+  const claro = tokens.slice(0, tokens.indexOf(':root[data-theme="dark"] [data-ui="v2"].tema-neutro'));
+  it('primario NARANJA con texto blanco, barra del activo NARANJA (#fb923c en oscuro) y señal burdeos como acento puntual', () => {
+    expect(claro).toMatch(/--btn-bg:\s*#c2410c/); // primario naranja ladrillo
+    expect(claro).toMatch(/--btn-fg:\s*#ffffff/); // con texto blanco
+    expect(claro).toMatch(/--marca:\s*#2a3f5f/); // marino de marca
+    expect(claro).toMatch(/--info:\s*#2a3f5f/);
+    expect(claro).toMatch(/--ui-focus:\s*#2a3f5f/);
+    expect(claro).toMatch(/--bg:\s*#f8f5f0/); // fondos crema cálidos
+    expect(claro).toMatch(/--canvas:\s*#f2eee7/);
+    expect(claro).toMatch(/--ui-activo-barra:\s*var\(--nav-activo-barra\)/); // alias que sigue a la barra naranja
+    expect(claro).toMatch(/--nav-activo-barra:\s*#c2410c/);
+    expect(claro).toMatch(/--kpi-filete:\s*#c2410c/);
     expect(tokens).not.toMatch(/--acento-marca/);
-    expect(tokens).toMatch(/--senal:\s*#a6264a/);
-    // oscuro: negro neutro #0e0e10, señal #cc4a6c
-    expect(tokens).toMatch(/--bg:\s*#0e0e10/);
-    expect(tokens).toMatch(/--senal:\s*#cc4a6c/);
+    expect(claro).toMatch(/--senal:\s*#a6264a/); // la señal burdeos sigue siendo el acento puntual
+    // oscuro: naranja #fb923c sobre tinta cálida, azul claro #9db8e0, señal #cc4a6c
+    expect(oscuro).toMatch(/--btn-bg:\s*#fb923c/);
+    expect(oscuro).toMatch(/--btn-fg:\s*#1a0e05/);
+    expect(oscuro).toMatch(/--nav-activo-barra:\s*#fb923c/);
+    expect(oscuro).toMatch(/--bg:\s*#13100e/);
+    expect(oscuro).toMatch(/--marca:\s*#9db8e0/);
+    expect(oscuro).toMatch(/--info:\s*#9db8e0/);
+    expect(oscuro).toMatch(/--senal:\s*#cc4a6c/);
   });
-  it('ningún token ni valor de naranja, marino o crema sobrevive en la capa v2 (tokens, shell, componentes, páginas, gráficas, logo)', () => {
+  it('los de marca EXISTEN en tokens.css y no hay otros naranjas ni azules fuera de la lista blanca (tokens, shell, componentes, páginas, gráficas, logo)', () => {
+    // Lista blanca = valores declarados en tokens.css (marca, estados cálidos y series de datos); un tono nuevo obliga a tocar esta lista a propósito.
+    const NARANJAS = new Set(['c2410c', '9a3412', 'fb923c', 'fdba74', 'b45309', '7a2a06', '6b3406', '4a2a12', 'fdd0aa', '86580d', 'f0c987', 'fbe3b0', '4a3a14', '3d352d']);
+    const AZULES = new Set(['2a3f5f', '9db8e0', '1c2c45', '1b2b44', '17243a', '163f5f', '16384f', '1d2838', '232a36', '263450', '2b6f9e', '334155', '64748b', '7ec0e8', '7f93ae']);
+    const familia = (h: string) => {
+      const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+      const max = Math.max(r, g, b); const min = Math.min(r, g, b);
+      if (max === min || (max - min) / max < 0.22 || max <= 0.2) return null;
+      let t = max === r ? ((g - b) / (max - min)) % 6 : max === g ? (b - r) / (max - min) + 2 : (r - g) / (max - min) + 4;
+      t *= 60; if (t < 0) t += 360;
+      return t >= 8 && t <= 48 ? 'naranja' : t >= 180 && t <= 260 ? 'azul' : null;
+    };
+    for (const h of ['c2410c', 'fb923c', '2a3f5f', '9db8e0']) expect(tokens, h).toContain(`#${h}`);
     const dir = new URL('../../ui-v2/', import.meta.url);
     const archivos = ['tokens.css', 'shell.css', 'componentes.css', 'overlay.css', 'paginas.css', 'paginas-dominio.css', 'graficas.css', 'movimiento.css', 'carga.css'];
+    const intrusos: string[] = [];
     for (const a of archivos) {
       const css = readFileSync(fileURLToPath(new URL(a, dir)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-      expect(css, a).not.toMatch(/--marca-(naranja|marino|crema)|--marino|--crema|#c2410c|#9a3412|#fb923c|#2a3f5f|#ede4d3|#e4e9f1|#f6f1e7|#17100d|#f7f1e8|#120d0a/i);
+      for (const m of css.matchAll(/#([0-9a-fA-F]{6})\b/g)) {
+        const h = m[1].toLowerCase(); const f = familia(h);
+        if ((f === 'naranja' && !NARANJAS.has(h)) || (f === 'azul' && !AZULES.has(h))) intrusos.push(`${a}: #${h} (${f})`);
+        // Fuera de tokens.css, el color de marca se LEE por token: ningún naranja ni azul literal.
+        if (f && a !== 'tokens.css') intrusos.push(`${a}: #${h} literal (${f}); usa el token`);
+      }
+      // Nombres de token heredados de la marca vieja siguen sin existir.
+      expect(css, a).not.toMatch(/--marca-(naranja|marino|crema)|--marino|--crema|#ede4d3|#e4e9f1|#f6f1e7|#17100d|#f7f1e8|#120d0a/i);
     }
+    expect(intrusos).toEqual([]);
     const logo = readFileSync(fileURLToPath(new URL('./logo-v2.tsx', import.meta.url)), 'utf8');
-    expect(logo).not.toMatch(/marca-naranja|#fb923c/);
+    expect(logo).not.toMatch(/marca-naranja|#fb923c|#c2410c/); // el logo sigue en tinta/currentColor, sin naranja propio
   });
   it('las entradas animadas del shell viven solo en no-preference y duran ≤ 220 ms', () => {
     const i = sinComentarios.indexOf('@keyframes rv-nav-entra');

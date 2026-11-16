@@ -25,6 +25,7 @@ import '../resumen.css';
 
 import { getT } from '@/lib/i18n/servidor';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { NotaVacia } from '../nota-vacia';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -264,22 +265,22 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
   const sinFacturas = historial !== null && mesesOrden.length === 0 && porEstado.size === 0;
   const graficas = sinFacturas ? [
     // Sin facturas no hay barras ni dona que dibujar: UN vacío de una línea en vez de dos tarjetas vacías lado a lado.
-    <Tarjeta key="vacio" titulo={t('costos_facturacion.facturado_por_mes')} estado="vacio" contenida mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />,
+    <Tarjeta key="vacio" titulo={t('costos_facturacion.facturado_por_mes')} contenida><NotaVacia titulo={t('costos_facturacion.sin_facturas_emitidas')}>{t('costos_facturacion.aparece_aqui_en_cuanto')}</NotaVacia></Tarjeta>,
   ] : [
     historial === null
       ? <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} estado="error" mensaje={t('costos_facturacion.no_se_pudo_leer_3')} reintentar />
       : mesesOrden.length === 0
-        ? <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} estado="vacio" mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />
+        ? <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} contenida><NotaVacia titulo={t('costos_facturacion.sin_facturas_emitidas')}>{t('costos_facturacion.aparece_aqui_en_cuanto')}</NotaVacia></Tarjeta>
         : (
           <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} elevar entra="tarjeta">
-            <Columnas datos={mesesOrden.map((m) => ({ etiqueta: m, valor: porMes.get(m)! }))} etiqueta={t('costos_facturacion.facturado_por_mes')} formato="mxn" matiz={8} />
+            <Columnas datos={mesesOrden.map((m) => ({ etiqueta: m, valor: porMes.get(m)! }))} etiqueta={t('costos_facturacion.facturado_por_mes')} formato="mxn" matiz={1} />
             {historial.truncado ? <p className="adm-din-nota">{t('costos_facturacion.historial_recortado')}</p> : null}
           </Tarjeta>
         ),
     historial === null
       ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} estado="error" mensaje={t('costos_facturacion.no_se_pudo_leer_3')} reintentar />
       : porEstado.size === 0
-        ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} estado="vacio" mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />
+        ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} contenida><NotaVacia titulo={t('costos_facturacion.sin_facturas_emitidas')}>{t('costos_facturacion.aparece_aqui_en_cuanto')}</NotaVacia></Tarjeta>
         : (
           <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} elevar entra="tarjeta">
             <DonaMini gajos={[...porEstado.entries()].map(([estado, valor]) => ({ etiqueta: rotuloFactura(estado, t), valor }))} etiqueta={t('costos_facturacion.facturas_por_estado')} formato="numero" matiz={8} />

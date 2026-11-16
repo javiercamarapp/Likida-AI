@@ -13,6 +13,7 @@ import { ahoraMs } from '@/lib/saludo';
 import { getT } from '@/lib/i18n/servidor';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { QuemaSlo } from './quema-slo';
+import { NotaVacia } from './nota-vacia';
 import { quema, calidadAgentes, costoIaMes, despliegues, entradaSemaforo, entradaTuTurno, parados, resumenNegocio, slos } from './resumen-lecturas';
 import './resumen.css';
 
@@ -71,7 +72,7 @@ export async function BloqueTuTurno() {
     return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} estado="error" mensaje={ta('resumen_mando.no_se_pudo_leer', { ciegas: t.ciegas.join(', ') })} reintentar />;
   }
   if (t.filas.length === 0) {
-    return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} estado="vacio" contenida mensaje={ta('resumen_mando.nada_espera_tu_decision')} detalle={ta('resumen_mando.cuando_algo_necesite_tu')} />;
+    return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} contenida elevar entra="tarjeta"><NotaVacia tono="ok" titulo={ta('resumen_mando.nada_espera_tu_decision')}>{ta('resumen_mando.cuando_algo_necesite_tu')}</NotaVacia></Tarjeta>;
   }
   return (
     <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/tu-turno">{ta('a1r4.ver_todas')}</BotonEnlace>}>
@@ -103,8 +104,8 @@ export async function BloqueCaja() {
     <Tarjeta titulo={ta('resumen_mando.costos')} elevar entra="tarjeta">
       <p className="adm-eyebrow">{ta('a1r4.eb_dinero')}</p>
       {r !== null && r.porDia.length > 1
-        ? <div className="adm-res-grafica"><Columnas datos={r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.costoUsd }))} etiqueta={ta('consola.gasto_de_ia_por')} formato="usd" matiz={2} alto={132} /></div>
-        : <p className="adm-vacio-linea"><strong>{ta('consola.sin_historial_suficiente')}</strong> {ta('consola.se_dibuja_cuando_haya')}</p>}
+        ? <div className="adm-res-grafica"><Columnas datos={r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.costoUsd }))} etiqueta={ta('consola.gasto_de_ia_por')} formato="usd" matiz={2} alto={132} /><ul className="aud16b-leyenda"><li><i data-m="2" aria-hidden="true" />{ta('consola.gasto_de_ia_por')}</li></ul></div>
+        : <NotaVacia titulo={ta('consola.sin_historial_suficiente')}>{ta('consola.se_dibuja_cuando_haya')}</NotaVacia>}
       <dl className="adm-res-pares">
         <dt>{mes ? ta('resumen_mando.gasto_de_ia_en', { etiquetaMes: mes.etiquetaMes }) : ta('resumen_mando.gasto_de_ia_del')}</dt>
         <dd>{mes ? usd(mes.mesUsd) : '—'}</dd>

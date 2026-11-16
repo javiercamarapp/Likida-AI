@@ -4,6 +4,7 @@ import { detalleLatidos } from '@/lib/admin/salud';
 import { logger } from '@/lib/logger';
 import { VistaCrons } from './vista';
 import { getT } from '@/lib/i18n/servidor';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 

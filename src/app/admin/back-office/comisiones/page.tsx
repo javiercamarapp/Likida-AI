@@ -117,7 +117,7 @@ export default async function ComisionesPage({ searchParams }: { searchParams?: 
     <Tarjeta key="mes" titulo={t('comis.g_por_mes')} estado={movs.estado === 'ok' ? 'ok' : movs.estado === 'error' ? 'error' : 'vacio'} mensaje={t('bo.no_disponible')} detalle={t('comis.sin_tabla_detalle')} reintentar>
       <Columnas
         datos={mesesGrafica.map((m) => ({ etiqueta: `${m.periodo.slice(5, 7)}/${m.periodo.slice(2, 4)}`, valor: m.montoCent === null ? null : m.montoCent / 100 }))}
-        etiqueta={t('comis.g_por_mes')} formato="mxnCompacto" matiz={8} alto={120} variacion={false} vacio={t('comis.g_sin_movimientos')}
+        etiqueta={t('comis.g_por_mes')} formato="mxnCompacto" matiz={2} alto={120} variacion={false} vacio={t('comis.g_sin_movimientos')}
       />
       <p className="adm-din-nota">{t('comis.g_por_mes_nota')}</p>
     </Tarjeta>,
@@ -126,7 +126,7 @@ export default async function ComisionesPage({ searchParams }: { searchParams?: 
         <p className="adm-din-nota">{t('comis.g_sin_devengo')}</p>
       ) : (
         <BarList
-          etiqueta={t('comis.g_por_vendedor')} matiz={8}
+          etiqueta={t('comis.g_por_vendedor')} matiz={2}
           items={filas.filter((f) => f.devengadoCent !== 0).map((f) => ({ clave: f.vendedorId, etiqueta: f.nombre, valor: f.devengadoCent / 100, texto: mxn(f.devengadoCent / 100) }))}
         />
       )}

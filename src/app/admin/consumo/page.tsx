@@ -17,6 +17,7 @@ import { observadas } from '../sello-observado';
 import '../dinero.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { NotaVacia } from '../nota-vacia';
 export const dynamic = 'force-dynamic';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -302,11 +303,9 @@ function AvisosDeTope({ avisos, encendidos, ta }: { avisos: FilaAlertaTope[] | n
   if (avisos === null) return <Tarjeta titulo={titulo} estado="error" mensaje={ta('consumo.no_se_pudieron_leer')} reintentar />;
   if (avisos.length === 0) {
     return (
-      <Tarjeta
-        titulo={titulo} estado="vacio" contenida mensaje={ta('consumo.ningun_aviso_registrado')}
-        detalle={encendidos ? ta('consumo.ninguna_flota_cruzo_el') : ta('consumo.los_avisos_estan_apagados')}
-        accionVacio={<BotonEnlace href="/admin/techo-ia" variante="secondary" tamano="sm">{ta('neg5.cn_ver_techos')}</BotonEnlace>}
-      />
+      <Tarjeta titulo={titulo} contenida acciones={<BotonEnlace href="/admin/techo-ia" variante="secondary" tamano="sm">{ta('neg5.cn_ver_techos')}</BotonEnlace>}>
+        <NotaVacia tono={encendidos ? 'ok' : 'warn'} titulo={ta('consumo.ningun_aviso_registrado')}>{encendidos ? ta('consumo.ninguna_flota_cruzo_el') : ta('consumo.los_avisos_estan_apagados')}</NotaVacia>
+      </Tarjeta>
     );
   }
   return (

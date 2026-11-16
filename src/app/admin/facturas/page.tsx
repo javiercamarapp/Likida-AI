@@ -170,7 +170,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
         <>
         {porMes.length > 1 ? (
           <Tarjeta titulo={t('costos_facturacion.facturado_por_mes')} elevar entra="tarjeta">
-            <Columnas datos={porMes.map(([m, valor]) => ({ etiqueta: m, valor }))} etiqueta={t('costos_facturacion.facturado_por_mes')} formato="mxn" matiz={8} />
+            <Columnas datos={porMes.map(([m, valor]) => ({ etiqueta: m, valor }))} etiqueta={t('costos_facturacion.facturado_por_mes')} formato="mxn" matiz={1} />
           </Tarjeta>
         ) : null}
         <Tarjeta titulo={t('facturas.facturas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={nFiltros > 0 ? t('facturas.ninguna_factura_con_ese') : t('facturas.aun_no_hay_facturas')}

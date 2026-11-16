@@ -1,0 +1,27 @@
+/* Auditoría visual 16-nov · lote A (sistema y agentes): estados vacíos de UNA línea con superficie propia, huecos al ritmo del shell y
+   entrada escalonada sobria. Solo tokens del sistema; el movimiento solo transform/opacity y solo con movimiento permitido. */
+
+/* Vacío dentro de una tarjeta: una sola línea compacta, borde y fondo propios (hundido sobre la tarjeta), nunca punteado ni alto. */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) {
+  flex-direction: row; flex-wrap: wrap; justify-content: flex-start; align-items: baseline; gap: 2px 10px; padding: 8px 12px;
+  max-height: none; text-align: left; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--ui-sunken);
+}
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) .rv-vacio__icono { align-self: center; }
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) .rv-vacio__accion { margin: 0; }
+
+/* La línea de vacío de las pantallas de sistema: misma superficie hundida con borde sólido, para que no se confunda con el fondo. */
+[data-ui="v2"] .adm-sis-vacio-linea { border: 1px solid var(--line2, var(--line)); background: var(--ui-sunken); }
+
+/* Las tarjetas de una fila se acomodan según el espacio y no se estiran a la altura de la vecina. */
+[data-ui="v2"] .adm-fila .rv-fila-tarjetas { align-items: start; }
+
+@keyframes rv-lota-sube { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-marco > .rv-tarjeta,
+  [data-ui="v2"] .rv-marco > .rv-fila-tarjetas > .rv-tarjeta { animation: rv-lota-sube 180ms ease-out both; }
+  [data-ui="v2"] .rv-marco > .rv-tarjeta:nth-child(n+4),
+  [data-ui="v2"] .rv-marco > .rv-fila-tarjetas > .rv-tarjeta:nth-child(2) { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-marco > .rv-tarjeta:nth-child(n+6),
+  [data-ui="v2"] .rv-marco > .rv-fila-tarjetas > .rv-tarjeta:nth-child(3) { animation-delay: 80ms; }
+  [data-ui="v2"] .rv-marco > .rv-tarjeta:nth-child(n+8) { animation-delay: 120ms; }
+}

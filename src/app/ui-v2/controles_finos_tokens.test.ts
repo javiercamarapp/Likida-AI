@@ -26,8 +26,8 @@ describe('controles finos · alturas y forma', () => {
     expect(valor('--btn-h-movil')).toBe('var(--ctl-h-movil)');
     expect(valor('--toque')).toBe('44px');
   });
-  it('--item-h sigue literal en 32 px (shell_css.test lo cruza con ALTO_ITEM_PX)', () => {
-    expect(valor('--item-h')).toBe('32px');
+  it('--item-h sigue literal en 38 px (shell_css.test lo cruza con ALTO_ITEM_PX)', () => {
+    expect(valor('--item-h')).toBe('38px');
   });
   it('radios por TIPO de control: 8 control, 12 tarjeta, 999 píldora, 8 tooltip', () => {
     expect(valor('--r-control')).toBe('8px');
@@ -107,12 +107,12 @@ describe('controles finos · tipografía, iconos y marco', () => {
     expect(valor('--sb-w')).toBe('232px');
     expect(valor('--rail-w')).toBe('72px');
   });
-  it('navegación: activo = tinta al 7 %, peso 500 y UN token para la barra (NEGRA en claro, blanca en oscuro; punto 10 del dueño)', () => {
-    expect(valor('--nav-activo-bg')).toBe('color-mix(in srgb, var(--ink) 7%, transparent)');
+  it('navegación: activo = marino de marca al 9 %, peso 500 y UN token para la barra (NARANJA #c2410c en claro, #fb923c en oscuro; paleta de marca 16-nov)', () => {
+    expect(valor('--nav-activo-bg')).toBe('color-mix(in srgb, #2a3f5f 9%, transparent)');
     expect(valor('--nav-activo-fg')).toBe('var(--ink)');
     expect(valor('--nav-activo-peso')).toBe('500');
-    expect(valor('--nav-activo-barra')).toBe('#0e0e10');
-    expect(valor('--nav-activo-barra', oscuro)).toBe('#f4f4f5');
+    expect(valor('--nav-activo-barra')).toBe('#c2410c');
+    expect(valor('--nav-activo-barra', oscuro)).toBe('#fb923c');
     // shell.css solo lee el token: ni rojo de Rovaq ni un valor propio.
     expect(sinComentarios(leer('shell.css'))).not.toMatch(/rgb\(\s*232/);
   });
