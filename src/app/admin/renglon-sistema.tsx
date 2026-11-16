@@ -3,6 +3,8 @@ import { ArrowRight, ExternalLink } from 'lucide-react';
 import { Disclosure, StatusChip, TablaBase, type ColumnaBase, type TonoEstado } from '../ui-v2/componentes';
 import { MarcaIntegracion, type MarcaId } from '../ui-v2/componentes/marca-integracion';
 import './sistema.css';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 
 /** Un renglón de Salud o de Integraciones: lo que se mide, su estado en palabras, qué significa y, aparte y plegado, cómo se arregla (ahí
  *  sí pueden ir los nombres que usa quien configura). Cada renglón está MEDIDO o dice que no lo está. */
@@ -19,7 +21,7 @@ export interface RenglonSistema {
   link?: { href: string; texto: string };
 }
 
-export function TarjetaRenglon({ r }: { r: RenglonSistema }) {
+export function TarjetaRenglon({ r, t = trAdminInicioEs }: { r: RenglonSistema; t?: TrDe<'admin_inicio'> }) {
   return (
     <div className="adm-sis-fila">
       <div className="adm-sis-fila__cab">
@@ -28,7 +30,7 @@ export function TarjetaRenglon({ r }: { r: RenglonSistema }) {
       </div>
       <p className="adm-sis-fila__texto">{r.detalle}</p>
       {r.arreglo ? (
-        <Disclosure titulo="Cómo arreglarlo" variante="linea">
+        <Disclosure titulo={t('raiz7.renglon_como_arreglar')} variante="linea">
           <p className="adm-sis-nota">{r.arreglo}</p>
         </Disclosure>
       ) : null}

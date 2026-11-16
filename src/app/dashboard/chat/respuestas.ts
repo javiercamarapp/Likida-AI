@@ -2,6 +2,14 @@ import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
 import { etiquetaToolAdmin } from './etiquetas-copiloto';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trBCompleto, trDashboardBEs } from '@/lib/i18n/tr_dashboard_b';
+
+type TB = TrDe<'dashboard_b'>;
+
+/** El traductor de `dashboard_b` que corresponde al idioma de `t` (namespace `resto`): `op.pensando` es la señal. Así las funciones de
+ *  este archivo no cambian de firma para quien ya les pasa `t`; sin `t` (pruebas) todo sigue en español. */
+const tbDe = (t: TResto): TB => (t === T_RESTO_ES || t('op.pensando') === T_RESTO_ES('op.pensando') ? trDashboardBEs : trBCompleto('en').t);
 
 // Lógica PURA del chat «Pregunta a tus datos» (L5: separada de la interfaz sin cambiar una coma de lo que responde). Aquí viven el
 // respondedor local de reserva, el catálogo de Consulta, la traducción de los bloques del analista y los rótulos de la traza.
@@ -88,10 +96,10 @@ export const rotuloTool = (nombre: string, t: TResto = T_RESTO_ES) => etiquetaTo
  *  por construcción: solo se AVANZA de fase si de verdad sigue trabajando —
  *  un saludo se resuelve en la primera y nunca dice "leyendo tu operación". */
 export const fasesPensando = (t: TResto = T_RESTO_ES): Array<[number, string]> => ([
-  [0, 'Pensando…'],
+  [0, t('op.pensando')],
   [3000, t('ch.leyendo_tu_operacion')],
-  [9000, 'Cruzando cifras…'],
-  [17000, 'Armando la respuesta…'],
+  [9000, tbDe(t)('rsp.cruzando')],
+  [17000, tbDe(t)('rsp.armando')],
   [30000, t('op.esto_esta_tardando_mas_de_lo')],
 ]);
 export const FASES_PENSANDO = fasesPensando();
@@ -99,7 +107,7 @@ export const FASES_PENSANDO = fasesPensando();
 /** Los bloques del agente analista (/api/dashboard/chat) → la Respuesta que
  *  esta interfaz ya sabe pintar. El agente manda números crudos; aquí se
  *  formatean con lib/formato — UNA sola fuente de formato, como siempre. */
-export function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Respuesta {
+export function respuestaDeBloques(bloques: Array<Record<string, unknown>>, tb: TB = trDashboardBEs): Respuesta {
   const textos: string[] = [];
   const visuales: Visual[] = [];
   let accion: AccionPropuesta | undefined;
@@ -119,7 +127,7 @@ export function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Res
       accion = b as unknown as AccionPropuesta;
     }
   }
-  return { texto: textos.join(' ') || 'Listo.', visuales: visuales.length > 0 ? visuales : undefined, ...(accion ? { accion } : {}) };
+  return { texto: textos.join(' ') || tb('rsp.listo'), visuales: visuales.length > 0 ? visuales : undefined, ...(accion ? { accion } : {}) };
 }
 
 /** El catálogo de Consulta, por CATEGORÍA y formal (pedido del 12-ago:
@@ -152,8 +160,8 @@ export const catalogoConsulta = (t: TResto = T_RESTO_ES): Array<{ categoria: str
     clave: 'fiscal',
     preguntas: [
       t('ch.desglose_de_acreditables_del_periodo'),
-      'IVA acreditable del periodo',
-      'Peaje acreditable del periodo',
+      tbDe(t)('rsp.q_iva'),
+      tbDe(t)('rsp.q_peaje'),
       t('ch.litros_de_diesel_elegibles_para_el'),
     ],
   },
@@ -166,6 +174,7 @@ export type AcreditablesOFuera = Acreditables | null | typeof FUERA_DEL_PLAN;
 
 export function responder(pregunta: string, kpis: DashboardKpis | null, acred: AcreditablesOFuera, t: TResto = T_RESTO_ES): Respuesta {
   const q = pregunta.toLowerCase();
+  const tb = tbDe(t);
   const sinLiq = { texto: t('ch.todavia_no_hay_liquidaciones_para_calcular') };
   // A37-S16-09: «observado» es el monto que el motor detectó fuera de regla o duplicado, NO lo comprobado (antes caía en la rama «monto»).
   if (q.includes('observad')) {
@@ -176,8 +185,8 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
         tipo: 'tabla',
         filas: [
           [t('ch.fuera_de_regla_o_duplicado'), mxn(kpis.diferenciaDetectada)],
-          ['Con diferencias', numero(kpis.conDiferencias)],
-          ['Por revisar', numero(kpis.porRevisar)],
+          [t('op.con_diferencias'), numero(kpis.conDiferencias)],
+          [t('op.por_revisar_2'), numero(kpis.porRevisar)],
         ],
       },
     };
@@ -191,14 +200,14 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
   if (q.includes('comprobad') || /\bmonto/.test(q)) {
     if (!kpis) return sinLiq;
     return {
-      texto: `Llevas ${mxn(kpis.montoComprobado)} comprobados en ${kpis.viajesLiquidados} viaje${kpis.viajesLiquidados === 1 ? '' : 's'}.`,
+      texto: tb(kpis.viajesLiquidados === 1 ? 'rsp.llevas.uno' : 'rsp.llevas.otros', { monto: mxn(kpis.montoComprobado), n: kpis.viajesLiquidados }),
       visual: {
         tipo: 'tabla',
         filas: [
-          ['Monto comprobado', mxn(kpis.montoComprobado)],
-          ['Viajes liquidados', numero(kpis.viajesLiquidados)],
-          ['Con diferencias', numero(kpis.conDiferencias)],
-          ['Por revisar', numero(kpis.porRevisar)],
+          [t('op.monto_comprobado'), mxn(kpis.montoComprobado)],
+          [tb('rsp.viajes_liquidados'), numero(kpis.viajesLiquidados)],
+          [t('op.con_diferencias'), numero(kpis.conDiferencias)],
+          [t('op.por_revisar_2'), numero(kpis.porRevisar)],
           [t('ch.fuera_de_regla_o_duplicado'), mxn(kpis.diferenciaDetectada)],
         ],
       },
@@ -251,8 +260,8 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
       visual: {
         tipo: 'tabla',
         filas: [
-          ['IVA acreditable', mxn(acred.iva)],
-          ['Peaje acreditable (50%)', mxn(acred.peaje)],
+          [tb('rsp.iva_acred'), mxn(acred.iva)],
+          [tb('rsp.peaje_acred'), mxn(acred.peaje)],
           [t('ch.diesel_elegible'), litros(acred.litrosDiesel)],
         ],
       },

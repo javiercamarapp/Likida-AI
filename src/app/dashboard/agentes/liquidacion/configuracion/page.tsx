@@ -53,7 +53,9 @@ export default async function PaginaConfiguracionLiquidacion({
 }: {
   searchParams: Promise<{ tenant?: string; rol?: string }>;
 }) {
-  const { t: tx } = await getT('agentes');
+  const trAgentes = await getT('agentes');
+  const { t: tx } = trAgentes;
+  const { t: ta } = await getT('dashboard_a');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -78,9 +80,10 @@ export default async function PaginaConfiguracionLiquidacion({
   async function accionGuardar(fd: FormData) {
     'use server';
     const { t: tx } = await getT('agentes');
+    const { t: ta } = await getT('dashboard_a');
     const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
-    const f = leerFormularioConfig(fd);
+    const f = leerFormularioConfig(fd, tx, ta);
     if (!f.ok) return volver(sufijo, `error:${f.error}`);
     let cambios: string[] = [];
     try {
@@ -105,7 +108,7 @@ export default async function PaginaConfiguracionLiquidacion({
     <VistaConfiguracionLiquidacion
       sufijo={sufijo} aviso={flash.aviso ?? null} error={flash.error ?? errorLectura}
       config={config} hayFila={hayFila} disponible={disponible} puedeAdministrar={puedeAdministrar}
-      acciones={{ guardar: accionGuardar }}
+      acciones={{ guardar: accionGuardar }} tr={trAgentes} ta={ta}
     />
   );
 }

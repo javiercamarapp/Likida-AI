@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import {
   listarAgentes, DEPARTAMENTOS, DISPARADORES, ESTADOS_AGENTE, type AgenteDefinido,
 } from '@/lib/likida/agentes/definiciones';
@@ -14,14 +15,16 @@ import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  Aviso, BarraFiltros, BotonEnlace, Chip, Disclosure, FiltroOpciones, FormaEnCajon, StatusChip, Tarjeta, CampoTexto, CampoSelect,
+  Aviso, BarraFiltros, BotonEnlace, Chip, Disclosure, FilaTarjetas, FiltroOpciones, FormaEnCajon, StatusChip, Tarjeta, CampoTexto, CampoSelect,
   type OpcionFiltro, type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { BarList } from '@/app/ui-v2/graficas';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { AccionesAgente } from './acciones-agente';
 import { getT } from '@/lib/i18n/servidor';
 import { corridaDe, haceTiempo, leerCorridas, resultadoCorrida } from './corrida-visual';
+import '../resumen.css';
 import './agentes.css';
 
 export type AccionAlta = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
@@ -108,7 +111,11 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   const parados72 = vivos.filter((f) => f.real === 'parado').length;
   const apagados = interruptores === null ? null : vivos.filter((f) => f.apagado === true).length;
   const costo30 = consumo === null ? null : consumo.agentes.reduce((s, a) => s + a.gastado30dUsd, 0);
-  const rotuloDepto = new Map<string, string>(DEPARTAMENTOS.map((d) => [d.valor, d.rotulo]));
+  // Los departamentos que trae el catálogo vivo (finanzas, éxito, operación, ventas) no están en DEPARTAMENTOS: se rotulan por diccionario.
+  const rotuloDepto = new Map<string, string>([
+    ...DEPARTAMENTOS.map((d) => [d.valor, d.rotulo] as [string, string]),
+    ['finanzas', t('pul9.depto_finanzas')], ['exito', t('pul9.depto_exito')], ['operacion', t('pul9.depto_operacion')], ['ventas', t('pul9.depto_ventas')],
+  ]);
   const estadosRotulo = ESTADOS_AGENTE.map((e) => ({ valor: e.valor as string, rotulo: e.rotulo as string }));
 
   // Filtros (barra BF de la plantilla TM): estado real y departamento, por la URL. Un valor que no existe no filtra (cae a «Todos»).
@@ -126,17 +133,42 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   const filasVista = filas.filter((f) => (!estadoFiltro || f.real === estadoFiltro) && (!deptoFiltro || f.a.departamento === deptoFiltro));
   const paramsUrl = { pag: params.pag, estado: estadoFiltro || undefined, depto: deptoFiltro || undefined };
 
+  // Éxito global de 30 días: suma de las corridas de TODOS los agentes que reportó la RPC (null = no se pudo leer; sin corridas = vacío, no 0 %).
+  const exitoGlobal = (() => {
+    if (exito === null) return null;
+    let ok = 0; let total = 0;
+    for (const e of exito.values()) { ok += e.ok; total += e.total; }
+    return total > 0 ? { ok, total } : null;
+  })();
+  // Los vivos repartidos por su estado real (corriendo, bloqueado, parado…): la barra segmentada de la primera cifra.
+  const segmentosReales = (Object.keys(TONO_ESTADO_REAL) as EstadoReal[])
+    .map((e) => ({ etiqueta: rotuloEstadoRealTr(e, ts), valor: vivos.filter((f) => f.real === e).length }))
+    .filter((x) => x.valor > 0);
+  // Agrupa por el departamento que TRAE cada vivo (con su rótulo si es conocido): antes solo contaba los de la lista fija y un agente
+  // con otro departamento (p. ej. «finanzas») desaparecía, y la tarjeta decía «Ningún agente vivo» con 5 vivos en la cifra.
+  const porDepto = [...vivos.reduce((m, f) => m.set(f.a.departamento, (m.get(f.a.departamento) ?? 0) + 1), new Map<string, number>()).entries()]
+    .map(([clave, valor]) => ({ clave, etiqueta: rotuloDepto.get(clave) ?? clave, valor }))
+    .sort((x, y) => y.valor - x.valor);
+  const topCorridas = exito === null ? [] : [...exito.entries()]
+    .filter(([, e]) => e.total > 0)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 8)
+    .map(([id, e]) => ({
+      clave: id, etiqueta: agentes.find((a) => a.id === id)?.nombre ?? id, valor: e.total,
+      texto: t('agentes_contenido.graf_exito_texto', { total: e.total, pct: Math.round((e.ok / e.total) * 100) }),
+    }));
+
   const columnas: ColumnaTabla<Fila>[] = [
     {
       id: 'agente', titulo: t('agentes_contenido.agente'), principal: true,
       celda: ({ a }) => {
         const e = exito?.get(a.id);
         const pct = e && e.total > 0 ? t('agentes_contenido.de_exito', { Math: Math.round((e.ok / e.total) * 100), total: e.total }) : exito === null ? t('agentes_contenido.exito_sin_dato') : t('agentes_contenido.sin_corridas_en_30');
-        const costo = consumo === null ? 'costo sin dato' : (costoDe.get(a.id) ?? 0) > 0 ? t('agentes_contenido.en_30_dias', { costoDe: usd(costoDe.get(a.id) ?? 0) }) : t('agentes_contenido.sin_costo_medido');
+        const costo = consumo === null ? t('agentes_contenido.costo_sin_dato') : (costoDe.get(a.id) ?? 0) > 0 ? t('agentes_contenido.en_30_dias', { costoDe: usd(costoDe.get(a.id) ?? 0) }) : t('agentes_contenido.sin_costo_medido');
         const tope = a.presupuestoDiaUsd === null ? t('agentes_contenido.sin_tope_declarado') : t('agentes_contenido.dia', { presupuestoDiaUsd: usd(a.presupuestoDiaUsd) });
         // Una sola línea de apoyo (departamento y éxito); modelo, tope y costo van en el tooltip y en «Configurar», no en cada fila.
         return (
-          <span title={`${a.modeloRol ?? 'modelo sin declarar'} · ${tope} · ${costo}`}>
+          <span title={`${a.modeloRol ?? t('agentes_contenido.modelo_sin_declarar')} · ${tope} · ${costo}`}>
             <strong>{a.nombre}</strong>
             <span className="rv-agente-sub">{rotuloDepto.get(a.departamento) ?? a.departamento} · {pct}</span>
           </span>
@@ -151,7 +183,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
           <span title={motivo && (real === 'bloqueado_bandeja' || real === 'parado') ? motivo : undefined}>
             <StatusChip tono={TONO_ESTADO_REAL[real] as TonoEstado}>{rotuloEstadoRealTr(real, ts)}</StatusChip>
           </span>
-          {a.experimental ? <Chip>Experimental</Chip> : null}
+          {a.experimental ? <Chip>{t('agentes_contenido.experimental')}</Chip> : null}
         </>
       ),
     },
@@ -190,8 +222,8 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
         : apagado === null
           ? <span className="rv-agente-nowrap">{t('agentes_contenido.no_se_pudo_leer')}</span>
           : apagado === undefined
-            ? <span className="rv-agente-nowrap">{t('agentes_contenido.sin_palanca_propia')}</span>
-            : <StatusChip tono={apagado ? 'bad' : 'ok'}>{apagado ? 'Apagado' : 'Encendido'}</StatusChip>,
+            ? <span className="rv-agente-nowrap" title={t('pul9.sin_palanca_tip')}>—</span>
+            : <StatusChip tono={apagado ? 'bad' : 'ok'}>{apagado ? t('agentes_contenido.chip_apagado') : t('agentes_contenido.chip_encendido')}</StatusChip>,
     },
     {
       id: 'acciones', titulo: t('agentes_contenido.acciones'), alinear: 'der', tituloOculto: true,
@@ -221,7 +253,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
 
   return (
     <EsqueletoTablaMaestra
-      area="Agentes"
+      area={t('agentes_contenido.agentes')}
       filtros={(
         <BarraFiltros accion="/admin/agentes" enLinea etiqueta={t('agentes_contenido.bf_filtros')} nActivos={nFiltros} limpiarHref="/admin/agentes">
           <FiltroOpciones etiqueta={t('agentes_contenido.bf_estado')} nombre="estado" valor={estadoFiltro} opciones={opcionesEstado} />
@@ -266,18 +298,40 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
         <Aviso tono="warn">{t('agentes_contenido.no_se_pudo_leer_2')}</Aviso>
       ) : bloqueados + parados72 > 0 ? (
         <Aviso tono="warn">
-          {bloqueados + parados72} agentes vivos llevan {parados.umbralHoras}  {t('agentes_contenido.horas_o_mas_sin')}
-          {bloqueados > 0 ? `; ${bloqueados} por la bandeja de aprobaciones llena` : ''}. Vaciar la bandeja los destraba; no se reabren por sí solos.
+          {t('agentes_contenido.aviso_parados', {
+            n: bloqueados + parados72, horas: parados.umbralHoras,
+            bandeja: bloqueados > 0 ? t('agentes_contenido.aviso_bandeja', { n: bloqueados }) : '',
+          })}
         </Aviso>
       ) : null}
       etiquetaCifras={t('agentes_contenido.estado_de_los_agentes')}
-      cifras={uniformes([
-          { etiqueta: t('agentes_contenido.agentes_vivos'), valor: vivos.length, estado: 'ok', nota: t('agentes_contenido.en_el_catalogo', { length: agentes.length }) },
+      cifras={observadas(uniformes([
+          {
+            etiqueta: t('agentes_contenido.agentes_vivos'), valor: vivos.length, estado: 'ok', nota: t('agentes_contenido.en_el_catalogo', { length: agentes.length }),
+            // La barra segmentada reparte los vivos por su estado real (la misma lectura de la tabla), no una serie inventada.
+            segmentos: vivos.length > 0 ? segmentosReales : undefined,
+          },
           { etiqueta: t('agentes_contenido.corriendo_de_verdad'), valor: parados === null || interruptores === null ? null : corriendo, estado: parados === null || interruptores === null ? 'error' : 'ok', nota: t('agentes_contenido.con_corrida_reciente_y') },
           { etiqueta: t('agentes_contenido.bloqueados_o_parados'), valor: parados === null ? null : bloqueados + parados72, estado: parados === null ? 'error' : 'ok', tono: parados !== null && bloqueados + parados72 > 0 ? 'warn' : undefined, nota: t('agentes_contenido.h_sin_correr_o', { umbralHoras: parados?.umbralHoras ?? 72 }) },
-          { etiqueta: t('agentes_contenido.apagados'), valor: apagados, estado: apagados === null ? 'error' : 'ok', tono: apagados ? 'bad' : undefined, nota: t('agentes_contenido.con_el_kill_switch') },
+          { etiqueta: t('agentes_contenido.apagados'), valor: apagados, estado: apagados === null ? 'error' : 'ok', nota: t('agentes_contenido.con_el_kill_switch') },
+          exitoGlobal === null
+            ? { etiqueta: t('agentes_contenido.kpi_exito'), valor: null, estado: exito === null ? 'error' : 'vacio', mensaje: exito === null ? undefined : t('agentes_contenido.kpi_exito_sin') }
+            : {
+              etiqueta: t('agentes_contenido.kpi_exito'), valor: (exitoGlobal.ok / exitoGlobal.total) * 100, formato: 'porcentaje', nota: t('agentes_contenido.kpi_exito_nota', { ok: exitoGlobal.ok, total: exitoGlobal.total }),
+              segmentos: [{ etiqueta: t('agentes_contenido.seg_ok'), valor: exitoGlobal.ok }, { etiqueta: t('agentes_contenido.seg_fallos'), valor: exitoGlobal.total - exitoGlobal.ok }],
+            },
           { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: costo30 === null ? null : usd(costo30), estado: costo30 === null ? 'error' : 'ok', nota: t('agentes_contenido.suma_de_los_agentes') },
-      ])}
+      ]), t('agentes_contenido.observado'))}
+      agrupacion={(
+        <FilaTarjetas variante="6-6" className="adm-fila-pareja">
+          <Tarjeta titulo={t('agentes_contenido.graf_deptos')} estado={porDepto.length === 0 ? 'vacio' : 'ok'} mensaje={t('agentes_contenido.graf_deptos_vacio')}>
+            <BarList etiqueta={t('agentes_contenido.graf_deptos')} items={porDepto} formato={(v) => String(v)} />
+          </Tarjeta>
+          <Tarjeta titulo={t('agentes_contenido.graf_exito')} estado={exito === null ? 'error' : topCorridas.length === 0 ? 'vacio' : 'ok'} mensaje={exito === null ? t('agentes_contenido.graf_sin_lectura') : t('agentes_contenido.graf_exito_vacio')}>
+            <BarList etiqueta={t('agentes_contenido.graf_exito')} items={topCorridas} formato={(v) => String(v)} />
+          </Tarjeta>
+        </FilaTarjetas>
+      )}
     >
 
       <Tarjeta
@@ -300,11 +354,11 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
         />
       </Tarjeta>
 
-      <Disclosure titulo={t('agentes_contenido.como_se_lee_el')} resumen="Qué significa cada rótulo">
+      <Disclosure titulo={t('agentes_contenido.como_se_lee_el')} resumen={t('agentes_contenido.disc_resumen')}>
         <ul>
-          <li><strong>Corriendo</strong>{t('agentes_contenido.vivo_con_palanca_arriba')}</li>
+          <li><strong>{t('agentes_contenido.rotulo_corriendo')}</strong>{t('agentes_contenido.vivo_con_palanca_arriba')}</li>
           <li><strong>{t('agentes_contenido.bloqueado_por_bandeja')}</strong>{t('agentes_contenido.el_runner_lo_salta')}</li>
-          <li><strong>Parado</strong>{t('agentes_contenido.habilitado_pero_sin_corrida')}</li>
+          <li><strong>{t('agentes_contenido.rotulo_parado')}</strong>{t('agentes_contenido.habilitado_pero_sin_corrida')}</li>
           <li><strong>{t('agentes_contenido.sin_presupuesto')}</strong>{t('agentes_contenido.el_runner_no_despacha')}</li>
           <li><strong>{t('agentes_contenido.corre_por_su_cron')}</strong>{t('agentes_contenido.no_depende_del_runner')}</li>
         </ul>

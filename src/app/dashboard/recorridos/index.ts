@@ -7,6 +7,9 @@ import { pistaDeRol } from '@/app/ui-v2/onboarding/roles';
 import { construirRecorrido } from '@/app/ui-v2/onboarding/tour';
 import type { PistaContextual } from '@/app/ui-v2/onboarding/tipos';
 import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
+import type { Idioma } from '@/lib/i18n/idioma';
+import { ctxOnb } from '@/app/ui-v2/onboarding/idioma';
+import { PISTAS_EN } from '@/app/ui-v2/onboarding/en/pistas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE EL LAYOUT LE ENTREGA AL MOTOR DEL RECORRIDO, calculado en el servidor para ESTE rol y ESTE perfil:
@@ -25,14 +28,15 @@ export interface OnboardingDeLaSesion {
   rutas: string[];
 }
 
-export function onboardingDeLaSesion(rol: string, perfil: PerfilTenant | null | undefined): OnboardingDeLaSesion {
+export function onboardingDeLaSesion(rol: string, perfil: PerfilTenant | null | undefined, idioma: Idioma = 'es'): OnboardingDeLaSesion {
+  const cx = ctxOnb(idioma);
   const pista = pistaDeRol(rol);
   const vacio: OnboardingDeLaSesion = { recorridos: [], principal: null, asistente: null, pistas: {}, rutas: [] };
   if (!pista) return vacio;
-  const corto = construirRecorrido(rol, perfil, 'corto');
-  const completo = construirRecorrido(rol, perfil, 'completo');
+  const corto = construirRecorrido(rol, perfil, 'corto', idioma);
+  const completo = construirRecorrido(rol, perfil, 'completo', idioma);
   if (!corto || !completo) return vacio;
-  const agentes = AGENTES.map((a) => construirRecorridoAgente(a, rol, perfil)).filter((r): r is Recorrido => r !== null);
+  const agentes = AGENTES.map((a) => construirRecorridoAgente(a, rol, perfil, idioma)).filter((r): r is Recorrido => r !== null);
   const recorridos = [corto, completo, ...agentes];
 
   const menu = menuPorPerfil(rol, perfil);
@@ -41,9 +45,11 @@ export function onboardingDeLaSesion(rol: string, perfil: PerfilTenant | null | 
   for (const [ruta, p] of Object.entries(PISTAS_CONTEXTUALES)) {
     // Una pista solo se ofrece si el rol llega a la pantalla de la que se abre y a la propia (el detalle y el borrador cuelgan de su padre).
     const propia = ruta.includes('[id]') ? true : puedeVerRuta(rol, ruta, perfil);
-    const origen = nombreDe(p.desde);
-    if (propia && origen && puedeVerRuta(rol, p.desde, perfil)) pistas[ruta] = { ...p, desde: origen };
+    const origenEs = nombreDe(p.desde);
+    const origen = origenEs ? cx.nav(origenEs) : origenEs;
+    const en = idioma === 'en' ? PISTAS_EN[ruta] : undefined;
+    if (propia && origen && puedeVerRuta(rol, p.desde, perfil)) pistas[ruta] = { ...p, ...(en ?? {}), desde: origen };
   }
   const rutas = [...new Set(recorridos.flatMap((r) => r.pasos.map((p) => p.ruta).filter((x): x is string => Boolean(x))))];
-  return { recorridos, principal: pista, asistente: asistenteDe(rol, perfil), pistas, rutas };
+  return { recorridos, principal: pista, asistente: asistenteDe(rol, perfil, idioma), pistas, rutas };
 }

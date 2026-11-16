@@ -14374,12 +14374,15 @@ end $$;
 --     por EDAD del evento, con o sin prospecto_id (el payload de Cal.com
 --     llega también huérfano); un segundo camino por frialdad solo taparía
 --     al primero. Además su nombre SÍ se exige en el fuente de esa función.
+--   · bo_comision_mov (mig. 1010, back-office) — registro FINANCIERO de comisiones (retención contable de 5 años, solo inserción): guarda solo ids y
+--     montos, ningún dato de persona; el nombre y el correo del prospecto viven en `prospecto`, donde `purgar_prospecto_persona` los anonimiza. La FK
+--     es `on delete restrict` a propósito: un prospecto que generó una comisión no se borra.
 --
 -- Esperado:
---   SATELITES_ESTRUCTURAL_0258  sin_decidir=ninguna  exentas=2  ledger_cubierto=t
+--   SATELITES_ESTRUCTURAL_0258  sin_decidir=ninguna  exentas=3  ledger_cubierto=t
 do $$
 declare
-  exentas text[] := array['prospecto_contacto', 'comercial_evento'];
+  exentas text[] := array['prospecto_contacto', 'comercial_evento', 'bo_comision_mov'];
   src_purga text; src_ledger text;
   t text; sin_decidir text[] := '{}'; faltantes text; ledger_cubierto boolean;
 begin
@@ -14415,7 +14418,7 @@ begin
   -- exista Y la nombre; si alguien la vacía, la exención deja de valer.
   ledger_cubierto := position('comercial_evento' in coalesce(src_ledger, '')) > 0;
 
-  raise exception E'SATELITES_ESTRUCTURAL_0258  sin_decidir=%  exentas=%  ledger_cubierto=%   (esperado ninguna / 2 / t)',
+  raise exception E'SATELITES_ESTRUCTURAL_0258  sin_decidir=%  exentas=%  ledger_cubierto=%   (esperado ninguna / 3 / t)',
     faltantes, cardinality(exentas), ledger_cubierto;
 end $$;
 

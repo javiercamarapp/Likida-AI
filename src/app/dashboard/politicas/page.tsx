@@ -1,8 +1,8 @@
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
 import { getConfig } from '@/lib/likida/config';
-import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
+import { etiquetaConcepto as etiquetaConceptoEs } from '@/lib/likida/cuadre/engine';
 import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -27,6 +27,10 @@ export const dynamic = 'force-dynamic';
 /** Los conceptos que el motor sabe etiquetar (`label()` en engine.ts). Un
  *  concepto fuera de esta lista no rompe nada, pero tampoco tiene renglón: por
  *  eso los que ya estén guardados se conservan aunque no aparezcan aquí. */
+const CLAVE_CONCEPTO = {
+  diesel: 'pol.concepto.diesel', caseta: 'pol.concepto.caseta', factura: 'pol.concepto.factura', alimentacion: 'pol.concepto.alimentacion',
+  hospedaje: 'pol.concepto.hospedaje', transporte: 'pol.concepto.transporte', flete: 'pol.concepto.flete', viaticos: 'pol.concepto.viaticos', otro: 'pol.concepto.otro',
+} as const;
 const CONCEPTOS = ['diesel', 'caseta', 'factura', 'alimentacion', 'hospedaje', 'transporte', 'flete', 'viaticos', 'otro'] as const;
 
 /**
@@ -58,6 +62,8 @@ export default async function PoliticasPage({
   searchParams: Promise<{ vista?: string; tenant?: string }>;
 }) {
   const { t: tr } = await getT('dinero');
+  const { t: tb } = await getT('dashboard_b');
+  const etiquetaConcepto = (c: string) => { const k = c as keyof typeof CLAVE_CONCEPTO; return k in CLAVE_CONCEPTO ? tb(CLAVE_CONCEPTO[k]) : etiquetaConceptoEs(c); };
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/politicas', sp);
   const puedeEditar = puedeAdministrar(rol);
@@ -131,7 +137,7 @@ export default async function PoliticasPage({
       );
       await guardarPolitica(t, completa);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar la política') };
+      return { error: mensajeParaPantalla(e, 'guardar la política', await idiomaActual()) };
     }
 
     revalidatePath('/dashboard/politicas');
@@ -187,13 +193,13 @@ export default async function PoliticasPage({
   const filasFiscales: FilaFiscal[] = config === null ? [] : [
     { concepto: tr('politicas.page.topeDiarioDeAlimentacion'), valor: mxn(config.estimulos.viaticosTopeFiscalDiarioMxn), nota: tr('politicas.page.lisrArt28V') },
     { concepto: tr('politicas.page.topeDeGastoEn'), valor: mxn(config.estimulos.efectivoTopeMxn), nota: tr('politicas.page.lisrArt27Iii') },
-    { concepto: 'Peaje acreditable', valor: `${Math.round(config.estimulos.peajeFactor * 100)}%`, nota: tr('politicas.page.estimuloDeAutopistasLif') },
+    { concepto: tb('pol.peaje'), valor: `${Math.round(config.estimulos.peajeFactor * 100)}%`, nota: tr('politicas.page.estimuloDeAutopistasLif') },
     { concepto: tr('politicas.page.desviacionDeConsumo'), valor: `${Math.round(config.tabulador.umbralDesviacion * 100)}%`, nota: tr('politicas.page.aPartirDeAqui') },
   ];
   const columnasFiscales: ColumnaBase<FilaFiscal>[] = [
     { id: 'concepto', titulo: tr('politicas.page.concepto'), principal: true, celda: (f) => f.concepto },
     { id: 'tope', titulo: tr('politicas.page.tope'), alinear: 'der', celda: (f) => <span className="tabular">{f.valor}</span> },
-    { id: 'nota', titulo: 'Fundamento', celda: (f) => <span className="rv-pol__sin">{f.nota}</span> },
+    { id: 'nota', titulo: tb('pol.fundamento'), celda: (f) => <span className="rv-pol__sin">{f.nota}</span> },
   ];
 
   return (

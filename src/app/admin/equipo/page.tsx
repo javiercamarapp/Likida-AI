@@ -16,6 +16,9 @@ import {
   accionDarDeBajaPersonalLikida, accionReactivarPersonalLikida,
 } from '../usuarios/acciones';
 import { GestionPersona } from './gestion-persona';
+import { TiraCifras } from '../../ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import '../resumen.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -44,6 +47,8 @@ function coincide(p: Persona, q: string): boolean {
  */
 export default async function EquipoPage({ searchParams }: { searchParams?: Promise<Params> }) {
   const { t } = await getT('admin_flotas');
+  const { t: tc } = await getT('resto');
+  const { t: ti } = await getT('admin_inicio');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   const sesion = await requireSuperadmin();
   const sp = (await searchParams) ?? {};
@@ -158,8 +163,21 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
     </>
   );
 
+  const tira = todas.length === 0 ? null : (
+    <TiraCifras etiqueta={tc('ctl.eq_cifras')} items={observadas(uniformes([
+      { etiqueta: t('equipo.personas_con_cuenta'), valor: todas.length, formato: 'entero',
+        segmentos: [{ etiqueta: t('equipo.activas'), valor: conteo('activa') }, { etiqueta: t('equipo.de_baja'), valor: conteo('baja') }, { etiqueta: t('equipo.sin_cuenta_de_acceso'), valor: conteo('sin_acceso') }] },
+      { etiqueta: t('equipo.activas'), valor: conteo('activa'), formato: 'entero' },
+      { etiqueta: t('equipo.de_baja'), valor: conteo('baja'), formato: 'entero', tono: conteo('baja') > 0 ? 'warn' : undefined },
+      lectura.accesoLegible
+        ? { etiqueta: t('equipo.nunca_han_entrado'), valor: nuncaEntraron, formato: 'entero' }
+        : { etiqueta: t('equipo.nunca_han_entrado'), valor: null, estado: 'error', mensaje: t('equipo.no_se_pudo_leer_2') },
+    ]), ti('a1r4.observado'))} />
+  );
+
   return marco(
     <>
+      {tira}
       {gestion ? <Tarjeta titulo={t('equipo_gestion_persona.gestionar_a', { nombre: seleccionada?.nombre ?? seleccionada?.email ?? '' })}>{gestion}</Tarjeta> : null}
       <FilaTarjetas variante="8-4" className="adm-fila-alto-contenido">
         <Tarjeta titulo={t('equipo.invitar_integrante')}>

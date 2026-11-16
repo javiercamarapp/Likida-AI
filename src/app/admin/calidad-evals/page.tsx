@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
@@ -14,6 +15,7 @@ import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import type { Idioma } from '@/lib/i18n/idioma';
+import './calidad-evals.css';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -64,7 +66,7 @@ function TarjetaExamen({ titulo, estado, avisoDrift, conNotas, tx = T_SISTEMA_ES
   return (
     <Tarjeta titulo={titulo}>
       {estado === null ? (
-        <p className="m-0 text-sm text-[var(--bad)]">{tx('calidad_evals.no_se_pudo_leer_el_estado')}</p>
+        <Aviso tono="error">{tx('calidad_evals.no_se_pudo_leer_el_estado')}</Aviso>
       ) : (
         <>
           {estado.driftDePrompt && (
@@ -72,23 +74,23 @@ function TarjetaExamen({ titulo, estado, avisoDrift, conNotas, tx = T_SISTEMA_ES
               {estado.ultima === null ? tx('calidad_evals.el_examen_nunca_se_ha_corrido') : avisoDrift}
             </Aviso>
           )}
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+          <div className="rv-ce-linea">
             {estado.ultima === null ? (
-              <span className="text-muted">{tx('calidad_evals.sin_corridas_registradas')}</span>
+              <span className="rv-ce-mutado">{tx('calidad_evals.sin_corridas_registradas')}</span>
             ) : (
               <>
-                <span className="flex items-center gap-1.5">{tx('calidad_evals.ultima_corrida')}{' '}<StatusChip tono={estadoDeVeredicto(estado.ultima.veredicto, tx).tono}>
+                <span className="rv-ce-chip">{tx('calidad_evals.ultima_corrida')}{' '}<StatusChip tono={estadoDeVeredicto(estado.ultima.veredicto, tx).tono}>
                     {estadoDeVeredicto(estado.ultima.veredicto, tx).texto}
                   </StatusChip>
                 </span>
-                <span className="text-muted">{fechaHoraMx(estado.ultima.iniciadaEn, idioma)}</span>
-                {estado.ultima.casos !== null && <span className="text-muted">{tx('calidad_evals.n_casos', { n: numero(estado.ultima.casos, idioma) })}</span>}
+                <span className="rv-ce-mutado">{fechaHoraMx(estado.ultima.iniciadaEn, idioma)}</span>
+                {estado.ultima.casos !== null && <span className="rv-ce-mutado">{tx('calidad_evals.n_casos', { n: numero(estado.ultima.casos, idioma) })}</span>}
               </>
-            )}{rico(tx('calidad_evals.e0_caso_s_activos_en_el', { numero: numero(estado.casosActivos, idioma) }), { e0: (c) => <span className="text-muted">{c}</span> })}</div>
+            )}{rico(tx('calidad_evals.e0_caso_s_activos_en_el', { numero: numero(estado.casosActivos, idioma) }), { e0: (c) => <span className="rv-ce-mutado">{c}</span> })}</div>
           {/* La calificación desglosada, tal cual la dejó el runner — buena o mala, aquí no se maquilla. */}
-          {conNotas && estado.ultima?.notas && <p className="m-0 mt-2 text-xs text-muted">{estado.ultima.notas}</p>}
-          <p className="m-0 mt-2 text-xs text-muted">
-            {rico(tx('calidad_evals.el_detalle_y_el_juez_humano'), { e0: (c) => <Link href="/admin/evals" className="underline">{c}</Link> })}
+          {conNotas && estado.ultima?.notas && <p className="rv-ce-nota">{estado.ultima.notas}</p>}
+          <p className="rv-ce-nota">
+            {rico(tx('calidad_evals.el_detalle_y_el_juez_humano'), { e0: (c) => <Link href="/admin/evals" className="rv-ce-enlace">{c}</Link> })}
           </p>
         </>
       )}
@@ -99,8 +101,8 @@ function TarjetaExamen({ titulo, estado, avisoDrift, conNotas, tx = T_SISTEMA_ES
 const columnasTropiezos = (tx: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<AgenteCorridas>[] => ([
   { id: 'agente', titulo: tx('calidad_evals.agente_con_tropiezos'), principal: true, celda: (a) => <span className="cifra-mono">{a.agente}</span> },
   { id: 'ok', titulo: 'Ok', alinear: 'der', celda: (a) => <span className="tabular">{numero(a.ok, idioma)}</span> },
-  { id: 'parcial', titulo: tx('calidad_evals.parciales'), alinear: 'der', celda: (a) => <span className={`tabular ${a.parcial > 0 ? 'text-[var(--warn)]' : ''}`}>{numero(a.parcial, idioma)}</span> },
-  { id: 'fallo', titulo: tx('observabilidad.fallos'), alinear: 'der', celda: (a) => <span className={`tabular ${a.fallo > 0 ? 'text-[var(--bad)]' : ''}`}>{numero(a.fallo, idioma)}</span> },
+  { id: 'parcial', titulo: tx('calidad_evals.parciales'), alinear: 'der', celda: (a) => <span className="tabular" data-tono={a.parcial > 0 ? 'warn' : undefined}>{numero(a.parcial, idioma)}</span> },
+  { id: 'fallo', titulo: tx('observabilidad.fallos'), alinear: 'der', celda: (a) => <span className="tabular" data-tono={a.fallo > 0 ? 'bad' : undefined}>{numero(a.fallo, idioma)}</span> },
 ]);
 
 export default async function CalidadEvalsPage() {
@@ -133,10 +135,10 @@ export default async function CalidadEvalsPage() {
 
   return (
     <EsqueletoPanelCifras
-      titulo={t('calidad_evals.calidad_evals')}
+      titulo={t('pul9.calidad_resumen')}
       apoyo={t('calidad_evals.titular_corto')}
       etiquetaCifras={t('calidad_evals.calidad_evals')}
-      cifras={uniformes([
+      cifras={observadas(uniformes([
         corridas === null
           ? { etiqueta: t('calidad_evals.kpi_corridas'), valor: null, estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') }
           : { etiqueta: t('calidad_evals.kpi_corridas'), valor: corridas.total, formato: 'entero' as const },
@@ -152,7 +154,7 @@ export default async function CalidadEvalsPage() {
         casos === null
           ? { etiqueta: t('calidad_evals.kpi_casos'), valor: null, estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') }
           : { etiqueta: t('calidad_evals.kpi_casos'), valor: casos, formato: 'entero' as const, nota: t('calidad_evals.kpi_casos_nota') },
-      ])}
+      ]), t('calidad_evals.observado'))}
       graficas={[
         <Tarjeta key="veredicto" titulo={t('calidad_evals.grafica_veredicto')} contenida
           {...(corridas === null ? { estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') } : corridas.total === 0 ? { estado: 'vacio' as const, mensaje: t('calidad_evals.sin_corridas_ventana') } : { estado: 'ok' as const })}>
@@ -226,7 +228,7 @@ export default async function CalidadEvalsPage() {
           {corridas === null ? (
             <p className="adm-sis-vacio-linea">{t('calidad_evals.no_se_pudieron_leer')}</p>
           ) : corridas.total === 0 ? (
-            <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.cero_corridas_en_la_ventana_eso'), { e0: (c) => <Link href="/admin/crons" className="underline">{c}</Link> })}</p>
+            <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.cero_corridas_en_la_ventana_eso'), { e0: (c) => <Link href="/admin/crons" className="rv-ce-enlace">{c}</Link> })}</p>
           ) : corridas.porAgente.some((a) => a.fallo > 0 || a.parcial > 0) ? (
             <TablaBase
               etiqueta={t('calidad_evals.agentes_con_tropiezos_en')}
@@ -243,7 +245,7 @@ export default async function CalidadEvalsPage() {
           {ocr === null ? (
             <p className="adm-sis-vacio-linea">{t('calidad_evals.no_se_pudo_leer')}</p>
           ) : ocr.fotosMedidas === 0 ? (
-            <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.el_banco_existe_y_ninguna_foto'), { e0: (c) => <Link href="/admin/qa" className="underline">{c}</Link> })}</p>
+            <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.el_banco_existe_y_ninguna_foto'), { e0: (c) => <Link href="/admin/qa" className="rv-ce-enlace">{c}</Link> })}</p>
           ) : (
             <ul className="adm-sis-lista">
               <li>
@@ -279,5 +281,5 @@ export default async function CalidadEvalsPage() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('admin_agentes');
-  return { title: t('calidad_evals.calidad_evals') };
+  return { title: t('pul9.calidad_resumen') };
 }

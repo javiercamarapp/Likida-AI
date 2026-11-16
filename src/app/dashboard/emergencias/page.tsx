@@ -28,7 +28,7 @@ import { CajonAlta } from '../cajon-alta';
 import { AccionFila } from './accion-fila';
 import '../estados.css';
 import './emergencias.css';
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('operacion');
   return { title: t('meta.emergencias') };
@@ -75,6 +75,7 @@ export default async function PaginaEmergencias({
   searchParams: Promise<ParamsPagina>;
 }) {
   const { t, idioma } = await getT('operacion');
+  const { t: tb } = await getT('dashboard_b');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -130,7 +131,7 @@ export default async function PaginaEmergencias({
         notas: String(fd.get('notas') ?? '') || null,
       });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'dar de alta el proveedor') };
+      return { error: mensajeParaPantalla(e, 'dar de alta el proveedor', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: t('emg.a.prov.ok') };
@@ -147,7 +148,7 @@ export default async function PaginaEmergencias({
       await marcarProveedorVerificado(g.tenantId, String(fd.get('id') ?? ''), g.userId);
     } catch (e) {
       logger.warn('emergencias.verificar_fallo', { err: e instanceof Error ? e.message : String(e) });
-      return { error: mensajeParaPantalla(e, 'marcar el proveedor como verificado') };
+      return { error: mensajeParaPantalla(e, 'marcar el proveedor como verificado', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: t('emg.a.verificado') };
@@ -162,7 +163,7 @@ export default async function PaginaEmergencias({
       await borrarProveedorEmergencia(g.tenantId, String(fd.get('id') ?? ''));
     } catch (e) {
       logger.warn('emergencias.borrar_proveedor_fallo', { err: e instanceof Error ? e.message : String(e) });
-      return { error: mensajeParaPantalla(e, 'quitar el proveedor') };
+      return { error: mensajeParaPantalla(e, 'quitar el proveedor', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: t('emg.a.quitado') };
@@ -181,7 +182,7 @@ export default async function PaginaEmergencias({
         vigenciaHasta: String(fd.get('vigenciaHasta') ?? '') || null,
       });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar la póliza') };
+      return { error: mensajeParaPantalla(e, 'guardar la póliza', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: t('emg.a.poliza.ok') };
@@ -201,7 +202,7 @@ export default async function PaginaEmergencias({
         avisarSiLesionados: String(fd.get('avisarSiLesionados') ?? '') === 'si',
       });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar el contacto') };
+      return { error: mensajeParaPantalla(e, 'guardar el contacto', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: t('emg.a.contacto.ok') };
@@ -216,7 +217,7 @@ export default async function PaginaEmergencias({
       await borrarContactoEmergencia(g.tenantId, String(fd.get('id') ?? ''));
     } catch (e) {
       logger.warn('emergencias.borrar_contacto_fallo', { err: e instanceof Error ? e.message : String(e) });
-      return { error: mensajeParaPantalla(e, 'quitar el contacto') };
+      return { error: mensajeParaPantalla(e, 'quitar el contacto', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: t('emg.a.contacto.quitado') };
@@ -235,7 +236,7 @@ export default async function PaginaEmergencias({
   ] : undefined;
 
   return (
-    <EsqueletoTablaMaestra titulo={t('emg.titulo')} apoyo={t('emg.apoyo')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy('Directorio de emergencia')}
+    <EsqueletoTablaMaestra titulo={t('emg.titulo')} apoyo={t('emg.apoyo')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy(tb('em.sello'), tb, idioma)}
       avisos={leyoOk ? <Aviso>{t('emg.protocolo')}</Aviso> : undefined}>
       {!leyoOk && (
         <EstadoVacio pantalla contenido icono={ShieldCheck} titulo={t('emg.error.titulo')}>
@@ -279,7 +280,7 @@ export default async function PaginaEmergencias({
                   { id: 'telefono', titulo: t('emg.prov.telefono'), celda: (p) => <span className="rv-em__dato">{p.telefono}{p.radioKm ? ` · ~${p.radioKm} km` : ''}</span> },
                   { id: 'estado', titulo: t('emg.cifra.sinconfirmar'), celda: (p) => (
                     <StatusChip tono={p.verificadoEn ? 'ok' : 'warn'}>
-                      {p.verificadoEn ? `verificado ${fechaMx(p.verificadoEn, idioma)}` : t('emg.prov.sinconfirmar')}
+                      {p.verificadoEn ? tb('em.verificado_el', { fecha: fechaMx(p.verificadoEn, idioma) }) : t('emg.prov.sinconfirmar')}
                     </StatusChip>
                   ) },
                   { id: 'acciones', titulo: '', alinear: 'der', celda: (p) => (
@@ -290,7 +291,7 @@ export default async function PaginaEmergencias({
                       )}
                       <AccionFila accion={borrarProveedor} id={p.id} etiqueta={t('emg.quitar')} tono="peligro"
                         confirmar={{
-                          titulo: `Quitar a ${p.nombre}`,
+                          titulo: tb('em.quitar_a', { nombre: p.nombre }),
                           descripcion: t('emg.prov.quitar.cuerpo'),
                           etiquetaConfirmar: t('emg.quitar.si'),
                         }} />
@@ -368,7 +369,7 @@ export default async function PaginaEmergencias({
                     <span className="rv-em__acciones">
                       <AccionFila accion={borrarContacto} id={c.id} etiqueta={t('emg.quitar')} tono="peligro"
                         confirmar={{
-                          titulo: `Quitar a ${c.nombre}`,
+                          titulo: tb('em.quitar_a', { nombre: c.nombre }),
                           descripcion: t('emg.cont.quitar.cuerpo', { operador: c.operadorNombre }),
                           etiquetaConfirmar: t('emg.quitar.si'),
                         }} />

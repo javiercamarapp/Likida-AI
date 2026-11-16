@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PanelRightClose, Sparkles, ExternalLink } from 'lucide-react';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_inicio as admin_inicioEs } from '@/lib/i18n/es/admin_inicio';
 import AgenteConversacion from '../dashboard/chat/agente-conversacion';
 // El chrome de /admin no trae el CSS del chat (solo /dashboard lo importa en su layout); el panel vive en TODAS las pantallas de /admin.
 import '../ui-v2/graficas.css';
@@ -21,6 +23,7 @@ import '../ui-v2/chat.css';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function CopilotoPanel() {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   const [abierto, setAbierto] = useState(false);
 
   useEffect(() => {
@@ -41,17 +44,17 @@ export default function CopilotoPanel() {
   }, []);
 
   return (
-    <aside aria-label="Copiloto" className="rv-copiloto-panel" data-abierto={abierto} inert={!abierto}>
+    <aside aria-label={t('raiz7.copiloto_aria')} className="rv-copiloto-panel" data-abierto={abierto} inert={!abierto}>
       <div className="rv-copiloto-panel__caja">
         <div className="rv-copiloto-panel__cab">
           <Sparkles width={14} height={14} strokeWidth={1.75} aria-hidden="true" />
           <strong>Copiloto</strong>
           <kbd>⌘J</kbd>
           <span className="rv-copiloto-panel__esp" />
-          <Link href="/admin/copiloto" title="Abrir en página completa" aria-label="Abrir en página completa" className="rv-btn rv-btn--ghost rv-copiloto-panel__btn">
+          <Link href="/admin/copiloto" title={t('raiz7.copiloto_abrir_completa')} aria-label={t('raiz7.copiloto_abrir_completa')} className="rv-btn rv-btn--ghost rv-copiloto-panel__btn">
             <ExternalLink width={14} height={14} strokeWidth={1.75} aria-hidden="true" />
           </Link>
-          <button type="button" onClick={() => setAbierto(false)} title="Cerrar" aria-label="Cerrar copiloto" className="rv-btn rv-btn--ghost rv-copiloto-panel__btn">
+          <button type="button" onClick={() => setAbierto(false)} title={t('raiz7.copiloto_cerrar')} aria-label={t('raiz7.copiloto_cerrar_aria')} className="rv-btn rv-btn--ghost rv-copiloto-panel__btn">
             <PanelRightClose width={14} height={14} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>

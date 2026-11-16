@@ -6,7 +6,8 @@ import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { CajonVistaRapida } from '../../ui-v2/esqueletos/cajon-vista-rapida';
 import { uniformes } from '../cifras-uniformes';
 import { observadas } from '../sello-observado';
-import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { BarList, type PropsCifra } from '@/app/ui-v2/graficas';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
 import { usd } from '@/lib/utils';
@@ -22,28 +23,25 @@ export const dynamic = 'force-dynamic';
 // se aplica (declarado por el superadmin, derivado del plan o el piso global) y cuánto lleva hoy.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TITULO = 'Techo diario de IA — por flota';
+const TONO_ORIGEN: Record<FilaTechoIa['origen'], TonoEstado> = { tenant: 'ok', plan: 'neutral', piso: 'neutral', explicito: 'neutral' };
 
-const ORIGEN: Record<FilaTechoIa['origen'], { tono: TonoEstado; rotulo: string }> = {
-  tenant: { tono: 'ok', rotulo: 'Declarado' },
-  plan: { tono: 'neutral', rotulo: 'Del plan' },
-  piso: { tono: 'neutral', rotulo: 'Piso global' },
-  explicito: { tono: 'neutral', rotulo: 'Explícito' },
-};
+const rotuloOrigen = (o: FilaTechoIa['origen'], t: TrDe<'admin_dinero'>): string => ({
+  tenant: t('neg5.ti_declarado'), plan: t('neg5.ti_del_plan'), piso: t('techo_ia.como_piso'), explicito: t('neg5.ti_explicito'),
+})[o];
 
-const MENSAJE_OK: Record<string, string> = {
-  fijado: 'Techo guardado. Esta instancia lo aplica ya; las demás en menos de un minuto.',
-  quitado: 'Declaración quitada: la flota vuelve al techo de su plan (o al piso).',
-};
+const mensajeOk = (t: TrDe<'admin_dinero'>): Record<string, string> => ({
+  fijado: t('neg5.ti_ok_fijado'),
+  quitado: t('neg5.ti_ok_quitado'),
+});
 
 // A37-S08-07: códigos cerrados (como `ok`); el texto de `?error=` ya no se pinta tal cual.
-const MENSAJE_ERROR: Record<string, string> = {
-  formato: 'Escribe un monto en dólares, por ejemplo 25 o 25.50.',
-  rango: `El techo diario va de ${TECHO_IA_MIN_USD.toFixed(2)} a ${TECHO_IA_MAX_USD} USD. Para apagar la IA de una flota usa el interruptor, no un techo de cero.`,
-  flota: 'Flota inválida.',
-  inexistente: 'Esa flota ya no existe.',
-  guardar: 'No se pudo guardar el techo. Recarga e inténtalo de nuevo; si persiste, avisa a soporte.',
-};
+const mensajeError = (t: TrDe<'admin_dinero'>): Record<string, string> => ({
+  formato: t('neg5.ti_err_formato'),
+  rango: t('neg5.ti_err_rango', { min: TECHO_IA_MIN_USD.toFixed(2), max: String(TECHO_IA_MAX_USD) }),
+  flota: t('neg5.ti_err_flota'),
+  inexistente: t('neg5.ti_err_inexistente'),
+  guardar: t('neg5.ti_err_guardar'),
+});
 
 export default async function TechoIaPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; ver?: string; como?: string }> }) {
   const { t } = await getT('admin_dinero');
@@ -56,16 +54,16 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   } catch {
     datos = null;
   }
-  if (datos === null) return <PantallaTecho apoyo={t('a1r4.techo_apoyo')}><EstadoError>{t('techo_ia.no_se_pudo_leer')}</EstadoError></PantallaTecho>;
+  if (datos === null) return <PantallaTecho titulo={t('neg5.ti_titulo')} apoyo={t('a1r4.techo_apoyo')}><EstadoError>{t('techo_ia.no_se_pudo_leer')}</EstadoError></PantallaTecho>;
 
   const columnas: ColumnaBase<FilaTechoIa>[] = [
     { id: 'flota', titulo: t('techo_ia.flota'), principal: true, celda: (f) => f.nombre },
     { id: 'techo', titulo: t('techo_ia.techo_que_aplica'), alinear: 'der', celda: (f) => <span className="tabular">{usd(f.topeUsd)}</span> },
-    { id: 'origen', titulo: t('techo_ia.origen'), celda: (f) => <StatusChip tono={ORIGEN[f.origen].tono}>{ORIGEN[f.origen].rotulo}</StatusChip> },
+    { id: 'origen', titulo: t('techo_ia.origen'), celda: (f) => <StatusChip tono={TONO_ORIGEN[f.origen]}>{rotuloOrigen(f.origen, t)}</StatusChip> },
     {
       id: 'hoy', titulo: t('techo_ia.hoy'),
       celda: (f) => f.usadoHoyUsd === null ? (
-        <span className="rv-techo-tenue">sin medir</span>
+        <span className="rv-techo-tenue">{t('neg5.ti_sin_medir')}</span>
       ) : (
         <span className="rv-techo-uso">
           <progress className="rv-techo-barra" value={Math.min(f.pctUsado ?? 0, 100)} max={100} data-alto={(f.pctUsado ?? 0) >= 80 || undefined} aria-hidden="true" />
@@ -77,13 +75,15 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
       // La edición vive en el cajón (Rovaq P5: la tabla muestra el uso; editar es una Vista rápida), no en un campo por fila.
       id: 'declarar', titulo: t('techo_ia.declarar_techo'), tituloOculto: true, alinear: 'der',
       celda: (f) => (
-        <BotonEnlace href={`/admin/techo-ia?ver=${f.tenantId}`} variante="ghost" tamano="sm" aria-label={`${f.declaradoUsd === null ? 'Fijar' : 'Cambiar'} · ${f.nombre}`}>
-          {f.declaradoUsd === null ? 'Fijar' : 'Cambiar'}
+        <BotonEnlace href={`/admin/techo-ia?ver=${f.tenantId}`} variante="ghost" tamano="sm" aria-label={`${f.declaradoUsd === null ? t('neg5.ti_fijar') : t('neg5.ti_cambiar')} · ${f.nombre}`}>
+          {f.declaradoUsd === null ? t('neg5.ti_fijar') : t('neg5.ti_cambiar')}
         </BotonEnlace>
       ),
     },
   ];
 
+  // Solo flotas con gasto de hoy MEDIDO y mayor que cero (sin dato ≠ 0): las más cerca de su techo primero, hasta seis.
+  const usoMedido = datos.gastoIlegible ? [] : datos.filas.filter((f) => f.usadoHoyUsd !== null && f.usadoHoyUsd > 0).sort((a, b) => (b.pctUsado ?? 0) - (a.pctUsado ?? 0)).slice(0, 6);
   const cercaDelTecho = datos.filas.filter((f) => (f.pctUsado ?? 0) >= 80).length;
   const cifras: PropsCifra[] = [
     { etiqueta: t('techo_ia.flotas'), valor: datos.filas.length, formato: 'entero' as const },
@@ -96,7 +96,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   ];
 
   const elegida = sp.ver ? datos.filas.find((f) => f.tenantId === sp.ver) : undefined;
-  const sinMedir = 'sin medir';
+  const sinMedir = t('neg5.ti_sin_medir');
   const cajon = elegida ? (
     <CajonVistaRapida
       titulo={elegida.nombre}
@@ -104,19 +104,19 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
       hrefCerrar="/admin/techo-ia"
       cifras={[
         { etiqueta: t('techo_ia.techo_que_aplica'), valor: usd(elegida.topeUsd) },
-        { etiqueta: t('techo_ia.origen'), valor: ORIGEN[elegida.origen].rotulo },
+        { etiqueta: t('techo_ia.origen'), valor: rotuloOrigen(elegida.origen, t) },
         { etiqueta: t('techo_ia.hoy'), valor: elegida.usadoHoyUsd === null ? sinMedir : usd(elegida.usadoHoyUsd) },
         { etiqueta: '%', valor: elegida.pctUsado === null ? '—' : `${elegida.pctUsado}%` },
       ]}
-      pie={<Boton type="submit" form="forma-techo" variante="primary" tamano="sm">{elegida.declaradoUsd === null ? 'Fijar' : 'Cambiar'}</Boton>}
+      pie={<Boton type="submit" form="forma-techo" variante="primary" tamano="sm">{elegida.declaradoUsd === null ? t('neg5.ti_fijar') : t('neg5.ti_cambiar')}</Boton>}
     >
       <form id="forma-techo" action={guardarTechoIa} className="rv-techo-forma rv-techo-forma--cajon">
         <input type="hidden" name="tenantId" value={elegida.tenantId} />
         <CampoTexto
           id={`techo-${elegida.tenantId}`} name="techoUsd" inputMode="decimal" autoComplete="off"
-          etiqueta={`Techo diario en dólares para ${elegida.nombre}`}
+          etiqueta={t('neg5.ti_campo_etq', { nombre: elegida.nombre })}
           defaultValue={elegida.declaradoUsd === null ? '' : String(elegida.declaradoUsd)}
-          placeholder="sin declarar"
+          placeholder={t('neg5.ti_sin_declarar')}
           claseControl="tabular"
           ayuda={t('techo_ia.dejalo_vacio_y_guarda')}
         />
@@ -148,6 +148,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
 
   return (
     <PantallaTecho
+      titulo={t('neg5.ti_titulo')}
       apoyo={t('a1r4.techo_apoyo')}
       etiquetaCifras={t('techo_ia.flotas')}
       cifras={observadas(uniformes(cifras), t('a1r4.observado'))}
@@ -155,8 +156,8 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
       avisos={(
         <>
           <Aviso tono="info">{t('techo_ia.aviso_admin')}</Aviso>
-          {sp.ok && MENSAJE_OK[sp.ok] && <Aviso tono="ok">{MENSAJE_OK[sp.ok]}</Aviso>}
-          {sp.error && MENSAJE_ERROR[sp.error] && <Aviso tono="error">{MENSAJE_ERROR[sp.error]}</Aviso>}
+          {sp.ok && mensajeOk(t)[sp.ok] && <Aviso tono="ok">{mensajeOk(t)[sp.ok]}</Aviso>}
+          {sp.error && mensajeError(t)[sp.error] && <Aviso tono="error">{mensajeError(t)[sp.error]}</Aviso>}
         </>
       )}
     >
@@ -166,6 +167,15 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
       {datos.truncado && (
         <p className="rv-techo-nota">{t('techo_ia.hay_mas_flotas_de')}</p>
       )}
+
+      {usoMedido.length > 0 ? (
+        <Tarjeta titulo={t('neg5.ti_grafica_titulo')}>
+          <BarList
+            etiqueta={t('neg5.ti_grafica_etq')} maximo={100} formato={(v) => `${v}%`}
+            items={usoMedido.map((f) => ({ clave: f.tenantId, etiqueta: f.nombre, valor: Math.min(f.pctUsado ?? 0, 100), texto: `${usd(f.usadoHoyUsd ?? 0)} / ${usd(f.topeUsd)}` }))}
+          />
+        </Tarjeta>
+      ) : null}
 
       <Tarjeta titulo={t('techo_ia.flotas')}>
         <TablaBase
@@ -186,8 +196,8 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   );
 }
 
-function PantallaTecho({ children, ...resto }: { children: ReactNode } & Omit<ComponentProps<typeof EsqueletoTablaMaestra>, 'titulo' | 'children'>) {
-  return <EsqueletoTablaMaestra titulo={TITULO} {...resto}>{children}</EsqueletoTablaMaestra>;
+function PantallaTecho({ children, ...resto }: { children: ReactNode } & Omit<ComponentProps<typeof EsqueletoTablaMaestra>, 'children'>) {
+  return <EsqueletoTablaMaestra {...resto}>{children}</EsqueletoTablaMaestra>;
 }
 
 export async function generateMetadata(): Promise<Metadata> {

@@ -4,13 +4,12 @@ import { getResumenNegocio } from '@/lib/admin/negocio';
 import { hoyMx, mxn } from '@/lib/formato';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { anotarAccionAdmin, pasoExtraSuperadmin, AVISO_SIN_BITACORA } from '@/lib/admin/acciones_riesgo';
-import { mensajeParaPantalla } from '@/lib/likida/administracion';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { getPlanes, guardarPriceDePlan, listarSuscripcionesVivas, type Plan, type Suscripcion } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
   datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, tenantDeFacturaSaas, listarFacturasSaas, type FacturaPorCobrar, type FacturaSaasFila,
 } from '@/lib/saas/transferencia';
-import { etiquetaIva } from '@/lib/saas/iva';
 import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
 import { logger } from '@/lib/logger';
 import { Aviso, AvisoCompacto, BarraFiltros, CampoSelect, CampoTexto, Disclosure, EstadoError, FilaTarjetas, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
@@ -25,6 +24,7 @@ import '../dinero.css';
 import '../resumen.css';
 
 import { getT } from '@/lib/i18n/servidor';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -38,6 +38,7 @@ export const dynamic = 'force-dynamic';
  */
 async function accionPrecio(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
   'use server';
+  const { t } = await getT('admin_dinero');
   const s = await requireSuperadmin();
   // Confirmación extra (step-up reutilizado; apagada mientras no se encienda LIKIDA_TOTP_ESCALONADO): cambiar el price mueve lo que se cobra.
   const pasoMfa = await pasoExtraSuperadmin('dinero_saas', s);
@@ -59,19 +60,11 @@ async function accionPrecio(_previo: ResultadoAccion, fd: FormData): Promise<Res
     // falta uno. Sin criterio no se puede emitir, y eso se dice aquí y no
     // cuando alguien apriete "Emitir" y no entienda por qué se negó.
     if (ivaIncluido === null) {
-      return {
-        ok: `Plan ${clave}: ${mxn(montoMensual)} ${moneda} al mes, leído de Stripe. OJO: ese price no declara si el `
-          + 'precio incluye IVA (tax_behavior = "unspecified"), así que TODAVÍA NO SE PUEDE EMITIR la mensualidad — '
-          + 'no se sabría si cobrar el precio o el precio × 1.16. Ponle "inclusive" o "exclusive" en Stripe y vuelve '
-          + 'a guardar el price.' + nota,
-      };
+      return { ok: t('neg5.cf_precio_sin_iva', { clave, monto: mxn(montoMensual), moneda, nota }) };
     }
-    return {
-      ok: `Plan ${clave}: ${mxn(montoMensual)} ${moneda} al mes ${ivaIncluido ? 'IVA INCLUIDO' : 'MÁS IVA'}, leído `
-        + 'de Stripe. Ya se puede contratar.' + nota,
-    };
+    return { ok: t('neg5.cf_precio_ok', { clave, monto: mxn(montoMensual), moneda, iva: ivaIncluido ? t('neg5.cf_iva_incluido') : t('neg5.cf_mas_iva'), nota }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'guardar el precio del plan') };
+    return { error: await mensajeDeFalla(e, 'verbo.costos_guardar_precio') };
   }
 }
 
@@ -125,12 +118,9 @@ async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<Res
     // Se dicen las TRES cifras. El total es lo que la flota transfiere y el
     // desglose es lo que va a salir en su CFDI: verlos juntos en la misma frase
     // es lo que permite cachar el día uno que el IVA quedó del lado equivocado.
-    return {
-      ok: `Mensualidad emitida por ${mxn(r.monto)} (base ${mxn(r.subtotal)} + IVA ${mxn(r.iva)}). La flota ya ve a `
-        + `dónde transferir, con la referencia ${r.referencia}.` + (anotado ? '' : AVISO_SIN_BITACORA),
-    };
+    return { ok: t('neg5.cf_mensualidad_emitida', { monto: mxn(r.monto), subtotal: mxn(r.subtotal), iva: mxn(r.iva), referencia: r.referencia, nota: anotado ? '' : AVISO_SIN_BITACORA }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'emitir la mensualidad') };
+    return { error: await mensajeDeFalla(e, 'verbo.costos_emitir_mensualidad') };
   }
 }
 
@@ -162,27 +152,35 @@ async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<
     let nota = '';
     try {
       const r = await timbrarFactura(id);
-      nota = 'uuid' in r ? ` CFDI timbrado: ${r.uuid.slice(0, 8)}…` : ` ${r.pendiente}`;
+      nota = 'uuid' in r ? t('neg5.cf_cfdi_timbrado', { uuid: r.uuid.slice(0, 8) }) : ` ${r.pendiente}`;
     } catch (e) {
       // A37-L-03: timeout/5xx/respuesta ilegible del PAC = el CFDI PUDO crearse. Decir
       // «NO se timbró» mandaba a timbrar a mano y emitía un segundo CFDI real.
       nota = (e as { ambiguo?: boolean } | null)?.ambiguo === true
-        ? t('costos_facturacion.el_pago_quedo_registrado', { e: mensajeParaPantalla(e, 'timbrar') })
-        : t('costos_facturacion.el_pago_quedo_registrado_2', { e: mensajeParaPantalla(e, 'timbrar') });
+        ? t('costos_facturacion.el_pago_quedo_registrado', { e: await mensajeDeFalla(e, 'verbo.costos_timbrar') })
+        : t('costos_facturacion.el_pago_quedo_registrado_2', { e: await mensajeDeFalla(e, 'verbo.costos_timbrar') });
     }
 
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
     return { ok: t('costos_facturacion.factura_marcada_como_pagada', { nota, anotado: anotado ? '' : AVISO_SIN_BITACORA }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'conciliar el pago') };
+    return { error: await mensajeDeFalla(e, 'verbo.costos_conciliar_pago') };
   }
 }
 
 
 const ESTADOS_SUSCRIPCION = ['prueba', 'activa', 'morosa', 'pausada'] as const;
 const TONO_SUSCRIPCION: Record<Suscripcion['estado'], TonoEstado> = { prueba: 'info', activa: 'ok', morosa: 'bad', pausada: 'warn', cancelada: 'muted' };
-const ROTULO_SUSCRIPCION: Record<Suscripcion['estado'], string> = { prueba: 'En prueba', activa: 'Activa', morosa: 'Morosa', pausada: 'Pausada', cancelada: 'Cancelada' };
+const rotuloSuscripcion = (t: TrDe<'admin_dinero'>): Record<Suscripcion['estado'], string> => ({
+  prueba: t('costos_facturacion.en_prueba'), activa: t('neg5.cf_s_activa'), morosa: t('neg5.cf_s_morosa'), pausada: t('neg5.cf_s_pausada'), cancelada: t('neg5.cf_s_cancelada'),
+});
+/** El estado de una factura en palabras; uno desconocido se muestra tal cual. */
+const rotuloFactura = (e: string, t: TrDe<'admin_dinero'>): string => (({
+  pendiente: t('neg5.est_pendiente'), fallida: t('neg5.est_fallida'), pagada: t('neg5.est_pagada'), cancelada: t('neg5.est_cancelada'),
+} as Record<string, string>)[e] ?? e);
+/** El criterio de IVA de un precio, en palabras (mismo criterio que `etiquetaIva`). */
+const rotuloIva = (criterio: boolean | null, t: TrDe<'admin_dinero'>): string => (criterio === true ? t('neg5.cf_iva_incluido_min') : criterio === false ? '+ IVA' : t('costos_facturacion.iva_sin_declarar'));
 
 const sinDato = (s: unknown): s is null => s === null;
 
@@ -240,15 +238,15 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
       ? { etiqueta: t('costos_facturacion.por_cobrar'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudo_leer'), reintentar: true }
       : recortada
         ? { etiqueta: t('costos_facturacion.por_cobrar'), valor: null, estado: 'error', mensaje: t('costos_facturacion.la_lista_esta_recortada'), reintentar: true }
-        : { etiqueta: t('costos_facturacion.por_cobrar'), valor: sumaPorCobrar, formato: 'mxn', nota: `${totalPorCobrar} ${totalPorCobrar === 1 ? 'factura pendiente o fallida' : 'facturas pendientes o fallidas'}.`, tono: totalPorCobrar > 0 ? 'warn' : undefined },
+        : { etiqueta: t('costos_facturacion.por_cobrar'), valor: sumaPorCobrar, formato: 'mxn', nota: t(totalPorCobrar === 1 ? 'neg5.cf_pend.uno' : 'neg5.cf_pend.otros', { n: totalPorCobrar }), tono: totalPorCobrar > 0 ? 'warn' : undefined },
     sinDato(suscripciones) || flotas === null
       ? { etiqueta: t('costos_facturacion.flotas_con_plan_asignado'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudo_leer_2'), reintentar: true }
-      : { etiqueta: t('costos_facturacion.flotas_con_plan_asignado'), valor: `${conSuscripcion} de ${flotas.length}`, nota: t('costos_facturacion.sin_plan_asignado_no'), tono: conSuscripcion < flotas.length ? 'warn' : 'ok' },
+      : { etiqueta: t('costos_facturacion.flotas_con_plan_asignado'), valor: t('neg5.n_de_m', { n: conSuscripcion, m: flotas.length }), nota: t('costos_facturacion.sin_plan_asignado_no'), tono: conSuscripcion < flotas.length ? 'warn' : 'ok' },
     sinDato(planes) || contables === null
       ? { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudieron_leer'), reintentar: true }
       : !hayStripe
         ? { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: null, estado: 'vacio', mensaje: t('costos_facturacion.stripe_sin_conectar') }
-        : { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: `${contables} de ${planes.length}`, nota: t('costos_facturacion.necesitan_precio_ligado_y') },
+        : { etiqueta: t('costos_facturacion.planes_que_se_pueden'), valor: t('neg5.n_de_m', { n: contables, m: planes.length }), nota: t('costos_facturacion.necesitan_precio_ligado_y') },
     {
       etiqueta: t('costos_facturacion.timbrado_de_cfdi'),
       valor: facturapiConfigurado() ? (modoFacturapi() === 'produccion' ? t('costos_facturacion.produccion') : t('costos_facturacion.en_prueba')) : t('costos_facturacion.sin_conectar'),
@@ -284,7 +282,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
         ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} estado="vacio" mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />
         : (
           <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} elevar entra="tarjeta">
-            <DonaMini gajos={[...porEstado.entries()].map(([etiqueta, valor]) => ({ etiqueta, valor }))} etiqueta={t('costos_facturacion.facturas_por_estado')} formato="numero" matiz={8} />
+            <DonaMini gajos={[...porEstado.entries()].map(([estado, valor]) => ({ etiqueta: rotuloFactura(estado, t), valor }))} etiqueta={t('costos_facturacion.facturas_por_estado')} formato="numero" matiz={8} />
           </Tarjeta>
         ),
   ];
@@ -317,32 +315,32 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
           {porCobrar !== null ? (
             <>
               {recortada ? (
-                <Aviso tono="warn">Se muestran {porCobrar.length} de {totalPorCobrar} facturas por cobrar: la lista está recortada. Las más viejas no aparecen aquí.</Aviso>
+                <Aviso tono="warn">{t('neg5.cf_recortada', { n: porCobrar.length, total: totalPorCobrar })}</Aviso>
               ) : null}
               {/* El total manda (es lo que entra al banco) y el desglose va debajo: es lo que va a salir en el CFDI. Sin desglose se dice, porque esa factura NO se va a poder timbrar. */}
               <TablaBase
                 etiqueta={t('costos_facturacion.facturas_por_cobrar')} idFila={(f) => f.id} tarjetaMovil filas={porCobrar}
                 columnas={[
                   { id: 'flota', titulo: t('costos_facturacion.flota'), principal: true, celda: (f) => f.tenantNombre },
-                  { id: 'periodo', titulo: t('costos_facturacion.periodo'), celda: (f) => `${f.periodoInicio} a ${f.periodoFin}` },
+                  { id: 'periodo', titulo: t('costos_facturacion.periodo'), celda: (f) => t('neg5.rango_a', { ini: f.periodoInicio, fin: f.periodoFin }) },
                   { id: 'ref', titulo: t('costos_facturacion.referencia'), celda: (f) => f.referencia ?? '—' },
-                  { id: 'estado', titulo: t('costos_facturacion.estado'), celda: (f) => <StatusChip tono={f.estado === 'fallida' ? 'bad' : 'warn'}>{f.estado === 'fallida' ? 'Fallida' : 'Pendiente'}</StatusChip> },
+                  { id: 'estado', titulo: t('costos_facturacion.estado'), celda: (f) => <StatusChip tono={f.estado === 'fallida' ? 'bad' : 'warn'}>{rotuloFactura(f.estado, t)}</StatusChip> },
                   {
                     id: 'total', titulo: t('costos_facturacion.total_a_transferir'), alinear: 'der',
                     celda: (f) => (
                       <>
                         {mxn(f.monto)}
-                        <span className="adm-din-sub">{f.subtotal === null || f.iva === null ? t('costos_facturacion.sin_desglose_no_se') : `${mxn(f.subtotal)} + IVA ${mxn(f.iva)}`}</span>
+                        <span className="adm-din-sub">{f.subtotal === null || f.iva === null ? t('costos_facturacion.sin_desglose_no_se') : t('neg5.cf_sub_mas_iva', { subtotal: mxn(f.subtotal), iva: mxn(f.iva) })}</span>
                       </>
                     ),
                   },
                 ]}
               />
               <div className="adm-din-forma">
-                <FormaConAviso accion={accionConciliar} boton="Marcar pagada" columnas="md:grid-cols-1">
+                <FormaConAviso accion={accionConciliar} boton={t('neg5.cf_marcar_pagada')} columnas="md:grid-cols-1">
                   <CampoSelect etiqueta={t('costos_facturacion.factura_que_ya_se')} name="facturaId" obligatorio defaultValue="">
-                    <option value="">Elige…</option>
-                    {porCobrar.map((f) => <option key={f.id} value={f.id}>{f.tenantNombre} · {f.periodoInicio} a {f.periodoFin} · {mxn(f.monto)}</option>)}
+                    <option value="">{t('neg5.elige')}</option>
+                    {porCobrar.map((f) => <option key={f.id} value={f.id}>{f.tenantNombre} · {t('neg5.rango_a', { ini: f.periodoInicio, fin: f.periodoFin })} · {mxn(f.monto)}</option>)}
                   </CampoSelect>
                   <CampoTexto etiqueta={t('costos_facturacion.referencia_del_banco')} name="referenciaBanco" obligatorio placeholder={t('costos_facturacion.folio_del_movimiento')} ayuda={t('costos_facturacion.un_banco_no_manda')} />
                 </FormaConAviso>
@@ -368,7 +366,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
             <BarraFiltros accion="/admin/costos-facturacion" enLinea etiqueta={t('costos_facturacion.filtrar_flotas_por_estado')} nActivos={filtroEstado ? 1 : 0} limpiarHref="/admin/costos-facturacion">
               <FiltroOpciones
                 etiqueta={t('costos_facturacion.estado_del_plan')} nombre="estado" valor={filtroEstado}
-                opciones={[{ valor: 'sin', rotulo: t('costos_facturacion.sin_plan_asignado') }, ...ESTADOS_SUSCRIPCION.map((e) => ({ valor: e, rotulo: ROTULO_SUSCRIPCION[e] }))]}
+                opciones={[{ valor: 'sin', rotulo: t('costos_facturacion.sin_plan_asignado') }, ...ESTADOS_SUSCRIPCION.map((e) => ({ valor: e, rotulo: rotuloSuscripcion(t)[e] }))]}
               />
             </BarraFiltros>
             <TablaBase
@@ -380,14 +378,14 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
                 {
                   id: 'estado', titulo: t('costos_facturacion.estado'),
                   celda: (f) => (f.suscripcion
-                    ? <StatusChip tono={TONO_SUSCRIPCION[f.suscripcion.estado]}>{ROTULO_SUSCRIPCION[f.suscripcion.estado]}</StatusChip>
+                    ? <StatusChip tono={TONO_SUSCRIPCION[f.suscripcion.estado]}>{rotuloSuscripcion(t)[f.suscripcion.estado]}</StatusChip>
                     : <StatusChip tono="muted">{t('costos_facturacion.sin_plan_asignado')}</StatusChip>),
                 },
-                { id: 'corte', titulo: t('costos_facturacion.corte_del_periodo'), celda: (f) => (f.suscripcion?.periodoFin ? <>{f.suscripcion.periodoFin}{f.suscripcion.vencida ? <StatusChip tono="warn">Vencido</StatusChip> : null}</> : '—') },
+                { id: 'corte', titulo: t('costos_facturacion.corte_del_periodo'), celda: (f) => (f.suscripcion?.periodoFin ? <>{f.suscripcion.periodoFin}{f.suscripcion.vencida ? <StatusChip tono="warn">{t('neg5.cf_vencido')}</StatusChip> : null}</> : '—') },
                 { id: 'gestion', titulo: t('costos_facturacion.se_gestiona'), celda: (f) => (f.suscripcion ? (f.suscripcion.stripeSubscriptionId ? t('costos_facturacion.en_stripe') : t('costos_facturacion.aqui')) : '—') },
               ]}
             />
-            <Disclosure titulo={t('costos_facturacion.asignar_activar_pausar_o')} resumen="Con huella en la bitácora">
+            <Disclosure titulo={t('costos_facturacion.asignar_activar_pausar_o')} resumen={t('neg5.cf_huella')}>
               <div className="adm-din-forma">
                 <p className="adm-din-nota">
                   
@@ -396,21 +394,21 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
                 {planes === null ? (
                   <Aviso tono="warn">{t('costos_facturacion.no_se_pudieron_leer_2')}</Aviso>
                 ) : (
-                  <FormaConAviso accion={accionGestionarPlan} boton="Asignar o cambiar plan" columnas="md:grid-cols-1">
+                  <FormaConAviso accion={accionGestionarPlan} boton={t('neg5.cf_asignar_cambiar')} columnas="md:grid-cols-1">
                     <input type="hidden" name="operacion" value="asignar" />
                     <CampoSelect etiqueta={t('costos_facturacion.flota')} name="tenantId" obligatorio defaultValue="">
-                      <option value="">Elige…</option>
+                      <option value="">{t('neg5.elige')}</option>
                       {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
                     </CampoSelect>
                     <CampoSelect etiqueta={t('costos_facturacion.plan')} name="planClave" obligatorio defaultValue="" ayuda={t('costos_facturacion.solo_se_asignan_planes')}>
-                      <option value="">Elige…</option>
+                      <option value="">{t('neg5.elige')}</option>
                       {planes.map((p) => <option key={p.clave} value={p.clave}>{p.nombre}</option>)}
                     </CampoSelect>
                   </FormaConAviso>
                 )}
-                <FormaConAviso accion={accionGestionarPlan} boton="Aplicar" columnas="md:grid-cols-1">
+                <FormaConAviso accion={accionGestionarPlan} boton={t('neg5.cf_aplicar')} columnas="md:grid-cols-1">
                   <CampoSelect etiqueta={t('costos_facturacion.flota')} name="tenantId" obligatorio defaultValue="">
-                    <option value="">Elige…</option>
+                    <option value="">{t('neg5.elige')}</option>
                     {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
                   </CampoSelect>
                   <CampoSelect etiqueta={t('costos_facturacion.que_hacer')} name="operacion" obligatorio defaultValue="activar" ayuda={t('costos_facturacion.activar_la_cuenta_para')}>
@@ -419,7 +417,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
                   </CampoSelect>
                 </FormaConAviso>
                 <FormaConAviso
-                  accion={accionGestionarPlan} boton="Cancelar suscripción" columnas="md:grid-cols-1"
+                  accion={accionGestionarPlan} boton={t('neg5.cf_cancelar_susc')} columnas="md:grid-cols-1"
                   confirmar={{
                     titulo: t('costos_facturacion.cancelar_la_suscripcion_de'),
                     descripcion: t('costos_facturacion.la_suscripcion_queda_cancelada'),
@@ -428,7 +426,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
                 >
                   <input type="hidden" name="operacion" value="cancelar" />
                   <CampoSelect etiqueta={t('costos_facturacion.flota')} name="tenantId" obligatorio defaultValue="">
-                    <option value="">Elige…</option>
+                    <option value="">{t('neg5.elige')}</option>
                     {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
                   </CampoSelect>
                 </FormaConAviso>
@@ -459,29 +457,24 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
                   <div className="adm-din-plan__precio">
                     {p.precioMensual === null
                       ? <small>{t('costos_facturacion.sin_configurar')}</small>
-                      : <>{mxn(p.precioMensual)} <small>al mes {etiquetaIva(p.precioIvaIncluido)}</small></>}
+                      : <>{mxn(p.precioMensual)} <small>{t('neg5.cf_al_mes', { iva: rotuloIva(p.precioIvaIncluido, t) })}</small></>}
                   </div>
                   {p.precioMensual !== null && p.precioIvaIncluido === null ? (
-                    <p className="adm-din-nota">
-                      Su precio en Stripe no dice si trae el IVA. Emitir la mensualidad está bloqueado: no se sabe si cobrar {mxn(p.precioMensual)} o {mxn(p.precioMensual * 1.16)}.
-                    </p>
+                    <p className="adm-din-nota">{t('neg5.cf_iva_nota', { a: mxn(p.precioMensual), b: mxn(p.precioMensual * 1.16) })}</p>
                   ) : null}
-                  <FormaConAviso accion={accionPrecio} boton="Guardar price" columnas="md:grid-cols-1">
+                  <FormaConAviso accion={accionPrecio} boton={t('neg5.cf_guardar_price')} columnas="md:grid-cols-1">
                     <input type="hidden" name="plan" value={p.clave} />
                     <CampoTexto etiqueta={t('costos_facturacion.price_id_de_stripe')} name="price" obligatorio defaultValue={p.stripePriceId ?? ''} placeholder="price_1Abc..." />
                   </FormaConAviso>
                 </div>
               ))}
             </div>
-            <p className="adm-din-nota">
-              El monto <strong>no se teclea</strong>: se lee de Stripe al guardar el precio, junto con el lado del IVA. Capturados aparte, el panel podría decir una cifra y Stripe cobrar otra.
-              Sin ese dato no se emite nada: un CFDI por 16 % de más solo se corrige cancelándolo ante el SAT.
-            </p>
+            <p className="adm-din-nota">{t('neg5.cf_monto_no_se_teclea')}</p>
           </>
         ) : null}
       </Tarjeta>
 
-      <Disclosure titulo={t('costos_facturacion.lo_que_aun_no')} resumen="MRR por plan, descuentos, cobranza automática">
+      <Disclosure titulo={t('costos_facturacion.lo_que_aun_no')} resumen={t('neg5.cf_mrr_resumen')}>
         <p className="adm-din-nota">
           
           {t('costos_facturacion.el_ingreso_recurrente_por')}

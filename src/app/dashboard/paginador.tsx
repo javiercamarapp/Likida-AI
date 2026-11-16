@@ -1,5 +1,9 @@
+'use client';
+
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { BotonEnlace, Icono } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { dashboard_b as dashboard_bEs } from '@/lib/i18n/es/dashboard_b';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS ENLACES DE PÁGINA — UNO (W2 «producto», 1-oct-2026).
@@ -22,7 +26,8 @@ export function EnlacePagina({ href, direccion, etiqueta }: {
   /** Solo cuando el rótulo estándar no sirve (p. ej. «Volver al inicio», «Ir a la última página (3)»). */
   etiqueta?: string;
 }) {
-  const texto = etiqueta ?? (direccion === 'siguiente' ? 'Siguiente' : direccion === 'inicio' ? 'Volver al inicio' : 'Anterior');
+  const { t } = useT('dashboard_b', dashboard_bEs);
+  const texto = etiqueta ?? (direccion === 'siguiente' ? t('pag.siguiente') : direccion === 'inicio' ? t('pag.inicio') : t('pag.anterior'));
   return (
     <BotonEnlace
       href={href} rel={direccion === 'siguiente' ? 'next' : direccion === 'anterior' ? 'prev' : undefined} tamano="sm"
@@ -36,5 +41,6 @@ export function EnlacePagina({ href, direccion, etiqueta }: {
 
 /** El contenedor: se pinta solo si hay algún enlace que mostrar. */
 export function NavPaginas({ children }: { children: React.ReactNode }) {
-  return <nav aria-label="Paginación" className="flex flex-wrap items-center gap-1.5">{children}</nav>;
+  const { t } = useT('dashboard_b', dashboard_bEs);
+  return <nav aria-label={t('pag.nav')} className="flex flex-wrap items-center gap-1.5">{children}</nav>;
 }

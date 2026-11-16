@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import AgenteConversacion from '../../dashboard/chat/agente-conversacion';
+import { MarcoPagina } from '../../ui-v2/componentes';
+import { getT } from '@/lib/i18n/servidor';
+import './copiloto.css';
 // El chrome de /admin no trae el CSS del chat (solo /dashboard lo importa en su layout).
 import '../../ui-v2/graficas.css';
 import '../../ui-v2/movimiento.css';
@@ -18,14 +21,18 @@ export const dynamic = 'force-dynamic';
  */
 export default async function PaginaCopiloto() {
   await requireSuperadmin();
-  // El MISMO contenedor que «Pregunta a tus datos» del dashboard (`.rv-chat-pagina`, ui-v2/chat.css): llena el alto del marco, el hilo
-  // scrollea por dentro y el chat queda con los márgenes del sistema. El envoltorio anterior (`.rv-agente-pagina`: borde, radio y
-  // altura fija) hacía una tarjeta dentro de otra y dejaba el botón «Historial» pegado a la esquina.
+  const { t } = await getT('admin_agentes');
+  // El marco único de pantalla (un solo h1, el nombre del menú) con la clase del chat: `.rv-chat-pagina` llena el alto, el hilo scrollea por
+  // dentro y el chat queda con los márgenes del sistema. El encabezado del marco queda a disposición de los lectores de pantalla
+  // (copiloto.css) porque el lienzo del agente es una portada a pantalla completa, igual que «Pregunta a tus datos».
   return (
-    <main className="rv-chat-pagina">
+    <MarcoPagina titulo={t('copiloto.titulo')} apoyo={t('copiloto.apoyo')} className="rv-chat-pagina rv-copiloto">
       <AgenteConversacion modo="superadmin" variante="pagina" />
-    </main>
+    </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Copiloto' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_agentes');
+  return { title: t('copiloto.titulo') };
+}

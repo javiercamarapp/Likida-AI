@@ -1,8 +1,10 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ShieldAlert } from 'lucide-react';
-import { BotonEnlace, Disclosure, EstadoError, EstadoVacio, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { BotonEnlace, Disclosure, EstadoError, EstadoVacio, FilaTarjetas, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { BarList, DonaMini } from '../../ui-v2/graficas';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import {
@@ -14,6 +16,7 @@ import { fechaHoraMx, numero } from '@/lib/formato';
 import { opcionesBitacora } from '@/lib/admin/bitacora';
 import { ChipCopiable } from '../bitacora/chip-copiable';
 import '../sistema.css';
+import '../control.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
@@ -58,11 +61,11 @@ const columnasEventos = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma, pag?: stri
     // UNA línea por fila (40 px): el origen es su propia columna, no un segundo renglón.
     id: 'que', titulo: t('trust_safety.que_y_de_donde'), principal: true,
     celda: (e) => (
-      <span className="font-medium">
+      <span className="adm-ctl-fuerte">
         {e.tipo.replace(/_/g, ' ')}
         {/* 0681: una ráfaga de la misma señal es UNA fila con su conteo — el número es lo medido, no una estimación. */}
         {(e.repeticiones ?? 1) > 1 && (
-          <span className="ml-1.5 cifra-mono text-xs text-muted" title={t('trust_safety.veces_que_se_vio_la_misma')}>×{e.repeticiones}</span>
+          <span className="adm-ctl-rep" title={t('trust_safety.veces_que_se_vio_la_misma')}>×{e.repeticiones}</span>
         )}
       </span>
     ),
@@ -89,7 +92,7 @@ const columnasEventos = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma, pag?: stri
   {
     id: 'flota', titulo: t('observabilidad.flota'),
     celda: (e) => {
-      if (!e.tenantId) return <span className="text-xs text-muted">{t('trust_safety.sin_flota')}</span>;
+      if (!e.tenantId) return <span className="adm-ctl-sin-fuente">{t('trust_safety.sin_flota')}</span>;
       const nombre = nombres.flotas.get(e.tenantId);
       return nombre ? <span className="adm-sis-celda-texto" title={nombre}>{nombre}</span> : <ChipCopiable texto={e.tenantId} copiar={t('bitacora.copiar')} copiado={t('bitacora.copiado')} />;
     },
@@ -107,7 +110,7 @@ const columnasCobertura = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): Columna
     id: 'filas', titulo: t('trust_safety.filas_30_dias'),
     celda: (f) => {
       const medida = f.filas30d === null ? t('trust_safety.sin_evento') : f.emite && f.filas30d === 0 ? t('trust_safety.0_en_30_dias') : numero(f.filas30d, idioma);
-      return <span className={`tabular whitespace-nowrap ${f.emite && f.filas30d === 0 ? 'text-muted' : ''}`}>{medida}</span>;
+      return <span className="adm-ctl-num" data-apagado={f.emite && f.filas30d === 0 ? '' : undefined}>{medida}</span>;
     },
   },
   {
@@ -119,6 +122,8 @@ const columnasCobertura = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): Columna
 
 export default async function TrustSafetyPage({ searchParams }: { searchParams: Promise<{ pag?: string; ver?: string }> }) {
   const { t, idioma } = await getT('admin_sistema');
+  const { t: tc } = await getT('resto');
+  const { t: ti } = await getT('admin_inicio');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const { pag, ver } = (await searchParams) ?? {};
@@ -161,25 +166,61 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
       /* ── Los conteos, medidos en la base ── */
       avisos={resumen === null ? <EstadoError>{t('trust_safety.no_se_pudieron_leer_los_conteos')}</EstadoError> : null}
       etiquetaCifras={t('trust_safety.ultimos_30_dias_por_severidad')}
-      cifras={resumen === null ? undefined : uniformes([
+      cifras={resumen === null ? undefined : observadas(uniformes([
         { etiqueta: t('trust_safety.severidad_alta_30_dias'), valor: resumen.d30.alta, tono: resumen.d30.alta > 0 ? 'bad' : undefined },
         { etiqueta: t('trust_safety.severidad_media_30_dias'), valor: resumen.d30.media, tono: resumen.d30.media > 0 ? 'warn' : undefined },
         { etiqueta: t('trust_safety.informativos_30_dias'), valor: resumen.d30.info },
         { etiqueta: t('trust_safety.total_historico'), valor: resumen.total },
-      ])}
+      ]), ti('a1r4.observado'))}
     >
+
+      {/* ── Dos gráficas con lo medido: severidad a 30 días y eventos por fuente ── */}
+      <FilaTarjetas variante="6-6" className="adm-ctl-pareja adm-ctl-pareja--libre">
+        {resumen === null ? (
+          <Tarjeta titulo={tc('ctl.ts_sev_titulo')} estado="error" mensaje={t('trust_safety.no_se_pudieron_leer_los_conteos')} />
+        ) : resumen.d30.alta + resumen.d30.media + resumen.d30.info === 0 ? (
+          <Tarjeta titulo={tc('ctl.ts_sev_titulo')} estado="vacio" mensaje={tc('ctl.ts_sev_vacio')} detalle={tc('ctl.ts_sev_vacio_detalle')} />
+        ) : (
+          <Tarjeta titulo={tc('ctl.ts_sev_titulo')}>
+            <div className="adm-ctl-grafica">
+              <DonaMini etiqueta={tc('ctl.ts_sev_titulo')} centro={numero(resumen.d30.alta + resumen.d30.media + resumen.d30.info, idioma)}
+                gajos={[
+                  { etiqueta: t('trust_safety.alta'), valor: resumen.d30.alta },
+                  { etiqueta: t('trust_safety.media'), valor: resumen.d30.media },
+                  { etiqueta: t('trust_safety.info'), valor: resumen.d30.info },
+                ]} />
+            </div>
+          </Tarjeta>
+        )}
+        {cobertura === null ? (
+          <Tarjeta titulo={tc('ctl.ts_fuente_titulo')} estado="error" mensaje={t('trust_safety.no_se_pudo_medir_la_cobertura')} />
+        ) : (
+          <Tarjeta titulo={tc('ctl.ts_fuente_titulo')}>
+            <div className="adm-ctl-grafica">
+              <BarList etiqueta={tc('ctl.ts_fuente_titulo')} formato={(v) => numero(v, idioma)}
+                items={cobertura.map((f) => ({ clave: f.id, etiqueta: f.titulo, valor: f.emite ? f.filas30d : null }))} />
+            </div>
+          </Tarjeta>
+        )}
+      </FilaTarjetas>
 
       {/* ── La cobertura REAL, medida ── */}
       <Tarjeta titulo={t('trust_safety.cobertura_que_fuentes_escriben_aqui_y')}>
         {cobertura === null ? (
-          <p className="m-0 text-sm text-muted">{t('trust_safety.no_se_pudo_medir_la_cobertura')}</p>
+          <EstadoError>{t('trust_safety.no_se_pudo_medir_la_cobertura')}</EstadoError>
         ) : (
           <>
-            <p className="m-0 mb-3 text-xs text-muted">{t('trust_safety.de_fuentes_emiten_las_demas_estan', { length: cobertura.filter((f) => f.emite).length, length2: cobertura.length })}</p>
-            <TablaBase etiqueta={t('trust_safety.cobertura_por_fuente_de_seguridad')} columnas={columnasCobertura(t, idioma)} filas={cobertura} idFila={(f) => f.id} altoMaximo={false} tarjetaMovil />
+            <p className="adm-sis-nota">{t('trust_safety.de_fuentes_emiten_las_demas_estan', { length: cobertura.filter((f) => f.emite).length, length2: cobertura.length })}</p>
+            {/* Top 8 a la vista; el resto plegado en la misma tabla (no se pierde ninguna fuente). */}
+            <TablaBase etiqueta={t('trust_safety.cobertura_por_fuente_de_seguridad')} columnas={columnasCobertura(t, idioma)} filas={cobertura.slice(0, 8)} idFila={(f) => f.id} altoMaximo={false} tarjetaMovil />
+            {cobertura.length > 8 ? (
+              <Disclosure titulo={t('pul9.ts_ver_todas', { n: cobertura.length - 8 })} variante="linea" resumen={String(cobertura.length - 8)}>
+                <TablaBase etiqueta={t('trust_safety.cobertura_por_fuente_de_seguridad')} columnas={columnasCobertura(t, idioma)} filas={cobertura.slice(8)} idFila={(f) => f.id} altoMaximo={false} tarjetaMovil />
+              </Disclosure>
+            ) : null}
             <Disclosure titulo={t('trust_safety.detalle_tecnico')} variante="linea" resumen={String(cobertura.length)}>
               <ul className="adm-sis-lista">
-                {cobertura.map((f) => <li key={f.id}><span>{f.titulo}</span><span className="break-words text-xs text-muted">{f.donde}</span></li>)}
+                {cobertura.map((f) => <li key={f.id}><span>{f.titulo}</span><span className="adm-sis-sub">{f.donde}</span></li>)}
               </ul>
             </Disclosure>
           </>
@@ -189,13 +230,13 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
       {/* ── La lista ── */}
       <Tarjeta titulo={t('trust_safety.eventos_registrados')}>
         {eventos === null ? (
-          <p className="m-0 text-sm text-muted">{t('trust_safety.no_se_pudieron_leer_los_eventos')}</p>
+          <EstadoError>{t('trust_safety.no_se_pudieron_leer_los_eventos')}</EstadoError>
         ) : eventos.length === 0 ? (
           <EstadoVacio titulo={t('trust_safety.sin_eventos')} icono={ShieldAlert} contenido>{t('trust_safety.ningun_evento_registrado_eso_no_prueba')}</EstadoVacio>
         ) : (
           <>
             <TablaLista<FilaSeguridad> etiqueta={t('trust_safety.eventos_de_seguridad_registrados')} columnas={columnasEventos(t, idioma, pag, nombres)} filas={eventos} idFila={(e) => String(e.id)} base="/admin/trust-safety" params={{ pag }} paginacion={{ tamano: 25 }} />
-            <p className="m-0 mt-3 text-xs text-muted">
+            <p className="adm-ctl-pie">
               {resumen === null
                 ? t('trust_safety.mostrando_los_ultimos_el_total_historico', { numero: numero(eventos.length, idioma) })
                 : t('trust_safety.mostrando_de_eventos_historicos_del_mas', { numero: numero(eventos.length, idioma), numero2: numero(resumen.total, idioma) })}
@@ -206,20 +247,20 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
 
       {/* ── Lo que este panel NO afirma — la lista de pendientes sale de la MISMA cobertura medida, no de texto fijo ── */}
       <Tarjeta titulo={t('trust_safety.que_se_registra_y_que_esta')}>
-        <p className="m-0 text-xs text-muted">{rico(t('trust_safety.emite_significa_solo_que_existe_codigo'), { e0: (c) => <code className="font-mono">{c}</code> })}</p>
+        <p className="adm-ctl-nota-sup">{rico(t('trust_safety.emite_significa_solo_que_existe_codigo'), { e0: (c) => <code className="adm-ctl-codigo">{c}</code> })}</p>
         {cobertura === null ? (
-          <p className="m-0 mt-2 text-xs text-muted">{t('trust_safety.sin_la_medicion_de_cobertura_no')}</p>
+          <p className="adm-ctl-nota-sup">{t('trust_safety.sin_la_medicion_de_cobertura_no')}</p>
         ) : cobertura.filter((f) => !f.emite).length === 0 ? (
-          <p className="m-0 mt-2 text-xs text-muted">{t('trust_safety.todas_las_fuentes_declaradas_emiten_eso')}</p>
+          <p className="adm-ctl-nota-sup">{t('trust_safety.todas_las_fuentes_declaradas_emiten_eso')}</p>
         ) : (
           <>
-            <p className="m-0 mt-2 text-xs text-muted">{t('trust_safety.pendiente_hoy_no_se_registra')}</p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-muted">
+            <p className="adm-ctl-nota-sup">{t('trust_safety.pendiente_hoy_no_se_registra')}</p>
+            <ul className="adm-ctl-vinetas">
               {cobertura.filter((f) => !f.emite).map((f) => <li key={f.id}>{f.titulo}</li>)}
             </ul>
           </>
         )}
-        <p className="m-0 mt-2 text-xs text-muted">{rico(t('trust_safety.tampoco_hay_un_pipeline_dedicado_de'), { e2: (c) => <code className="font-mono">{c}</code> })}</p>
+        <p className="adm-ctl-nota-sup">{rico(t('trust_safety.tampoco_hay_un_pipeline_dedicado_de'), { e2: (c) => <code className="adm-ctl-codigo">{c}</code> })}</p>
       </Tarjeta>
     </EsqueletoTablaMaestra>
   );

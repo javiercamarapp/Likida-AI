@@ -31,4 +31,7 @@ export const graficas: Record<keyof typeof graficasEs, string> = {
   'corridas.calor.dias': 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
   'crecimiento.activacion.ceros': 'No fleet has been signed up yet: all three stages are zero, and that is a real count.',
   'ventas.embudo.error': 'The pipeline could not be read right now. This does NOT mean there are no prospects.',
+  'pul9.ver_tabla': 'View as table',
+  'pul9.tabla_de': 'Table of {titulo}',
+  'pul9.periodo': 'Period',
 };

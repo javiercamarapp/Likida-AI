@@ -1,0 +1,6 @@
+/* Copiloto: el marco único con el chat a pantalla completa. El encabezado del marco se conserva para lectores de pantalla (un h1 con el
+   nombre del menú) y se oculta a la vista: la portada del agente ya es el título visible. Sin relleno ni separación propios. */
+[data-ui="v2"] .rv-marco.rv-copiloto { gap: 0; padding: 0; }
+[data-ui="v2"] .rv-marco.rv-copiloto > .rv-encabezado {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

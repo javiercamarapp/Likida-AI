@@ -2,6 +2,8 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useT } from '@/lib/i18n/proveedor';
+import { ui_comun as uiEs } from '@/lib/i18n/es/ui_comun';
 
 const LLAVE = 'likida-sidebar';
 
@@ -37,6 +39,8 @@ export function BotonSidebar() {
     if (leerColapsado()) document.documentElement.dataset.sidebar = 'min';
   }, []);
 
+  const { t } = useT('ui_comun', uiEs);
+  const etiqueta = t(min ? 'sidebar.expandir' : 'sidebar.contraer');
   function alternar() {
     const nuevo = !min;
     window.localStorage.setItem(LLAVE, nuevo ? 'min' : 'max');
@@ -47,8 +51,8 @@ export function BotonSidebar() {
 
   return (
     <button type="button" onClick={alternar}
-      aria-label={min ? 'Expandir menú' : 'Contraer menú'}
-      title={min ? 'Expandir menú' : 'Contraer menú'}
+      aria-label={etiqueta}
+      title={etiqueta}
       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
       style={{ color: 'var(--muted)' }}>
       {min ? <PanelLeftOpen width={15} height={15} strokeWidth={1.75} /> : <PanelLeftClose width={15} height={15} strokeWidth={1.75} />}

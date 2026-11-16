@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { KindBadge, type TipoDato } from './kind-badge';
 import type { Variacion } from './escala';
+import { useT } from '@/lib/i18n/proveedor';
+import { graficas as graficasEs } from '@/lib/i18n/es/graficas';
 
 /** Ancho real (px) de un elemento; 0 hasta medirlo. Las gráficas se pintan a píxeles reales: el texto nunca se estira. */
 export function useAncho<T extends HTMLElement>() {
@@ -68,19 +70,20 @@ export interface FilaTabla { rotulo: string; celdas: readonly string[] }
 
 /** «Ver como tabla»: la MISMA serie en una tabla accesible (región enfocable con nombre). Cierra la brecha de quien no puede leer el
  *  trazo; los valores son los de la gráfica, ya formateados, y un dato que falta sale «—», nunca 0. */
-export function TablaGrafica({ titulo, encabezados, filas, primera = 'Periodo' }: {
+export function TablaGrafica({ titulo, encabezados, filas, primera }: {
   titulo: string;
   encabezados: readonly string[];
   filas: readonly FilaTabla[];
   primera?: string;
 }) {
+  const { t } = useT('graficas', graficasEs);
   return (
     <details className="rv-tabla-grafica">
-      <summary>Ver como tabla</summary>
-      <div className="rv-tabla-grafica__caja" role="region" tabIndex={0} aria-label={`Tabla de ${titulo}`}>
+      <summary>{t('pul9.ver_tabla')}</summary>
+      <div className="rv-tabla-grafica__caja" role="region" tabIndex={0} aria-label={t('pul9.tabla_de', { titulo })}>
         <table>
           <caption className="rv-sr">{titulo}</caption>
-          <thead><tr><th scope="col">{primera}</th>{encabezados.map((h) => <th key={h} scope="col" className="rv-num">{h}</th>)}</tr></thead>
+          <thead><tr><th scope="col">{primera ?? t('pul9.periodo')}</th>{encabezados.map((h) => <th key={h} scope="col" className="rv-num">{h}</th>)}</tr></thead>
           <tbody>
             {filas.map((f, i) => (
               <tr key={`${f.rotulo}-${i}`}><th scope="row">{f.rotulo}</th>{f.celdas.map((c, j) => <td key={j} className="rv-num">{c}</td>)}</tr>

@@ -8,6 +8,7 @@ import {
 } from '@/lib/auth/admin-context';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ElegirFlotaContenido, type FlotaElegible } from './contenido';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ export default async function ElegirFlotaPage({
   searchParams,
 }: { searchParams: Promise<{ next?: string; error?: string; q?: string }> }) {
   await requireSuperadmin();
+  const { t } = await getT('admin_sistema');
   const sp = await searchParams;
   const next = destinoSeguro(sp.next);
 
@@ -84,8 +86,12 @@ export default async function ElegirFlotaPage({
       consulta={(sp.q ?? '').trim().slice(0, 80)}
       accionElegir={elegirFlota}
       accionQuitar={quitarSeleccion}
+      t={t}
     />
   );
 }
 
-export const metadata: Metadata = { title: 'Elegir flota' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('elegir_flota.titulo') };
+}

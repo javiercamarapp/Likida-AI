@@ -52,7 +52,7 @@ const columnasTr = (tx: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaTabla<
     id: 'agente', titulo: tx('observabilidad.agente'), principal: true,
     celda: (c) => (
       <>
-        <Link href={`/admin/corridas/${c.id}`}>{etiquetaInterruptor(c.agente, tx)}</Link>
+        <Link href={`/admin/corridas/${c.id}`}>{etiquetaInterruptor(c.agente.includes(':') ? c.agente : `agente:${c.agente}`, tx)}</Link>
         {/* EL ERROR, EN LA LISTA. Estaba solo dentro de la traza, una por una: con 50 corridas y tres fallos, encontrar el motivo eran tres
             clics a ciegas. El motivo ya viene REDACTADO para una persona (no un stack), así que se puede pintar tal cual. */}
         {c.error !== null && c.error !== '' ? <span className="adm-sis-error-fila" title={c.error}>{c.error}</span> : null}
@@ -112,6 +112,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
   const flotas: OpcionFiltro[] | null = opciones.flotas === null ? null : [{ valor: '', rotulo: tx('corridas.todas_las_flotas') }, ...opciones.flotas.map((f) => ({ valor: f.id, rotulo: f.nombre }))];
   const params = { agente: agente || undefined, estado: estado || undefined, tenant: tenant || undefined };
   const { t } = await getT('graficas');
+  const { t: ti } = await getT('admin_inicio');
   const calor = resultado !== null && resultado.corridas.length > 0 ? matrizDeCorridas(resultado.corridas.map((c) => c.inicio), t('corridas.calor.dias').split(',')) : null;
 
   return (
@@ -153,7 +154,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
             </Tarjeta>
           ) : null}
           {resultado.total > 0 ? (
-            <PiePaginas base="/admin/corridas" params={params} pagina={resultado.pagina} paginas={resultado.paginas} total={resultado.total} tamano={CORRIDAS_POR_PAGINA} unidad="corridas" />
+            <PiePaginas base="/admin/corridas" params={params} pagina={resultado.pagina} paginas={resultado.paginas} total={resultado.total} tamano={CORRIDAS_POR_PAGINA} unidad={ti('raiz7.pie_unidad_corridas')} t={ti} />
           ) : null}
         </>
       )}

@@ -53,6 +53,8 @@ function enlacesRotos(): Hallazgo[] {
   const rotos: Hallazgo[] = [];
   for (const f of archivos) {
     if (!/\.(ts|tsx)$/.test(f) || /\.(test|fixture)\.tsx?$/.test(f)) continue;
+    // Las traducciones en inglés de los guiones (`…/en/…`) repiten los mismos enlaces que el español: se vigila el original.
+    if (/\/en\/[^/]+\.tsx?$/.test(f)) continue;
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
     const lineas = readFileSync(f, 'utf8').split('\n');
     for (const linea of lineas) {

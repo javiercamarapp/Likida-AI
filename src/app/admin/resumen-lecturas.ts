@@ -10,6 +10,7 @@ import { getCalidadAgentes } from '@/lib/admin/calidad-agentes';
 import { getAnotacionesDespliegue } from '@/lib/admin/anotaciones-despliegue';
 import { bandejaPendiente } from '@/lib/likida/agentes/cola';
 import { ahoraMs } from '@/lib/saludo';
+import { idiomaActual } from '@/lib/i18n/servidor';
 import type { EntradaSemaforo, EntradaTuTurno } from '@/lib/admin/centro-mando';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -25,7 +26,8 @@ const sinLanzar = <T>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
 export const resumenNegocio = cache(() => sinLanzar(getResumenNegocio(undefined, VENTANA_FACTURAS_DIAS)));
 export const conteosPlataforma = cache(() => sinLanzar(getConteosPlataforma()));
 export const mrr = cache(() => sinLanzar(getMrr()));
-export const costoIaMes = cache(() => sinLanzar(costoIaMesActual()));
+/** La etiqueta del mes sale en el idioma activo (en inglés «November», no «noviembre»). */
+export const costoIaMes = cache(async () => sinLanzar(costoIaMesActual((await idiomaActual()) === 'en' ? 'en-US' : 'es-MX')));
 /** La bandeja NUNCA lanza; `null` solo si la lectura entera falló (`bandeja: null` en el panorama). */
 export const panorama = cache(() => obtenerPanoramaAccion(ahoraMs()));
 export const slos = cache(() => sinLanzar(getSLOs()));

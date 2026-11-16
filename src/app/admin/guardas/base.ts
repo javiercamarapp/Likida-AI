@@ -11,7 +11,6 @@ export const BASE_APOYO_LARGO: Record<string, number> = {};
 export const BASE_MARCOS_MULTIPLES: Record<string, number> = {};
 /** Pantallas (carpetas con page.tsx) que todavía no usan MarcoPagina. */
 export const BASE_SIN_MARCO: string[] = [
-  'app/admin/copiloto',
 ];
 
 /** admin_paginas_en_menu: direcciones estáticas que ninguna entrada ni pestaña de rutas.ts cubre. */

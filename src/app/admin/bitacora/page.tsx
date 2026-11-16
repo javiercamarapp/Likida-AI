@@ -5,12 +5,15 @@ import {
   FILAS_BITACORA, leerPaginaAccesos, leerPaginaBitacora, normalizarFiltroBitacora, opcionesBitacora,
   type AccesoSuperadmin, type EntradaBitacora, type FiltroBitacora, type PaginaAccesos, type PaginaBitacora,
 } from '@/lib/admin/bitacora';
-import { fechaHoraMx, numero } from '@/lib/formato';
+import { fechaCorta, fechaHoraMx, numero } from '@/lib/formato';
 import {
-  Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, hrefConParams,
+  Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, Tarjeta, FiltroOpciones, StatusChip, hrefConParams,
   type OpcionFiltro,
 } from '@/app/ui-v2/componentes';
 import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { Columnas } from '@/app/ui-v2/graficas';
+import { observadas } from '../sello-observado';
+import { uniformes } from '../cifras-uniformes';
 import { ahoraMs } from '@/lib/saludo';
 import { PiePaginas } from '../pie-paginas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
@@ -18,6 +21,7 @@ import { quienDe } from './quien';
 import { FiltroFechaIso } from './filtro-fecha-iso';
 import { etiquetaAccion, etiquetaEntidad, rotuloTipoAcceso } from './etiquetas';
 import '../sistema.css';
+import '../control.css';
 import { ChipCopiable } from './chip-copiable';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -77,6 +81,7 @@ function PanelRegistros({ total, titulo, rotulo, solo, children }: { total: numb
 export default async function BitacoraPage({ searchParams }: { searchParams: Promise<SP> }) {
   const { t } = await getT('admin_inicio');
   const { t: ts, idioma } = await getT('admin_sistema');
+  const { t: tc } = await getT('resto');
   await requireSuperadmin();
   const sp = await searchParams;
   const filtro: FiltroBitacora = normalizarFiltroBitacora({ accion: sp.accion, actorId: sp.persona, tenantId: sp.flota, desde: sp.desde, hasta: sp.hasta });
@@ -115,10 +120,29 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
   ];
   const lecturaActual = vista === 'acciones' ? lectura : accesos;
 
+  // Lo que se ve en ESTA página de registros (no de todo el historial): actividad por día y personas/flotas distintas. El total sí es exacto.
+  const filasPag: Array<{ dia: string; quien: string | null; flota: string | null }> =
+    vista === 'acciones' && lectura
+      ? lectura.filas.map((e) => ({ dia: e.ocurrioEn.slice(0, 10), quien: e.actor, flota: e.tenantNombre }))
+      : vista === 'accesos' && accesos && accesos.existe
+        ? accesos.filas.map((a) => ({ dia: a.creadoEn.slice(0, 10), quien: a.actor, flota: a.tenantNombre }))
+        : [];
+  const totalLeido = vista === 'acciones' ? (lectura?.total ?? null) : (accesos && accesos.existe ? accesos.total : null);
+  const porDia = new Map<string, number>();
+  for (const f of filasPag) porDia.set(f.dia, (porDia.get(f.dia) ?? 0) + 1);
+  const dias = [...porDia.keys()].sort().map((d) => ({ etiqueta: fechaCorta(d, idioma), valor: porDia.get(d) ?? 0 }));
+  const cifras = alReves || totalLeido === null ? undefined : observadas(uniformes([
+    { etiqueta: tc('ctl.bit_total'), valor: totalLeido, formato: 'entero', nota: tc('ctl.bit_total_nota') },
+    { etiqueta: tc('ctl.bit_personas'), valor: filasPag.length === 0 ? null : new Set(filasPag.map((f) => f.quien).filter((x): x is string => !!x)).size, estado: filasPag.length === 0 ? 'vacio' as const : undefined, mensaje: filasPag.length === 0 ? tc('ctl.bit_sin_filas') : undefined, formato: 'entero', nota: tc('ctl.bit_pagina_nota', { n: filasPag.length }) },
+    { etiqueta: tc('ctl.bit_flotas'), valor: filasPag.length === 0 ? null : new Set(filasPag.map((f) => f.flota).filter((x): x is string => !!x)).size, estado: filasPag.length === 0 ? 'vacio' as const : undefined, mensaje: filasPag.length === 0 ? tc('ctl.bit_sin_filas') : undefined, formato: 'entero', nota: tc('ctl.bit_pagina_nota', { n: filasPag.length }) },
+  ]), t('a1r4.observado'));
+
   return (
     <EsqueletoTablaMaestra
       titulo={t('bitacora.bitacora')}
       apoyo={t('bitacora.lo_que_se_hizo')}
+      cifras={cifras}
+      etiquetaCifras={tc('ctl.bit_cifras')}
       acciones={<BotonEnlace href="/admin/copiloto" variante="secondary" tamano="sm">Copiloto</BotonEnlace>}
       filtros={<>
       {hayAccesos ? (
@@ -152,7 +176,12 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
     >
       {alReves ? null : lecturaActual === null ? (
         <EstadoError reintentar>{t('bitacora.no_se_pudo_leer_2')}</EstadoError>
-      ) : vista === 'acciones' && lectura ? (
+      ) : vista === 'acciones' && lectura ? (<>
+        {dias.length > 0 ? (
+          <Tarjeta titulo={tc('ctl.bit_dia_titulo', { n: filasPag.length })}>
+            <Columnas datos={dias} etiqueta={tc('ctl.bit_dia_titulo', { n: filasPag.length })} formato="numero" matiz={1} />
+          </Tarjeta>
+        ) : null}
         <PanelRegistros total={lectura.total} titulo={ts('bitacora.panel_acciones')} rotulo={ts(lectura.total === 1 ? 'bitacora.registro_uno' : 'bitacora.registros_otros')} solo={ts('bitacora.solo_lectura')}>
           <TablaLista<EntradaBitacora>
             etiqueta={t('bitacora.acciones_registradas')} columnas={columnasAcciones(t, ts, idioma)} filas={lectura.filas} idFila={(e) => String(e.id)} base="/admin/bitacora" params={params}
@@ -160,15 +189,15 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
               ? { titulo: t('bitacora.ninguna_entrada_con_ese'), texto: t('bitacora.quita_un_filtro_o') }
               : { titulo: t('bitacora.la_bitacora_esta_vacia'), texto: t('bitacora.aun_no_se_ha') }}
           />
-          <PiePaginas base="/admin/bitacora" params={params} pagina={lectura.pagina} paginas={lectura.paginas} total={lectura.total} tamano={FILAS_BITACORA} unidad="entradas" />
+          <PiePaginas base="/admin/bitacora" params={params} pagina={lectura.pagina} paginas={lectura.paginas} total={lectura.total} tamano={FILAS_BITACORA} unidad={t('raiz7.pie_unidad_entradas')} t={t} />
         </PanelRegistros>
-      ) : accesos && accesos.existe ? (
+      </>) : accesos && accesos.existe ? (
         <PanelRegistros total={accesos.total} titulo={ts('bitacora.panel_accesos')} rotulo={ts(accesos.total === 1 ? 'bitacora.registro_uno' : 'bitacora.registros_otros')} solo={ts('bitacora.solo_lectura')}>
           <TablaLista<AccesoSuperadmin>
             etiqueta={t('bitacora.accesos_del_equipo')} columnas={columnasAccesos(t, ts, idioma)} filas={accesos.filas} idFila={(a) => String(a.id)} base="/admin/bitacora" params={params}
             vacio={{ titulo: t('bitacora.ningun_acceso_con_ese'), texto: t('bitacora.quita_un_filtro_o') }}
           />
-          <PiePaginas base="/admin/bitacora" params={params} pagina={accesos.pagina} paginas={accesos.paginas} total={accesos.total} tamano={FILAS_BITACORA} unidad="accesos" />
+          <PiePaginas base="/admin/bitacora" params={params} pagina={accesos.pagina} paginas={accesos.paginas} total={accesos.total} tamano={FILAS_BITACORA} unidad={t('raiz7.pie_unidad_accesos')} t={t} />
         </PanelRegistros>
       ) : null}
 

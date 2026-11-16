@@ -12,6 +12,7 @@ import {
 } from './respuestas';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { dashboard_a as dashboard_aEs } from '@/lib/i18n/es/dashboard_a';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // El estado y el transporte del chat (L5: salieron de `chat.tsx` SIN cambiar la lógica de datos). Mismas rutas, mismos cuerpos,
@@ -41,6 +42,7 @@ function leerDataUrl(archivo: File): Promise<string> {
 
 export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: { kpis: DashboardKpis | null; acred: AcreditablesOFuera; endpoint?: string }) {
   const { t: tx } = useT('resto', restoEs);
+  const { t: ta } = useT('dashboard_a', dashboard_aEs);
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const [historial, setHistorial] = useState<Turno[]>([]);
@@ -51,7 +53,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
   const [conversacionId, setConversacionId] = useState<string | null>(null);
   const [convs, setConvs] = useState<Conversacion[] | 'error' | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [fasePensando, setFasePensando] = useState('Pensando…');
+  const [fasePensando, setFasePensando] = useState(tx('op.pensando'));
   // La secuencia REAL de tools del turno en curso (streaming NDJSON del servidor): 'inicio' agrega un renglón, 'fin' palomea el suyo.
   const [pasosVivos, setPasosVivos] = useState<PasoTraza[]>([]);
   const control = useRef<AbortController | null>(null);
@@ -79,7 +81,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
     if (!archivo.type.startsWith('image/')) {
       // Lector universal (12-ago): PDF, Excel, CSV, XML de CFDI, texto… El extracto regresa acotado y se ADJUNTA a la conversación.
       setOcupado(true);
-      const etiqueta = `Adjuntar: ${archivo.name}`;
+      const etiqueta = ta('ana.adjuntar', { nombre: archivo.name });
       try {
         const b64 = await leerDataUrl(archivo);
         const resp = await fetch('/api/dashboard/archivo', {
@@ -106,7 +108,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
       return;
     }
     setOcupado(true);
-    const etiquetaQ = `Leer comprobante: ${archivo.name}`;
+    const etiquetaQ = ta('ana.leerComprobante', { nombre: archivo.name });
     try {
       const dataUrl = await leerDataUrl(archivo);
       // H14 (auditoría 24): esta llamada manda `?tenant=` como sus hermanas — un superadmin previsualizando una flota
@@ -125,13 +127,13 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
         return;
       }
       const filas: Array<[string, string]> = [];
-      if (d.campos.concepto) filas.push(['Concepto', String(d.campos.concepto)]);
-      if (typeof d.campos.monto === 'number') filas.push(['Monto', mxn(d.campos.monto)]);
-      if (d.campos.fecha) filas.push(['Fecha', String(d.campos.fecha)]);
-      if (d.campos.folio) filas.push(['Folio', String(d.campos.folio)]);
-      if (d.campos.rfcEmisor) filas.push(['RFC emisor', String(d.campos.rfcEmisor)]);
-      if (typeof d.campos.litros === 'number') filas.push(['Litros', litros(d.campos.litros)]);
-      if (typeof d.campos.confianza === 'number') filas.push(['Confianza del OCR', `${Math.round(d.campos.confianza * 100)}%`]);
+      if (d.campos.concepto) filas.push([ta('ana.concepto'), String(d.campos.concepto)]);
+      if (typeof d.campos.monto === 'number') filas.push([ta('ana.monto'), mxn(d.campos.monto)]);
+      if (d.campos.fecha) filas.push([ta('ana.fecha'), String(d.campos.fecha)]);
+      if (d.campos.folio) filas.push([ta('ana.folio'), String(d.campos.folio)]);
+      if (d.campos.rfcEmisor) filas.push([ta('ana.rfcEmisor'), String(d.campos.rfcEmisor)]);
+      if (typeof d.campos.litros === 'number') filas.push([ta('ana.litros'), litros(d.campos.litros)]);
+      if (typeof d.campos.confianza === 'number') filas.push([ta('ana.confianza'), `${Math.round(d.campos.confianza * 100)}%`]);
       agregar(etiquetaQ, {
         texto: tx('ch.esto_fue_lo_que_el_motor'),
         visual: filas.length > 0 ? { tipo: 'tabla', filas } : undefined,
@@ -206,7 +208,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
   async function preguntarAnalista(q: string, reemplazar: string | null) {
     setOcupado(true);
     setGenerando(true);
-    setFasePensando('Pensando…');
+    setFasePensando(tx('op.pensando'));
     setPasosVivos([]);
     detenido.current = false;
     const ctl = new AbortController();

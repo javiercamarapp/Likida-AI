@@ -6,6 +6,8 @@ import { Boton, BotonEnlace } from './boton';
 import { Campo } from './campos';
 import { ChipFuente, type MarcaId } from './marca-integracion';
 import { Drawer } from './overlay';
+import { useT } from '@/lib/i18n/proveedor';
+import { ui_comun as uiEs } from '@/lib/i18n/es/ui_comun';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CAJÓN DE FILTROS (R8): botón «Filtros N» (32 px) que abre SIEMPRE el Drawer de 420. Cuerpo = <form method="get"> (funciona sin JS: el
@@ -55,6 +57,7 @@ export interface PropsCajonFiltros {
 const SECCION = 'rv-cajon__sec';
 
 export function CajonFiltros(p: PropsCajonFiltros) {
+  const { t: tu } = useT('ui_comun', uiEs);
   const [abierto, setAbierto] = useState(p.abiertoInicial ?? false);
   const idForma = useId();
   const nombreDesde = p.periodo?.nombreDesde ?? 'desde';
@@ -97,7 +100,7 @@ export function CajonFiltros(p: PropsCajonFiltros) {
           descripcion={p.descripcion}
           pie={<>
             <BotonEnlace href={p.limpiarHref} variante="secondary">Limpiar</BotonEnlace>
-            <Boton type="submit" form={idForma} variante="primary">Aplicar</Boton>
+            <Boton type="submit" form={idForma} variante="primary">{tu('filtros.aplicar')}</Boton>
           </>}
         >
           <form id={idForma} method="get" action={p.accion} className="rv-cajon" onSubmit={alEnviar}>
@@ -142,13 +145,13 @@ export function CajonFiltros(p: PropsCajonFiltros) {
 
             {p.fuentes && p.fuentes.opciones.length > 0 ? (
               <section className={SECCION} aria-labelledby={`${idForma}-fue`}>
-                <h3 id={`${idForma}-fue`} className="rv-cajon__tit">{p.fuentes.titulo ?? 'Fuentes'}</h3>
+                <h3 id={`${idForma}-fue`} className="rv-cajon__tit">{p.fuentes.titulo ?? tu('filtros.fuentes')}</h3>
                 <div className="rv-cajon__fuentes">
                   {p.fuentes.opciones.map((o) => (
                     <ChipFuente key={o.valor} id={o.marca} etiqueta={o.etiqueta} name={p.fuentes!.nombre} value={o.valor} activo={p.fuentes!.seleccionadas.includes(o.valor)} />
                   ))}
                 </div>
-                <p className="rv-cajon__ayuda">Sin selección se incluyen todas.</p>
+                <p className="rv-cajon__ayuda">{tu('filtros.sin_seleccion')}</p>
               </section>
             ) : null}
 
@@ -163,16 +166,16 @@ export function CajonFiltros(p: PropsCajonFiltros) {
 
             {p.avanzado ? (
               <section className={SECCION} aria-labelledby={`${idForma}-ava`}>
-                <h3 id={`${idForma}-ava`} className="rv-cajon__tit">Avanzado</h3>
+                <h3 id={`${idForma}-ava`} className="rv-cajon__tit">{tu('filtros.avanzado')}</h3>
                 <details className="rv-cajon__avanzado">
-                  <summary>Mostrar opciones avanzadas</summary>
+                  <summary>{tu('filtros.mostrar_avanzadas')}</summary>
                   <div className="rv-cajon__avanzado-cuerpo">{p.avanzado}</div>
                 </details>
               </section>
             ) : null}
 
-            <p className="rv-cajon__nota">{p.nota ?? 'Cambiar filtros reinicia la paginación.'}</p>
-            <button type="submit" className="rv-sr" tabIndex={-1} aria-hidden="true">Aplicar</button>
+            <p className="rv-cajon__nota">{p.nota ?? tu('filtros.reinicia')}</p>
+            <button type="submit" className="rv-sr" tabIndex={-1} aria-hidden="true">{tu('filtros.aplicar')}</button>
           </form>
         </Drawer>
       ) : null}

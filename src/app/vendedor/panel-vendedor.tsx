@@ -50,7 +50,7 @@ export async function ejecutarComoVendedor(
 ): Promise<ResultadoAccion> {
   const s = await getSessionTenant();
   if (!s || (s.rol !== 'vendedor' && s.rol !== 'superadmin')) {
-    return { ok: false, error: 'Tu sesión no puede tocar prospectos.' };
+    return { ok: false, error: (await getT('ui_comun')).t('vend.sin_permiso') };
   }
   const veredictoMfa = await veredictoMfaDeSesion(s);
   if (veredictoMfa !== 'ok') {
@@ -92,6 +92,7 @@ export async function PanelVendedor({
   pag?: string;
 }) {
   const esVendedor = rol === 'vendedor';
+  const { t: tu } = await getT('ui_comun');
 
   // El vendedor ve SU cartera (filtro por el userId de SESIÓN, en SQL); el
   // superadmin ve todo y además resuelve nombres para las tarjetas.
@@ -150,7 +151,7 @@ export async function PanelVendedor({
         mas: restantes > 0
           ? {
             href: `${RUTA}?col=${e.valor}&pag=${esta ? pagina + 1 : 2}`,
-            etiqueta: `${restantes} más en esta etapa — ver ${Math.min(TOPE_COLUMNA, restantes)} más`,
+            etiqueta: tu('vend.mas_etapa', { restantes, ver: Math.min(TOPE_COLUMNA, restantes) }),
           }
           : null,
         menos: esta && pagina > 1
@@ -188,34 +189,33 @@ export async function PanelVendedor({
   return (
     <EsqueletoPortada
       area={tv('r4.vend_area')} apoyo={tv('r4.vend_apoyo')}
-      titulo={esVendedor ? 'Mis prospectos' : 'Prospectos (soporte)'}
-      cifras={cifras} etiquetaCifras={esVendedor ? 'Mi cartera' : 'Cartera (todos)'}
+      titulo={esVendedor ? tu('vend.mis_prospectos') : tu('vend.prospectos_soporte')}
+      cifras={cifras} etiquetaCifras={esVendedor ? tu('vend.mi_cartera') : tu('vend.cartera_todos')}
     >
       {prospectos === null ? (
         <Aviso tono="error">
-          No se pudieron cargar tus prospectos en este momento. Recarga la página — esto NO
-          significa que no tengas: significa que no se pudo leer.
+          {tu('vend.no_cargo')}
         </Aviso>
       ) : (
         <>
           {/* La regla de comisión, con su aclaración pegada: 50/20 es la regla pactada; el dinero sale de cobros reales, hoy $0. */}
-          <Tarjeta titulo="Tu comisión">
+          <Tarjeta titulo={tu('vend.tu_comision')}>
             <div className="vnd-comision">
               <Icono icono={BadgePercent} tam={16} />
               <div>
                 <p className="vnd-comision__regla">{comision.primerMes}</p>
                 <p className="vnd-comision__regla">{comision.recurrente}</p>
                 <p className="vnd-comision__nota">
-                  Falta el cálculo: aún no hay registro de comisiones ni la liga de cada prospecto cerrado con su flota y su factura pagada, así que no se muestra ninguna cifra.
+                  {tu('vend.falta_calculo')}
                 </p>
               </div>
             </div>
           </Tarjeta>
 
-          <Tarjeta titulo={esVendedor ? 'Tu tablero' : 'El tablero completo'}
+          <Tarjeta titulo={esVendedor ? tu('vend.tu_tablero') : tu('vend.tablero_completo')}
             estado={prospectos.length === 0 ? 'vacio' : 'ok'}
-            mensaje="Sin prospectos asignados"
-            detalle="En cuanto te asignen los primeros (a mano o con el asignador), aparecen aquí con la empresa y la vacante que publicó."
+            mensaje={tu('vend.sin_asignados')}
+            detalle={tu('vend.sin_asignados_detalle')}
             iconoVacio={Inbox}>
             {columnas !== null && (
               <TableroProspectos

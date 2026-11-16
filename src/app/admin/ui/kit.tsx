@@ -10,6 +10,8 @@ import { Cifra } from '../../ui-v2/graficas/cifra';
 import { Tarjeta } from '../../ui-v2/componentes/tarjeta';
 import { EstadoVacio as EstadoVacioV2 } from '../../ui-v2/componentes/estado-vacio';
 import { EstadoError as EstadoErrorV2 } from '../../ui-v2/componentes/estado-error';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_inicio as admin_inicioEs } from '@/lib/i18n/es/admin_inicio';
 import './kit.css';
 
 /**
@@ -53,6 +55,7 @@ export function KpiTile({
    *  sección se leería como que las tres comparten un mismo fundamento. */
   nota?: string;
 }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   // El conteo vive aquí (hook existente): arranca en el valor REAL y solo anima cuando el valor cambia; Cifra recibe el texto ya formateado.
   const reducido = usePrefersReducedMotion();
   const mostrado = useCountUp(valor ?? 0, !reducido);
@@ -64,10 +67,10 @@ export function KpiTile({
         etiqueta={etiqueta} valor={texto} icono={icono}
         serie={sparkline && sparkline.length > 1 ? sparkline : undefined}
         deltaPct={tendencia === undefined ? undefined : tendencia === null ? null : { pct: tendencia, bueno: tendencia >= 0 }}
-        deltaNota="vs los 7 días previos"
+        deltaNota={t('raiz7.kit_vs_7_dias')}
         nota={nota ?? (sinSerie ? vacio : undefined)}
         estado={valor === null ? 'vacio' : undefined}
-        mensaje={valor === null ? (vacio ?? 'Sin dato en este periodo') : undefined}
+        mensaje={valor === null ? (vacio ?? t('raiz7.kit_sin_dato_periodo')) : undefined}
         tono={destacar ? 'warn' : undefined}
         matiz={destacar ? undefined : 1}
       />
@@ -107,8 +110,8 @@ export const BOTON_PERIODO =
  *  /admin): jerarquía cifra-primero y el slot `flechas` para los ‹ › de
  *  periodo de /dashboard. */
 export function StatCard({
-  icono, etiqueta, valor, formato = 'numero', delta, deltaNota = 'vs periodo anterior', flechas, nota,
-  sinDato = 'sin dato en este periodo',
+  icono, etiqueta, valor, formato = 'numero', delta, deltaNota, flechas, nota,
+  sinDato,
 }: {
   icono: React.ReactNode;
   etiqueta: string;
@@ -129,6 +132,7 @@ export function StatCard({
   /** Nota fija de una línea (cita legal, aclaración del supuesto). */
   nota?: string;
 }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   const reducido = usePrefersReducedMotion();
   const mostrado = useCountUp(valor ?? 0, !reducido);
   const texto = valor === null ? null : resolverFormato(formato)(mostrado);
@@ -136,8 +140,8 @@ export function StatCard({
     <section className="rv-kpis kit-celda" aria-label={etiqueta} title={valor === null ? undefined : resolverFormato(formato)(valor)}>
       <Cifra
         etiqueta={etiqueta} valor={texto} icono={icono} flechas={flechas}
-        deltaPct={delta} deltaNota={deltaNota} nota={nota}
-        estado={valor === null ? 'vacio' : undefined} mensaje={valor === null ? sinDato : undefined}
+        deltaPct={delta} deltaNota={deltaNota ?? t('raiz7.kit_vs_periodo_anterior')} nota={nota}
+        estado={valor === null ? 'vacio' : undefined} mensaje={valor === null ? (sinDato ?? t('raiz7.kit_sin_dato_periodo_min')) : undefined}
       />
     </section>
   );
@@ -151,7 +155,7 @@ export function StatCard({
  *  jamás un $0 o un 0% con cara de medición. En /admin mide el costo de IA
  *  del mes; en /dashboard, el presupuesto diario de análisis del tenant.
  *  El widget de PLAN real llega cuando exista suscripción real (DESIGN §3). */
-export function WidgetUso({ etiqueta, valor, detalle, tope, href, hrefTexto = 'Ver' }: {
+export function WidgetUso({ etiqueta, valor, detalle, tope, href, hrefTexto }: {
   /** Micro-rótulo mono uppercase: "COSTO DE IA · AGOSTO". */
   etiqueta: string;
   /** La cifra YA formateada por el llamador (lib/formato) — `null` = no se
@@ -163,12 +167,13 @@ export function WidgetUso({ etiqueta, valor, detalle, tope, href, hrefTexto = 'V
   href?: string;
   hrefTexto?: string;
 }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   const pct = tope && tope.limite > 0 ? Math.min(100, Math.round((tope.usado / tope.limite) * 100)) : null;
   return (
     <div className="kit-uso">
       <div className="kit-uso__etq">{etiqueta}</div>
       {valor === null ? (
-        <p className="kit-uso__nota">No se pudo leer ahora mismo.</p>
+        <p className="kit-uso__nota">{t('raiz7.kit_no_se_pudo_leer')}</p>
       ) : (
         <>
           {/* El sidebar mide ~200 px: recorte de ancho con la cifra completa en `title` (escala 50k). */}
@@ -180,7 +185,7 @@ export function WidgetUso({ etiqueta, valor, detalle, tope, href, hrefTexto = 'V
         </>
       )}
       {href && (
-        <a href={href} className="kit-uso__ver">{hrefTexto} →</a>
+        <a href={href} className="kit-uso__ver">{hrefTexto ?? t('raiz7.kit_ver')} →</a>
       )}
     </div>
   );
@@ -192,10 +197,11 @@ export function WidgetUso({ etiqueta, valor, detalle, tope, href, hrefTexto = 'V
  *  lleva a la pantalla (o ancla) donde se profundiza — el pariente chico del
  *  link del `BannerInsight`. Es `<a>` y no `Link` a propósito: la mitad de
  *  sus destinos son anclas (`#estadisticas`) en la misma página. */
-export function VerMas({ href, children = 'Ver estadísticas' }: { href: string; children?: React.ReactNode }) {
+export function VerMas({ href, children }: { href: string; children?: React.ReactNode }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   return (
     <a href={href} className="kit-vermas">
-      {children} <ArrowRight width={12} height={12} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+      {children ?? t('raiz7.kit_ver_estadisticas')} <ArrowRight width={12} height={12} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
     </a>
   );
 }
@@ -206,7 +212,7 @@ export type Estado = 'ok' | 'warn' | 'bad' | 'neutral' | 'info';
 
 const ESTILO_ESTADO: Record<Estado, { bg: string; fg: string; label: string }> = {
   ok: { bg: 'var(--okbg)', fg: 'var(--ok)', label: 'OK' },
-  warn: { bg: 'var(--warnbg)', fg: 'var(--warn)', label: 'Atención' },
+  warn: { bg: 'var(--warnbg)', fg: 'var(--warn)', label: 'Warn' },
   bad: { bg: 'var(--badbg)', fg: 'var(--bad)', label: 'Error' },
   neutral: { bg: 'var(--canvas)', fg: 'var(--muted)', label: '—' },
   // Aditivo (v2): en v1 --info/--infobg no existen y caen a los neutros.
@@ -216,11 +222,12 @@ const ESTILO_ESTADO: Record<Estado, { bg: string; fg: string; label: string }> =
 /** Nunca color solo — siempre trae texto (label o children), para no
  *  depender de percibir el matiz (regla del skill de dataviz). */
 export function StatusPill({ estado, children }: { estado: Estado; children?: React.ReactNode }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   const e = ESTILO_ESTADO[estado];
   return (
     <span className="text-xs font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1.5 shrink-0"
       style={{ background: e.bg, color: e.fg }}>
-      {children ?? e.label}
+      {children ?? (estado === 'warn' ? t('raiz7.kit_atencion') : e.label)}
     </span>
   );
 }
@@ -265,7 +272,7 @@ export function ChartCard({
 /** El mismo bloque "sin datos suficientes" que ya se repetía a mano en
  *  cada página — consolidado aquí (§H: "no gráficas/widgets ad-hoc por
  *  página"). Nunca rellena con datos de ejemplo. */
-export function EstadoVacio({ icono, titulo = 'Sin datos por ahora', children, accion }: {
+export function EstadoVacio({ icono, titulo, children, accion }: {
   icono?: React.ReactNode;
   /** Título corto (≤6 palabras, sin punto). Por omisión, el genérico. */
   titulo?: string;
@@ -275,13 +282,14 @@ export function EstadoVacio({ icono, titulo = 'Sin datos por ahora', children, a
    *  vive en Despacho» sin enlace). */
   accion?: { href: string; texto: string };
 }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   // R9: vacío CONTENIDO (alto natural con tope de 220 px, no se estira a la altura del vecino) y con el icono que el llamador ya
   // pasaba y que antes se descartaba (`void icono`). El icono es un elemento ya renderizado, nunca un componente ni una función.
   return (
     <div className="rv-tarjeta kit-vacio" data-contenida>
       <div className="rv-tarjeta__cuerpo">
         {icono ? <span className="kit-vacio__icono" aria-hidden="true">{icono}</span> : null}
-        <EstadoVacioV2 titulo={titulo} contenido
+        <EstadoVacioV2 titulo={titulo ?? t('raiz7.kit_sin_datos')} contenido
           accion={accion ? <Link href={accion.href} className="kit-vermas">{accion.texto}</Link> : undefined}>
           {children}
         </EstadoVacioV2>
@@ -321,7 +329,7 @@ export function EstadoError({ mensaje, onReintentar }: { mensaje: string; onRein
  * `deltaPct` viene de `pctCambio` y llega `null` sin comparable: el chip
  * se omite, nunca un "0%" con cara de medición.
  */
-export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto = 'Ver estadísticas', children }: {
+export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto, children }: {
   /** Micro-rótulo mono uppercase: "ESTA SEMANA", "ESTE MES". */
   etiqueta: string;
   /** % de cambio real vs el periodo anterior, o `null` si no hay comparable. */
@@ -332,6 +340,7 @@ export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto = 'Ver estad
   /** La frase con la cifra ya formateada por el llamador (lib/formato). */
   children: React.ReactNode;
 }) {
+  const { t } = useT('admin_inicio', admin_inicioEs);
   return (
     <div className="kit-banner" data-banner="insight">
       <span className="kit-banner__punto" />
@@ -341,10 +350,10 @@ export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto = 'Ver estad
       {deltaPct !== null && (
         <span className="kit-banner__delta tabular" data-bueno={deltaPct >= 0 ? '1' : '0'}>
           {/* Sin toLocaleString: el formato vive SOLO en lib/formato. */}
-          {deltaPct >= 0 ? '↑' : '↓'} {Math.abs(Math.round(deltaPct * 10) / 10)}% vs periodo anterior
+          {deltaPct >= 0 ? '↑' : '↓'} {Math.abs(Math.round(deltaPct * 10) / 10)}% {t('raiz7.kit_vs_periodo_anterior')}
         </span>
       )}
-      <a href={href} className="kit-banner__ver">{hrefTexto} →</a>
+      <a href={href} className="kit-banner__ver">{hrefTexto ?? t('raiz7.kit_ver_estadisticas')} →</a>
     </div>
   );
 }

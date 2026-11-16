@@ -1,22 +1,25 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { resolverSolicitudArco } from '@/lib/likida/repo';
-import { fechaMx, hoyMx } from '@/lib/formato';
+import { fechaCorta, fechaMx, hoyMx, numero } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo, conteo } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
 import { agregarDiasHabiles } from '@/lib/admin/dias-habiles';
-import { mensajeParaPantalla } from '@/lib/likida/administracion';
-import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
+import { mensajeDeFalla } from '../mensaje-falla';
+import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, FilaTarjetas, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
+import { Columnas, DonaMini } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { BarraVistas, PanelesVistas, ProveedorVistas, type OpcionVista } from '../aprobaciones/vistas';
-import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
+import { FormaConAviso, type ResultadoAccion } from '../../ui-v2/componentes';
 import '../sistema.css';
+import '../control.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
@@ -46,6 +49,8 @@ const chipArco = (t: TSistema = T_SISTEMA_ES): Record<string, { tono: TonoEstado
  */
 export default async function CompliancePage({ searchParams }: { searchParams: Promise<{ pagina?: string }> }) {
   const { t, idioma } = await getT('admin_sistema');
+  const { t: tc } = await getT('resto');
+  const { t: ti } = await getT('admin_inicio');
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   async function accionResolver(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -71,7 +76,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
     try {
       r = await resolverSolicitudArco(sol.tenant_id as string, solicitudId, resolucion);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'resolver la solicitud', idioma) };
+      return { error: await mensajeDeFalla(e, 'verbo.cmp_resolver_solicitud') };
     }
     revalidatePath('/admin/compliance');
     // A37-S05-04: el resultado del envío NO se descarta — la pantalla no
@@ -96,6 +101,22 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
   // pantalla SIEMPRE vacía. El superadmin ve TODAS las flotas, con la flota en cada solicitud.
   const hoy = hoyMx(new Date(ahoraMs()));
   const pagina = Math.max(1, Number.parseInt((await searchParams)?.pagina ?? '1', 10) || 1);
+
+  // Solicitudes recibidas por mes (todas las leídas, sin huecos entre el primer y el último mes; máx. 12).
+  const conteoMes = new Map<string, number>();
+  for (const s of solicitudes) { const m = s.recibidaEn.slice(0, 7); conteoMes.set(m, (conteoMes.get(m) ?? 0) + 1); }
+  const meses = [...conteoMes.keys()].sort();
+  const porMes: { etiqueta: string; valor: number }[] = [];
+  if (meses.length > 0) {
+    let [a, m] = meses[0].split('-').map(Number);
+    const [az, mz] = meses[meses.length - 1].split('-').map(Number);
+    while (a < az || (a === az && m <= mz)) {
+      const k = `${a}-${String(m).padStart(2, '0')}`;
+      porMes.push({ etiqueta: fechaCorta(`${k}-01`, idioma).replace(/\d+/g, '').trim(), valor: conteoMes.get(k) ?? 0 });
+      m += 1; if (m > 12) { m = 1; a += 1; }
+    }
+  }
+  porMes.splice(0, Math.max(0, porMes.length - 12));
 
   const columnas: ColumnaTabla<SolicitudArcoPanel>[] = [
     { id: 'recibida', titulo: t('compliance.recibida'), corta: true, celda: (s) => fechaMx(s.recibidaEn, idioma) },
@@ -142,7 +163,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
       titulo={t('compliance.seguridad_y_datos')}
       apoyo={t('compliance.las_solicitudes_de_derechos_de_los')}
       etiquetaCifras={t('compliance.solicitudes_arco')}
-      cifras={uniformes(lectura === null ? [
+      cifras={observadas(uniformes(lectura === null ? [
         { etiqueta: t('compliance.por_responder'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
         { etiqueta: t('compliance.vencen_pronto'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
         { etiqueta: t('compliance.kpi_resueltas'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
@@ -152,13 +173,29 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
         { etiqueta: t('compliance.por_responder'), valor: null, estado: 'vacio', mensaje: t('compliance.kpi_sin_solicitudes') },
         { etiqueta: t('compliance.vencen_pronto'), valor: null, estado: 'vacio', mensaje: t('compliance.kpi_sin_solicitudes') },
         { etiqueta: t('compliance.kpi_resueltas'), valor: null, estado: 'vacio', mensaje: t('compliance.kpi_sin_solicitudes') },
-        { etiqueta: t('compliance.kpi_obligaciones'), valor: `${obligaciones.filter((o) => o.medida).length} / ${obligaciones.length}`, nota: t('compliance.kpi_obligaciones_nota') },
+        { etiqueta: t('compliance.kpi_obligaciones'), valor: `${obligaciones.filter((o) => o.medida).length} / ${obligaciones.length}`, tipo: 'calculado', nota: t('compliance.kpi_obligaciones_nota') },
       ] : [
-        { etiqueta: t('compliance.por_responder'), valor: pendientes.length, formato: 'entero', tono: pendientes.length > 0 ? 'warn' : undefined, nota: t('compliance.recibidas_o_en_proceso_de_todas') },
+        { etiqueta: t('compliance.por_responder'), valor: pendientes.length, formato: 'entero', tono: pendientes.length > 0 ? 'warn' : undefined, nota: t('compliance.recibidas_o_en_proceso_de_todas'),
+          segmentos: pendientes.length > 0 ? [{ etiqueta: tc('ctl.cmp_seg_vencidas'), valor: vencidasN }, { etiqueta: tc('ctl.cmp_seg_en_plazo'), valor: pendientes.length - vencidasN }] : undefined },
         { etiqueta: t('compliance.vencen_pronto'), valor: lectura.pendientesVencen, formato: 'entero', tono: lectura.pendientesVencen > 0 ? 'bad' : undefined, nota: t('compliance.plazo_en_5_dias_habiles_o') },
         { etiqueta: t('compliance.kpi_resueltas'), valor: resueltas.length, formato: 'entero' },
-        { etiqueta: t('compliance.kpi_obligaciones'), valor: `${obligaciones.filter((o) => o.medida).length} / ${obligaciones.length}`, nota: t('compliance.kpi_obligaciones_nota') },
-      ])}
+        { etiqueta: t('compliance.kpi_obligaciones'), valor: `${obligaciones.filter((o) => o.medida).length} / ${obligaciones.length}`, tipo: 'calculado', nota: t('compliance.kpi_obligaciones_nota') },
+      ]), ti('a1r4.observado'))}
+      agrupacion={lectura === null || solicitudes.length === 0 ? undefined : (
+        <FilaTarjetas variante="8-4" className="adm-ctl-pareja">
+          <Tarjeta titulo={tc('ctl.cmp_mes_titulo')}>
+            <div className="adm-ctl-grafica">
+              <Columnas datos={porMes} etiqueta={tc('ctl.cmp_mes_titulo')} formato="numero" matiz={1} />
+            </div>
+          </Tarjeta>
+          <Tarjeta titulo={tc('ctl.cmp_derecho_titulo')}>
+            <div className="adm-ctl-grafica">
+              <DonaMini etiqueta={tc('ctl.cmp_derecho_titulo')} centro={numero(solicitudes.length, idioma)}
+                gajos={Object.entries(etiquetaTipo(t)).map(([k, et]) => ({ etiqueta: et, valor: solicitudes.filter((s) => s.tipo === k).length }))} />
+            </div>
+          </Tarjeta>
+        </FilaTarjetas>
+      )}
     >
 
       {lectura === null ? (

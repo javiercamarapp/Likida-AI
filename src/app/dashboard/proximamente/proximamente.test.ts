@@ -35,7 +35,8 @@ describe('la pantalla «Próximamente» no toca datos de la flota', () => {
     // El h1 y la región con nombre ya los pone `MarcoPagina` (un solo encabezado): basta darle el id del título.
     expect(fuentes.componente).toMatch(/<MarcoPagina[^>]*idTitulo="proximamente-titulo"/);
     expect(fuentes.componente).not.toContain('BarraPagina');
-    expect(fuentes.componente).toContain('Próximamente');
+    // El rótulo sale del diccionario (clave `prox.area`); en español dice «Próximamente».
+    expect(fuentes.componente).toContain("t('prox.area')");
   });
 });
 

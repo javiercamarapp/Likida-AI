@@ -1,7 +1,5 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { BarraFiltros, BotonEnlace, FiltroBusqueda, Icono } from '@/app/ui-v2/componentes';
-import { numero } from '@/lib/formato';
 import { urlRegistro, type PaginaRegistroUI } from './paginar-registro';
+import { BuscadorRegistro, ConteoRegistroTexto } from './registro-filtro-cliente';
 
 /**
  * La barra de búsqueda + paginación de los registros del panel (FE-12).
@@ -37,14 +35,11 @@ export function FiltroRegistro<T>({
   conteoEnPie?: boolean;
 }) {
   const { q } = pagina;
-  const hayFiltro = q !== '';
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <BarraFiltros buscar accion={ruta} enLinea etiqueta={`Buscar en ${sustantivo}`} ocultos={camposOcultos} nActivos={hayFiltro ? 1 : 0}
-        limpiarHref={urlRegistro(ruta, sufijo, { [nombreQ]: null, [nombreP]: null, [nombreEditar]: null })}>
-        <FiltroBusqueda nombre={nombreQ} valor={q} placeholder={`Buscar en ${sustantivo}…`} etiqueta={`Buscar en ${sustantivo}`} />
-      </BarraFiltros>
+      <BuscadorRegistro ruta={ruta} sustantivo={sustantivo} camposOcultos={camposOcultos} nombreQ={nombreQ} q={q}
+        limpiarHref={urlRegistro(ruta, sufijo, { [nombreQ]: null, [nombreP]: null, [nombreEditar]: null })} />
 
       {conteoEnPie ? null : <ConteoRegistro ruta={ruta} sufijo={sufijo} pagina={pagina} sustantivo={sustantivo} nombreQ={nombreQ} nombreP={nombreP} nombreEditar={nombreEditar} />}
     </div>
@@ -53,31 +48,13 @@ export function FiltroRegistro<T>({
 
 type PropsConteo<T> = { ruta: string; sufijo: string; pagina: PaginaRegistroUI<T>; sustantivo: string; nombreQ?: string; nombreP?: string; nombreEditar?: string };
 
-/** El texto «25 de N» + la paginación Anterior / Siguiente. Una sola pieza para el encabezado (modo clásico) y el pie de la tabla. */
+/** El texto «25 de N» + la paginación Anterior / Siguiente (el texto vive en `registro-filtro-cliente.tsx`). */
 function ConteoRegistro<T>({ ruta, sufijo, pagina, sustantivo, nombreQ = 'q', nombreP = 'p', nombreEditar = 'editar' }: PropsConteo<T>) {
   const { q, paginas } = pagina;
-  const hayFiltro = q !== '';
+  const enlace = (p: number) => urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: p, [nombreEditar]: null });
   return (
-  <div className="flex items-center gap-3 text-[12px] text-[var(--muted)]">
-    <span>
-      {hayFiltro
-        ? `${numero(pagina.filtrados)} ${pagina.filtrados === 1 ? 'coincide' : 'coinciden'} de ${numero(pagina.total)}`
-        : `${numero(pagina.filas.length)} de ${numero(pagina.total)} ${sustantivo}`}
-    </span>
-    {paginas > 1 && (
-      <span className="flex items-center gap-2">
-        {pagina.pagina > 1 ? (
-          <BotonEnlace href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina - 1, [nombreEditar]: null })}
-            variante="ghost" tamano="sm" rel="prev" icono={<Icono icono={ChevronLeft} tam={14} />}>Anterior</BotonEnlace>
-        ) : <span className="inline-flex items-center gap-1 px-2.5 text-[var(--faint)]"><Icono icono={ChevronLeft} tam={14} />Anterior</span>}
-        <span className="tabular">Página {numero(pagina.pagina)} de {numero(paginas)}</span>
-        {pagina.pagina < paginas ? (
-          <BotonEnlace href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina + 1, [nombreEditar]: null })}
-            variante="ghost" tamano="sm" rel="next">Siguiente<Icono icono={ChevronRight} tam={14} /></BotonEnlace>
-        ) : <span className="inline-flex items-center gap-1 px-2.5 text-[var(--faint)]">Siguiente<Icono icono={ChevronRight} tam={14} /></span>}
-      </span>
-    )}
-  </div>
+    <ConteoRegistroTexto hayFiltro={q !== ''} filtrados={pagina.filtrados} total={pagina.total} nFilas={pagina.filas.length} sustantivo={sustantivo}
+      paginas={paginas} paginaActual={pagina.pagina} hrefAnterior={enlace(pagina.pagina - 1)} hrefSiguiente={enlace(pagina.pagina + 1)} />
   );
 }
 

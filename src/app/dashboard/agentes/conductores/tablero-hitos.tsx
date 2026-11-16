@@ -2,7 +2,6 @@ import { CheckCircle2, CircleAlert, CircleDashed, Clock, MapPin, MapPinOff, Came
 import { fechaHoraMx, numero, porcentaje } from '@/lib/formato';
 import type { ResumenDocumentosCierre } from '@/lib/likida/conductor/documentos_cierre';
 import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
-import { textoTiempo } from '@/lib/likida/conductor/planificador';
 import { esFolioSimulado, type EpisodioVista, type Excepcion, type FilaTablero, type HitoVista, type IndicadoresVista, type Semaforo, type Tablero, type TipoExcepcion } from '@/lib/likida/conductor/tablero';
 import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
 import type { ReubicacionesCliente } from '@/lib/likida/conductor/reubicaciones';
@@ -10,9 +9,12 @@ import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type Modo
 import './conductores.css';
 import { BarraFiltros, Disclosure, FiltroOpciones, Icono, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import { VacioAgente } from '../vacio-agente';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, type TrAgentes, TR_ES, selloHoyTr } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
+import { trBCompleto, trDashboardBEs } from '@/lib/i18n/tr_dashboard_b';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+
+type TB = TrDe<'dashboard_b'>;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO DE HITOS (0385) — la pantalla del jefe de tráfico.
@@ -39,17 +41,17 @@ const semaforoTr = (tx: TAgentes = TR_ES.t): Record<Semaforo, { etiqueta: string
 });
 export const ORDEN_SEMAFORO: Semaforo[] = ['sin_reporte', 'atrasado', 'a_tiempo', 'sin_ancla', 'completo'];
 
-const excepcion = (tx: TAgentes = TR_ES.t): Record<TipoExcepcion, string> => ({
+const excepcion = (tx: TAgentes = TR_ES.t, tb: TB = trDashboardBEs): Record<TipoExcepcion, string> => ({
   escalado_sin_atender: tx('rest.escalado_sin_atender'), sin_reporte: tx('rest.sin_reporte'), atrasado: tx('rest.atrasado'), sin_coincidencia: tx('rest.ubicacion_sin_coincidencia_2'),
   llegada_sin_confirmar: tx('rest.llegada_sin_confirmar'), llegada_sin_sitio: tx('rest.llegada_sin_sitio_para_conciliar'),
   estadia_excedida: tx('rest.estadia_excedida'), horas_incoherentes: tx('rest.horas_incoherentes'), sin_a_quien_escalar: tx('rest.sin_a_quien_escalar'), patio_entrega_distinto: tx('rest.patio_de_entrega_distinto'),
-  pendiente_cruce_largo: tx('rest.pendiente_de_cruce_por_mucho_tiempo'), salida_tms_discrepante: tx('rest.salida_del_tms_sin_confirmar'), local_abierto_sin_ccp: 'Sin Carta Porte (viaje local abierto)', sin_ruta_autorizada: tx('rest.sin_ruta_autorizada'),
+  pendiente_cruce_largo: tx('rest.pendiente_de_cruce_por_mucho_tiempo'), salida_tms_discrepante: tx('rest.salida_del_tms_sin_confirmar'), local_abierto_sin_ccp: tb('th.sin_ccp'), sin_ruta_autorizada: tx('rest.sin_ruta_autorizada'),
 });
-const GRAVEDAD: Record<1 | 2 | 3, string> = { 3: 'Urgente', 2: 'Revisar', 1: 'Vigilar' };
+const gravedad = (tb: TB = trDashboardBEs): Record<1 | 2 | 3, string> => ({ 3: tb('th.grav.3'), 2: tb('th.grav.2'), 1: tb('th.grav.1') });
 
 /** T-A5-26: rótulo de los datos de demostración del seed. Nunca se mezclan con reales sin decirlo. */
-export function EtiquetaSimulado() {
-  return <span className="rv-cd__simulado">SIMULADO</span>;
+export function EtiquetaSimulado({ tr = TR_ES }: { tr?: TrAgentes } = {}) {
+  return <span className="rv-cd__simulado">{trBCompleto(tr.idioma).t('th.simulado')}</span>;
 }
 
 export function PuntoSemaforo({ s, tr = TR_ES }: { s: Semaforo; tr?: TrAgentes }) {
@@ -66,13 +68,24 @@ export const TEXTO_SIN_GPS = textoSinGps();
 export const textoSinTelefono = (tx: TAgentes = TR_ES.t) => (tx('rest.este_operador_no_tiene_telefono_no'));
 export const TEXTO_SIN_TELEFONO = textoSinTelefono();
 
-const minutos = (m: number): string => (m < 60 ? `${numero(Math.round(m))} min` : textoTiempo(m));
+/** `textoTiempo` con las unidades en el idioma activo (en español dice lo mismo que `textoTiempo`). */
+function textoTiempoTr(minutosTotal: number, tb: TB): string {
+  const m = Math.max(0, Math.round(minutosTotal));
+  const min = (n: number) => (n === 1 ? tb('th.t.min.uno') : tb('th.t.min.otros', { n }));
+  if (m < 60) return min(m);
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  const horas = h === 1 ? tb('th.t.hora.uno') : tb('th.t.hora.otros', { n: h });
+  return r === 0 ? horas : tb('th.t.y', { horas, min: min(r) });
+}
 
-function Def({ rotulo, valor, nota, tono }: { rotulo: string; valor: string | null; nota: string; tono?: 'warn' }) {
+const minutos = (m: number, tb: TB = trDashboardBEs): string => (m < 60 ? tb('th.min', { n: numero(Math.round(m)) }) : textoTiempoTr(m, tb));
+
+function Def({ rotulo, valor, nota, tono, sinDato = ' Sin dato' }: { rotulo: string; valor: string | null; nota: string; tono?: 'warn'; sinDato?: string }) {
   return (
     <div>
       <dt>{rotulo}</dt>
-      <dd><span className="rv-ag-indic__valor" data-vacio={valor === null || undefined}>{valor ?? '—'}{valor === null ? <span className="rv-sr">{' Sin dato'}</span> : null}</span></dd>
+      <dd><span className="rv-ag-indic__valor" data-vacio={valor === null || undefined}>{valor ?? '—'}{valor === null ? <span className="rv-sr">{sinDato}</span> : null}</span></dd>
       <dd className="rv-ag-indic__nota" data-tono={tono}>{nota}</dd>
     </div>
   );
@@ -80,22 +93,23 @@ function Def({ rotulo, valor, nota, tono }: { rotulo: string; valor: string | nu
 
 export function IndicadoresHitos({ i, dias, tr = TR_ES }: { i: IndicadoresVista | null; dias: number; tr?: TrAgentes }) {
   const { t: tx } = tr;
+  const tb = trBCompleto(tr.idioma).t;
   if (i === null) {
     return <p className="rv-cd__nota">{tx('rest.no_se_pudieron_calcular_los_indicadores')}</p>;
   }
   return (
-    <Tarjeta titulo={tx('f26d5.cd.indicadores_hitos')} info="conductores_tablero.sin_insistencia" acciones={<span className="rv-cd__micro">{selloHoy(tx('conductores.vista.viajes_de_la_flota'))}</span>}>
+    <Tarjeta titulo={tx('f26d5.cd.indicadores_hitos')} info="conductores_tablero.sin_insistencia" acciones={<span className="rv-cd__micro">{selloHoyTr(tr, tx('conductores.vista.viajes_de_la_flota'))}</span>}>
       <dl className="rv-ag-indic">
-        <Def rotulo={tx('rest.hitos_reportados_sin_insistencia')}
+        <Def rotulo={tx('rest.hitos_reportados_sin_insistencia')} sinDato={tb('th.sin_dato_sr')}
           valor={i.tasaSinInsistencia === null ? null : porcentaje(i.tasaSinInsistencia * 100, 0)}
           nota={i.recibidos === 0 ? tx('rest.ningun_hito_recibido_en_el_periodo') : tx('rest.de_hitos_a_lo_mas_un', { numero: numero(i.recibidos) })} />
-        <Def rotulo={tx('rest.tiempo_medio_de_respuesta')}
-          valor={i.minutosRespuestaPromedio === null ? null : minutos(i.minutosRespuestaPromedio)}
-          nota={i.conRespuestaMedida === 0 ? tx('rest.ninguna_solicitud_con_respuesta_medible') : `sobre ${numero(i.conRespuestaMedida)} solicitudes contestadas`} />
+        <Def rotulo={tx('rest.tiempo_medio_de_respuesta')} sinDato={tb('th.sin_dato_sr')}
+          valor={i.minutosRespuestaPromedio === null ? null : minutos(i.minutosRespuestaPromedio, tb)}
+          nota={i.conRespuestaMedida === 0 ? tx('rest.ninguna_solicitud_con_respuesta_medible') : tb('th.sobre', { n: numero(i.conRespuestaMedida) })} />
         <Def rotulo={tx('rest.hitos_escalados')} valor={numero(i.escalados)} tono={i.escalados > 0 ? 'warn' : undefined} nota={tx('rest.agotaron_la_escalera_de_recordatorios')} />
         <Def rotulo={tx('rest.validados_con_ubicacion')} valor={numero(i.validadosUbicacion)}
           nota={i.sinCoincidencia > 0 ? tx('rest.sin_coincidencia_por_revisar', { numero: numero(i.sinCoincidencia) }) : tx('rest.pin_o_gps_dentro_del_sitio')} />
-        <Def rotulo={tx('rest.validacion_en_modo_degradado')} valor={i.tasaValidacionDegradada === null ? null : porcentaje(i.tasaValidacionDegradada * 100, 0)}
+        <Def rotulo={tx('rest.validacion_en_modo_degradado')} sinDato={tb('th.sin_dato_sr')} valor={i.tasaValidacionDegradada === null ? null : porcentaje(i.tasaValidacionDegradada * 100, 0)}
           tono={i.tasaValidacionDegradada !== null && i.tasaValidacionDegradada > 0 ? 'warn' : undefined}
           nota={i.llegadasValidables === 0 ? tx('rest.ninguna_llegada_validable_en_el_periodo') : tx('rest.de_llegadas_sin_geocerca_o_solo', { numero: numero(i.validacionDegradada), numero2: numero(i.llegadasValidables) })} />
       </dl>
@@ -140,6 +154,8 @@ function modosDeExcepcion(e: Excepcion): ModoAccion[] {
 
 export function ColaExcepciones({ excepciones, puedeActuar, accion, tr = TR_ES }: { excepciones: Excepcion[]; puedeActuar: boolean; accion: AccionOficinaServidor; tr?: TrAgentes }) {
   const { t: tx } = tr;
+  const tb = trBCompleto(tr.idioma).t;
+  const grav = gravedad(tb);
   return (
     <Tarjeta titulo={tx('rest.cola_de_excepciones')} info="conductores_tablero.excepciones" estado={excepciones.length === 0 ? 'vacio' : 'ok'}
       mensaje={tx('rest.nada_pendiente')} detalle={tx('rest.nada_pendiente_ningun_hito_escalado_atrasado')}>
@@ -148,10 +164,10 @@ export function ColaExcepciones({ excepciones, puedeActuar, accion, tr = TR_ES }
         {excepciones.slice(0, 50).map((e, i) => (
           <li key={`${e.viajeId}-${e.tipo}-${e.hitoId ?? i}`} className="rv-cd__item">
             <div className="rv-cd__linea">
-              <span className="rv-cd__grav" data-g={e.gravedad}>{GRAVEDAD[e.gravedad]}</span>
-              <span className="rv-cd__medio">{excepcion(tx)[e.tipo]}</span>
+              <span className="rv-cd__grav" data-g={e.gravedad}>{grav[e.gravedad]}</span>
+              <span className="rv-cd__medio">{excepcion(tx, tb)[e.tipo]}</span>
               <span className="rv-cd__medio">{e.folio ?? tx('rest.viaje_sin_folio')}</span>
-              {e.desde && <span className="rv-cd__micro rv-cd__fin">desde {fechaHoraMx(e.desde)}</span>}
+              {e.desde && <span className="rv-cd__micro rv-cd__fin">{tb('th.desde', { fecha: fechaHoraMx(e.desde, tr.idioma) })}</span>}
             </div>
             <p className="rv-cd__nota">{e.texto}</p>
             {puedeActuar && <AccionesHito accion={accion} modos={modosDeExcepcion(e)} hitoId={e.hitoId} viajeId={e.viajeId} />}
@@ -165,22 +181,23 @@ export function ColaExcepciones({ excepciones, puedeActuar, accion, tr = TR_ES }
   );
 }
 
-const fotoTexto = (tx: TAgentes = TR_ES.t): Record<string, string> => ({ sello: 'sello', anden: tx('rest.anden_2'), recibido: 'recibido', otra: 'foto' });
-const fuenteTexto = (tx: TAgentes = TR_ES.t): Record<string, string> => ({ texto: 'texto', boton: tx('rest.boton'), ubicacion: tx('rest.ubicacion'), foto: 'foto', sistema: 'sistema', oficina: 'oficina' });
+const fotoTexto = (tx: TAgentes = TR_ES.t, tb: TB = trDashboardBEs): Record<string, string> => ({ sello: tb('th.foto.sello'), anden: tx('rest.anden_2'), recibido: tb('th.foto.recibido'), otra: tb('th.foto.otra') });
+const fuenteTexto = (tx: TAgentes = TR_ES.t, tb: TB = trDashboardBEs): Record<string, string> => ({ texto: tb('th.fuente.texto'), boton: tx('rest.boton'), ubicacion: tx('rest.ubicacion'), foto: tb('th.fuente.foto'), sistema: tb('th.fuente.sistema'), oficina: tb('th.fuente.oficina') });
 
 /**
  * R10-8: por qué se ve «omitido». Antes TODO omitido decía «avisó el siguiente», incluso el hito escalado que cerró el barrido de viajes
  * abiertos hace más de 30 días (`viaje_abierto_vencido`): la oficina creía que el chofer había avisado el siguiente y nadie lo capturó.
  */
-function textoOmitido(h: HitoVista, tx: TAgentes = TR_ES.t): string {
+function textoOmitido(h: HitoVista, tx: TAgentes = TR_ES.t, tb: TB = trDashboardBEs): string {
   if (h.omitidoMotivo === 'viaje_abierto_vencido') {
-    return tx('rest.cerrado_sin_reporte_el_viaje_lleva', { v: h.escaladoEn ? ' y ya se había escalado' : '' });
+    return tx('rest.cerrado_sin_reporte_el_viaje_lleva', { v: h.escaladoEn ? tb('th.y_escalado') : '' });
   }
   return tx('rest.omitido_aviso_el_siguiente');
 }
 
 function CeldaHito({ h, puedeActuar, accion, viajeId, tr = TR_ES }: { h: HitoVista; puedeActuar: boolean; accion: AccionOficinaServidor; viajeId: string; tr?: TrAgentes }) {
   const { t: tx } = tr;
+  const tb = trBCompleto(tr.idioma).t;
   const resuelto = h.estado === 'recibido' || h.estado === 'validado';
   const icono = h.estado === 'validado' ? CheckCircle2 : resuelto ? CheckCircle2 : h.estado === 'escalado' ? Flag : h.estado === 'omitido' ? CircleDashed : Clock;
   const tono = resuelto ? 'ok' : h.estado === 'escalado' ? 'bad' : 'faint';
@@ -196,20 +213,20 @@ function CeldaHito({ h, puedeActuar, accion, viajeId, tr = TR_ES }: { h: HitoVis
         <span>{h.etiqueta}</span>
       </div>
       {resuelto && h.horaMensaje ? (
-        <div className="rv-ag-num" title={tx('rest.hora_del_mensaje_del_chofer_no')}>{fechaHoraMx(h.horaMensaje)}</div>
+        <div className="rv-ag-num" title={tx('rest.hora_del_mensaje_del_chofer_no')}>{fechaHoraMx(h.horaMensaje, tr.idioma)}</div>
       ) : (
         <div className="rv-cd__faint">
-          {h.estado === 'omitido' ? textoOmitido(h) : h.estado === 'escalado' ? `escalado${h.atendidaEn ? ' · atendido' : ''}` : h.tocaDesde ? `toca desde ${fechaHoraMx(h.tocaDesde)}` : 'pendiente'}
+          {h.estado === 'omitido' ? textoOmitido(h, tx, tb) : h.estado === 'escalado' ? (h.atendidaEn ? tb('th.escalado_atendido') : tb('th.escalado')) : h.tocaDesde ? tb('th.toca_desde', { fecha: fechaHoraMx(h.tocaDesde, tr.idioma) }) : tb('th.pendiente')}
         </div>
       )}
       {resuelto && (
         <div className="rv-cd__linea rv-cd__micro" data-tono="muted">
-          {h.fuente && <span>{tx('rest.via')}{' '}{fuenteTexto(tx)[h.fuente] ?? tx('rest.otro_medio')}</span>}
-          {h.validadoPor && <span data-tono="ok" className="rv-cd__micro">{tx('rest.validado')}{h.validadoPor === 'gps' ? tx('rest.ubicacion') : h.validadoPor === 'oficina' ? 'oficina' : 'sistema'})</span>}
+          {h.fuente && <span>{tx('rest.via')}{' '}{fuenteTexto(tx, tb)[h.fuente] ?? tx('rest.otro_medio')}</span>}
+          {h.validadoPor && <span data-tono="ok" className="rv-cd__micro">{tx('rest.validado')}{h.validadoPor === 'gps' ? tx('rest.ubicacion') : h.validadoPor === 'oficina' ? tb('th.fuente.oficina') : tb('th.fuente.sistema')})</span>}
           {h.fotos.map((f) => (
             <a key={f.id} href={`/api/v1/evidencias/${f.id}`} target="_blank" rel="noopener noreferrer" className="rv-cd__foto" data-alerta={f.reusoTenant || undefined}
               title={f.reusoTenant ? tx('rest.abrir_la_foto_el_enlace_dura') : tx('rest.abrir_la_foto_el_enlace_dura_2')}>
-              <Icono icono={Camera} tam={14} />{fotoTexto(tx)[f.tipo]}
+              <Icono icono={Camera} tam={14} />{fotoTexto(tx, tb)[f.tipo]}
               {f.reusoTenant && <Icono icono={CircleAlert} tam={14} />}
             </a>
           ))}
@@ -221,14 +238,14 @@ function CeldaHito({ h, puedeActuar, accion, viajeId, tr = TR_ES }: { h: HitoVis
       {h.reporte && h.reporte.reubicaciones > 0 && (
         <Disclosure titulo={h.reporte.reubicaciones === 1 ? tx('rest.1_cambio_de_rampa_o_contacto') : tx('rest.cambios_de_rampa_o_contacto', { reubicaciones: h.reporte.reubicaciones })} variante="linea">
           <ol className="rv-cd__lista">
-            {h.reporte.historial.map((r) => <li key={r.en} className="rv-cd__micro" data-tono="muted"><span className="rv-ag-num">{fechaHoraMx(r.en)}</span> · {r.rampa ?? tx('rest.sin_rampa_registrada')}</li>)}
+            {h.reporte.historial.map((r) => <li key={r.en} className="rv-cd__micro" data-tono="muted"><span className="rv-ag-num">{fechaHoraMx(r.en, tr.idioma)}</span> · {r.rampa ?? tx('rest.sin_rampa_registrada')}</li>)}
           </ol>
         </Disclosure>
       )}
       {h.validacion && h.validacion.resultado !== 'sin_dato' && (
         <div className="rv-cd__icono-linea rv-cd__micro" data-tono={h.validacion.resultado === 'validado' ? 'ok' : 'warn'} title={h.validacion.texto}>
           <Icono icono={h.validacion.resultado === 'validado' ? MapPin : MapPinOff} tam={14} />
-          <span>{h.validacion.resultado === 'validado' ? tx('rest.en_el_sitio_m', { numero: numero(h.validacion.distanciaM ?? 0) }) : `fuera del sitio (${numero(h.validacion.distanciaM ?? 0)} m)`}</span>
+          <span>{h.validacion.resultado === 'validado' ? tx('rest.en_el_sitio_m', { numero: numero(h.validacion.distanciaM ?? 0) }) : tb('th.fuera', { n: numero(h.validacion.distanciaM ?? 0) })}</span>
         </div>
       )}
       {h.validacion?.resultado === 'sin_dato' && <div className="rv-cd__micro">{tx('rest.ubicacion_sin_dato')}</div>}
@@ -257,7 +274,7 @@ function DocumentosCierreFila({ r, tr = TR_ES }: { r: ResumenDocumentosCierre; t
   return (
     <p className="rv-cd__icono-linea" data-tono={faltan > 0 ? 'warn' : 'ok'} aria-label={tx('rest.documentos_de_cierre')}>
       <Icono icono={faltan > 0 ? FileWarning : FileCheck2} tam={14} />
-      <span>{ricoT(tx('rest.e0_documentos_de_cierre_e0'), { e0: (c) => <span className="rv-cd__medio">{c}</span> })}{' '}<span className="rv-ag-num">{numero(r.recibidos)}</span> de <span className="rv-ag-num">{numero(r.total)}</span> recibidos
+      <span>{ricoT(tx('rest.e0_documentos_de_cierre_e0'), { e0: (c) => <span className="rv-cd__medio">{c}</span> })}{' '}{ricoT(trBCompleto(tr.idioma).t('th.docs_recibidos', { a: numero(r.recibidos), b: numero(r.total) }), { num: (c) => <span className="rv-ag-num">{c}</span> })}
         {faltan > 0 && <>{tx('rest.faltan')}{' '}{r.faltantes.map((f) => f.nombreSolicitado).join(', ')}</>}
         {porRevisar > 0 && <span> · {numero(porRevisar)} {porRevisar === 1 ? tx('rest.con_foto_por_revisar_calidad') : tx('rest.con_fotos_por_revisar_calidad')}</span>}
       </span>
@@ -267,9 +284,10 @@ function DocumentosCierreFila({ r, tr = TR_ES }: { r: ResumenDocumentosCierre; t
 
 function ResumenEstancia({ e, tr = TR_ES }: { e: Estancia; tr?: TrAgentes }) {
   const { t: tx } = tr;
-  const texto = e.fase === 'cerrada' ? `${minutos(e.minutos ?? 0)} (cerrada)`
-    : e.fase === 'en_curso' ? tx('rest.y_sigue_en_el_anden', { minutos: minutos(e.minutos ?? 0) })
-      : e.fase === 'incoherente' ? 'horas incoherentes' : e.fase === 'sin_llegada' ? 'sin llegada registrada' : 'sin salida registrada';
+  const tb = trBCompleto(tr.idioma).t;
+  const texto = e.fase === 'cerrada' ? tb('th.est.cerrada', { minutos: minutos(e.minutos ?? 0, tb) })
+    : e.fase === 'en_curso' ? tx('rest.y_sigue_en_el_anden', { minutos: minutos(e.minutos ?? 0, tb) })
+      : e.fase === 'incoherente' ? tb('th.est.incoherente') : e.fase === 'sin_llegada' ? tb('th.est.sin_llegada') : tb('th.est.sin_salida');
   return <span>{e.lugar === 'carga' ? tx('rest.en_carga') : tx('rest.en_descarga')}: <span className="rv-ag-num">{texto}</span></span>;
 }
 
@@ -277,13 +295,14 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios, sit
   f: FilaTablero; puedeActuar: boolean; accion: AccionOficinaServidor; accionSitios: AccionOficinaServidor; sitios: OpcionSitio[]; sitiosHayMas?: boolean; tr?: TrAgentes;
 }) {
   const { t: tx } = tr;
+  const tb = trBCompleto(tr.idioma).t;
   const v = f.viaje;
   return (
-    <li className="rv-cd__viaje" aria-label={`Viaje ${v.folio ?? tx('cobranza.vista.sin_folio_2')}`}>
+    <li className="rv-cd__viaje" aria-label={tb('th.viaje_aria', { folio: v.folio ?? tx('cobranza.vista.sin_folio_2') })}>
       <div className="rv-cd__semaforo-linea">
         <PuntoSemaforo s={f.semaforo} tr={tr} />
         <span className="rv-cd__medio">{v.folio ?? tx('cobranza.vista.sin_folio_2')}</span>
-        {esFolioSimulado(v.folio) && <EtiquetaSimulado />}
+        {esFolioSimulado(v.folio) && <EtiquetaSimulado tr={tr} />}
         <span className="rv-cd__nota">{v.operadorNombre ?? tx('conductores.vista.sin_operador')}</span>
         <span className="rv-cd__nota" data-tono="faint">
           {[v.terminalNombre, v.clienteNombre].filter(Boolean).join(' · ')}
@@ -350,13 +369,13 @@ export function EpisodiosSenalVida({ episodios, dias, hayMas, tr = TR_ES }: { ep
                 <span className="rv-cd__medio">{e.folio}</span>
                 <span className="rv-cd__muted">{e.chofer}</span>
                 <StatusChip tono="muted">{e.motivo}</StatusChip>
-                <span className="rv-ag-num rv-cd__micro">desde {fechaHoraMx(e.abiertoEn)}</span>
+                <span className="rv-ag-num rv-cd__micro">{trBCompleto(tr.idioma).t('th.desde', { fecha: fechaHoraMx(e.abiertoEn, tr.idioma) })}</span>
                 <StatusChip tono={e.urgente ? 'bad' : e.abierto ? 'warn' : 'ok'}>{e.abierto ? tx('rest.abierto') : tx('rest.cerrado')}</StatusChip>
               </div>
               <div>{e.estado}</div>
               {e.pasos.length > 0 && (
                 <ol className="rv-cd__linea rv-cd__micro" data-tono="muted">
-                  {e.pasos.map((p) => <li key={p.texto}>{p.texto} · <span className="rv-ag-num">{fechaHoraMx(p.en)}</span></li>)}
+                  {e.pasos.map((p) => <li key={p.texto}>{p.texto} · <span className="rv-ag-num">{fechaHoraMx(p.en, tr.idioma)}</span></li>)}
                 </ol>
               )}
             </li>
@@ -374,6 +393,7 @@ export function EpisodiosSenalVida({ episodios, dias, hayMas, tr = TR_ES }: { ep
  */
 export function ReubicacionesPorCliente({ filas, csv, tr = TR_ES }: { filas: ReubicacionesCliente[]; csv: string; tr?: TrAgentes }) {
   const { t: tx } = tr;
+  const tb = trBCompleto(tr.idioma).t;
   const hayCsv = filas.some((f) => f.viajesConDato > 0);
   return (
     <Tarjeta titulo={tx('rest.reubicaciones_por_cliente')} info="conductores_tablero.reubicaciones" estado={filas.length === 0 ? 'vacio' : 'ok'}
@@ -388,10 +408,10 @@ export function ReubicacionesPorCliente({ filas, csv, tr = TR_ES }: { filas: Reu
               <div className="rv-cd__linea">
                 <span className="rv-cd__medio">{f.clienteNombre}</span>
                 {f.viajesConDato === 0 ? (
-                  <span className="rv-cd__muted">{tx('rest.sin_dato_2', { numero: numero(f.viajes) })}{' '}{f.viajes === 1 ? 'viaje' : 'viajes'}{' '}{tx('rest.sin_respuesta_del_chofer')}</span>
+                  <span className="rv-cd__muted">{tx('rest.sin_dato_2', { numero: numero(f.viajes) })}{' '}{f.viajes === 1 ? tb('th.viaje') : tb('th.viajes')}{' '}{tx('rest.sin_respuesta_del_chofer')}</span>
                 ) : (
                   <>
-                    <span><span className="rv-ag-num">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? tx('rest.reubicacion') : 'reubicaciones'}</span>
+                    <span><span className="rv-ag-num">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? tx('rest.reubicacion') : tb('th.reubicaciones')}</span>
                     <span><span className="rv-ag-num">{numero(f.minutos ?? 0)}</span> min</span>
                     <span className="rv-cd__muted">{tx('rest.en_de', { numero: numero(f.viajesReubicados ?? 0), numero2: numero(f.viajesConDato) })}{' '}{f.viajesConDato === 1 ? tx('rest.viaje_con_dato') : tx('rest.viajes_con_dato')}</span>
                   </>

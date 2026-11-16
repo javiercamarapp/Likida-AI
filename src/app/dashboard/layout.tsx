@@ -41,13 +41,16 @@ import { invitacionEncendida, leerEstado } from '@/lib/likida/guia/repo';
 import type { EstadoGuia } from '@/lib/likida/guia/tipos';
 import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
-import { datosParaProveedor } from '@/lib/i18n/servidor';
+import { datosParaProveedor, getT, idiomaActual } from '@/lib/i18n/servidor';
 import { resolverBandeja } from '@/lib/avisos/bandeja';
 import { clienteAvisos } from '@/lib/avisos/cliente';
 import { leerAvisosFlota } from '@/app/ui-v2/avisos/fuente-flota';
 
 // Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
-export const metadata: Metadata = { title: { default: 'Likida — Liquidación de viajes', template: '%s · Likida' } };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('dashboard_a');
+  return { title: { default: t('lay.titulo'), template: '%s · Likida' } };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +69,7 @@ const HREF_AVISOS = '/dashboard/notificaciones';
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const sesion = await getSessionTenant();
   if (!sesion) redirect('/login?next=%2Fdashboard');
+  const { t: tA } = await getT('dashboard_a');
 
   // El widget de uso del sidebar (16-ago-2026): cuánto del presupuesto
   // diario de análisis con IA lleva usado HOY el tenant — el MISMO número
@@ -130,7 +134,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // solo. Los pasos del recorrido se limitan a las rutas que ESTE rol ve en ESTE perfil.
   const v2 = ui === 'v2';
   const avance = v2 && perfil && tenantDelMenu ? insigniaDeCookie(jarra.get(nombreCookieAvance(tenantDelMenu))?.value) : null;
-  const onb = v2 ? onboardingDeLaSesion(sesion.rol, perfil) : null;
+  const onb = v2 ? onboardingDeLaSesion(sesion.rol, perfil, await idiomaActual()) : null;
   const rutasDelRecorrido = (onb?.rutas ?? []).filter((r) => puedeVerRuta(sesion.rol, r, perfil));
   // Estado de la guía por persona y flota (0983) e interruptor de la invitación por flota: una lectura por carga del panel. Si la tabla
   // no existe todavía o la base falla, la guía sigue con su respaldo local y la invitación sigue el interruptor global. «Ver como» no lee ni escribe.
@@ -173,7 +177,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const marco = (
     <Chrome
-      nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
+      nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil} t={tA}
       {...(v2 && Object.keys(insignias).length > 0 ? { insignias } : {})}
       {...(v2 && organizacion !== undefined ? { organizacion } : {})}
       {...(v2 && flotas !== undefined ? { flotas } : {})}
@@ -184,7 +188,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // El motor del recorrido envuelve TODO el chrome (no solo la página): el menú Guía vive en la barra superior y necesita su contexto.
   // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es. El layout RAÍZ no lo lee (públicas estáticas).
-  const idiomaDatos = await datosParaProveedor(['shell', 'operacion', 'avisos', 'resto']);
+  const idiomaDatos = await datosParaProveedor(['shell', 'operacion', 'avisos', 'resto', 'errores', 'graficas', 'dinero', 'agentes', 'mensajes', 'dashboard_a', 'dashboard_b', 'onboarding', 'ui_comun']);
   const arbol = onb && onb.principal ? (
     <TourProvider
       recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}

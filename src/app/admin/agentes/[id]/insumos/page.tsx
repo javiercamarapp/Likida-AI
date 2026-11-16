@@ -133,7 +133,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
     >
 
       <Tarjeta titulo={t('agentes_insumos.soltar_un_insumo_nuevo')}>
-        <p className="m-0 mb-3 text-xs text-muted">{t('agentes_insumos.este_agente_acepta', { tiposAceptados: tiposAceptados.join(', ') })}</p>
+        <p className="rv-insumos-ayuda">{t('agentes_insumos.este_agente_acepta', { tiposAceptados: tiposAceptados.join(', ') })}</p>
         <FormularioInsumo
           tiposAceptados={tiposAceptados}
           accionArchivo={accionSubirArchivo}

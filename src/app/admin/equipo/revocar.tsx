@@ -1,9 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { BotonConfirmar } from '../../ui-v2/componentes/confirmar';
-import { clasesBoton } from '../../ui-v2/componentes/boton';
-import type { AccionDeForma, ResultadoAccion } from '../ui/forma';
+import { BotonConfirmar, clasesBoton, type AccionDeForma, type ResultadoAccion } from '../../ui-v2/componentes';
 
 /** «Revocar» (Rovaq CF «Equipo»): el botón de PELIGRO de la fila. Cierra el acceso de la persona (baja de la cuenta), así que pide una
  *  confirmación que dice la consecuencia; la acción de servidor (`accionDarDeBajaUsuario`) re-gatea y deja su asiento en la bitácora. */

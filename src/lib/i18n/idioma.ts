@@ -12,11 +12,12 @@ export type Idioma = (typeof IDIOMAS)[number];
 export const IDIOMA_POR_OMISION: Idioma = 'es';
 
 /**
- * ¿Ya se puede ELEGIR inglés? Mientras la traducción completa no exista (F15; hoy solo `en/shell.ts`), el conmutador del pie
- * muestra la bandera US DESHABILITADA («Inglés: próximamente») y no hace POST: un «inglés» que cambia tres textos es peor que
- * no tenerlo. Cuando F15 termine, basta ponerla en `true`. La infraestructura (ruta, cookie, proveedor) sigue intacta.
+ * ¿Ya se puede ELEGIR inglés? Sí: el marco (shell, navegación, paleta) y las pantallas de /admin y /dashboard ya salen de
+ * diccionarios `en/*` con paridad exacta de claves contra `es/*` (`i18n_paridad.test.ts`). El conmutador del pie hace POST y la
+ * cookie `likida_lang` + `user_metadata.idioma` se sirven tal cual. El texto en español que aún no migra se mide en
+ * `i18n-deuda.json` y solo puede bajar. Poner `false` es el interruptor de emergencia (todo vuelve a español sin tocar nada más).
  */
-export const IDIOMA_EN_DISPONIBLE = false;
+export const IDIOMA_EN_DISPONIBLE = true;
 
 /** Un idioma se puede elegir si tiene traducción completa: el español siempre; el inglés solo con `IDIOMA_EN_DISPONIBLE`. */
 export function idiomaElegible(idioma: Idioma, enDisponible: boolean = IDIOMA_EN_DISPONIBLE): boolean {

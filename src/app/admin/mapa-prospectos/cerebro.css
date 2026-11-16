@@ -50,7 +50,7 @@
 .cer-toggle[aria-pressed="true"]:hover { background: var(--seg-activo-hover); }
 
 /* ── La zona del mundo ── */
-.cer-zona { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); height: calc(100dvh - 17rem); min-height: 480px; }
+.cer-zona { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); height: clamp(360px, calc(100dvh - 17rem), 960px); }
 .cer-zona:fullscreen { height: 100vh; border-radius: 0; }
 .cer-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 .cer-svg:active { cursor: grabbing; }
@@ -88,7 +88,7 @@
 
 /* El ranking lateral */
 .cer-rank { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
-@media (min-width: 1100px) { .cer-rank { height: calc(100dvh - 17rem); min-height: 480px; overflow-y: auto; } }
+@media (min-width: 1100px) { .cer-rank { height: clamp(360px, calc(100dvh - 17rem), 960px); overflow-y: auto; } }
 .cer-rank > .cer-rank__bloque:last-child { flex: 1 1 auto; align-content: flex-start; }
 .cer-rank__bloque { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .cer-rank__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -253,11 +253,11 @@
 .cer-sello .rv-kpi__punto { margin-right: 0; }
 .cer-mapacard .cer-barra__resumen { flex: 1 1 200px; }
 .cer-mapacard .cer-cuerpo { gap: 0; }
-.cer-mapacard .cer-zona { border: 0; border-radius: 0; height: calc(100dvh - 20rem); min-height: 440px; }
+.cer-mapacard .cer-zona { border: 0; border-radius: 0; height: clamp(360px, calc(100dvh - 20rem), 720px); }
 .cer-mapacard .cer-zona:fullscreen { height: 100vh; }
 .cer-mapacard .cer-rank { padding: 14px; gap: 0; border-left: 1px solid var(--line); }
 @media (max-width: 1099px) { .cer-mapacard .cer-rank { border-left: 0; border-top: 1px solid var(--line); } .cer-mapacard .cer-zona { min-height: 360px; height: 60dvh; } }
-@media (min-width: 1100px) { .cer-mapacard .cer-rank { height: calc(100dvh - 20rem); min-height: 440px; } }
+@media (min-width: 1100px) { .cer-mapacard .cer-rank { height: clamp(360px, calc(100dvh - 20rem), 720px); } }
 /* Los bloques del ranking ya no son tarjetas dentro de la tarjeta: se separan con un filete. */
 .cer-mapacard .cer-rank__bloque { background: transparent; border: 0; border-radius: 0; padding: 0 0 14px; }
 .cer-mapacard .cer-rank__bloque + .cer-rank__bloque { padding-top: 14px; border-top: 1px solid var(--line); }
@@ -282,8 +282,9 @@
 .cer-familias li span { flex: 1; min-width: 0; }
 .cer-familias li b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Segunda fila: embudo y tabla equivalente con el mismo alto (la tabla desplaza dentro de su tarjeta). */
-.cer-fila-baja { align-items: stretch; }
-.cer-fila-baja > .rv-tarjeta { height: 100%; }
+/* Cada tarjeta mide lo suyo (antes se estiraban al alto del embudo de 14 filas y «Cobertura» quedaba casi vacía). */
+.cer-fila-baja { align-items: start; }
+.cer-fila-baja > .rv-tarjeta { height: auto; }
 .cer-tabla-estados .rv-tabla { max-height: 340px; }
 /* Vacío dentro de una tarjeta (Rovaq ac-vacio): borde punteado de 1 px, radio 8, relleno 20×14; nunca sin borde dentro de una tarjeta alta. */
 [data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }

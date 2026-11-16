@@ -3,8 +3,11 @@ import '../sistema.css';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
-import { Smartphone, Info } from 'lucide-react';
-import { EstadoVacio, Tarjeta } from '../../ui-v2/componentes';
+import { Info } from 'lucide-react';
+import { EstadoVacio, FilaTarjetas, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { observadas } from '../sello-observado';
+import './whatsapp-infra.css';
+import '../resumen.css';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { FilaConversacion } from '../conversaciones/hilo';
 import { getT } from '@/lib/i18n/servidor';
@@ -54,7 +57,8 @@ export default async function WhatsappInfraPage() {
     <EsqueletoPanelCifras
       titulo={t('whatsapp_infra.whatsapp_infra')}
       etiquetaCifras={t('whatsapp_infra.conversaciones_de_whatsapp')}
-      cifras={uniformes([
+      cifras={[
+        ...observadas(uniformes([
         {
           etiqueta: t('whatsapp_infra.conversaciones_activas'), valor: total, formato: 'entero',
           estado: total === null ? 'vacio' : 'ok',
@@ -62,45 +66,50 @@ export default async function WhatsappInfraPage() {
           nota: t('whatsapp_infra.filas_vivas_en_wa_conversacion_ventana'),
         },
         { etiqueta: t('whatsapp_infra.kpi_mostradas'), valor: conversaciones.length, formato: 'entero' },
+        ]), t('a1r4.observado')),
+        // Lo declarado en el código (un número, seis capacidades sin integrar) no es una lectura de la base: sin sello «Observado».
+        ...uniformes([
         { etiqueta: t('whatsapp_infra.kpi_numeros'), valor: 1, formato: 'entero', nota: t('whatsapp_infra.kpi_numeros_nota') },
         { etiqueta: t('whatsapp_infra.kpi_sin_integrar'), valor: fueraDeAlcance(t).length, formato: 'entero', tono: 'warn' },
-      ])}
+        ]),
+      ]}
     >
 
-      <Tarjeta titulo={t('whatsapp_infra.numero_operativo')}>
-        <div className="flex items-center gap-2.5 rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-3 py-2.5">
-          <Smartphone width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" />
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold">{t('whatsapp_infra.1_numero_operativo')}</div>
-            <div className="mt-0.5 text-xs text-muted">{t('whatsapp_infra.el_que_usa_el_bot_de')}</div>
+      <FilaTarjetas variante="8-4" className="adm-fila-pareja">
+        <Tarjeta titulo={recortado ? t('whatsapp_infra.conversaciones_las_mas_recientes_de', { topeConversaciones: TOPE_CONVERSACIONES, total }) : t('whatsapp_infra.conversaciones')}>
+          <div id="conversaciones" className="adm-wa-conversaciones">
+            {conversaciones.length === 0 ? (
+              <EstadoVacio titulo={t('whatsapp_infra.sin_conversaciones_activas').replace(/\.$/, '')} contenido />
+            ) : (
+              <div className="adm-wa-lista-conv">
+                {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} />)}
+              </div>
+            )}
           </div>
-        </div>
-        <p className="m-0 mt-2 text-xs text-muted">{t('whatsapp_infra.el_digito_real_no_vive_en')}</p>
-      </Tarjeta>
+        </Tarjeta>
 
-      <Tarjeta titulo={recortado ? t('whatsapp_infra.conversaciones_las_mas_recientes_de', { topeConversaciones: TOPE_CONVERSACIONES, total }) : t('whatsapp_infra.conversaciones')}>
-        <div id="conversaciones" className="scroll-mt-24">
-          {conversaciones.length === 0 ? (
-            <EstadoVacio titulo={t('whatsapp_infra.sin_conversaciones_activas').replace(/\.$/, '')} contenido />
-          ) : (
-            <div className="space-y-1.5">
-              {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} />)}
+        <div className="adm-pila">
+          <Tarjeta titulo={t('whatsapp_infra.numero_operativo')}>
+            <div className="adm-wa-numero">
+              <StatusChip tono="ok">{t('whatsapp_infra.estado_un_solo_numero')}</StatusChip>
+              <div className="adm-wa-numero__texto">
+                <span className="adm-wa-numero__titulo">{t('whatsapp_infra.1_numero_operativo')}</span>
+                <span className="adm-wa-numero__detalle">{t('whatsapp_infra.el_que_usa_el_bot_de')}</span>
+              </div>
             </div>
-          )}
-        </div>
-      </Tarjeta>
+            <p className="adm-wa-nota">{t('whatsapp_infra.el_digito_real_no_vive_en')}</p>
+          </Tarjeta>
 
-      <Tarjeta titulo={t('whatsapp_infra.fuera_de_alcance_hoy')}>
-        <EstadoVacio titulo={t('whatsapp_infra.sin_integrar')} icono={Info} contenido>{t('whatsapp_infra.ninguno_de_estos_existe_todavia_en')}</EstadoVacio>
-        <ul className="m-0 mt-3 list-none space-y-2 p-0 text-sm text-muted">
-          {fueraDeAlcance(t).map((item) => (
-            <li key={item} className="flex items-start gap-2.5">
-              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--muted)]" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      </Tarjeta>
+          <Tarjeta titulo={t('whatsapp_infra.fuera_de_alcance_hoy')}>
+            <EstadoVacio titulo={t('whatsapp_infra.sin_integrar')} icono={Info} contenido>{t('whatsapp_infra.ninguno_de_estos_existe_todavia_en')}</EstadoVacio>
+            <ul className="adm-wa-pendientes">
+              {fueraDeAlcance(t).map((item) => (
+                <li key={item}><StatusChip tono="muted">{item}</StatusChip></li>
+              ))}
+            </ul>
+          </Tarjeta>
+        </div>
+      </FilaTarjetas>
     </EsqueletoPanelCifras>
   );
 }

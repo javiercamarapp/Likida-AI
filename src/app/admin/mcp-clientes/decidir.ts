@@ -3,7 +3,8 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { decidirCliente } from '@/lib/mcp/oauth';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
-import type { ResultadoAccion } from '../ui/forma';
+import type { ResultadoAccion } from '../../ui-v2/componentes';
+import { getT } from '@/lib/i18n/servidor';
 
 /**
  * Decide un cliente OAuth del MCP y deja rastro. Vive aparte de la página para
@@ -20,6 +21,7 @@ export async function decidirYAnotar(
   fd: FormData,
 ): Promise<ResultadoAccion> {
   const s = await requireSuperadmin();
+  const { t } = await getT('resto');
   const clientId = String(fd.get('cliente') ?? '');
   const r = await decidirCliente(clientId, decision, s.userId);
   if (!r.ok) return { error: r.detalle };
@@ -36,12 +38,12 @@ export async function decidirYAnotar(
   const opciones = { evento: 'mcp.bitacora' };
   const anotada = (await anotarBitacora(entrada, opciones)) || (await anotarBitacora(entrada, opciones));
   const ok = decision === 'aprobado'
-    ? 'Cliente aprobado: ya puede pedir consentimiento.'
-    : `Cliente rechazado. Tokens vivos revocados: ${r.revocados}.`;
+    ? t('ctl.mcp_ok_aprobado')
+    : t('ctl.mcp_ok_rechazado', { n: r.revocados });
   if (!anotada) {
     logger.error('mcp.cliente_bitacora_perdida', { accion: entrada.accion, clientId });
     return {
-      ok: `${ok} ATENCIÓN: la decisión quedó aplicada pero NO se pudo anotar en la bitácora de auditoría; anótala a mano (cliente ${clientId}, ${entrada.accion}).`,
+      ok: `${ok} ${t('ctl.mcp_sin_bitacora', { clientId, accion: entrada.accion })}`,
     };
   }
   return { ok };

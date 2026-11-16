@@ -184,15 +184,16 @@ export function VistaTuTurno({
           ]} />
         </BarraFiltros>
       )}
-      etiquetaProcedencia={t('turno.procedencia')}
-      procedencia={(
+      metodo={(
         <>
-          <li><SelloDato tipo={bus.errores.length > 0 ? 'sin_dato' : 'observado'} fuente={t('turno.fuente_bus')} leidoEn={ahora} ahora={ahora} edad={false} /></li>
-          <li><SelloDato tipo={prs.estado === 'ok' ? 'observado' : 'sin_dato'} fuente="GitHub" leidoEn={ahora} ahora={ahora} edad={false} /></li>
-          <li><SelloDato tipo={totalEscalaciones === null ? 'sin_dato' : 'observado'} fuente={t('turno.fuente_escalaciones')} leidoEn={ahora} ahora={ahora} edad={false} /></li>
+          <ul className="rv-esq__procedencia bj-procedencia" aria-label={t('turno.procedencia')}>
+            <li><SelloDato tipo={bus.errores.length > 0 ? 'sin_dato' : 'observado'} fuente={t('turno.fuente_bus')} leidoEn={ahora} ahora={ahora} edad={false} /></li>
+            <li><SelloDato tipo={prs.estado === 'ok' ? 'observado' : 'sin_dato'} fuente="GitHub" leidoEn={ahora} ahora={ahora} edad={false} /></li>
+            <li><SelloDato tipo={totalEscalaciones === null ? 'sin_dato' : 'observado'} fuente={t('turno.fuente_escalaciones')} leidoEn={ahora} ahora={ahora} edad={false} /></li>
+          </ul>
+          <p className="bj-nota">{t('turno.sesion_pie', { sesionNombre })}</p>
         </>
       )}
-      metodo={t('turno.sesion_pie', { sesionNombre })}
       avisos={(aviso || error || bus.errores.length > 0) ? (
         <>
           {aviso && <Aviso tono="ok">{aviso}</Aviso>}
@@ -210,7 +211,10 @@ export function VistaTuTurno({
             valor: piezasSinDato ? null : bus.piezasPendientes.length,
             nota: piezasSinDato ? t('tu_turno_vista.no_se_pudo_leer_2') : bus.piezasPendientes.length >= TOPE_PIEZAS ? t('tu_turno_vista.se_cuentan_las_mas', { TOPE_PIEZAS }) : undefined,
           },
-          { etiqueta: t('tu_turno_vista.envios_por_aprobar'), valor: envios.length, formato: 'entero' },
+          {
+            etiqueta: t('tu_turno_vista.envios_por_aprobar'), valor: envios.length, formato: 'entero',
+            nota: cola && cola.diasMasVieja !== null ? `${t('aprobaciones.kpi_mas_vieja')}: ${t('aprobaciones.kpi_dias', { n: cola.diasMasVieja })}` : undefined,
+          },
           {
             etiqueta: t('tu_turno_vista.cambios_por_aprobar'), formato: 'entero',
             valor: prs.estado === 'ok' ? prs.prs.length : null,

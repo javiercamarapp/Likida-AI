@@ -8,13 +8,16 @@ import { getPiezasDunningPlataforma, getUltimaCorridaDunningPlataforma, type Cor
 import { armarEstadoDunning, type SelloToque } from '@/lib/likida/cobranza_estado';
 import { toquesDeHoy, tituloToque } from '@/lib/likida/agentes/exito';
 import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
-import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Columnas } from '@/app/ui-v2/graficas';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { uniformes } from '../cifras-uniformes';
 import { observadas } from '../sello-observado';
 import '../dinero.css';
 
 import { getT } from '@/lib/i18n/servidor';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { rico } from '@/lib/i18n/rico';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -30,17 +33,22 @@ export const dynamic = 'force-dynamic';
  * mientras tanto el texto no promete un «editar y mandar» que no existe). Y `null` es «no se pudo leer», `[]` es «no hay nada»: cada
  * lectura falla por separado y se avisa, para no decir «nada por cobrar» con la base caída.
  */
-const ROTULO_SELLO: Record<SelloToque, { texto: string; tono: TonoEstado }> = {
-  sin_propuesta: { texto: 'sin propuesta', tono: 'bad' },
-  superado: { texto: 'sin propuesta (el agente solo propone el toque más alto)', tono: 'neutral' },
-  pendiente: { texto: 'propuesta pendiente', tono: 'warn' },
-  aprobada: { texto: 'aprobada, sin enviar', tono: 'warn' },
-  rechazada: { texto: 'rechazada', tono: 'neutral' },
-  enviada: { texto: 'enviada', tono: 'ok' },
-};
+const TONO_SELLO: Record<SelloToque, TonoEstado> = { sin_propuesta: 'bad', superado: 'neutral', pendiente: 'warn', aprobada: 'warn', rechazada: 'neutral', enviada: 'ok' };
+const textoSello = (k: SelloToque, t: TrDe<'admin_dinero'>): string => ({
+  sin_propuesta: t('neg5.co_sello_sin_propuesta'),
+  superado: t('neg5.co_sello_superado'),
+  pendiente: t('neg5.co_sello_pendiente'),
+  aprobada: t('neg5.co_sello_aprobada'),
+  rechazada: t('neg5.co_sello_rechazada'),
+  enviada: t('neg5.co_sello_enviada'),
+})[k];
 
 /** Filas de la lista; las cifras de arriba cubren todas las facturas, no solo estas. */
 const FILAS_MOSTRADAS = 50;
+
+const rotuloEstadoFactura = (e: string, t: TrDe<'admin_dinero'>): string => (({
+  pendiente: t('neg5.est_pendiente'), fallida: t('neg5.est_fallida'), pagada: t('neg5.est_pagada'), cancelada: t('neg5.est_cancelada'),
+} as Record<string, string>)[e] ?? e);
 
 const hito = (h: number) => `D${h >= 0 ? '+' : ''}${h}`;
 
@@ -90,6 +98,14 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
     { etiqueta: t('cobranza.propuestas_pendientes_enviadas_por'), valor: `${estado.propuestasPendientes} / ${estado.propuestasEnviadas}` },
   ]) : undefined;
 
+  // Antigüedad: monto por tramo de días desde el corte, sobre las facturas leídas (nunca un tramo sin facturas inventado: 0 es 0 pesos reales).
+  const tramos = estado ? [
+    { etiqueta: t('cobranza.ant_por_vencer'), cumple: (d: number) => d <= 0 },
+    { etiqueta: t('cobranza.ant_0_7'), cumple: (d: number) => d > 0 && d <= 7 },
+    { etiqueta: t('cobranza.ant_8_30'), cumple: (d: number) => d > 7 && d <= 30 },
+    { etiqueta: t('cobranza.ant_31'), cumple: (d: number) => d > 30 },
+  ].map((b) => ({ etiqueta: b.etiqueta, valor: estado.facturas.filter((f) => b.cumple(f.dias)).reduce((s, f) => s + f.factura.monto, 0) })) : [];
+
   return (
     <EsqueletoTablaMaestra
       titulo={t('cobranza.facturacion')} apoyo={t('cobranza.seguimiento_de_lo_que')}
@@ -102,7 +118,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
             { etiqueta: t('cobranza.total'), valor: mxn(sel.factura.monto) },
             { etiqueta: t('cobranza.corte'), valor: sel.dias >= 0 ? t('cobranza.dias_desde_el_corte', { dias: sel.dias }) : t('cobranza.faltan_dias', { dias: -sel.dias }) },
             { etiqueta: t('cobranza.toques'), valor: String(sel.toques.length) },
-            { etiqueta: t('facturas.periodo'), valor: `${sel.factura.periodoInicio} a ${sel.factura.periodoFin}` },
+            { etiqueta: t('facturas.periodo'), valor: t('neg5.rango_a', { ini: sel.factura.periodoInicio, fin: sel.factura.periodoFin }) },
           ]}
           pie={<BotonEnlace variante="primary" href="/admin/costos-facturacion">{t('cobranza.vr_abrir')}</BotonEnlace>}
         />
@@ -119,46 +135,50 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
           ) : null}
           <AvisoCompacto
             tono="info"
-            resumen="El dunning de las mensualidades de Likida ya corre: prepara recordatorios en cinco toques, como propuestas a la bandeja de aprobación, no envíos."
-            mas={(
-              <>
-                El agente de cobranza recorre las facturas pendientes o fallidas y, para cada una, prepara un recordatorio —3 días antes del corte, el día, y +3, +7 y +15—.
-                Son <strong>propuestas a la bandeja de aprobación, no envíos</strong>: no hay canal de correo al cliente aprobado y nada sale solo. En{' '}
-                <Link href="/admin/aprobaciones">Aprobaciones</Link> el dueño solo aprueba o rechaza la propuesta; el envío al cliente lo hace por su cuenta y el sistema no lo registra,
-                así que «enviadas» seguirá en 0 hasta que exista ese canal. Emitir la mensualidad, conciliar el pago contra el banco y timbrar el CFDI se hace en{' '}
-                <Link href="/admin/costos-facturacion">Planes y cobro</Link>. El vencimiento se toma como el inicio del periodo (la mensualidad se cobra por adelantado).
-              </>
-            )}
+            resumen={t('neg5.co_resumen')}
+            mas={rico(t('neg5.co_mas'), {
+              strong: (c) => <strong>{c}</strong>,
+              aprob: (c) => <Link href="/admin/aprobaciones">{c}</Link>,
+              plan: (c) => <Link href="/admin/costos-facturacion">{c}</Link>,
+            })}
           />
         </>
       )}
     >
-      <Tarjeta titulo={t('cobranza.ultima_corrida_del_agente')} estado={corrida.error ? 'error' : 'ok'} mensaje={t('cobranza.no_se_pudo_leer_2')} reintentar>
-        {corrida.dato === null ? (
-          <p className="adm-din-nota">
-            <StatusChip tono="warn">{t('cobranza.nunca_ha_corrido')}</StatusChip>  {t('cobranza.no_hay_una_sola')}
-          </p>
-        ) : (
-          <>
+      <FilaTarjetas variante="6-6" className="adm-fila-pareja">
+        <Tarjeta titulo={t('cobranza.ultima_corrida_del_agente')} estado={corrida.error ? 'error' : 'ok'} mensaje={t('cobranza.no_se_pudo_leer_2')} reintentar>
+          {corrida.dato === null ? (
             <p className="adm-din-nota">
-              <StatusChip tono={corrida.dato.estado === 'ok' ? 'ok' : 'bad'}>{corrida.dato.estado === 'ok' ? t('cobranza.ultima_corrida_ok') : t('cobranza.ultima_corrida_con_fallo')}</StatusChip>{' '}
-              {corrida.dato.fin.slice(0, 16).replace('T', ' ')} UTC
+              <StatusChip tono="warn">{t('cobranza.nunca_ha_corrido')}</StatusChip>  {t('cobranza.no_hay_una_sola')}
             </p>
-            {corrida.dato.error ? <Aviso tono="error">{corrida.dato.error}</Aviso> : null}
-          </>
-        )}
-      </Tarjeta>
+          ) : (
+            <>
+              <p className="adm-din-nota">
+                <StatusChip tono={corrida.dato.estado === 'ok' ? 'ok' : 'bad'}>{corrida.dato.estado === 'ok' ? t('cobranza.ultima_corrida_ok') : t('cobranza.ultima_corrida_con_fallo')}</StatusChip>{' '}
+                {corrida.dato.fin.slice(0, 16).replace('T', ' ')} UTC
+              </p>
+              {corrida.dato.error ? <Aviso tono="error">{corrida.dato.error}</Aviso> : null}
+            </>
+          )}
+        </Tarjeta>
+        {estado ? (
+          <Tarjeta titulo={t('cobranza.antiguedad_titulo')}>
+            <Columnas datos={tramos} etiqueta={t('cobranza.antiguedad_etiqueta')} formato="mxnCompacto" matiz={8} alto={120} variacion={false} />
+            <p className="adm-din-nota">{t('cobranza.antiguedad_nota')}</p>
+          </Tarjeta>
+        ) : null}
+      </FilaTarjetas>
 
       {estado ? (
         <Tarjeta titulo={t('cobranza.facturas_por_cobrar_y')}>
           {estado.facturas.length > filasVistas.length || truncada ? (
             <p className="adm-din-nota" role="note">
-              Mostrando {filasVistas.length} de {totalBase}; las cifras de arriba cubren {truncada ? `las ${estado.facturas.length} leídas (hay más en la base: sus totales están incompletos)` : 'todas'}.
+              {truncada ? t('neg5.co_mostrando_trunc', { n: filasVistas.length, total: totalBase, leidas: estado.facturas.length }) : t('neg5.co_mostrando_todas', { n: filasVistas.length, total: totalBase })}
             </p>
           ) : null}
           <TablaBase
             etiqueta={t('cobranza.facturas_por_cobrar_y')} idFila={(f) => f.factura.id} tarjetaMovil filas={filasVistas}
-            vacio={{ titulo: '0 mensualidades por cobrar', texto: t('cobranza.no_hay_ninguna_factura') }}
+            vacio={{ titulo: t('neg5.co_cero_mensualidades'), texto: t('cobranza.no_hay_ninguna_factura') }}
             columnas={[
               { id: 'flota', titulo: t('cobranza.flota'), principal: true, celda: (f) => f.factura.tenantNombre },
               { id: 'monto', titulo: t('cobranza.total'), alinear: 'der', celda: (f) => mxn(f.factura.monto) },
@@ -167,32 +187,40 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
                 celda: (f) => (
                   <>
                     <StatusChip tono={f.vencida ? 'bad' : 'neutral'}>{f.dias >= 0 ? t('cobranza.dias_desde_el_corte', { dias: f.dias }) : t('cobranza.faltan_dias', { dias: -f.dias })}</StatusChip>
-                    <span className="adm-din-sub">{f.factura.estado} · {f.factura.periodoInicio} a {f.factura.periodoFin}</span>
+                    <span className="adm-din-sub">{rotuloEstadoFactura(f.factura.estado, t)} · {t('neg5.rango_a', { ini: f.factura.periodoInicio, fin: f.factura.periodoFin })}</span>
                   </>
                 ),
               },
               {
                 id: 'toques', titulo: t('cobranza.toques'),
                 celda: (f) => (f.toques.length === 0 ? (
-                  <>Aún no alcanza el primer toque ({hito(f.proximoHito ?? -3)}).</>
+                  <>{t('neg5.co_aun_no_toque', { hito: hito(f.proximoHito ?? -3) })}</>
                 ) : (
-                  <span className="adm-din-acciones">
-                    {f.toques.map((toque) => (
-                      <StatusChip key={toque.hito} tono={piezas.error ? 'neutral' : ROTULO_SELLO[toque.sello].tono}>
-                        {hito(toque.hito)} · {piezas.error ? t('cobranza.estado_de_la_propuesta') : ROTULO_SELLO[toque.sello].texto}
-                      </StatusChip>
-                    ))}
-                    {f.proximoHito !== null ? <span className="adm-din-sub">siguiente: {hito(f.proximoHito)}</span> : null}
+                  <span className="adm-din-acciones adm-cob-toques">
+                    {(() => {
+                      const ultimo = f.toques[f.toques.length - 1];
+                      const previos = f.toques.slice(0, -1);
+                      const detalle = f.toques.map((q) => `${hito(q.hito)} · ${piezas.error ? t('cobranza.estado_de_la_propuesta') : textoSello(q.sello, t)}`).join('\n');
+                      return (
+                        <>
+                          <StatusChip tono={piezas.error ? 'neutral' : TONO_SELLO[ultimo.sello]} title={detalle}>
+                            {hito(ultimo.hito)} · {piezas.error ? t('cobranza.estado_de_la_propuesta') : textoSello(ultimo.sello, t)}
+                          </StatusChip>
+                          {previos.length > 0 ? <span className="adm-din-sub">{t('pul9.co_previos', { n: previos.length })}</span> : null}
+                        </>
+                      );
+                    })()}
+                    {f.proximoHito !== null ? <span className="adm-din-sub">{t('neg5.co_siguiente', { hito: hito(f.proximoHito) })}</span> : null}
                   </span>
                 )),
               },
-              { id: 'vr', titulo: '', alinear: 'der', celda: (f) => <BotonEnlace href={`/admin/cobranza?ver=${encodeURIComponent(f.factura.id)}`} variante="ghost" tamano="sm">{t('cobranza.vista_rapida')}</BotonEnlace> },
+              { id: 'vr', titulo: '', alinear: 'der', celda: (f) => <BotonEnlace className="adm-cob-vr" href={`/admin/cobranza?ver=${encodeURIComponent(f.factura.id)}`} variante="ghost" tamano="sm">{t('cobranza.vista_rapida')}</BotonEnlace> },
             ]}
           />
         </Tarjeta>
       ) : null}
 
-      <Disclosure titulo={t('cobranza.que_no_se_mide')} resumen="Días de cobro y recuperación">
+      <Disclosure titulo={t('cobranza.que_no_se_mide')} resumen={t('neg5.co_resumen_dias')}>
         <p className="adm-din-nota">
           
           {t('cobranza.pendiente_de_construir_los')}

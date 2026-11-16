@@ -1,0 +1,13 @@
+/* WhatsApp Infra: lista de conversaciones, número operativo y pendientes (sin utilidades de Tailwind, solo tokens del sistema). */
+[data-ui="v2"] .adm-wa-conversaciones { scroll-margin-top: 96px; }
+[data-ui="v2"] .adm-wa-lista-conv { display: flex; flex-direction: column; gap: 6px; }
+[data-ui="v2"] .adm-wa-numero { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+[data-ui="v2"] .adm-wa-numero__texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+[data-ui="v2"] .adm-wa-numero__titulo { font-size: var(--t-body); font-weight: 600; }
+[data-ui="v2"] .adm-wa-numero__detalle { font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .adm-wa-nota { margin: 8px 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--muted); }
+[data-ui="v2"] .adm-wa-pendientes { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* pul9: los chips de pendientes caben en la tarjeta (envuelven el texto en vez de tocar el borde). */
+[data-ui="v2"] .adm-wa-pendientes > li { max-width: 100%; min-width: 0; }
+[data-ui="v2"] .adm-wa-pendientes .rv-estado { max-width: 100%; white-space: normal; text-align: left; }

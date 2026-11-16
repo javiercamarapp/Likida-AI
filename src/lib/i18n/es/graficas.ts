@@ -30,4 +30,7 @@ export const graficas = {
   'corridas.calor.dias': 'Lun,Mar,Mié,Jue,Vie,Sáb,Dom',
   'crecimiento.activacion.ceros': 'Ninguna flota dada de alta todavía: las tres etapas valen cero, y es un conteo real.',
   'ventas.embudo.error': 'No se pudo leer el pipeline en este momento. Esto NO significa que no haya prospectos.',
+  'pul9.ver_tabla': 'Ver como tabla',
+  'pul9.tabla_de': 'Tabla de {titulo}',
+  'pul9.periodo': 'Periodo',
 } as const;

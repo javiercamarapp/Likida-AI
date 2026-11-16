@@ -15,6 +15,7 @@ import './registro.css';
 import { ahoraMs } from '@/lib/saludo';
 import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
+import { trBCompleto } from '@/lib/i18n/tr_dashboard_b';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
 
@@ -143,6 +144,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
   ver?: string | null;
 }) {
   const { t, idioma } = tr;
+  const tb = trBCompleto(idioma).t;
   const conteo = (n: number | null): { valor: string; estado?: 'error'; reintentar?: boolean } => (n === null ? { valor: '—', estado: 'error', reintentar: true } : { valor: numero(n, idioma) });
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
   const hrefVista = (id: string) => hrefRegistro(sufijo, { f: filtro, q, c: cursor, ver: id });
@@ -157,7 +159,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
 
   // Un conteo que no se pudo leer es `null`: NUNCA se pinta como 0. La celda dice «No disponible ahora. No es cero.» y ofrece Reintentar.
   const cifras: PropsCifra[] = [
-    { etiqueta: t('viajes.cifra.total'), ...conteo(conteos.total), nota: 'histórico', info: 'viajes.total' },
+    { etiqueta: t('viajes.cifra.total'), ...conteo(conteos.total), nota: tb('vv.historico'), info: 'viajes.total' },
     { etiqueta: t('viajes.cifra.abiertos'), ...conteo(conteos.abiertos), info: 'viajes.abiertos' },
     { etiqueta: t('viajes.cifra.cuadre'), ...conteo(conteos.enCuadre), info: 'viajes.en_cuadre' },
     { etiqueta: t('viajes.cifra.escalados'), ...conteo(conteos.escalados), tono: (conteos.escalados ?? 0) > 0 ? 'bad' : undefined, info: 'viajes.escalados' },
@@ -168,7 +170,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
       titulo={t('viajes.titulo')}
       apoyo={t('viajes.apoyo')}
       cifras={cifrasUniformes(cifras)}
-      selloCifras={selloHoy(t('viajes.sello'))}
+      selloCifras={selloHoy(t('viajes.sello'), tb, idioma)}
       etiquetaCifras={t('viajes.sello')}
       filtros={(
         // GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como

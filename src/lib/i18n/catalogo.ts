@@ -14,6 +14,12 @@ import type { admin_agentes as admin_agentesEs } from './es/admin_agentes';
 import type { admin_flotas as admin_flotasEs } from './es/admin_flotas';
 import type { admin_dinero as admin_dineroEs } from './es/admin_dinero';
 import type { admin_sistema as admin_sistemaEs } from './es/admin_sistema';
+import type { admin_backoffice as admin_backofficeEs } from './es/admin_backoffice';
+import type { dashboard_a as dashboard_aEs } from './es/dashboard_a';
+import type { dashboard_b as dashboard_bEs } from './es/dashboard_b';
+import type { onboarding as onboardingEs } from './es/onboarding';
+import type { ui_comun as ui_comunEs } from './es/ui_comun';
+import type { admin_resto as admin_restoEs } from './es/admin_resto';
 import type { publico as publicoEs } from './es/publico';
 import type { correo as correoEs } from './es/correo';
 import type { mensajes as mensajesEs } from './es/mensajes';
@@ -47,6 +53,12 @@ export interface Diccionarios {
   admin_flotas: typeof admin_flotasEs;
   admin_dinero: typeof admin_dineroEs;
   admin_sistema: typeof admin_sistemaEs;
+  admin_backoffice: typeof admin_backofficeEs;
+  dashboard_a: typeof dashboard_aEs;
+  dashboard_b: typeof dashboard_bEs;
+  onboarding: typeof onboardingEs;
+  ui_comun: typeof ui_comunEs;
+  admin_resto: typeof admin_restoEs;
   publico: typeof publicoEs;
   correo: typeof correoEs;
   mensajes: typeof mensajesEs;
@@ -58,7 +70,7 @@ export type Namespace = keyof Diccionarios;
 export type DiccionarioDe<N extends Namespace> = { readonly [K in keyof Diccionarios[N]]: string };
 export type ClaveDe<N extends Namespace> = keyof Diccionarios[N] & string;
 
-export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes', 'login', 'operacion', 'dinero', 'agentes', 'admin_inicio', 'admin_agentes', 'admin_flotas', 'admin_dinero', 'admin_sistema', 'publico', 'correo', 'mensajes', 'resto'] as const satisfies readonly Namespace[];
+export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes', 'login', 'operacion', 'dinero', 'agentes', 'admin_inicio', 'admin_agentes', 'admin_flotas', 'admin_dinero', 'admin_sistema', 'admin_backoffice', 'dashboard_a', 'dashboard_b', 'onboarding', 'ui_comun', 'admin_resto', 'publico', 'correo', 'mensajes', 'resto'] as const satisfies readonly Namespace[];
 
 type Cargadores = { [I in Idioma]: { [N in Namespace]: () => Promise<DiccionarioDe<N>> } };
 
@@ -76,6 +88,12 @@ export const CARGADORES: Cargadores = {
     admin_flotas: () => import('./es/admin_flotas').then((m) => m.admin_flotas),
     admin_dinero: () => import('./es/admin_dinero').then((m) => m.admin_dinero),
     admin_sistema: () => import('./es/admin_sistema').then((m) => m.admin_sistema),
+    admin_backoffice: () => import('./es/admin_backoffice').then((m) => m.admin_backoffice),
+    dashboard_a: () => import('./es/dashboard_a').then((m) => m.dashboard_a),
+    dashboard_b: () => import('./es/dashboard_b').then((m) => m.dashboard_b),
+    onboarding: () => import('./es/onboarding').then((m) => m.onboarding),
+    ui_comun: () => import('./es/ui_comun').then((m) => m.ui_comun),
+    admin_resto: () => import('./es/admin_resto').then((m) => m.admin_resto),
     publico: () => import('./es/publico').then((m) => m.publico),
     correo: () => import('./es/correo').then((m) => m.correo),
     mensajes: () => import('./es/mensajes').then((m) => m.mensajes),
@@ -93,6 +111,12 @@ export const CARGADORES: Cargadores = {
     admin_flotas: () => import('./en/admin_flotas').then((m) => m.admin_flotas),
     admin_dinero: () => import('./en/admin_dinero').then((m) => m.admin_dinero),
     admin_sistema: () => import('./en/admin_sistema').then((m) => m.admin_sistema),
+    admin_backoffice: () => import('./en/admin_backoffice').then((m) => m.admin_backoffice),
+    dashboard_a: () => import('./en/dashboard_a').then((m) => m.dashboard_a),
+    dashboard_b: () => import('./en/dashboard_b').then((m) => m.dashboard_b),
+    onboarding: () => import('./en/onboarding').then((m) => m.onboarding),
+    ui_comun: () => import('./en/ui_comun').then((m) => m.ui_comun),
+    admin_resto: () => import('./en/admin_resto').then((m) => m.admin_resto),
     publico: () => import('./en/publico').then((m) => m.publico),
     correo: () => import('./en/correo').then((m) => m.correo),
     mensajes: () => import('./en/mensajes').then((m) => m.mensajes),

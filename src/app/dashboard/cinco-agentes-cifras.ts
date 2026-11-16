@@ -4,6 +4,8 @@ import { cierreDosMesesDeFlota } from '@/lib/likida/peajes/revision_cobros';
 import { hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { logger } from '@/lib/logger';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trDashboardBEs } from '@/lib/i18n/tr_dashboard_b';
 import {
   PERFIL_CIFRAS_PESOS, cifrasDeCierre, cifrasSinDato, type CifrasPesosCincoAgentes,
 } from './cinco-agentes-cifras-modelo';
@@ -27,7 +29,7 @@ export * from './cinco-agentes-cifras-modelo';
  * `hoy` (AAAA-MM-DD, hora de México) solo se pasa en pruebas.
  */
 export async function leerCifrasPesosCincoAgentes(
-  tenantId: string, rol: string, hoy: string = hoyMx(new Date(ahoraMs())),
+  tenantId: string, rol: string, hoy: string = hoyMx(new Date(ahoraMs())), t: TrDe<'dashboard_b'> = trDashboardBEs,
 ): Promise<CifrasPesosCincoAgentes | null> {
   if (!puedeVerArea(rol, 'dinero')) return null; // el encargado nunca: ni siquiera se consulta el perfil
   // FALLA CERRADO: `perfilDeTenant` por omisión asume `cinco_agentes` cuando no pudo leer la tabla (así se oculta de más en
@@ -38,12 +40,12 @@ export async function leerCifrasPesosCincoAgentes(
     const dos = await cierreDosMesesDeFlota(tenantId, hoy.slice(0, 7));
     if ('error' in dos) {
       logger.warn('cinco_agentes.cifras_pesos.cierre_invalido', { tenant: tenantId });
-      return cifrasSinDato('No se pudo leer el estado de cuenta.', true);
+      return cifrasSinDato(t('cif.no_leer_estado'), true, t);
     }
-    return cifrasDeCierre(dos, hoy);
+    return cifrasDeCierre(dos, hoy, t);
   } catch (e) {
     // Sin el mensaje de la base: puede traer TAG, unidad o importe.
     logger.warn('cinco_agentes.cifras_pesos.lectura', { tenant: tenantId, err: e instanceof Error ? e.name : 'desconocido' });
-    return cifrasSinDato('No se pudo leer el estado de cuenta.', true);
+    return cifrasSinDato(t('cif.no_leer_estado'), true, t);
   }
 }

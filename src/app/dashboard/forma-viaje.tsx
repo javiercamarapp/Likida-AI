@@ -6,6 +6,8 @@ import { Plus } from 'lucide-react';
 import { ComboCatalogo, type BuscarCatalogo } from './combo-catalogo';
 import { mxn } from '@/lib/formato';
 import { Aviso, Boton, CampoFecha, CampoTexto, Icono } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { dashboard_b as dashboard_bEs } from '@/lib/i18n/es/dashboard_b';
 
 /**
  * El formulario de NUEVO VIAJE — pieza REUSABLE a propósito (12-ago-2026):
@@ -33,9 +35,10 @@ export type AccionCrearViaje = (
 
 function BotonCrear() {
   const { pending } = useFormStatus();
+  const { t } = useT('dashboard_b', dashboard_bEs);
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Plus} />}>
-      {pending ? 'Creando…' : 'Crear viaje'}
+      {pending ? t('fv.creando') : t('fv.crear')}
     </Boton>
   );
 }
@@ -66,45 +69,46 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
   /** Las unidades activas de la flota. Mismo contrato. */
   totalUnidades: number | null;
 }) {
+  const { t } = useT('dashboard_b', dashboard_bEs);
   const [estado, dispatch] = useActionState(action, null);
 
   return (
     <form action={dispatch} className="rv-forma">
       <div className="rv-forma__rejilla">
-        <CampoTexto id="folio" etiqueta="Folio" name="folio" maxLength={40} placeholder="Ej. F-0148" claseControl="cifra-mono" />
-        <CampoFecha id="fechaInicio" etiqueta="Fecha de inicio" name="fechaInicio" />
-        <CampoTexto id="origen" etiqueta="Origen" name="origen" maxLength={120} placeholder="Ej. Silao" />
-        <CampoTexto id="destino" etiqueta="Destino" name="destino" maxLength={120} placeholder="Ej. Monterrey" />
+        <CampoTexto id="folio" etiqueta={t('fv.folio')} name="folio" maxLength={40} placeholder={t('fv.folio_ph')} claseControl="cifra-mono" />
+        <CampoFecha id="fechaInicio" etiqueta={t('fv.fecha_inicio')} name="fechaInicio" />
+        <CampoTexto id="origen" etiqueta={t('fv.origen')} name="origen" maxLength={120} placeholder={t('fv.origen_ph')} />
+        <CampoTexto id="destino" etiqueta={t('fv.destino')} name="destino" maxLength={120} placeholder={t('fv.destino_ph')} />
         {puedeCapturarAnticipo && (
-          <CampoTexto id="anticipo" etiqueta="Anticipo (MXN)" name="anticipo" tipo="number" min={0} max={topeAnticipo} step="0.01" placeholder="Ej. 8,000" claseControl="cifra-mono"
+          <CampoTexto id="anticipo" etiqueta={t('fv.anticipo')} name="anticipo" tipo="number" min={0} max={topeAnticipo} step="0.01" placeholder={t('fv.anticipo_ph')} claseControl="cifra-mono"
             ayuda={topeAnticipo === undefined ? undefined : topeAnticipoOrigen === 'politica'
-              ? `Tope de la política de tu flota: ${mxn(topeAnticipo)}`
-              : `Umbral de revisión: ${mxn(topeAnticipo)} (arriba de eso lo captura el dueño)`} />
+              ? t('fv.anticipo_tope_politica', { monto: mxn(topeAnticipo) })
+              : t('fv.anticipo_tope_umbral', { monto: mxn(topeAnticipo) })} />
         )}
         <div className="rv-campo">
-          <label htmlFor="operadorId" className="rv-campo__etq">Operador</label>
+          <label htmlFor="operadorId" className="rv-campo__etq">{t('fv.operador')}</label>
           {/* SIN "Sin asignar todavía". `viaje.operador_id` es NOT NULL desde la
               0001, así que esa opción no creaba un viaje sin operador: tronaba
               con un 23502 y el usuario veía "No se pudo crear el viaje" sin
               saber por qué. Verificado contra producción el 14-ago-2026.
               Ofrecer una opción que la base rechaza es peor que no ofrecerla. */}
           <ComboCatalogo tipo="operador" name="operadorId" campoId="operadorId" buscar={buscarCatalogo} requerido
-            aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
+            aria-label={t('fv.operador')} etiquetaVacia={t('fv.operador_vacia')}
             total={totalOperadores} className="w-full" />
           <span className="rv-campo__ayuda">
             {totalOperadores === 0
-              ? 'Necesitas al menos un operador dado de alta: un viaje no puede existir sin quién lo maneje. El alta rápida está a la derecha.'
-              : 'Likida le avisa por WhatsApp en cuanto el viaje exista.'}
+              ? t('fv.operador_sin')
+              : t('fv.operador_aviso')}
           </span>
         </div>
         {totalUnidades === 0 ? (
           // Campo con estado vacío (no un párrafo): deshabilitado, sin `name`, y dice dónde se resuelve.
-          <CampoTexto id="unidadId" etiqueta="Unidad" disabled placeholder="Sin unidades dadas de alta" ayuda="Se registran en Unidades." />
+          <CampoTexto id="unidadId" etiqueta={t('fv.unidad')} disabled placeholder={t('fv.unidad_ph')} ayuda={t('fv.unidad_ayuda')} />
         ) : (
           <div className="rv-campo">
-            <label htmlFor="unidadId" className="rv-campo__etq">Unidad</label>
+            <label htmlFor="unidadId" className="rv-campo__etq">{t('fv.unidad')}</label>
             <ComboCatalogo tipo="unidad" name="unidadId" campoId="unidadId" buscar={buscarCatalogo}
-              aria-label="Unidad" etiquetaVacia="Sin asignar todavía"
+              aria-label={t('fv.unidad')} etiquetaVacia={t('fv.sin_asignar')}
               total={totalUnidades} className="w-full cifra-mono" />
           </div>
         )}
@@ -118,32 +122,31 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
           cuadrícula, el anticipo y el ingreso se confunden — y confundirlos
           produce márgenes que se ven bien y están mal. */}
       {puedeCapturarDinero && <fieldset className="rv-forma__ingreso">
-        <legend className="rv-forma__leyenda">Lo que se le cobra al cliente · opcional</legend>
+        <legend className="rv-forma__leyenda">{t('fv.ingreso_leyenda')}</legend>
 
         <div className="rv-forma__rejilla">
           {totalClientes === 0 ? (
-            <CampoTexto id="clienteId" etiqueta="Cliente" disabled placeholder="Sin clientes dados de alta" ayuda="Se registran en Clientes y tarifas." />
+            <CampoTexto id="clienteId" etiqueta={t('fv.cliente')} disabled placeholder={t('fv.cliente_ph')} ayuda={t('fv.cliente_ayuda')} />
           ) : (
             <div className="rv-campo">
-              <label htmlFor="clienteId" className="rv-campo__etq">Cliente</label>
+              <label htmlFor="clienteId" className="rv-campo__etq">{t('fv.cliente')}</label>
               <ComboCatalogo tipo="cliente" name="clienteId" campoId="clienteId" buscar={buscarCatalogo}
-                aria-label="Cliente" etiquetaVacia="Sin asignar todavía"
+                aria-label={t('fv.cliente')} etiquetaVacia={t('fv.sin_asignar')}
                 total={totalClientes} className="w-full" />
             </div>
           )}
-          <CampoTexto id="ingresoFlete" etiqueta="Ingreso del flete (MXN)" name="ingresoFlete" inputMode="decimal" placeholder="Ej. 38,500" claseControl="cifra-mono"
-            ayuda="Lo que le cobras al cliente, NO el anticipo. Vacío no es cero." />
-          <CampoTexto id="kmRecorridos" etiqueta="Kilómetros" name="kmRecorridos" inputMode="numeric" placeholder="Ej. 1,240" claseControl="cifra-mono" />
+          <CampoTexto id="ingresoFlete" etiqueta={t('fv.ingreso')} name="ingresoFlete" inputMode="decimal" placeholder={t('fv.ingreso_ph')} claseControl="cifra-mono"
+            ayuda={t('fv.ingreso_ayuda')} />
+          <CampoTexto id="kmRecorridos" etiqueta={t('fv.km')} name="kmRecorridos" inputMode="numeric" placeholder={t('fv.km_ph')} claseControl="cifra-mono" />
         </div>
 
         <p className="rv-campo__ayuda">
-          Sin el ingreso capturado, este viaje no entra en la medición de margen — ni la suya ni la de
-          su ruta, su cliente o su unidad. Se puede llenar después.
+          {t('fv.ingreso_nota')}
         </p>
       </fieldset>}
 
       {!puedeCapturarDinero && (
-        <CampoTexto id="kmRecorridos" etiqueta="Kilómetros" name="kmRecorridos" inputMode="numeric" placeholder="Ej. 1,240" claseControl="cifra-mono" />
+        <CampoTexto id="kmRecorridos" etiqueta={t('fv.km')} name="kmRecorridos" inputMode="numeric" placeholder={t('fv.km_ph')} claseControl="cifra-mono" />
       )}
 
       {estado?.error && (

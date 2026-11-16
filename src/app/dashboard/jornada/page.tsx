@@ -24,7 +24,7 @@ import { evaluarSemanas, type SemanaEvaluada } from '@/lib/likida/jornada/semana
 import { sufijoTenant } from '../sufijo';
 import { VistaJornada, type FilaJornada } from './vista';
 import type { Metadata } from 'next';
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('operacion');
   return { title: t('meta.jornada') };
@@ -110,7 +110,7 @@ async function resolverAlcance(
     exigirDentroDelAlcance(alcance, ter.terminalId);
     return { jornadaId: ter.jornadaId ?? null };
   } catch (e) {
-    return { rechazo: { ok: false, error: mensajeParaPantalla(e, 'comprobar el patio del operador') } };
+    return { rechazo: { ok: false, error: mensajeParaPantalla(e, 'comprobar el patio del operador', await idiomaActual()) } };
   }
 }
 
@@ -162,6 +162,7 @@ export default async function PaginaJornada({
   }>;
 }) {
   const { t } = await getT('operacion');
+  const { t: tb } = await getT('dashboard_b');
   const sp = await searchParams;
   // El `userId` del render NO se saca aquí A PROPÓSITO: cada server action
   // vuelve a resolver la sesión con `puerta(sp, tenantId)` y firma con ESE id. Arrastrar
@@ -222,7 +223,7 @@ export default async function PaginaJornada({
         jornadaId: d.id,
         operadorId: d.operadorId,
         // Nunca un nombre inventado: si ya no está en el catálogo, se dice.
-        operadorNombre: o?.nombre ?? `Operador dado de baja (${d.operadorId.slice(0, 8)})`,
+        operadorNombre: o?.nombre ?? tb('jp.baja', { id: d.operadorId.slice(0, 8) }),
         dia: d.dia,
         estado: d.estado,
         cerradoPorEmail: d.cerradoPorEmail,

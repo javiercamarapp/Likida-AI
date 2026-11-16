@@ -192,3 +192,28 @@
 [data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido { align-items: start; }
 [data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > *,
 [data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > * > .rv-tarjeta { align-self: start; height: auto; }
+
+/* ── Ronda 7 (15-nov-2026): como el dashboard de clientes — tira unida, compacta, con visuales; sin vacíos ─────────────────── */
+/* Las seis cifras van en UNA tira (`TiraCifras`, la misma del dashboard): padding 14, gap 6, filete de 3 px. La serie o la barra
+   segmentada llenan el costado; el sello «● Observado» queda en el pie de cada celda. Tipografía solo por tokens. */
+[data-ui="v2"] .adm-res-tira .rv-kpi { padding: 12px 14px; gap: 6px; min-width: 0; overflow: hidden; }
+/* La etiqueta ocupa siempre dos líneas de alto: así la cifra de todas las celdas queda a la misma altura (había celdas de 1 y de 2 líneas). */
+[data-ui="v2"] .adm-res-tira .rv-kpi__cab { min-height: 2.6em; align-items: flex-start; }
+[data-ui="v2"] .adm-res-tira .rv-kpi__fila { min-width: 0; }
+[data-ui="v2"] .adm-res-tira .rv-kpi__valor { min-width: 0; }
+[data-ui="v2"] .adm-res-tira .rv-kpi__spark { flex: 0 1 64px; width: 64px; min-width: 0; overflow: hidden; }
+[data-ui="v2"] .adm-res-tira .rv-kpi__spark .rv-spark { width: 100%; height: auto; }
+[data-ui="v2"] .adm-res-tira .rv-kpi__segs { margin-top: 2px; }
+/* Aviso de acceso: una línea fina, no una banda de 40 px. */
+[data-ui="v2"] .adm-acceso { padding: 6px 12px; font-size: var(--t-small, 12px); border-radius: 8px; gap: 8px; }
+/* Dos paneles de la misma fila: cada uno mide lo que su contenido (nunca se estira con un vacío dentro; 15-nov, capturas del arnés). */
+[data-ui="v2"] .adm-fila-pareja { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-pareja > .rv-tarjeta { height: auto; }
+[data-ui="v2"] .adm-res-grafica { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+[data-ui="v2"] .adm-res-grafica > * { width: 100%; }
+[data-ui="v2"] .adm-fila-pareja .adm-res-pares { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); row-gap: 6px; }
+[data-ui="v2"] .adm-fila-pareja .adm-res-pie { margin-top: 0; }
+[data-ui="v2"] .adm-fila-pareja .rv-dona { margin: auto; }
+/* Filas-tarjeta de «Requieren atención»: más finas. */
+[data-ui="v2"] .adm-res-lista--tarjetas { gap: 6px; }
+[data-ui="v2"] .adm-res-lista--tarjetas .adm-res-fila { padding: 8px 12px; min-height: 0; }

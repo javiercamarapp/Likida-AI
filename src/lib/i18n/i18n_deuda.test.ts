@@ -130,7 +130,8 @@ function archivos(dir: string, acc: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
     if (e.isDirectory()) {
-      if (e.name === 'node_modules' || e.name === '__fixtures__') continue;
+      // `en/` son las traducciones al inglés de archivos de datos (info-textos, onboarding): conservan términos y campos en español a propósito.
+      if (e.name === 'node_modules' || e.name === '__fixtures__' || e.name === 'en') continue;
       archivos(p, acc);
     } else if (/\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) && !/\.tmp\.tsx?$/.test(e.name) && !e.name.endsWith('.d.ts')) acc.push(p); // `.tmp.` = archivo efímero que otra prueba crea y borra en paralelo
   }

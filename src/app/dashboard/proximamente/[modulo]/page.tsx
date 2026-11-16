@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeVerRuta, rutaProximamenteEnPerfil, type ModuloPerfil } from '@/lib/auth/visibilidad';
+import { getT } from '@/lib/i18n/servidor';
 import { sufijoTenant } from '../../sufijo';
 import { Proximamente } from '../proximamente';
 import { CONTENIDO_PROXIMAMENTE } from '../contenido';
@@ -36,7 +37,11 @@ export default async function PaginaProximamente({
   if (!perfil || !rutaProximamenteEnPerfil(perfil, contenido.rutaReal)) redirect(`${contenido.rutaReal}${sufijo}`);
   if (!puedeVerRuta(rol, contenido.rutaReal)) redirect('/dashboard');
 
-  return <Proximamente contenido={contenido} hrefResumen={`/dashboard${sufijo}`} />;
+  const { t } = await getT('dashboard_a');
+  return <Proximamente contenido={contenido} hrefResumen={`/dashboard${sufijo}`} t={t} />;
 }
 
-export const metadata: Metadata = { title: 'Próximamente' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('dashboard_a');
+  return { title: t('prox.area') };
+}

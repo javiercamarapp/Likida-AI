@@ -9,7 +9,7 @@ import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { getAgentesParados } from '@/lib/admin/agentes-parados';
 import { leerResumenBandeja } from '@/lib/admin/cola-aprobacion';
 import { bandejaPendiente } from '@/lib/likida/agentes/cola';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { ahoraMs } from '@/lib/saludo';
 import { VistaTuTurno } from './vista';
 
@@ -85,7 +85,7 @@ export default async function PaginaTuTurno({
       await resolverPieza(id, accion, actor);
       revalidatePath('/admin/tu-turno');
     } catch (e) {
-      mensajeParaPantalla(e, 'resolver la pieza'); // registra la falla del sistema; la URL lleva solo un código
+      await mensajeDeFalla(e, 'verbo.turno_resolver_pieza'); // registra la falla del sistema; la URL lleva solo un código
       redirect('/admin/tu-turno?error=pieza');
     }
     redirect(`/admin/tu-turno?aviso=${accion === 'aprobada' ? 'pieza_aprobada' : 'pieza_descartada'}`);
@@ -107,7 +107,7 @@ export default async function PaginaTuTurno({
       await crearOrden(tipo, rutina, actor, tipo === 'editar_encargo' ? { contenido } : {});
       revalidatePath('/admin/tu-turno');
     } catch (e) {
-      mensajeParaPantalla(e, 'encolar la orden');
+      await mensajeDeFalla(e, 'verbo.turno_encolar_orden');
       redirect('/admin/tu-turno?error=orden');
     }
     redirect(`/admin/tu-turno?aviso=${tipo === 'editar_encargo' ? 'encargo' : 'orden'}`);

@@ -1,6 +1,8 @@
 import { AlertTriangle, Check, Info, OctagonAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cx } from './clases';
+import { textoUi } from './texto-ui';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 export type TonoAviso = 'info' | 'warn' | 'error' | 'ok';
 
@@ -33,7 +35,9 @@ export function Aviso({ tono = 'info', titulo, children, acciones, className }: 
  *  «Ver más» que despliega el resto en un <details> nativo (sin JavaScript). Sustituye a los párrafos o banners largos antes del
  *  contenido: lo importante en dos líneas, lo legal o de contexto detrás del enlace. Mismo cromo y tonos que `Aviso`; `error` usa
  *  role="alert". Sin funciones como props: se puede pintar desde un componente de servidor. */
-export function AvisoCompacto({ tono = 'info', resumen, mas, etiquetaMas = 'Ver más', className }: {
+export function AvisoCompacto({ tono = 'info', resumen, mas, etiquetaMas, className, idioma }: {
+  /** Idioma del «Ver más» por omisión (servidor sin proveedor); por omisión, es. */
+  idioma?: Idioma;
   tono?: TonoAviso;
   /** Lo esencial, en una o dos líneas (se recorta a dos). */
   resumen: ReactNode;
@@ -43,6 +47,7 @@ export function AvisoCompacto({ tono = 'info', resumen, mas, etiquetaMas = 'Ver 
   className?: string;
 }) {
   const Glifo = ICONO[tono];
+  const rotuloMas = etiquetaMas ?? textoUi(idioma)('comun.ver_mas');
   return (
     <div className={cx('rv-aviso', 'rv-aviso--compacto', className)} data-tono={tono} role={tono === 'error' ? 'alert' : 'status'}>
       <Glifo className="rv-aviso__icono" width={14} height={14} strokeWidth={2} aria-hidden="true" />
@@ -50,7 +55,7 @@ export function AvisoCompacto({ tono = 'info', resumen, mas, etiquetaMas = 'Ver 
         <p className="rv-aviso__resumen">{resumen}</p>
         {mas ? (
           <details className="rv-aviso__mas">
-            <summary className="rv-aviso__mas-cab">{etiquetaMas}</summary>
+            <summary className="rv-aviso__mas-cab">{rotuloMas}</summary>
             <div className="rv-aviso__mas-cuerpo">{mas}</div>
           </details>
         ) : null}

@@ -200,6 +200,9 @@ describe('la página', () => {
     expect(h).not.toContain('class="card p-');
   });
   it('sin sesión de superadmin no lee nada', async () => {
+    // La prueba anterior deja lecturas asíncronas en vuelo (cada bloque espera su traductor); se dejan terminar y se limpian antes de medir esta.
+    await new Promise((r) => setTimeout(r, 20));
+    vi.clearAllMocks();
     dobles.requireSuperadmin.mockRejectedValue(new Error('REDIRECT'));
     await expect(CrecimientoPage()).rejects.toThrow('REDIRECT');
     expect(dobles.getResumenNegocio).not.toHaveBeenCalled();

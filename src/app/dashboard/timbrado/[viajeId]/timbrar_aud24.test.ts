@@ -70,7 +70,7 @@ describe('FE-24: un fallo de red con el PAC no tira la página ni se traga el ti
     expect(iTry).toBeGreaterThan(-1);
     expect(iLlamada).toBeGreaterThan(iTry);
     expect(iCatch).toBeGreaterThan(iLlamada);
-    expect(accion).toContain('mensajeParaPantalla(e, \'timbrar\')');
+    expect(accion).toContain('mensajeParaPantalla(e, \'timbrar\', await idiomaActual())');
   });
 
   it('se revalida SIEMPRE, también cuando lanzó: el timbre pudo haber salido', () => {
