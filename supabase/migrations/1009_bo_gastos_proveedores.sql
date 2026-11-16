@@ -109,10 +109,21 @@ begin
   if (to_jsonb(new) - v_libres) is distinct from (to_jsonb(old) - v_libres) then
     raise exception 'bo_gasto es de una sola escritura: solo se concilia, se clasifica o se anula' using errcode = '42501';
   end if;
-  if old.conciliado_en is not null and new.conciliado_en is distinct from old.conciliado_en then
+  -- La EVIDENCIA queda congelada: una vez conciliado, ni quién, ni con qué referencia, ni contra qué movimiento se reescriben; una vez
+  -- anulado, ni quién ni el motivo. (Solo importaba el instante: con `now()` dentro de una misma transacción un segundo UPDATE lo dejaba igual
+  -- y se colaba un motivo nuevo.)
+  if old.conciliado_en is not null and (
+       new.conciliado_en is distinct from old.conciliado_en
+    or new.conciliado_por is distinct from old.conciliado_por
+    or new.referencia_banco is distinct from old.referencia_banco
+    -- por JSON: la columna la agrega la 1015, y esta función debe valer también en el tramo 1009-1014
+    or (to_jsonb(new) -> 'tesoreria_mov_id') is distinct from (to_jsonb(old) -> 'tesoreria_mov_id')) then
     raise exception 'el gasto ya estaba conciliado' using errcode = '42501';
   end if;
-  if old.anulado_en is not null and new.anulado_en is distinct from old.anulado_en then
+  if old.anulado_en is not null and (
+       new.anulado_en is distinct from old.anulado_en
+    or new.anulado_por is distinct from old.anulado_por
+    or new.motivo_anulacion is distinct from old.motivo_anulacion) then
     raise exception 'el gasto ya estaba anulado' using errcode = '42501';
   end if;
   return new;

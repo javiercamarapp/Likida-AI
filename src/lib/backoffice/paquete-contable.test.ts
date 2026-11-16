@@ -229,6 +229,7 @@ describe('armarPaquete', () => {
 
 describe('el módulo no llama al SAT ni a ningún servicio externo', () => {
   const ARCHIVOS = ['fiscal.ts', 'calendario.ts', 'libro.ts', 'cuentas.ts', 'paquete-contable.ts', 'contabilidad.ts', 'insumos-contables.ts'];
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee archivos fuente fijos del propio módulo
   const leer = (f: string) => readFileSync(join(process.cwd(), 'src/lib/backoffice', f), 'utf8');
   const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/[^\n]*/g, '$1');
 

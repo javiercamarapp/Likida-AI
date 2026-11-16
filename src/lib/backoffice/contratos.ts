@@ -75,7 +75,7 @@ export function parsearDiasAviso(texto: string | undefined, porOmision: readonly
 /** Pesos tecleados → centavos enteros; null si no es una cantidad ≥ 0 con a lo más 2 decimales. */
 export function parsearPesosACentavos(texto: string): number | null {
   const t = texto.trim().replace(/[$\s]/g, '').replace(/,/g, '');
-  if (!/^\d{1,10}(\.\d{1,2})?$/.test(t)) return null;
+  if (!/^\d{1,10}$/.test(t) && !/^\d{1,10}\.\d{1,2}$/.test(t)) return null;
   return Math.round(Number(t) * 100);
 }
 

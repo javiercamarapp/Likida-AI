@@ -31,7 +31,7 @@ export function diasDeCierre(periodo: string, cerradoEn: string | null): number 
 
 // ───────────────────────────── Guardia de números ─────────────────────────────
 
-const NUMERO = /-?\$?\d[\d,]*(?:\.\d+)?/g;
+const NUMERO = /-?\$?\d[\d,]*(?:\.\d{1,12})?/g;
 
 /** Valor absoluto de un token numérico impreso (`-$1,160.00` → 1160). */
 function valorDeToken(t: string): number {
