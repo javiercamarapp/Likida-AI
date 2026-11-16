@@ -48,7 +48,8 @@ for (const rol of ROLES) {
       });
       expect(medidas.dentroDeV2, 'la invitación debe vivir dentro de data-ui="v2"').toBe(true);
       expect(medidas.z).toBe('55');
-      expect(medidas.fondoPrimario, 'primario negro (--marca), nunca el naranja de v1').toBe('rgb(14, 14, 16)');
+      // 16-nov-2026: el primario es el naranja ladrillo de marca de Likida (--btn-bg #c2410c).
+      expect(medidas.fondoPrimario, 'primario naranja de marca (--btn-bg)').toBe('rgb(194, 65, 12)');
       // Nada la tapa (cabeceras sticky, otras capas): Playwright falla el clic de prueba si otro elemento recibe el puntero.
       await invitacion(page).getByRole('button', { name: 'Recorrido corto' }).click({ trial: true });
       await invitacion(page).getByRole('button', { name: 'Ahora no' }).click({ trial: true });
