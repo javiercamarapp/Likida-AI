@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { ShieldCheck } from 'lucide-react';
-import { EsqCifrasV2, EsqTarjetaV2, FilaTarjetas, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqCifrasV2, EsqTarjetaV2, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { Columnas, DonaMini, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import { uniformes } from './cifras-uniformes';
 import { observadas } from './sello-observado';
