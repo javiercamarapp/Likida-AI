@@ -40,7 +40,7 @@ describe('el resultado del alta se ve en la pantalla', () => {
 
   it('el alta (cuenta + asiento + correo) va dentro de un try que traduce el error a mensaje', () => {
     expect(ACCION).toMatch(/try \{[\s\S]*?await altaDeUsuarioDesdeAdmin\(/);
-    expect(ACCION).toContain("mensajeParaPantalla(e, 'dar de alta al usuario')");
+    expect(ACCION).toContain("mensajeParaPantalla(e, t('ctl.nu_verbo_alta'))");
     // `provisionarUsuario` y su traducción de errores viven ahora en gestion_admin.ts (probado en gestion_admin.test.ts).
     expect(ACCION).not.toMatch(/await provisionarUsuario\(/);
   });

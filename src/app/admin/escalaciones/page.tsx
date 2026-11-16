@@ -3,6 +3,7 @@ import { getT } from '@/lib/i18n/servidor';
 import { nombreFuenteTr } from '@/lib/i18n/rotulos_tr';
 import { urlCasoExamen } from '@/lib/admin/casos-regresion';
 import type { Metadata } from 'next';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 import {
   Inbox, ShieldCheck, Bot, Wrench, ReceiptText, LifeBuoy, ClipboardCheck, ArrowRight,
 } from 'lucide-react';
@@ -33,12 +34,12 @@ const ICONO_FUENTE: Record<FuenteEscalacion, typeof Inbox> = {
 
 /** "hace 3 h" / "hace 2 d" contra el MISMO reloj del servidor con el que se calculó el SLA de los tickets (ahoraMs inyectado a la
  *  bandeja) — dos relojes en la misma fila terminan contándose historias distintas. */
-function edadDe(desdeIso: string, ahora: number): string {
+function edadDe(desdeIso: string, ahora: number, td: TrDe<'admin_dinero'>): string {
   const horas = (ahora - new Date(desdeIso).getTime()) / 3_600_000;
   if (Number.isNaN(horas)) return '—';
-  if (horas < 1) return 'hace menos de 1 h';
-  if (horas < 48) return `hace ${Math.floor(horas)} h`;
-  return `hace ${Math.floor(horas / 24)} d`;
+  if (horas < 1) return td('neg5.hace_menos_1h');
+  if (horas < 48) return td('neg5.hace_horas', { n: Math.floor(horas) });
+  return td('neg5.hace_dias', { n: Math.floor(horas / 24) });
 }
 
 const FUENTES: FuenteEscalacion[] = ['arco', 'corridas', 'talachas', 'facturas_proveedor', 'tickets', 'liquidaciones'];
@@ -75,6 +76,7 @@ export default async function EscalacionesPage() {
 
   const { t: tMon } = await getT('monitoreo');
   const { t: tSis } = await getT('admin_sistema');
+  const { t: td } = await getT('admin_dinero');
   const columnas: ColumnaBase<ItemEscalacion>[] = [
     {
       id: 'que', titulo: t('escalaciones.que_espera'), principal: true,
@@ -85,7 +87,7 @@ export default async function EscalacionesPage() {
       celda: (it) => { const Icono = ICONO_FUENTE[it.fuente]; return <span className="bj-fuente"><Icono width={13} height={13} strokeWidth={1.75} aria-hidden="true" />{nombreFuenteTr(it.fuente, tSis)}</span>; },
     },
     { id: 'flota', titulo: t('escalaciones.flota'), celda: (it) => it.tenantNombre },
-    { id: 'desde', titulo: t('escalaciones.desde'), celda: (it) => `${fechaHoraMx(it.desde)} · ${edadDe(it.desde, ahora)}` },
+    { id: 'desde', titulo: t('escalaciones.desde'), celda: (it) => `${fechaHoraMx(it.desde)} · ${edadDe(it.desde, ahora, td)}` },
     {
       id: 'vence', titulo: t('escalaciones.vence'),
       celda: (it) => (it.vence
@@ -96,8 +98,8 @@ export default async function EscalacionesPage() {
       id: 'resolver', titulo: t('escalaciones.se_resuelve_en'), alinear: 'der',
       // Sin pantalla a la cual llevar, se dice — un link que rebota es peor que ninguno.
       celda: (it) => (it.href
-        ? <BotonEnlace href={it.href} variante="secondary" tamano="sm" className="bj-nowrap">Resolver <ArrowRight width={11} height={11} strokeWidth={1.75} aria-hidden="true" /></BotonEnlace>
-        : 'sin ficha'),
+        ? <BotonEnlace href={it.href} variante="secondary" tamano="sm" className="bj-nowrap">{td('neg5.resolver')} <ArrowRight width={11} height={11} strokeWidth={1.75} aria-hidden="true" /></BotonEnlace>
+        : td('neg5.sin_ficha')),
     },
     { id: 'caso', titulo: '', alinear: 'der', celda: (it) => <BotonEnlace href={urlCasoExamen(it)} variante="ghost" tamano="sm" className="bj-nowrap">{tMon('caso.boton')}</BotonEnlace> },
   ];
@@ -171,7 +173,7 @@ export default async function EscalacionesPage() {
         </section>
       )}
 
-      <BloqueAgentesParados datos={parados} cola={cola} t={t} tope={10} />
+      <BloqueAgentesParados datos={parados} cola={cola} t={t} td={td} tope={10} />
     </EsqueletoTablaMaestra>
   );
 }

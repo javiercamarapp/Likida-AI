@@ -76,3 +76,8 @@
 /* Ronda 8: periodo (segmentado) y filtros del cajón en UNA sola fila con gap 8, como el FilterBar de Rovaq. */
 [data-ui="v2"] .adm-filtros-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 [data-ui="v2"] .adm-filtros-fila > * { margin: 0; }
+/* Cobranza: un solo chip de toque por fila, con aire en la celda y botón en una línea. */
+[data-ui="v2"] .adm-cob-toques { flex-direction: column; align-items: flex-start; gap: 4px; padding-block: 4px; }
+[data-ui="v2"] .adm-cob-vr { white-space: nowrap; }
+/* pul9: aire entre una forma ancha y lo que va debajo (el vacío punteado de la lista). */
+[data-ui="v2"] .adm-din-forma--ancha { margin-bottom: 12px; }

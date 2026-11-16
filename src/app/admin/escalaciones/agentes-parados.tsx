@@ -1,11 +1,12 @@
 import { Aviso, BotonEnlace, EstadoVacio, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { BarList } from '@/app/ui-v2/graficas';
 import type { AgenteParado, AgentesParados } from '@/lib/admin/agentes-parados';
 import type { ResumenBandejaCola } from '@/lib/admin/cola-aprobacion';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import '../bandeja.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
-import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
+import { trAdminInicioEs, trAdminDineroEs } from '@/lib/i18n/tr_admin';
 /** Cuántas filas se listan; el conteo de arriba es de TODOS los parados y se dice. */
 export const TOPE_PARADOS = 50;
 
@@ -43,8 +44,10 @@ export function contarPorCausa(parados: ReadonlyArray<AgenteParado>): { causa: s
  * saltados del último latido del runner). Lectura caída = se dice, NO «ningún agente parado». NO toca `LIKIDA_RUNNER_TOPE_BANDEJA_GLOBAL`:
  * la contrapresión es un freno correcto y aquí solo se hace visible, con la salida legítima (resolver la bandeja) enlazada.
  */
-export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, resumen = false, tope = TOPE_PARADOS }: {
+export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, td = trAdminDineroEs, resumen = false, tope = TOPE_PARADOS }: {
   datos: AgentesParados | null; cola: ResumenBandejaCola | null; t?: TrDe<'admin_inicio'>;
+  /** Traductor de «admin_dinero» para los textos propios del bloque (sin él, español). */
+  td?: TrDe<'admin_dinero'>;
   /** Solo el aviso con el conteo por causa y la salida a Escalaciones: la tabla completa vive en una sola página (no se repite en tres). */
   resumen?: boolean;
   /** Cuántas filas se listan en la tabla (el conteo sigue siendo de todos los parados y se dice). */
@@ -102,8 +105,8 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, resumen
       {cola?.frenaAlRunner && (
         <Aviso
           tono="error"
-          titulo="La bandeja de aprobación está frenando a los agentes."
-          acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">Ir a Aprobaciones</BotonEnlace>}
+          titulo={td('neg5.bandeja_frena_titulo')}
+          acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">{td('neg5.ir_a_aprobaciones')}</BotonEnlace>}
         >
           {t('parados.piezas_pendientes', { n: numero(cola.pendientes) })}
           {cola.diasMasVieja !== null ? t('parados.mas_vieja', { dias: numero(Math.floor(cola.diasMasVieja)) }) : ''}
@@ -116,7 +119,11 @@ export function BloqueAgentesParados({ datos, cola, t = trAdminInicioEs, resumen
         </p>
       ) : (
         <>
-          <TablaBase etiqueta="Agentes que no corrieron" columnas={columnas} filas={filas} idFila={(p) => p.agente} densa tarjetaMovil />
+          <BarList
+            etiqueta={td('neg5.parados_por_causa')} formato={numero}
+            items={porCausa.map((c) => ({ clave: c.causa ?? 'sin_dato', etiqueta: etiquetaCausa(c.causa, t) ?? t('turno.sin_dato_del_motivo'), valor: c.n, texto: numero(c.n) }))}
+          />
+          <TablaBase etiqueta={t('escalaciones_agentes_parados.agentes_que_no_corrieron')} columnas={columnas} filas={filas} idFila={(p) => p.agente} densa tarjetaMovil />
           <p className="bj-nota">
         {parados.length > tope
           ? t('parados.se_listan', { tope: numero(tope), total: numero(parados.length) })

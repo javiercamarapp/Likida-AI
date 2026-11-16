@@ -143,11 +143,11 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
             {p.sitio ? (
               <span>
                 <a href={p.sitio.startsWith('http') ? p.sitio : `https://${p.sitio}`} target="_blank" rel="noreferrer">{p.sitio}</a>{' '}
-                <StatusChip tono={p.sitioVerificado ? 'ok' : 'neutral'}>{p.sitioVerificado ? 'verificado' : t('mapa_prospectos_detalle.sin_verificar')}</StatusChip>
+                <StatusChip tono={p.sitioVerificado ? 'ok' : 'neutral'}>{p.sitioVerificado ? t('mapa_prospectos.verificado') : t('mapa_prospectos_detalle.sin_verificar')}</StatusChip>
               </span>
             ) : null}
           </Dato>
-          <Dato etiqueta={t('observabilidad.flota')}>{p.numUnidades !== null ? `${numero(p.numUnidades, idioma)} unidades` : null}</Dato>
+          <Dato etiqueta={t('observabilidad.flota')}>{p.numUnidades !== null ? t('mapa_prospectos_cerebro.n_unidades', { n: numero(p.numUnidades, idioma) }) : null}</Dato>
           <Dato etiqueta={t('mapa_prospectos_detalle.viajes_mes_estimado')}>{p.viajesMesEstimado !== null ? `≈ ${numero(p.viajesMesEstimado, idioma)}` : null}</Dato>
           <Dato etiqueta={t('trust_safety.fuente')}>{p.fuenteCruda}</Dato>
           <Dato etiqueta={t('mapa_prospectos_detalle.registrado')}>{fechaHoraMx(p.creadoEn, idioma)}</Dato>

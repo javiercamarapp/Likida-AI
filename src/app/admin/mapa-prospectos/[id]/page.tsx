@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getDetalleProspecto } from '@/lib/admin/prospectos-mapa';
 import { Detalle } from './detalle';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,4 +20,7 @@ export default async function PaginaDetalleProspecto({ params }: { params: Promi
   return <Detalle p={p} />;
 }
 
-export const metadata: Metadata = { title: 'Prospecto' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('mapa_prospectos.prospecto_titulo') };
+}

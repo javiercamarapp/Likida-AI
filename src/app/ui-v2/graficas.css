@@ -559,3 +559,6 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] :is([data-matiz="4"], [data-matiz="6"], [data-matiz="8"]) :is(.rv-colum__barra, .rv-dona__gajo, .rv-area__linea, .rv-spark__linea) { stroke: var(--chart-borde); stroke-width: 1; }
 [data-ui="v2"] :is([data-matiz="4"], [data-matiz="6"], [data-matiz="8"]) :is(.rv-embudo__barra, .rv-bullet__relleno, .rv-barlist__relleno, .rv-apilada__tramo) { box-shadow: inset 0 0 0 1px var(--chart-borde); }
 [data-ui="v2"] :is([data-matiz="4"], [data-matiz="6"], [data-matiz="8"]) .rv-kpi__cab::before { box-shadow: inset 0 0 0 1px var(--chart-borde); }
+
+/* Una dona en una tarjeta que se estira a la altura de su vecina se centra (antes quedaba arriba con un vacío debajo). */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta .rv-dona { margin-block: auto; }

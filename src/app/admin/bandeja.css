@@ -114,8 +114,7 @@
 .bj-chips-fuente > li { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font-size: 12px; color: var(--ink2, var(--muted)); }
 .bj-chips-fuente > li b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
 
-/* F26 ronda 5 · Tu turno: «Siguiente mejor acción» destacada (Rovaq `hoy-sig`): filete izquierdo de 3 px (negro en monocromo), título 16/600 y la acción primaria a la vista. */
-[data-ui="v2"] .rv-tarjeta.bj-sig { border-left: 3px solid var(--ink); }
+/* F26 ronda 5 · Tu turno: «Siguiente mejor acción» destacada (Rovaq `hoy-sig`; pul9: sin filete izquierdo, es la tarjeta estándar), título 16/600 y la acción primaria a la vista. */
 [data-ui="v2"] .rv-tarjeta.bj-sig .rv-tarjeta__titulo { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
 [data-ui="v2"] .rv-tarjeta.bj-sig .bj-siguiente { font-size: 14px; line-height: 1.45; font-weight: 500; }
 /* Ronda 7: la tarjeta lateral se estira a la altura de «Piezas para tu tap» (no `align-self: start`) y el cuerpo la llena: la acción arriba,
@@ -129,3 +128,6 @@
   [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn { position: relative; min-height: 36px; }
   [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
 }
+
+/* pul9: los sellos de procedencia van debajo de las tarjetas, como en el resto de pantallas. */
+.bj-procedencia { margin-bottom: 8px; }

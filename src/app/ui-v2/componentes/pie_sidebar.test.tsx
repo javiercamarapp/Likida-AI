@@ -90,26 +90,23 @@ describe('PieSidebar: conmutadores', () => {
     for (const r of ['Tema claro', 'Seguir al sistema', 'Tema oscuro']) expect(bloque).toContain(`aria-label="${r}"`);
     expect(bloque).toMatch(/checked=""[^>]*value="claro"|value="claro"[^>]*checked=""/);
   });
-  it('idioma: MX activo y marcado; US visible pero DESHABILITADO («Inglés: próximamente») mientras no haya traducción completa', () => {
+  it('idioma: MX activo y marcado; US elegible (sin deshabilitar) con su nombre accesible', () => {
     const bloque = renderToStaticMarkup(<ConmutadorIdioma />);
     expect(bloque.match(/type="radio"/g)).toHaveLength(2);
-    expect(bloque.match(/disabled=""/g)).toHaveLength(1);
-    expect(bloque).toMatch(/value="en"[^>]*disabled=""|disabled=""[^>]*value="en"/);
-    expect(bloque).not.toMatch(/value="es"[^>]*disabled=""|disabled=""[^>]*value="es"/);
-    expect(bloque).toContain('aria-label="Inglés: próximamente"');
+    expect(bloque).not.toContain('disabled=""');
+    expect(bloque).not.toContain('próximamente');
+    expect(bloque).toContain('aria-label="English (US)"');
+    expect(bloque).toContain('aria-label="Español (México)"');
     // Tooltip del sistema (tarjeta, lateral): nunca el title nativo oscuro, que tapaba la fila Avisos.
     expect(bloque).not.toContain('title=');
-    expect(bloque).toMatch(/role="tooltip"[^>]*>Inglés: próximamente</);
-    expect(bloque).not.toContain('aria-label="English (US)"');
     expect(bloque).toMatch(/value="es"[^>]*checked|checked=""[^>]*value="es"/);
     expect(bloque).not.toMatch(/value="en"[^>]*checked=""|checked=""[^>]*value="en"/);
-    expect(bloque).toContain('aria-label="Español (México)"');
   });
-  it('la bandera IDIOMA_EN_DISPONIBLE está apagada y con ella apagada el inglés no es elegible (no hay POST)', () => {
-    expect(IDIOMA_EN_DISPONIBLE).toBe(false);
-    expect(idiomaElegible('en')).toBe(false);
+  it('la bandera IDIOMA_EN_DISPONIBLE está encendida: el inglés es elegible (hay POST) y el español también', () => {
+    expect(IDIOMA_EN_DISPONIBLE).toBe(true);
+    expect(idiomaElegible('en')).toBe(true);
     expect(idiomaElegible('es')).toBe(true);
-    expect(idiomaElegible('en', true)).toBe(true); // el día que F15 termine, basta con encender la bandera
+    expect(idiomaElegible('en', false)).toBe(false); // apagarla sigue siendo el interruptor de emergencia
   });
   it('idioma: con el proveedor en inglés marca US y la interfaz del pie está en inglés', () => {
     const bloque = renderToStaticMarkup(

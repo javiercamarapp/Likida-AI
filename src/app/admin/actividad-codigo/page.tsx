@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '../sello-observado';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
@@ -8,7 +9,9 @@ import { BotonReintentar } from '../../ui-v2/componentes/boton-reintentar';
 import { Columnas } from '../../ui-v2/graficas';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
+import type { TSistema } from '@/lib/i18n/sistema_tr';
 import '../sistema.css';
+import './actividad-codigo.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,9 +23,8 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CELDA = 11, GAP = 3;
-const TITULO = 'Actividad de código — likida.ai', CONTEXTO = 'actividad de código';
-const ETQ_ANUAL = 'Commits — últimas 52 semanas', ETQ_SEMANA = 'Esta semana', ETQ_MEJOR = 'La mejor semana';
-const DIAS_ROTULO = ['', 'lun', '', 'mié', '', 'vie', ''];
+/** Rótulos del eje de días (domingo a sábado, semana de GitHub): solo lunes, miércoles y viernes llevan nombre. */
+const DIAS_ROTULO = (t: TSistema): string[] => ['', t('actividad_codigo.dia_lun'), '', t('actividad_codigo.dia_mie'), '', t('actividad_codigo.dia_vie'), ''];
 
 function opacidad(commits: number, max: number): number {
   if (commits === 0) return 0;
@@ -32,16 +34,17 @@ function opacidad(commits: number, max: number): number {
 
 type Commit = Extract<Awaited<ReturnType<typeof getActividadCodigo>>, { estado: 'ok' }>['recientes'][number];
 
-const COLUMNAS_COMMITS: ColumnaBase<Commit>[] = [
-  { id: 'sha', titulo: 'Commit', celda: (c) => <span className="cifra-mono text-muted">{c.sha}</span> },
-  { id: 'mensaje', titulo: 'Asunto', principal: true, celda: (c) => <span className="block max-w-[520px] truncate">{c.mensaje}</span> },
-  { id: 'fecha', titulo: 'Fecha', alinear: 'der', celda: (c) => (c.fecha ? fechaCorta(c.fecha) : '—') },
+const columnasCommits = (t: TSistema): ColumnaBase<Commit>[] => [
+  { id: 'sha', titulo: t('actividad_codigo.col_commit'), celda: (c) => <span className="adm-codigo-sha">{c.sha}</span> },
+  { id: 'mensaje', titulo: t('actividad_codigo.col_asunto'), principal: true, celda: (c) => <span className="adm-codigo-asunto">{c.mensaje}</span> },
+  { id: 'fecha', titulo: t('actividad_codigo.col_fecha'), alinear: 'der', celda: (c) => (c.fecha ? fechaCorta(c.fecha) : '—') },
 ];
 
 export default async function ActividadCodigoPage() {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
-  const { t } = await getT('admin_sistema');
+  const { t, tp } = await getT('admin_sistema');
+  const { t: ti } = await getT('admin_inicio');
   const a = await getActividadCodigo();
   const ok = a.estado === 'ok';
   // F26: el esqueleto se dibuja SIEMPRE. Sin lectura, cada bloque dice «No disponible ahora. No es cero.» (con Reintentar) o que GitHub
@@ -62,31 +65,31 @@ export default async function ActividadCodigoPage() {
       estado="vacio"
       mensaje={mensajeSinLectura}
       detalle={a.estado === 'sin_token' ? t('actividad_codigo.sin_conexion_detalle') : a.estado === 'calculando' ? t('actividad_codigo.calculando_detalle') : t('actividad_codigo.error_detalle', { detalle: a.detalle })}
-      accionVacio={a.estado === 'sin_token' ? undefined : <BotonReintentar contexto={CONTEXTO} />}
+      accionVacio={a.estado === 'sin_token' ? undefined : <BotonReintentar contexto={ti('raiz7.contexto_actividad_codigo')} />}
     />
   );
 
   return (
     <EsqueletoPanelCifras
-      titulo={TITULO}
+      titulo={t('actividad_codigo.titulo')}
       apoyo={t('actividad_codigo.apoyo')}
-      etiquetaCifras="Commits del repositorio"
-      cifras={!ok ? undefined : uniformes([
-        { etiqueta: ETQ_ANUAL, ...(ok ? { valor: a.totalAnual, formato: 'entero' as const } : { valor: null }) },
-        { etiqueta: ETQ_SEMANA, ...(ok ? { valor: a.semanas[a.semanas.length - 1]?.total ?? 0, formato: 'entero' as const } : { valor: null }) },
-        { etiqueta: ETQ_MEJOR, ...(ok ? { valor: mejor?.total ?? 0, formato: 'entero' as const, nota: mejor ? `semana del ${fechaCorta(new Date(mejor.semana * 1000).toISOString())}` : undefined } : { valor: null }) },
+      etiquetaCifras={t('actividad_codigo.cifras_etiqueta')}
+      cifras={!ok ? undefined : observadas(uniformes([
+        { etiqueta: t('actividad_codigo.etq_anual'), ...(ok ? { valor: a.totalAnual, formato: 'entero' as const } : { valor: null }) },
+        { etiqueta: t('actividad_codigo.etq_semana'), ...(ok ? { valor: a.semanas[a.semanas.length - 1]?.total ?? 0, formato: 'entero' as const } : { valor: null }) },
+        { etiqueta: t('actividad_codigo.etq_mejor'), ...(ok ? { valor: mejor?.total ?? 0, formato: 'entero' as const, nota: mejor ? t('actividad_codigo.semana_del', { fecha: fechaCorta(new Date(mejor.semana * 1000).toISOString()) }) : undefined } : { valor: null }) },
         { etiqueta: t('actividad_codigo.kpi_recientes'), ...(ok ? { valor: a.recientes.length, formato: 'entero' as const } : { valor: null }) },
-      ])}
+      ]), t('a1r4.observado'))}
       variante="12"
       graficas={!ok ? undefined : [
-        <Tarjeta key="puntitos" titulo="Los puntitos — commits por día" contenida>
+        <Tarjeta key="puntitos" titulo={t('actividad_codigo.puntitos')} contenida>
           {ok ? (
             <>
               {/* Wide content scrollea DENTRO de su contenedor (regla). */}
-              <div className="overflow-x-auto pb-1">
-                <svg width={ancho} height={alto} className="block">
-                  {DIAS_ROTULO.map((d, i) => d && (
-                    <text key={i} x={0} y={i * (CELDA + GAP) + CELDA} fontSize={11} fill="var(--muted)">{d}</text>
+              <div className="adm-codigo-rejilla">
+                <svg width={ancho} height={alto} className="adm-codigo-svg">
+                  {DIAS_ROTULO(t).map((d, i) => d && (
+                    <text key={i} className="adm-codigo-dia" x={0} y={i * (CELDA + GAP) + CELDA}>{d}</text>
                   ))}
                   {a.semanas.map((s, x) => s.dias.map((n, y) => (
                     <rect key={`${x}-${y}`}
@@ -95,19 +98,19 @@ export default async function ActividadCodigoPage() {
                       fill={n === 0 ? 'var(--line2)' : 'var(--marca)'}
                       opacity={n === 0 ? 0.6 : opacidad(n, max)}
                     >
-                      <title>{`${n} commit${n === 1 ? '' : 's'} — ${new Date((s.semana + y * 86_400) * 1000).toISOString().slice(0, 10)}`}</title>
+                      <title>{tp('actividad_codigo.commits_dia', n, { fecha: new Date((s.semana + y * 86_400) * 1000).toISOString().slice(0, 10) })}</title>
                     </rect>
                   )))}
                 </svg>
               </div>
-              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
-                menos
+              <div className="adm-codigo-escala">
+                {t('actividad_codigo.menos')}
                 {[0, 0.3, 0.6, 1].map((t) => (
                   <svg key={t} width={10} height={10} aria-hidden="true">
                     <rect width={10} height={10} rx={2.5} fill={t === 0 ? 'var(--line2)' : 'var(--marca)'} opacity={t === 0 ? 0.6 : 0.18 + t * 0.82} />
                   </svg>
                 ))}
-                más · escala relativa al mejor día ({numero(max)})
+                {t('actividad_codigo.mas_escala', { max: numero(max) })}
               </div>
             </>
           ) : null}
@@ -125,17 +128,17 @@ export default async function ActividadCodigoPage() {
             />
           ) : null}
         </Tarjeta>
-        <Tarjeta titulo="Últimos commits" contenida>
+        <Tarjeta titulo={t('actividad_codigo.ultimos_commits')} contenida>
           {/* FE-19: un asunto de commit largo no estira la página. */}
           {ok ? (
             <TablaBase
-              etiqueta="Últimos commits"
-              columnas={COLUMNAS_COMMITS}
+              etiqueta={t('actividad_codigo.ultimos_commits')}
+              columnas={columnasCommits(t)}
               filas={a.recientes}
               idFila={(c) => c.sha}
               altoMaximo={false}
               densa
-              vacio={{ titulo: 'Sin commits recientes' }} tarjetaMovil />
+              vacio={{ titulo: t('actividad_codigo.sin_commits') }} tarjetaMovil />
           ) : null}
         </Tarjeta>
       </FilaTarjetas> : null}
@@ -143,4 +146,7 @@ export default async function ActividadCodigoPage() {
   );
 }
 
-export const metadata: Metadata = { title: 'Actividad de código' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('actividad_codigo.titulo_pestana') };
+}

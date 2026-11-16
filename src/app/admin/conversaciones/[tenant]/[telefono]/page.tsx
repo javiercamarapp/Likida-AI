@@ -47,24 +47,34 @@ export default async function ConversacionPage({
   if (conversacion === null) notFound();
 
   const { t } = await getT('admin_inicio');
+  const { t: tc } = await getT('admin_agentes');
   return (
     <EsqueletoFicha
       area={t('ficha_conv.eyebrow')}
-      titulo={conversacion === undefined ? 'Conversación' : `Conversación — ${conversacion.telefono}`}
-      volver={{ href: '/admin/conversaciones', etiqueta: 'Volver' }}
+      titulo={conversacion === undefined ? tc('conversaciones_pagina.det_titulo') : tc('conversaciones_pagina.det_titulo_tel', { telefono: conversacion.telefono })}
+      volver={{ href: '/admin/conversaciones', etiqueta: tc('conversaciones_pagina.det_volver') }}
       chips={conversacion ? <li><Chip>{conversacion.tenantNombre}</Chip></li> : undefined}
       etiquetaChips={conversacion ? conversacion.tenantNombre : undefined}
       cifras={conversacion ? [
         { etiqueta: t('ficha_conv.mensajes'), valor: numero(conversacion.turns.length) },
         { etiqueta: t('ficha_conv.ultima'), valor: fechaHoraMx(conversacion.actualizadaEn) },
+        conversacion.turns.length === 0
+          ? { etiqueta: tc('conversaciones_pagina.kpi_quien'), valor: null, estado: 'vacio' as const, mensaje: tc('conversaciones_pagina.det_vacio') }
+          : {
+            etiqueta: tc('conversaciones_pagina.kpi_quien'), valor: (conversacion.turns.filter((x) => x.role === 'user').length / conversacion.turns.length) * 100, formato: 'porcentaje' as const, tipo: 'observado' as const, sello: tc('conversaciones_pagina.observado'),
+            segmentos: [
+              { etiqueta: tc('conversaciones_pagina.seg_choferes'), valor: conversacion.turns.filter((x) => x.role === 'user').length },
+              { etiqueta: tc('conversaciones_pagina.seg_bot'), valor: conversacion.turns.filter((x) => x.role !== 'user').length },
+            ],
+          },
       ] : undefined}
     >
       {conversacion === undefined ? (
-        <EstadoError>No se pudo leer la conversación. La consulta falló — no es que no exista, es que no se pudo mirar.</EstadoError>
+        <EstadoError>{tc('conversaciones_pagina.det_error')}</EstadoError>
       ) : (
-        <Tarjeta titulo="Historial completo">
+        <Tarjeta titulo={tc('conversaciones_pagina.det_historial')}>
           {conversacion.turns.length === 0 ? (
-            <p className="m-0 text-sm text-muted">Sin mensajes en la ventana rodante.</p>
+            <p className="rv-conv-sin">{tc('conversaciones_pagina.det_vacio')}</p>
           ) : (
             <HiloMensajes turnos={conversacion.turns} />
           )}
@@ -74,4 +84,7 @@ export default async function ConversacionPage({
   );
 }
 
-export const metadata: Metadata = { title: 'Conversación' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_agentes');
+  return { title: t('conversaciones_pagina.det_titulo') };
+}

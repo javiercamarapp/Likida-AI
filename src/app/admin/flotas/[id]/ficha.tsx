@@ -244,7 +244,7 @@ export function Ficha360({
       <p>
         {personas === null || personas === undefined
           ? t('flotas_ficha.no_se_pudo_leer_5')
-          : `${numero(activas)} ${activas === 1 ? 'persona activa' : 'personas activas'} de ${numero(personas.length)}.`}
+          : t(activas === 1 ? 'cf6.ficha_persona_activa' : 'cf6.ficha_personas_activas', { activas: numero(activas), total: numero(personas.length) })}
       </p>
       <p>
         

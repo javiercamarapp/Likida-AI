@@ -1,0 +1,9 @@
+/* Calidad › Evals: lo que el kit ui-v2 no trae. Variables del sistema, tipografía por tokens. */
+[data-ui="v2"] .rv-ce-linea { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 10px; font-size: var(--t-body); }
+[data-ui="v2"] .rv-ce-chip { display: inline-flex; align-items: center; gap: 6px; }
+[data-ui="v2"] .rv-ce-mutado { color: var(--muted); }
+[data-ui="v2"] .rv-ce-nota { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .rv-ce-enlace { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+[data-ui="v2"] .rv-ce-enlace:hover { color: var(--muted); }
+[data-ui="v2"] .tabular[data-tono="warn"] { color: var(--warn); }
+[data-ui="v2"] .tabular[data-tono="bad"] { color: var(--bad); }

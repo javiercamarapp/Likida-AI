@@ -4,6 +4,8 @@ import { useActionState } from 'react';
 import { CampoSelect } from '../../../ui-v2/componentes/campos';
 import { BotonConfirmar } from '../../../ui-v2/componentes/confirmar';
 import { Boton, clasesBoton } from '../../../ui-v2/componentes/boton';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_flotas as admin_flotasEs } from '@/lib/i18n/es/admin_flotas';
 import { FormaConAviso, Aviso, type AccionDeForma, type ResultadoAccion } from '../../ui/forma';
 
 /**
@@ -20,6 +22,7 @@ export function GestionPlan({ tenantId, planes, accion }: {
   planes: Array<{ clave: string; nombre: string }> | null;
   accion: AccionDeForma;
 }) {
+  const { t } = useT('admin_flotas', admin_flotasEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   const oculto = (op: string) => (
     <>
@@ -31,13 +34,13 @@ export function GestionPlan({ tenantId, planes, accion }: {
   return (
     <div className="adm-plan">
       {planes === null ? (
-        <p>No se pudieron leer los planes ahora mismo. Reintenta.</p>
+        <p>{t('cf6.plan_no_se_pudieron_leer')}</p>
       ) : (
-        <FormaConAviso accion={accion} boton="Asignar o cambiar plan" columnas="md:grid-cols-1">
+        <FormaConAviso accion={accion} boton={t('cf6.plan_asignar_o_cambiar')} columnas="md:grid-cols-1">
           {oculto('asignar')}
-          <CampoSelect etiqueta="Plan" name="planClave" required defaultValue=""
-            ayuda="Empieza en «prueba»: no cuenta para el MRR hasta que lo actives. Solo se asignan planes con price de Stripe ligado.">
-            <option value="" disabled>Elige un plan</option>
+          <CampoSelect etiqueta={t('cf6.plan_etiqueta')} name="planClave" required defaultValue=""
+            ayuda={t('cf6.plan_ayuda')}>
+            <option value="" disabled>{t('cf6.plan_elige')}</option>
             {planes.map((p) => <option key={p.clave} value={p.clave}>{p.nombre}</option>)}
           </CampoSelect>
         </FormaConAviso>
@@ -45,19 +48,19 @@ export function GestionPlan({ tenantId, planes, accion }: {
       <div className="adm-plan__fila">
         <form action={enviar}>
           {oculto('activar')}
-          <Boton type="submit" variante="secondary" tamano="sm" disabled={pendiente}>Activar</Boton>
+          <Boton type="submit" variante="secondary" tamano="sm" disabled={pendiente}>{t('cf6.plan_activar')}</Boton>
         </form>
         <form action={enviar}>
           {oculto('pausar')}
-          <Boton type="submit" variante="secondary" tamano="sm" disabled={pendiente}>Pausar</Boton>
+          <Boton type="submit" variante="secondary" tamano="sm" disabled={pendiente}>{t('cf6.plan_pausar')}</Boton>
         </form>
         <form action={enviar}>
           {oculto('cancelar')}
           <BotonConfirmar
-            etiqueta="Cancelar suscripción" deshabilitado={pendiente} tono="peligro" className={clasesBoton('danger', 'sm')}
-            titulo="Cancelar la suscripción de esta flota"
-            descripcion="La suscripción queda cancelada y la flota vuelve al plan de demostración. No se borra su historial de cobro. Para volver a cobrarle habrá que asignarle un plan de nuevo."
-            etiquetaConfirmar="Sí, cancelar"
+            etiqueta={t('cf6.plan_cancelar')} deshabilitado={pendiente} tono="peligro" className={clasesBoton('danger', 'sm')}
+            titulo={t('cf6.plan_cancelar_titulo')}
+            descripcion={t('cf6.plan_cancelar_desc')}
+            etiquetaConfirmar={t('cf6.plan_cancelar_confirmar')}
           />
         </form>
       </div>

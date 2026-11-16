@@ -54,7 +54,7 @@ export function FormularioInsumo({
   const [tipo, setTipo] = useState<TipoInsumo>(tiposAceptados[0] ?? 'texto');
 
   return (
-    <div className="space-y-3">
+    <div className="rv-insumos-pila">
       <SegmentedControl
         etiqueta={t('agentes_insumos_zona_insumos.tipo_de_insumo')}
         valor={tipo}
@@ -85,7 +85,7 @@ function FormaArchivo({ tipo, accion }: { tipo: 'documento' | 'imagen' | 'video'
   }
 
   return (
-    <form action={enviar} className="space-y-3">
+    <form action={enviar} className="rv-insumos-pila">
       <input type="hidden" name="tipo" value={tipo} />
       <div
         onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
@@ -96,10 +96,10 @@ function FormaArchivo({ tipo, accion }: { tipo: 'documento' | 'imagen' | 'video'
           tomarArchivo(e.dataTransfer.files?.[0]);
         }}
         onClick={() => inputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 transition-colors ${arrastrando ? 'rv-insumos-zona rv-insumos-zona--sobre' : 'rv-insumos-zona'}`}
+        className={arrastrando ? 'rv-insumos-zona rv-insumos-zona--sobre' : 'rv-insumos-zona'}
       >
-        <UploadCloud width={22} height={22} strokeWidth={1.5} className="text-muted" aria-hidden="true" />
-        <p className="text-sm text-center px-4">
+        <UploadCloud width={22} height={22} strokeWidth={1.75} className="rv-insumos-zona__icono" aria-hidden="true" />
+        <p className="rv-insumos-zona__texto">
           {nombreArchivo ?? <>{t('agentes_insumos_zona_insumos.arrastra_un_aqui_o_haz_click', { rotuloTipo: rotuloTipo(t)[tipo].toLowerCase() })}</>}
         </p>
         <input
@@ -107,7 +107,7 @@ function FormaArchivo({ tipo, accion }: { tipo: 'documento' | 'imagen' | 'video'
           type="file"
           name="archivo"
           accept={ACEPTA_POR_TIPO[tipo]}
-          className="hidden"
+          hidden
           onChange={(e) => setNombreArchivo(e.target.files?.[0]?.name ?? null)}
         />
       </div>
@@ -124,7 +124,7 @@ function FormaTexto({ tipo, accion }: { tipo: 'link' | 'texto'; accion: AccionDe
   const { t } = useT('admin_sistema', admin_sistemaEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   return (
-    <form action={enviar} className="space-y-3">
+    <form action={enviar} className="rv-insumos-pila">
       <input type="hidden" name="tipo" value={tipo} />
       <CampoTexto name="titulo" required obligatorio etiqueta={t('agentes_insumos_zona_insumos.titulo_del_insumo')} />
       {tipo === 'link' ? (
@@ -146,15 +146,15 @@ function FormaTexto({ tipo, accion }: { tipo: 'link' | 'texto'; accion: AccionDe
 export function ListaInsumos({ insumos }: { insumos: Array<InsumoAgente & { url: string | null }> }) {
   const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
   return (
-    <ul className="m-0 list-none divide-y divide-[var(--line2)] p-0">
+    <ul className="rv-insumos-lista">
       {insumos.map((i) => (
-        <li key={i.id} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="text-muted">{ICONO_TIPO[i.tipo]}</span>
-              <span className="truncate text-sm font-medium">{i.titulo}</span>
+        <li key={i.id} className="rv-insumos-item">
+          <div className="rv-insumos-cab">
+            <div className="rv-insumos-nombre">
+              <span className="rv-insumos-tipo">{ICONO_TIPO[i.tipo]}</span>
+              <span className="rv-insumos-nombre__t">{i.titulo}</span>
               {i.url && (
-                <a href={i.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-[var(--marca)] hover:underline">
+                <a href={i.url} target="_blank" rel="noreferrer" className="rv-insumos-ver">
                   {t('agentes_insumos_zona_insumos.ver')}
                 </a>
               )}
@@ -163,7 +163,7 @@ export function ListaInsumos({ insumos }: { insumos: Array<InsumoAgente & { url:
               {i.procesadoEn ? t('agentes_insumos_zona_insumos.procesado') : t('trust_safety.pendiente')}
             </StatusChip>
           </div>
-          <div className="text-xs text-muted">{t('agentes_insumos_zona_insumos.subido', { fechaHoraMx: fechaHoraMx(i.subidoEn, idioma) })}{i.tipo === 'link' && i.contenidoTexto && <> · <a href={i.contenidoTexto} target="_blank" rel="noreferrer" className="hover:underline">{i.contenidoTexto}</a></>}
+          <div className="rv-insumos-meta">{t('agentes_insumos_zona_insumos.subido', { fechaHoraMx: fechaHoraMx(i.subidoEn, idioma) })}{i.tipo === 'link' && i.contenidoTexto && <> · <a href={i.contenidoTexto} target="_blank" rel="noreferrer">{i.contenidoTexto}</a></>}
             {i.tipo === 'texto' && i.contenidoTexto && <> · {i.contenidoTexto.slice(0, 140)}{i.contenidoTexto.length > 140 ? '…' : ''}</>}
           </div>
           {i.resumenUso && (

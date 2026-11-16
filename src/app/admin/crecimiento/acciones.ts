@@ -6,6 +6,7 @@ import { veredictoMfaDeSesion } from '@/lib/auth/superadmin-mfa';
 import { MSG_MFA_SUPERADMIN } from '@/lib/auth/mfa';
 import { pausarCampana, refrescarGastoMeta } from '@/lib/admin/campanas';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { getT } from '@/lib/i18n/servidor';
 import type { AccionCampana } from './campanas';
 
 async function ejecutarComoSuperadmin(
@@ -22,6 +23,7 @@ async function ejecutarComoSuperadmin(
 }
 
 export async function accionPausarCampana(id: string): Promise<AccionCampana> {
+  const { t } = await getT('admin_flotas');
   return ejecutarComoSuperadmin(async (userId) => {
     try {
       const r = await pausarCampana(String(id), userId);
@@ -30,30 +32,31 @@ export async function accionPausarCampana(id: string): Promise<AccionCampana> {
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'pausar la campaña') };
     }
-  }, 'Solo el superadmin pausa campañas.');
+  }, t('cf6.acc_solo_pausa'));
 }
 
 export async function accionRefrescarGasto(): Promise<AccionCampana> {
+  const { t, tp } = await getT('admin_flotas');
   return ejecutarComoSuperadmin(async () => {
     try {
       const r = await refrescarGastoMeta();
       revalidatePath('/admin/crecimiento');
       if (!r.configurada) {
-        return { ok: false, error: 'La conexión con Meta Ads no está configurada: no hay de dónde leer el gasto.' };
+        return { ok: false, error: t('cf6.acc_meta_sin_config') };
       }
       const fallo = r.fallidas.length > 0
-        ? ` · fallaron: ${r.fallidas.map((f) => `${f.nombre} (${f.motivo})`).join(', ')}`
+        ? t('cf6.acc_fallaron', { lista: r.fallidas.map((f) => `${f.nombre} (${f.motivo})`).join(', ') })
         : '';
       // A37-S22-03: las que no alcanzaron en el presupuesto de tiempo se DICEN.
       const faltan = r.pendientes > 0
-        ? ` · ${r.pendientes} sin medir por tiempo — vuelve a pulsar para continuar`
+        ? t('cf6.acc_pendientes', { n: r.pendientes })
         : '';
       return {
         ok: true,
-        mensaje: `Gasto medido en ${r.medidas} campaña${r.medidas === 1 ? '' : 's'}${fallo}${faltan}.`,
+        mensaje: `${tp('cf6.acc_gasto_medido', r.medidas)}${fallo}${faltan}.`,
       };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'medir el gasto') };
     }
-  }, 'Solo el superadmin mide el gasto.');
+  }, t('cf6.acc_solo_mide'));
 }

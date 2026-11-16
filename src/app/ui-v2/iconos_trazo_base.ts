@@ -1,7 +1,6 @@
 // Base del trinquete de iconos_trazo.test.ts: archivos con iconos de lucide en grosor distinto de 1.75, con su tope.
 // Solo puede BAJAR: al migrar un archivo a <Icono> (o a 1.75) se borra su línea. Un archivo nuevo no entra aquí.
 export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
-  'app/admin/agentes/[id]/insumos/zona-insumos.tsx': 1,
   'app/admin/command-palette.tsx': 2,
   'app/ui-v2/componentes/forma.tsx': 2,
   'app/ui-v2/componentes/notificaciones.tsx': 1,

@@ -1,8 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { Boton, CampoSelect, CampoTexto, Disclosure, StatusChip, TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
-import { Aviso, type ResultadoAccion, type AccionDeForma } from '../ui/forma';
+import { AvisoResultado, Boton, CampoSelect, CampoTexto, Disclosure, StatusChip, TablaBase, type AccionDeForma, type ColumnaBase, type ResultadoAccion } from '../../ui-v2/componentes';
 import { fechaHoraMx } from '@/lib/formato';
 import { etiquetaInterruptor } from './etiquetas';
 import '../sistema.css';
@@ -89,7 +88,7 @@ function FormaApagar({ encendidos, accion }: { encendidos: InterruptorParaUi[]; 
           <Boton type="button" variante="danger" tamano="sm" disabled={encendidos.length === 0} onClick={() => setPidiendo(true)}>{t('observabilidad_interruptores_ui.apagar_uno')}</Boton>
         </div>
       )}
-      <Aviso estado={estado} />
+      <AvisoResultado estado={estado} />
     </div>
   );
 }
@@ -103,7 +102,7 @@ function FormaEncender({ id, accion }: { id: string; accion: AccionDeForma }) {
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="operacion" value="encender" />
       <Boton type="submit" variante="secondary" tamano="sm" disabled={pendiente}>{pendiente ? t('observabilidad_interruptores_ui.guardando') : t('observabilidad_interruptores_ui.encender')}</Boton>
-      <Aviso estado={estado} />
+      <AvisoResultado estado={estado} />
     </form>
   );
 }

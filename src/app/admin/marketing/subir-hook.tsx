@@ -4,6 +4,8 @@ import { useRef, useState, useTransition } from 'react';
 import { UploadCloud } from 'lucide-react';
 import { Aviso, Boton, CampoArchivo, CampoTextarea, Icono } from '../../ui-v2/componentes';
 import { subirConUrlFirmada } from '@/lib/supabase/browser-storage';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_dinero } from '@/lib/i18n/es/admin_dinero';
 
 export type ResultadoFirmaHook =
   | { ok: true; bucket: string; path: string; token: string }
@@ -21,6 +23,7 @@ export function SubirHook({
   pedirFirma: (mime: string) => Promise<ResultadoFirmaHook>;
   guardar: (videoRuta: string, hookTexto: string) => Promise<ResultadoGuardar>;
 }) {
+  const { t } = useT('admin_dinero', admin_dinero);
   const [archivo, setArchivo] = useState<File | null>(null);
   const [hookTexto, setHookTexto] = useState('');
   const [estado, setEstado] = useState<{ fase: 'idle' | 'subiendo' | 'ok' | 'error'; mensaje?: string }>({ fase: 'idle' });
@@ -34,8 +37,8 @@ export function SubirHook({
   }
 
   function enviar() {
-    if (!archivo) { setEstado({ fase: 'error', mensaje: 'Elige un video primero.' }); return; }
-    if (!hookTexto.trim()) { setEstado({ fase: 'error', mensaje: 'Anota qué hook usa el video.' }); return; }
+    if (!archivo) { setEstado({ fase: 'error', mensaje: t('neg5.mk_elige_video') }); return; }
+    if (!hookTexto.trim()) { setEstado({ fase: 'error', mensaje: t('neg5.mk_anota_hook') }); return; }
     const elArchivo = archivo;
     const elHook = hookTexto;
     empezar(async () => {
@@ -51,22 +54,22 @@ export function SubirHook({
         setHookTexto('');
         if (inputRef.current) inputRef.current.value = '';
       } catch (e) {
-        setEstado({ fase: 'error', mensaje: e instanceof Error ? e.message : 'No se pudo subir el video.' });
+        setEstado({ fase: 'error', mensaje: e instanceof Error ? e.message : t('neg5.mk_no_subio_video') });
       }
     });
   }
 
   return (
     <div className="adm-din-forma adm-din-forma--ancha">
-      <CampoArchivo etiqueta="Video de referencia" entradaRef={inputRef} accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+      <CampoArchivo etiqueta={t('neg5.mk_video_ref')} entradaRef={inputRef} accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
         nombreArchivo={archivo?.name ?? null} onChange={elegirArchivo} disabled={pendiente} />
-      <CampoTextarea etiqueta="Hook que usa el video" value={hookTexto} onChange={(e) => setHookTexto(e.target.value)} disabled={pendiente}
-        placeholder="¿Qué hook usa este video? (ej. «la pregunta llega igual en todas las flotas…»)" rows={2} />
+      <CampoTextarea etiqueta={t('neg5.mk_hook_video')} value={hookTexto} onChange={(e) => setHookTexto(e.target.value)} disabled={pendiente}
+        placeholder={t('neg5.mk_hook_ph')} rows={2} />
       {estado.fase === 'error' ? <Aviso tono="error">{estado.mensaje}</Aviso> : null}
-      {estado.fase === 'ok' ? <Aviso tono="ok">Hook guardado.</Aviso> : null}
+      {estado.fase === 'ok' ? <Aviso tono="ok">{t('neg5.mk_hook_guardado')}</Aviso> : null}
       <div>
         <Boton variante="primary" tamano="sm" onClick={enviar} disabled={pendiente || !archivo} loading={estado.fase === 'subiendo'} icono={<Icono icono={UploadCloud} tam={14} />}>
-          {estado.fase === 'subiendo' ? 'Subiendo…' : 'Subir y guardar hook'}
+          {estado.fase === 'subiendo' ? t('neg5.mk_subiendo') : t('neg5.mk_subir_guardar')}
         </Boton>
       </div>
     </div>

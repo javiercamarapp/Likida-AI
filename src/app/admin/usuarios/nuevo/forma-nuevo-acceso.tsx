@@ -1,8 +1,7 @@
-import { CampoSelect, CampoTexto } from '../../../ui-v2/componentes/campos';
+import { CampoSelect, CampoTexto, FormaConAviso } from '../../../ui-v2/componentes';
 import { FilaConfig } from '../../../ui-v2/esqueletos';
 import type { RolAppUser } from '@/lib/auth/provisionar';
 import { ROTULOS_ROL } from '@/lib/auth/roles';
-import { FormaConAviso } from '../../ui/forma';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { accionNuevoAcceso } from './acciones';
 

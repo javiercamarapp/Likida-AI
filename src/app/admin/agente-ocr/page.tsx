@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -14,6 +15,7 @@ import { TablaModelosFase } from '../tarjeta-fase';
 import '../sistema.css';
 
 import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -44,17 +46,17 @@ export default async function AgenteOcrPage() {
 
   return (
     <EsqueletoPanelCifras
-      area="Agentes"
+      area={t('agente_ocr.agentes')}
       titulo="OCR"
       apoyo={t('agente_ocr.ocr_la_lectura_de')}
       acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.medir_en_calidad')}</BotonEnlace>}
       etiquetaCifras="OCR"
-      cifras={uniformes([
+      cifras={observadas(uniformes([
           { etiqueta: t('agente_ocr.gastado_en_ocr'), valor: ocr ? ocr.costoUsd : 0, formato: 'usd', nota: t('agente_ocr.costo_medido_en_llm') },
           { etiqueta: t('agente_ocr.llamadas_de_ocr'), valor: ocr ? ocr.n : 0, formato: 'entero' },
           { etiqueta: t('agente_ocr.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero' },
           { etiqueta: t('agente_ocr.exactitud_global'), valor: precision === null ? null : precision.global.exactitud === null ? null : Math.round(precision.global.exactitud * 100), formato: 'porcentaje', estado: precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok', mensaje: precision === null ? undefined : t('agente_ocr.sin_medir_todavia'), nota: t('agente_ocr.contra_el_banco_de') },
-      ])}
+      ]), t('agentes_contenido.observado'))}
       graficas={[
         <Tarjeta key="serie" titulo={t('agente_ocr.serie_facturas')} contenida>
           {r.facturasPorDia.some((d) => d.n > 0)
@@ -102,11 +104,11 @@ export default async function AgenteOcrPage() {
               <p>
                 {t('agente_ocr.lo_que_peor_se')}{' '}
                 {peores.map((c, i) => (
-                  <span key={c.clave}>{i > 0 && ' · '}<strong>{c.clave} {pct(c.exactitud)}</strong> ({numero(c.medidos)} {c.medidos === 1 ? t('agente_ocr.medicion') : 'mediciones'})</span>
+                  <span key={c.clave}>{i > 0 && ' · '}<strong>{c.clave} {pct(c.exactitud)}</strong> ({numero(c.medidos)} {c.medidos === 1 ? t('agente_ocr.medicion') : t('agente_ocr.mediciones')})</span>
                 ))}
               </p>
             ) : null}
-            <p>El detalle por foto y el botón para volver a medir viven en <Link href="/admin/qa">Calidad › Pruebas reales</Link>.</p>
+            <p>{rico(t('agente_ocr.detalle_calidad'), { enlace: (c) => <Link href="/admin/qa">{c}</Link> })}</p>
           </>
         )}
       </Tarjeta>

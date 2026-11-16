@@ -181,8 +181,8 @@ export default async function EstudioMarketingPage() {
           ) : null}
           <AvisoCompacto
             tono="info"
-            resumen="Entre más insumo le das, mejor salen las piezas. Ninguna se genera sola; publicar sigue siendo tu aprobación."
-            mas="Sube el video que te gustó o la foto del chofer o del patio, y abajo lees el guion, el carrusel, la promo del día y los encargos de imagen y video. No hay render en el servidor."
+            resumen={t('neg5.mk_resumen_insumo')}
+            mas={t('neg5.mk_mas_insumo')}
           />
         </>
       )}
@@ -192,7 +192,7 @@ export default async function EstudioMarketingPage() {
       <Tarjeta titulo={t('marketing.piezas_del_dia', { pendientes: pendientes !== null ? ` (${pendientes.length})` : '' })}>
         <p className="adm-din-nota">
           
-          {t('marketing.lo_que_el_agente')} <a href="/admin/aprobaciones">Aprobaciones</a>.
+          {t('marketing.lo_que_el_agente')} <a href="/admin/aprobaciones">{t('neg5.mk_aprobaciones')}</a>.
         </p>
         {pendientes === null ? (
           <EstadoError compacto>{t('marketing.no_se_pudieron_leer')}</EstadoError>
@@ -255,7 +255,7 @@ export default async function EstudioMarketingPage() {
                 <div className="adm-din-plan__cab"><span>{r.nombre}</span></div>
                 <span className="adm-din-sub">{r.tipo}</span>
                 <FormaConAviso
-                  accion={accionBorrarReferencia} boton="Borrar" columnas="md:grid-cols-1"
+                  accion={accionBorrarReferencia} boton={t('neg5.mk_borrar')} columnas="md:grid-cols-1"
                   confirmar={{ titulo: t('marketing.borrar', { nombre: r.nombre }), descripcion: t('marketing.se_borran_la_fila'), etiquetaConfirmar: t('marketing.si_borrar') }}
                 >
                   <input type="hidden" name="referencia" value={r.id} />
@@ -266,7 +266,7 @@ export default async function EstudioMarketingPage() {
         )}
       </Tarjeta>
 
-      <Disclosure titulo={t('marketing.que_no_hace_el')} resumen="Generación de imagen y video">
+      <Disclosure titulo={t('marketing.que_no_hace_el')} resumen={t('neg5.mk_generacion')}>
         <p className="adm-din-nota">
           
           {t('marketing.la_generacion_real_de')}

@@ -6,6 +6,7 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { facturasACsv } from '@/lib/saas/facturas-csv';
 import { listarFacturasSaas, TECHO_FACTURAS_SAAS } from '@/lib/saas/transferencia';
 import { hoyMx } from '@/lib/formato';
+import { getT } from '@/lib/i18n/servidor';
 import { leerFiltros, rangoAlReves } from './filtros';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -21,12 +22,13 @@ export type ResultadoExportacion =
 
 export async function accionExportarFacturas(fd: FormData): Promise<ResultadoExportacion> {
   const s = await requireSuperadmin();
+  const { t } = await getT('admin_dinero');
   const filtros = leerFiltros({ estado: fd.get('estado'), desde: fd.get('desde'), hasta: fd.get('hasta') });
-  if (rangoAlReves(filtros)) return { ok: false, error: 'El rango está al revés: la fecha «desde» es posterior a «hasta».' };
+  if (rangoAlReves(filtros)) return { ok: false, error: t('neg5.fa_err_rango') };
   try {
     const { filas, total, truncado } = await listarFacturasSaas({ ...filtros, limite: TECHO_FACTURAS_SAAS });
     if (truncado) {
-      return { ok: false, error: `Hay ${total} facturas con ese filtro y el archivo admite ${TECHO_FACTURAS_SAAS}. Acota las fechas: un archivo parcial presentado como completo es peor que ninguno.` };
+      return { ok: false, error: t('neg5.fa_err_tope', { total, max: TECHO_FACTURAS_SAAS }) };
     }
     const anotado = await anotarAccionAdmin({
       actor: s, tenantId: null, accion: 'facturas.exportadas', entidad: 'factura_saas', entidadId: 'exportacion',

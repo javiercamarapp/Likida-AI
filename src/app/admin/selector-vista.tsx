@@ -40,11 +40,11 @@ type Vista = {
   Icono: typeof Building2;
 };
 
-const VISTAS: Vista[] = [
+const vistasDe = (t: TrDe<'admin_inicio'>): Vista[] => [
   {
     href: '/dashboard?vista=demo&rol=flota_admin',
-    titulo: 'Dueño de flota',
-    que: 'Resumen con pesos: lo señalado por el motor, acreditables y monto comprobado.',
+    titulo: t('raiz7.vista_dueno_titulo'),
+    que: t('raiz7.vista_dueno_que'),
     Icono: Building2,
   },
   {
@@ -53,14 +53,14 @@ const VISTAS: Vista[] = [
     // que `inicioDe` (visibilidad.ts) vuelve a aterrizarlo. Mientras estuvo
     // borrado, este botón apuntaba a Suscripción.
     href: '/dashboard/contador?vista=demo&rol=contador',
-    titulo: 'Contador',
-    que: 'Acreditables del ejercicio, motor fiscal, deducibilidad y el papel que falta.',
+    titulo: t('raiz7.vista_contador_titulo'),
+    que: t('raiz7.vista_contador_que'),
     Icono: Landmark,
   },
   {
     href: '/dashboard?vista=demo&rol=encargado',
-    titulo: 'Jefe de tráfico',
-    que: 'Operación y nada de dinero: qué no tiene chofer, carga por operador, incidencias.',
+    titulo: t('raiz7.vista_jefe_titulo'),
+    que: t('raiz7.vista_jefe_que'),
     Icono: Send,
   },
 ];
@@ -82,7 +82,7 @@ export function SelectorVista({ tenants, t = trAdminInicioEs }: {
       <p className="m-0 mb-3 text-xs text-muted">{t('selector_vista.con_tu_propia_sesion')}</p>
       <div id="vistas" className="scroll-mt-24">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {VISTAS.map(({ href, titulo, que, Icono }) => (
+          {vistasDe(t).map(({ href, titulo, que, Icono }) => (
             <Link key={href} href={href} className="block min-h-11 py-0.5 no-underline">
               <span className="flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 transition-colors hover:bg-[var(--canvas)]">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--marca)]">

@@ -11,7 +11,7 @@ import {
   cambiarRolDesdeAdmin, darDeBajaDesdeAdmin, reactivarDesdeAdmin, reenviarAccesoDesdeAdmin, cerrarSesionesDesdeAdmin,
 } from '@/lib/auth/gestion_admin';
 import { darDeBajaPersonalLikida, reactivarPersonalLikida } from '@/lib/auth/baja_acceso';
-import type { ResultadoAccion } from '../ui/forma';
+import type { ResultadoAccion } from '../../ui-v2/componentes';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 

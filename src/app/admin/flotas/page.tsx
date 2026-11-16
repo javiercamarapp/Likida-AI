@@ -10,20 +10,23 @@ import { numero } from '@/lib/formato';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getTechosIa, type FilaTechoIa } from '@/lib/admin/techo_ia';
 import { usd } from '@/lib/formato';
-import { Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { uniformes } from '../cifras-uniformes';
+import { Aviso, BarraFiltros, BotonEnlace, EstadoError, FilaTarjetas, FiltroBusqueda, FiltroOpciones, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { BarList, Bullet, DonaMini } from '../../ui-v2/graficas';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, hrefConParams, type ColumnaTabla } from '../../ui-v2/datos';
 import { accionCrearFlota } from './acciones';
 import { AltaFlota } from './alta';
 import '../dinero.css';
 import '../resumen.css';
+import './flotas.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /** El marco de la pantalla, UNO solo (también para el error de lectura): encabezado y acción de alta no cambian entre estados. */
-function PantallaClientes({ children, filtros, pie, vistaRapida, t }: { children: ReactNode; filtros?: ReactNode; pie?: ReactNode; vistaRapida?: ReactNode; t: TrDe<'admin_flotas'> }) {
+function PantallaClientes({ children, filtros, pie, vistaRapida, cifras, t }: { children: ReactNode; filtros?: ReactNode; pie?: ReactNode; vistaRapida?: ReactNode; cifras?: ReturnType<typeof uniformes>; t: TrDe<'admin_flotas'> }) {
   return (
     <EsqueletoTablaMaestra
       area="Negocio" titulo={t('flotas.clientes')}
@@ -31,6 +34,7 @@ function PantallaClientes({ children, filtros, pie, vistaRapida, t }: { children
       // Rovaq P2: el aviso administrativo va PRIMERO y luego los filtros (el esqueleto pinta filtros antes que avisos, así que el aviso entra con ellos).
       filtros={<><Aviso tono="info">{t('flotas.aviso_admin')}</Aviso>{filtros}</>}
       pie={pie} vistaRapida={vistaRapida}
+      cifras={cifras} etiquetaCifras={cifras ? t('pul9.cifras_etiqueta') : undefined}
     >
       {children}
     </EsqueletoTablaMaestra>
@@ -44,10 +48,10 @@ function GastoIa({ f, t }: { f: Fila; t: TrDe<'admin_flotas'> }) {
   const h = f.techo;
   if (h === null || h.usadoHoyUsd === null) return <span className="adm-din-sub">{t('flotas.sin_medir')}</span>;
   return (
-    <span className="adm-flota-gasto">
-      <progress value={Math.min(h.pctUsado ?? 0, 100)} max={100} aria-hidden="true" data-alto={(h.pctUsado ?? 0) >= 80 || undefined} />
-      <span className="tabular">{t('flotas.gasto_de_techo', { gasto: usd(h.usadoHoyUsd), techo: usd(h.topeUsd) })}</span>
-    </span>
+    <Bullet
+      compacto etiqueta={t('flotas.gasto_etiqueta')} valor={h.usadoHoyUsd} maximo={h.topeUsd > 0 ? h.topeUsd : undefined}
+      formato={() => t('flotas.gasto_de_techo', { gasto: usd(h.usadoHoyUsd as number), techo: usd(h.topeUsd) })}
+    />
   );
 }
 
@@ -123,9 +127,18 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
     },
   ];
 
+  // Tira breve (pul9): lo que la página ya lee. El gasto de IA de hoy suma solo lo medido; sin lectura de techos queda «—», no 0.
+  const gastoHoy = techos === null ? null : techos.filas.reduce((s, x) => s + (x.usadoHoyUsd ?? 0), 0);
+  const cifras = uniformes([
+    { etiqueta: t('flotas.flotas'), valor: numero(filas.length) },
+    { etiqueta: t('flotas.viajes'), valor: numero(filas.reduce((s, f) => s + f.viajes, 0)) },
+    { etiqueta: t('flotas.gasto_ia_hoy'), valor: gastoHoy === null ? '—' : usd(gastoHoy) },
+  ]);
+
   return (
     <PantallaClientes
       t={t}
+      cifras={cifras}
       filtros={(
         <BarraFiltros accion="/admin/flotas" enLinea buscar etiqueta={t('flotas.filtrar_flotas')} nActivos={nFiltros} limpiarHref="/admin/flotas">
           <FiltroBusqueda nombre="q" valor={textoQ} placeholder={t('flotas.buscar_flota')} etiqueta={t('flotas.buscar_flota')} />
@@ -155,6 +168,27 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
         </CajonVistaRapida>
       ) : null}
     >
+      {filas.length > 0 ? (
+        <FilaTarjetas variante="6-6">
+          <Tarjeta titulo={t('flotas.mix_planes_titulo')}>
+            <BarList
+              etiqueta={t('flotas.mix_planes_etiqueta')}
+              items={[...filas.reduce((m, f) => m.set(f.plan, (m.get(f.plan) ?? 0) + 1), new Map<string, number>())]
+                .sort((a, b) => b[1] - a[1]).map(([plan, n]) => ({ clave: plan, etiqueta: plan, valor: n, texto: numero(n) }))}
+            />
+          </Tarjeta>
+          <Tarjeta titulo={t('flotas.mix_arranque_titulo')}>
+            <DonaMini
+              etiqueta={t('flotas.mix_arranque_etiqueta')} centro={`${numero(filas.length)} ${t('flotas.mix_centro')}`} formato="numero"
+              gajos={[
+                { etiqueta: t('flotas.arranque_completo'), valor: filas.filter((f) => f.arranque !== null && f.arranque.hechas === f.arranque.total).length },
+                { etiqueta: t('flotas.arranque_pendiente'), valor: filas.filter((f) => f.arranque !== null && f.arranque.hechas < f.arranque.total).length },
+                { etiqueta: t('flotas.sin_dato'), valor: filas.filter((f) => f.arranque === null).length },
+              ]}
+            />
+          </Tarjeta>
+        </FilaTarjetas>
+      ) : null}
       <Tarjeta
         titulo={t('flotas.flotas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={t('flotas.sin_flotas_dadas_de')}
         detalle={t('flotas.da_de_alta_la')}

@@ -16,6 +16,7 @@ import {
 } from '@/lib/admin/cola-aprobacion';
 import { ahoraMs } from '@/lib/saludo';
 import { Aviso, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { DonaMini } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FormaPieza, FormaEnvio, FormaLiberarAmbiguo, type ResultadoPieza } from './forma-pieza';
 import { RebotesYBajas } from './rebotes';
@@ -31,6 +32,7 @@ const VISTAS: readonly VistaAprobaciones[] = ['aprobar', 'enviar', 'historial'];
 
 export default async function PaginaAprobaciones({ searchParams }: { searchParams: Promise<{ vista?: string }> }) {
   const { t } = await getT('admin_inicio');
+  const { t: td } = await getT('admin_dinero');
   await requireSuperadmin();
   const sp = (await searchParams) ?? {};
   const inicial: VistaAprobaciones = VISTAS.find((v) => v === sp.vista) ?? 'aprobar';
@@ -174,7 +176,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
     <>
       {estadoBandeja?.frenaAlRunner && (
         <Aviso tono="error" titulo={t('aprobaciones.la_bandeja_esta_frenando')}>
-          Con {estadoBandeja.pendientes}  {t('aprobaciones.piezas_pendientes_el_runner')}
+          {td('neg5.ap_con', { n: estadoBandeja.pendientes })} {t('aprobaciones.piezas_pendientes_el_runner')}
         </Aviso>
       )}
       <Tarjeta
@@ -188,6 +190,14 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
           {grupo(t('aprobaciones.normal_prospeccion_y_contenido'), normal, t('aprobaciones.nada_pendiente'))}
         </div>
       </Tarjeta>
+      {urgente.ok !== null && normal.ok !== null && decidir !== null && decidir > 0 ? (
+        <Tarjeta titulo={td('aprobaciones_mix.titulo')}>
+          <DonaMini
+            etiqueta={td('aprobaciones_mix.etiqueta')} centro={`${decidir} ${td('aprobaciones_mix.centro')}`} formato="numero"
+            gajos={Object.entries([...urgente.ok, ...normal.ok].reduce<Record<string, number>>((m, p) => { m[p.tipo] = (m[p.tipo] ?? 0) + 1; return m; }, {})).map(([etiqueta, valor]) => ({ etiqueta, valor }))}
+          />
+        </Tarjeta>
+      ) : null}
       <LimpiezaLote contar={accionContarLote} vaciar={accionVaciarLote} bandeja={estadoBandeja} />
     </>
   );
@@ -219,14 +229,14 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
           {resueltas?.map((p) => (
             <div key={p.id} className="bj-item__fila">
               <StatusChip tono={p.estado === 'aprobado' ? 'ok' : 'bad'}>
-                {p.estado === 'aprobado' ? (p.cuerpoFinal ? t('aprobaciones.aprobada_con_edicion') : t('aprobaciones.aprobada')) : 'Rechazada'}
+                {p.estado === 'aprobado' ? (p.cuerpoFinal ? t('aprobaciones.aprobada_con_edicion') : t('aprobaciones.aprobada')) : td('neg5.ap_rechazada')}
               </StatusChip>
               <span>{p.titulo}</span>
               <span className="bj-item__meta">{p.agente}</span>
-              {p.resueltoPorEmail && <span className="bj-item__meta">por {p.resueltoPorEmail}</span>}
+              {p.resueltoPorEmail && <span className="bj-item__meta">{td('neg5.ap_por', { email: p.resueltoPorEmail })}</span>}
               {p.enviadoEn && (
                 p.providerMessageId
-                  ? <span className="bj-sub" data-tono="ok">enviada {fechaHoraMx(p.enviadoEn)}</span>
+                  ? <span className="bj-sub" data-tono="ok">{td('neg5.ap_enviada_el', { fecha: fechaHoraMx(p.enviadoEn) })}</span>
                   // La inconsistencia VISIBLE: enviada estampada sin prueba del proveedor (el proceso murió entre envío y guardado).
                   : <span className="bj-sub" data-tono="warn">{t('aprobaciones.enviada_sin_prueba_del')}</span>
               )}

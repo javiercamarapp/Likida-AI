@@ -1,0 +1,2 @@
+/* Alta de una flota: el formulario ocupa el ancho de su tarjeta en 3 columnas (2 en tablet, 1 en móvil), no una columna de 520 px. */
+[data-ui="v2"] section.adm-flota-alta .adm-forma-fina { max-width: none; }

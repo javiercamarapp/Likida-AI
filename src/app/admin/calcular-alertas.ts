@@ -2,6 +2,8 @@ import type { ResumenNegocio, ConversacionActiva } from '@/lib/admin/negocio';
 import type { ConteosEscalaciones } from '@/lib/admin/escalaciones';
 import { NOMBRE_FUENTE } from '@/lib/admin/escalaciones';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 
 export interface Alerta {
   tipo: 'ok' | 'atencion';
@@ -12,9 +14,7 @@ export interface Alerta {
   href?: string;
 }
 
-/** "3 talachas" / "1 talacha" sin duplicar el ternario en cada alerta. */
-const n = (cuenta: number, singular: string, plural: string) =>
-  `${cuenta} ${cuenta === 1 ? singular : plural}`;
+type Tr = TrDe<'admin_inicio'>;
 
 /**
  * Nada de contadores inventados ("14 items waiting"): las alertas se
@@ -44,6 +44,8 @@ export function calcularAlertas(
    *  `null`/omitido = no se pudo contar, y la alerta cae al tamaño de la
    *  página diciéndolo. */
   conversacionesTotal: number | null = null,
+  /** Traductor de `admin_inicio`; sin él, español (los llamadores y pruebas existentes no cambian). */
+  t: Tr = trAdminInicioEs,
 ): Alerta[] {
   const alertas: Alerta[] = [];
   const e = escalaciones;
@@ -52,28 +54,28 @@ export function calcularAlertas(
   if (e.arco !== null && e.arco > 0) {
     alertas.push({
       tipo: 'atencion',
-      texto: `${n(e.arco, 'solicitud ARCO espera', 'solicitudes ARCO esperan')} respuesta (plazo legal de 20 días hábiles).`,
+      texto: t(e.arco === 1 ? 'raiz7.alerta_arco.uno' : 'raiz7.alerta_arco.otros', { n: e.arco }),
       href: '/admin/escalaciones',
     });
   }
   if (e.corridasFallo !== null && e.corridasFallo > 0) {
     alertas.push({
       tipo: 'atencion',
-      texto: `${n(e.corridasFallo, 'corrida de agente terminó', 'corridas de agentes terminaron')} en fallo.`,
+      texto: t(e.corridasFallo === 1 ? 'raiz7.alerta_corrida.uno' : 'raiz7.alerta_corrida.otros', { n: e.corridasFallo }),
       href: '/admin/escalaciones',
     });
   }
   if (e.talachas !== null && e.talachas > 0) {
     alertas.push({
       tipo: 'atencion',
-      texto: `${n(e.talachas, 'talacha espera', 'talachas esperan')} la autorización del jefe.`,
+      texto: t(e.talachas === 1 ? 'raiz7.alerta_talacha.uno' : 'raiz7.alerta_talacha.otros', { n: e.talachas }),
       href: '/admin/escalaciones',
     });
   }
   if (e.facturasProveedor !== null && e.facturasProveedor > 0) {
     alertas.push({
       tipo: 'atencion',
-      texto: `${n(e.facturasProveedor, 'factura de proveedor espera', 'facturas de proveedor esperan')} decisión humana.`,
+      texto: t(e.facturasProveedor === 1 ? 'raiz7.alerta_factura_prov.uno' : 'raiz7.alerta_factura_prov.otros', { n: e.facturasProveedor }),
       href: '/admin/escalaciones',
     });
   }
@@ -83,15 +85,15 @@ export function calcularAlertas(
     alertas.push({
       tipo: 'atencion',
       texto: vencidos > 0
-        ? `${n(vencidos, 'ticket de soporte tiene', 'tickets de soporte tienen')} el SLA vencido (${e.ticketsAbiertos} abiertos en total).`
-        : `${n(e.ticketsAbiertos, 'ticket de soporte abierto', 'tickets de soporte abiertos')}.`,
+        ? t(vencidos === 1 ? 'raiz7.alerta_ticket_vencido.uno' : 'raiz7.alerta_ticket_vencido.otros', { n: vencidos, abiertos: e.ticketsAbiertos })
+        : t(e.ticketsAbiertos === 1 ? 'raiz7.alerta_ticket_abierto.uno' : 'raiz7.alerta_ticket_abierto.otros', { n: e.ticketsAbiertos }),
       href: '/admin/escalaciones',
     });
   }
   if (e.liquidacionesRevisar !== null && e.liquidacionesRevisar > 0) {
     alertas.push({
       tipo: 'atencion',
-      texto: `${n(e.liquidacionesRevisar, 'liquidación espera', 'liquidaciones esperan')} revisión humana en la bandeja.`,
+      texto: t(e.liquidacionesRevisar === 1 ? 'raiz7.alerta_liquidacion.uno' : 'raiz7.alerta_liquidacion.otros', { n: e.liquidacionesRevisar }),
       href: '/admin/escalaciones',
     });
   }
@@ -107,7 +109,7 @@ export function calcularAlertas(
   if (ciegas.length > 0) {
     alertas.push({
       tipo: 'atencion',
-      texto: `No se pudo leer: ${ciegas.join(', ')} — ahí puede haber pendientes que la campana no está viendo.`,
+      texto: t('raiz7.alerta_ciegas', { fuentes: ciegas.join(', ') }),
       href: '/admin/escalaciones',
     });
   }
@@ -116,7 +118,7 @@ export function calcularAlertas(
   if (r && r.tendenciaCosto !== null && r.tendenciaCosto >= 30) {
     alertas.push({
       tipo: 'atencion',
-      texto: `El costo de IA subió ${r.tendenciaCosto}% esta semana vs la anterior.`,
+      texto: t('raiz7.alerta_costo_ia', { pct: r.tendenciaCosto }),
       href: '/admin/costos-facturacion',
     });
   }
@@ -124,8 +126,8 @@ export function calcularAlertas(
     alertas.push({
       tipo: 'ok',
       texto: conversacionesTotal !== null
-        ? `${conversacionesTotal} conversación(es) de WhatsApp abiertas.`
-        : `Al menos ${conversaciones.length} conversación(es) de WhatsApp con actividad reciente (no se pudo contar el total).`,
+        ? t('raiz7.alerta_conv_total', { n: conversacionesTotal })
+        : t('raiz7.alerta_conv_pagina', { n: conversaciones.length }),
       href: '/admin/conversaciones',
     });
   }
@@ -138,7 +140,7 @@ export function calcularAlertas(
   if (esSoloDemo) {
     alertas.push({
       tipo: 'atencion',
-      texto: 'Likida sigue con solo el tenant demo — sin clientes reales dados de alta.',
+      texto: t('raiz7.alerta_solo_demo'),
       href: '/admin/flotas',
     });
   }

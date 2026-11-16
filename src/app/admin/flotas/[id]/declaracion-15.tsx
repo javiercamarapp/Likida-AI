@@ -1,3 +1,7 @@
+'use client';
+
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_flotas as admin_flotasEs } from '@/lib/i18n/es/admin_flotas';
 import { CampoSelect } from '../../../ui-v2/componentes/campos';
 import { FormaConAviso, type AccionDeForma } from '../../ui/forma';
 
@@ -8,19 +12,20 @@ export function Declaracion15({ flotaId, ded, reg, accion }: {
   reg: boolean | undefined;
   accion: AccionDeForma;
 }) {
+  const { t } = useT('admin_flotas', admin_flotasEs);
   const valor = (b: boolean | undefined) => (b === true ? 'si' : b === false ? 'no' : '');
   return (
-    <FormaConAviso accion={accion} boton="Guardar declaración" columnas="md:grid-cols-2">
+    <FormaConAviso accion={accion} boton={t('cf6.decl_guardar')} columnas="md:grid-cols-2">
       <input type="hidden" name="flotaId" value={flotaId} />
-      <CampoSelect etiqueta="Dedicación exclusiva a carga" name="ded" defaultValue={valor(ded)}>
-        <option value="">Sin declarar</option>
-        <option value="si">Sí</option>
-        <option value="no">No</option>
+      <CampoSelect etiqueta={t('cf6.decl_dedicacion')} name="ded" defaultValue={valor(ded)}>
+        <option value="">{t('cf6.decl_sin_declarar')}</option>
+        <option value="si">{t('cf6.decl_si')}</option>
+        <option value="no">{t('cf6.decl_no')}</option>
       </CampoSelect>
-      <CampoSelect etiqueta="Régimen elegible" name="reg" defaultValue={valor(reg)}>
-        <option value="">Sin declarar</option>
-        <option value="si">Sí</option>
-        <option value="no">No</option>
+      <CampoSelect etiqueta={t('cf6.decl_regimen')} name="reg" defaultValue={valor(reg)}>
+        <option value="">{t('cf6.decl_sin_declarar')}</option>
+        <option value="si">{t('cf6.decl_si')}</option>
+        <option value="no">{t('cf6.decl_no')}</option>
       </CampoSelect>
     </FormaConAviso>
   );
