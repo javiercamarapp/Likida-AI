@@ -468,14 +468,14 @@
    `:root[data-theme="light"]` (0,2,0) sin depender del orden de los chunks de CSS; el oscuro lleva
    su propio bloque (0,3,1). Sin un `[data-ui="v2"]` en el documento, esto no aplica a nada. */
 html:root:has([data-ui="v2"]) {
-  --bg: #f6f6f7;
+  --bg: #f8f5f0;
   --ink: #0e0e10;
   --carga-fondo: #ffffff;
 }
 html:root[data-theme="dark"]:has([data-ui="v2"]) {
-  --bg: #0e0e10;
+  --bg: #13100e;
   --ink: #f4f4f5;
-  --carga-fondo: #0e0e10;
+  --carga-fondo: #13100e;
 }
 
 /* Tarjetas: 12 px, sin sombra. Selector de clase propio del alcance (0,2,0)
