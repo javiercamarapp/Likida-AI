@@ -14,7 +14,7 @@ import {
   type MensajeHilo, type TicketDetalle,
 } from '@/lib/likida/soporte';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, numero } from '@/lib/formato';
 import {
@@ -156,7 +156,7 @@ export default async function SoportePage({
           : ta('soporte.respuesta_enviada_el_cliente'),
       };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'responder el ticket') };
+      return { error: await mensajeDeFalla(e, 'verbo.sop_responder_ticket') };
     }
   }
 
@@ -170,7 +170,7 @@ export default async function SoportePage({
       revalidatePath('/admin/soporte');
       return { ok: ta('soporte.tomado_queda_a_tu', { estado: r.estado }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'tomar el ticket') };
+      return { error: await mensajeDeFalla(e, 'verbo.sop_tomar_ticket') };
     }
   }
 
@@ -191,7 +191,7 @@ export default async function SoportePage({
           : ta('soporte.de_a_el_cambio', { estadoPrevio: r.estadoPrevio, estado: r.estado }),
       };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'cambiar el estado del ticket') };
+      return { error: await mensajeDeFalla(e, 'verbo.sop_cambiar_estado') };
     }
   }
 

@@ -6,6 +6,7 @@ import { Boton } from '../../ui-v2/componentes/boton';
 import type { AccionPropuesta } from './respuestas';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { dashboard_a as dashboard_aEs } from '@/lib/i18n/es/dashboard_a';
 import { rico } from '@/lib/i18n/rico';
 
 type Estado = 'lista' | 'ejecutando' | 'armada' | 'hecha' | 'cancelada';
@@ -23,6 +24,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   onEjecutada: (mensaje: string) => void;
 }) {
   const { t } = useT('resto', restoEs);
+  const { t: ta } = useT('dashboard_a', dashboard_aEs);
   const [motivo, setMotivo] = useState(a.motivoSugerido ?? '');
   const [estado, setEstado] = useState<Estado>('lista');
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   }
 
   async function ejecutar() {
-    if (!motivo.trim()) { setError('El motivo es obligatorio: sin nota, en tres semanas nadie sabe si ya se puede encender.'); return; }
+    if (!motivo.trim()) { setError(ta('tac.motivoObligatorio')); return; }
     const veniaArmada = estado === 'armada';
     setEstado('ejecutando');
     setError(null);
@@ -73,16 +75,16 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
       }
       if (d.armado === true) { setEstado('armada'); return; } // 'doble': falta la segunda confirmación
       setEstado('hecha');
-      onEjecutada(String(d.mensaje ?? 'Hecho.'));
+      onEjecutada(String(d.mensaje ?? ta('tac.hecho')));
     } catch {
       setEstado(veniaArmada ? 'armada' : 'lista');
-      setError('No se pudo ejecutar. Inténtalo de nuevo.');
+      setError(ta('tac.errorEjecutar'));
     }
   }
 
   return (
     <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado={estado} aria-label={t('ch.confirmar_accion')}>
-      <p className="rv-accion__titulo">{t('ch.voy_a')}{' '}{apagar ? 'apagar' : encender ? 'encender' : 'ejecutar'} <span className="rv-accion__objetivo">{a.objetivo}</span></p>
+      <p className="rv-accion__titulo">{t('ch.voy_a')}{' '}{apagar ? ta('tac.verbo.apagar') : encender ? ta('tac.verbo.encender') : ta('tac.verbo.ejecutar')} <span className="rv-accion__objetivo">{a.objetivo}</span></p>
       <label className="rv-accion__campo">{rico(t('ch.e0_motivo_obligatorio_e0'), { e0: (c) => <span>{c}</span> })}<input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={encender ? t('ch.por_que_se_enciende_queda_en') : t('ch.por_que_se_apaga_queda_en')} />
       </label>
       <p className="rv-accion__linea">{rico(t('ch.b_efecto_b'), { b: (c) => <b>{c}</b> })}{' '}{a.efecto}</p>
@@ -94,7 +96,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
       <div className="rv-accion__botones">
         <Boton tamano="sm" onClick={() => setEstado('cancelada')}>{t('op.cancelar')}</Boton>
         <Boton variante="primary" tamano="sm" disabled={estado === 'ejecutando'} onClick={() => void ejecutar()}>
-          {estado === 'ejecutando' ? (apagar ? 'Apagando…' : encender ? 'Encendiendo…' : 'Ejecutando…') : estado === 'armada' ? t('ch.confirmar_de_nuevo') : (apagar ? t('ch.apagar') : encender ? 'Encender' : 'Ejecutar')}
+          {estado === 'ejecutando' ? (apagar ? ta('tac.apagando') : encender ? ta('tac.encendiendo') : ta('tac.ejecutando')) : estado === 'armada' ? t('ch.confirmar_de_nuevo') : (apagar ? t('ch.apagar') : encender ? ta('tac.btn.encender') : ta('tac.btn.ejecutar'))}
         </Boton>
       </div>
     </section>

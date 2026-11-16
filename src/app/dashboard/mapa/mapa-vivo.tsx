@@ -7,6 +7,7 @@ import { Boton, Disclosure, EstadoVacio, SegmentedControl, StatusChip, TablaBase
 import { KindBadge } from '@/app/ui-v2/graficas';
 import { useT } from '@/lib/i18n/proveedor';
 import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
+import { dashboard_a as dashboard_aEs } from '@/lib/i18n/es/dashboard_a';
 import '../estados.css';
 import { VIEWBOX, TRAZO_MEXICO, PUNTOS_MEXICO } from './mexico-geo';
 import './mapa.css';
@@ -116,6 +117,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
   const [fijo, setFijo] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const { t } = useT('operacion', operacionEs);
+  const { t: ta } = useT('dashboard_a', dashboard_aEs);
   // Zoom del lienzo (1 a 3): recorta el viewBox alrededor del viaje activo (o del centro). Solo cambia el encuadre, nunca los datos.
   const [zoom, setZoom] = useState(1);
   // Ranking del panel (Rovaq: «mayor concentración · elige otro»): cuenta MEDIDA de los viajes dibujados por destino u origen.
@@ -169,7 +171,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
             <button type="button" className="rv-mp__zbtn" onClick={() => setZoom(1)} disabled={zoom === 1} aria-label={t('mapa.zoom.reset')}>⤢</button>
           </div>
           <svg viewBox={`${vx.toFixed(1)} ${vy.toFixed(1)} ${ancho.toFixed(1)} ${alto.toFixed(1)}`} className="rv-mp__svg" role="img"
-            aria-label="Mapa de México con los viajes en curso">
+            aria-label={ta('mv.aria')}>
             {/* La tierra: trazo tenue + la matriz de puntos */}
             <path d={TRAZO_MEXICO} fillRule="evenodd" fill="var(--g1)" stroke="var(--line2)" strokeWidth={0.7} />
             {PUNTOS_MEXICO.map(([x, y], i) => (
@@ -226,7 +228,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
                     fill={relleno}
                     stroke="var(--surface)" strokeWidth={1.2}>
                     <title>
-                      {`${p.etiqueta} — ${ROTULO_FRESCURA[nivel]}${fresco ? '' : ': última posición conocida, no dónde está ahora'} (${p.respaldoWa ? 'pin del chofer, respaldo del GPS' : p.proveedor})`}
+                      {ta(fresco ? 'mv.pin.fresco' : 'mv.pin.viejo', { etiqueta: p.etiqueta, frescura: ROTULO_FRESCURA[nivel], fuente: p.respaldoWa ? ta('mv.pin.respaldo') : p.proveedor })}
                     </title>
                   </rect>
                   <text x={p.x} y={p.y + 11} textAnchor="middle" fontSize={11} fontWeight={600}
@@ -253,10 +255,9 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
           {/* AUDITORÍA 20 (H5): esta leyenda decía «Likida no rastrea GPS» y dejó de ser verdad — `posicion` tiene escritores y los
               pines de arriba salen de ahí. Lo ilustrativo sigue siendo el ARCO, y eso es lo que la leyenda tiene que decir ahora. */}
           <p className="rv-mp__nota">
-            El ARCO es el trayecto ilustrativo entre origen y destino, no la ruta que hizo el
-            camión. {pines.length > 0
-              ? `Los ${numero(pines.length)} ${pines.length === 1 ? 'rombo es una posición MEDIDA' : 'rombos son posiciones MEDIDAS'} — con su hora y su origen en la lista de abajo.`
-              : 'Cuando una unidad reporte posición (conector GPS o pin del chofer por WhatsApp) aparece aquí como un rombo.'}
+            {pines.length > 0
+              ? ta(pines.length === 1 ? 'mv.nota.pines.uno' : 'mv.nota.pines.otros', { n: numero(pines.length) })
+              : ta('mv.nota.sinPines')}
           </p>
         </div>
 
@@ -293,16 +294,16 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
                 className="rv-mp__card !flex !h-auto !w-full !flex-col !items-stretch !justify-start !whitespace-normal !text-left" data-activo={esActivo || undefined} aria-pressed={esActivo}>
                 <div className="rv-mp__card-cab">
                   <strong>{v.folio}</strong>
-                  {v.escalado ? <StatusChip tono="bad">Escalado</StatusChip> : <StatusChip tono="ok">En ruta</StatusChip>}
+                  {v.escalado ? <StatusChip tono="bad">{ta('mv.escalado')}</StatusChip> : <StatusChip tono="ok">{ta('mv.enRuta')}</StatusChip>}
                   {v.dias !== null && (
-                    <span className="rv-mp__card-dias">{numero(v.dias)} {v.dias === 1 ? 'día' : 'días'}</span>
+                    <span className="rv-mp__card-dias">{ta(v.dias === 1 ? 'mv.dias.uno' : 'mv.dias.otros', { n: numero(v.dias) })}</span>
                   )}
                 </div>
                 <div className="rv-mp__card-ruta">{v.origenNombre} → {v.destinoNombre}</div>
                 <div className="rv-mp__card-pie">
-                  {v.operadorNombre ?? 'Sin operador asignado'}
-                  {' · '}≈ {numero(v.kmRecta)} km en línea recta
-                  {v.fotos > 0 && <> · {numero(v.fotos)} {v.fotos === 1 ? 'foto' : 'fotos'} en proceso</>}
+                  {v.operadorNombre ?? ta('mv.sinOperador')}
+                  {' · '}{ta('mv.km', { km: numero(v.kmRecta) })}
+                  {v.fotos > 0 && <> · {ta(v.fotos === 1 ? 'mv.fotos.uno' : 'mv.fotos.otros', { n: numero(v.fotos) })}</>}
                 </div>
               </Boton>
             );
@@ -321,7 +322,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
               { id: 'operador', titulo: t('mapa.tabla.operador'), celda: (v) => v.operadorNombre ?? '—' },
               { id: 'dias', titulo: t('mapa.tabla.dias'), celda: (v) => (v.dias === null ? '—' : numero(v.dias)) },
               { id: 'km', titulo: t('mapa.tabla.km'), celda: (v) => numero(v.kmRecta) },
-              { id: 'estado', titulo: t('mapa.tabla.estado'), celda: (v) => (v.escalado ? <StatusChip tono="bad">Escalado</StatusChip> : <StatusChip tono="ok">En ruta</StatusChip>) },
+              { id: 'estado', titulo: t('mapa.tabla.estado'), celda: (v) => (v.escalado ? <StatusChip tono="bad">{ta('mv.escalado')}</StatusChip> : <StatusChip tono="ok">{ta('mv.enRuta')}</StatusChip>) },
             ]} />
         </Disclosure>
       ) : null}

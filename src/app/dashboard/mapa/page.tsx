@@ -14,6 +14,7 @@ import { ESTATUS_EN_CURSO, contarViajesEnCurso } from '../viajes-en-curso';
 import { VistaMapa, type SinUbicar, type Rastreo } from './vista';
 import type { ViajeEnMapa, PinUnidad } from './mapa-vivo';
 import { getT } from '@/lib/i18n/servidor';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 import type { Metadata } from 'next';
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('operacion');
@@ -86,7 +87,7 @@ async function viajesVivos(tenantId: string): Promise<FilaViva[]> {
  * ninguna posición": esa frase afirma algo sobre el GPS de la flota y aquí no
  * se pudo ni preguntar.
  */
-async function rastreoDe(tenantId: string, ahora: number): Promise<Rastreo> {
+async function rastreoDe(tenantId: string, ahora: number, t: TrDe<'dashboard_a'>): Promise<Rastreo> {
   try {
     const [estado, posiciones] = await Promise.all([
       getEstadoRastreo(tenantId), getUltimasPosiciones(tenantId),
@@ -108,7 +109,7 @@ async function rastreoDe(tenantId: string, ahora: number): Promise<Rastreo> {
         const { x, y } = proyectar(p.lat, p.lng);
         return {
           unidadId: p.unidadId,
-          etiqueta: p.numeroEconomico || p.placas || 'Unidad sin número',
+          etiqueta: p.numeroEconomico || p.placas || t('mapa.unidadSinNumero'),
           placas: p.placas,
           estadoUnidad: p.estadoUnidad,
           x: +x.toFixed(1), y: +y.toFixed(1),
@@ -134,7 +135,7 @@ async function rastreoDe(tenantId: string, ahora: number): Promise<Rastreo> {
     // el `tenantId`.
     const err = e instanceof Error ? e.message : String(e);
     logger.warn('mapa.rastreo', { tenantId, err });
-    return { error: 'no se pudo leer el rastreo de la flota', unidadesConPosicion: null, ultimaPosicion: null, proveedores: [], polls: [], pines: [] };
+    return { error: t('mapa.errorRastreo'), unidadesConPosicion: null, ultimaPosicion: null, proveedores: [], polls: [], pines: [] };
   }
 }
 
@@ -171,8 +172,9 @@ export default async function PaginaMapa({
   if (!puedeVerRuta(rol, '/dashboard/mapa')) redirect('/dashboard');
 
   const ahora = ahoraMs();
+  const { t } = await getT('dashboard_a');
   const [vivos, totalVivos, rastreo] = await Promise.all([
-    viajesVivos(tenantId), contarViajesEnCurso(tenantId, 'mapa.contarVivos'), rastreoDe(tenantId, ahora),
+    viajesVivos(tenantId), contarViajesEnCurso(tenantId, 'mapa.contarVivos'), rastreoDe(tenantId, ahora, t),
   ]);
 
   const ubicados: ViajeEnMapa[] = [];
@@ -183,8 +185,8 @@ export default async function PaginaMapa({
     const destino = resolverCiudad(v.destino);
     if (!origen || !destino) {
       const faltas: string[] = [];
-      if (!origen) faltas.push(v.origen ? `«${v.origen}» no está en el mapa todavía` : 'sin origen capturado');
-      if (!destino) faltas.push(v.destino ? `«${v.destino}» no está en el mapa todavía` : 'sin destino capturado');
+      if (!origen) faltas.push(v.origen ? t('mapa.origenNoMapa', { ciudad: v.origen }) : t('mapa.sinOrigen'));
+      if (!destino) faltas.push(v.destino ? t('mapa.destinoNoMapa', { ciudad: v.destino }) : t('mapa.sinDestino'));
       sinUbicar.push({ id: v.id, folio: v.folio, operadorNombre: v.operadorNombre, motivo: faltas.join(' · ') });
       continue;
     }

@@ -10,6 +10,8 @@ import { BotonReintentar } from '../componentes/boton-reintentar';
 import { ConteoKpi } from './conteo-kpi';
 import { KindBadge, type TipoDato } from './kind-badge';
 import { Sparkline } from './sparkline';
+import { textoUi } from '../componentes/texto-ui';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 export interface SegmentoKpi { etiqueta: string; valor: number | null }
 
@@ -44,6 +46,8 @@ export interface PropsCifra {
   /** Texto ya formateado, p. ej. «+4,2 %». El color va solo en el chip; la flecha lleva el sentido. */
   delta?: { texto: string; dir: 'sube' | 'baja' | 'igual'; bueno?: 'sube' | 'baja' } | null;
   serie?: ReadonlyArray<number | null>;
+  /** Idioma de los textos propios de la celda (servidor sin proveedor); por omisión, es. */
+  idioma?: Idioma;
   /** Alternativa a la serie: barra segmentada (segmentos de 6 px). Una u otra. */
   segmentos?: readonly SegmentoKpi[];
   /** Icono de 16 px, tintado con el matiz de la métrica. */
@@ -64,8 +68,8 @@ export interface PropsCifra {
 export type ItemKpi = PropsCifra & { /** @deprecated usa `sello`; se sigue mostrando como sello si no hay uno. */ nota?: string };
 
 const FLECHA = { sube: '▲', baja: '▼', igual: '■' } as const;
-const SENTIDO = { sube: 'sube', baja: 'baja', igual: 'sin cambio' } as const;
-const ROTULO_TONO = { ok: 'Al día', warn: 'Atención', bad: 'Crítico' } as const;
+const CLAVE_SENTIDO = { sube: 'cifra.sube', baja: 'cifra.baja', igual: 'cifra.igual' } as const;
+const CLAVE_TONO = { ok: 'cifra.al_dia', warn: 'cifra.atencion', bad: 'cifra.critico' } as const;
 
 function tonoDelta(d: NonNullable<PropsCifra['delta']>): 'ok' | 'bad' | 'neutral' {
   if (d.dir === 'igual' || !d.bueno) return 'neutral';
@@ -77,6 +81,7 @@ function tonoDelta(d: NonNullable<PropsCifra['delta']>): 'ok' | 'bad' | 'neutral
  *  o de atención, nota y sello de procedencia de UNA línea, y sparkline 60×24 o barra segmentada. Sin count-up por omisión: el valor
  *  real está en el primer render. Observado es silencioso (punto); Estimado / Inferido / Sin dato muestran su marca. */
 export function Cifra(p: PropsCifra) {
+  const t = textoUi(p.idioma);
   const error = p.estado === 'error';
   const vacio = !error && (p.estado === 'vacio' || p.valor === null || p.valor === undefined || p.valor === '—');
   const m = p.metrica ? metrica(p.metrica) : null;
@@ -108,7 +113,7 @@ export function Cifra(p: PropsCifra) {
       </span>
       {error ? (
         <span className="rv-kpi__error" role="alert">
-          <span>{p.mensaje ?? MENSAJE_CIFRA_ERROR}</span>
+          <span>{p.mensaje ?? (p.idioma === 'en' ? t('comun.no_disponible_cero') : MENSAJE_CIFRA_ERROR)}</span>
           {p.reintentar ? <BotonReintentar contexto={p.etiqueta} /> : null}
         </span>
       ) : null}
@@ -123,12 +128,12 @@ export function Cifra(p: PropsCifra) {
         {delta && !sinValor ? (
           <span className="rv-kpi__delta" data-tono={tonoDelta(delta)}>
             <span aria-hidden="true">{FLECHA[delta.dir]}</span> {delta.texto}
-            <span className="rv-sr"> ({SENTIDO[delta.dir]})</span>
+            <span className="rv-sr"> ({t(CLAVE_SENTIDO[delta.dir])})</span>
           </span>
         ) : null}
-        {p.tono && !sinValor ? <span className="rv-kpi__atencion" data-tono={p.tono}>{ROTULO_TONO[p.tono]}</span> : null}
-        {p.deltaPct === null && !sinValor ? <span className="rv-kpi__sinbase">sin periodo comparable</span> : null}
-        {tipo && tipo !== 'observado' ? <KindBadge tipo={tipo} /> : null}
+        {p.tono && !sinValor ? <span className="rv-kpi__atencion" data-tono={p.tono}>{t(CLAVE_TONO[p.tono])}</span> : null}
+        {p.deltaPct === null && !sinValor ? <span className="rv-kpi__sinbase">{t('cifra.sin_periodo')}</span> : null}
+        {tipo && tipo !== 'observado' ? <KindBadge tipo={tipo} idioma={p.idioma} /> : null}
         {tipo === 'observado' || sello ? (
           <span className="rv-kpi__sello">
             {tipo === 'observado' ? <i className="rv-kpi__punto" aria-hidden="true" /> : null}{sello}
@@ -153,7 +158,9 @@ export function selloDe(fuente: string, corte?: string | null): string {
 }
 
 /** Tira de indicadores en UNA sola tarjeta (112 px): celdas separadas por filetes. Recibe `Cifra` como hijos o una lista `items`. */
-export function TiraCifras({ items, children, etiqueta = 'Indicadores', sello, className, elevar, entra }: {
+export function TiraCifras({ items, children, etiqueta, sello, className, elevar, entra, idioma }: {
+  /** Idioma de la etiqueta por omisión (servidor sin proveedor); por omisión, es. */
+  idioma?: Idioma;
   items?: PropsCifra[];
   children?: ReactNode;
   etiqueta?: string;
@@ -172,8 +179,8 @@ export function TiraCifras({ items, children, etiqueta = 'Indicadores', sello, c
     return Object.keys(extra).length ? cloneElement(el, extra) : c;
   });
   return (
-    <section className={className ? `rv-kpis ${className}` : 'rv-kpis'} aria-label={etiqueta} data-lift={elevar || undefined} data-entra={entra}>
-      {items ? items.map((it) => <Cifra key={it.etiqueta} {...it} sello={it.sello ?? sello} />) : null}
+    <section className={className ? `rv-kpis ${className}` : 'rv-kpis'} aria-label={etiqueta ?? textoUi(idioma)('comun.indicadores')} data-lift={elevar || undefined} data-entra={entra}>
+      {items ? items.map((it) => <Cifra key={it.etiqueta} {...it} idioma={it.idioma ?? idioma} sello={it.sello ?? sello} />) : null}
       {hijos}
     </section>
   );

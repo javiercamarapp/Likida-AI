@@ -5,7 +5,7 @@ import { getSessionTenant } from '@/lib/auth/session';
 import { veredictoMfaDeSesion } from '@/lib/auth/superadmin-mfa';
 import { MSG_MFA_SUPERADMIN } from '@/lib/auth/mfa';
 import { pausarCampana, refrescarGastoMeta } from '@/lib/admin/campanas';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { getT } from '@/lib/i18n/servidor';
 import type { AccionCampana } from './campanas';
 
@@ -30,7 +30,7 @@ export async function accionPausarCampana(id: string): Promise<AccionCampana> {
       revalidatePath('/admin/crecimiento');
       return { ok: true, mensaje: r.mensaje };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'pausar la campaña') };
+      return { ok: false, error: await mensajeDeFalla(e, 'verbo.crec_pausar_campana') };
     }
   }, t('cf6.acc_solo_pausa'));
 }
@@ -56,7 +56,7 @@ export async function accionRefrescarGasto(): Promise<AccionCampana> {
         mensaje: `${tp('cf6.acc_gasto_medido', r.medidas)}${fallo}${faltan}.`,
       };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'medir el gasto') };
+      return { ok: false, error: await mensajeDeFalla(e, 'verbo.crec_medir_gasto') };
     }
   }, t('cf6.acc_solo_mide'));
 }

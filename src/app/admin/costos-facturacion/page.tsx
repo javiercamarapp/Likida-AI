@@ -4,7 +4,7 @@ import { getResumenNegocio } from '@/lib/admin/negocio';
 import { hoyMx, mxn } from '@/lib/formato';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { anotarAccionAdmin, pasoExtraSuperadmin, AVISO_SIN_BITACORA } from '@/lib/admin/acciones_riesgo';
-import { mensajeParaPantalla } from '@/lib/likida/administracion';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { getPlanes, guardarPriceDePlan, listarSuscripcionesVivas, type Plan, type Suscripcion } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
@@ -64,7 +64,7 @@ async function accionPrecio(_previo: ResultadoAccion, fd: FormData): Promise<Res
     }
     return { ok: t('neg5.cf_precio_ok', { clave, monto: mxn(montoMensual), moneda, iva: ivaIncluido ? t('neg5.cf_iva_incluido') : t('neg5.cf_mas_iva'), nota }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'guardar el precio del plan') };
+    return { error: await mensajeDeFalla(e, 'verbo.costos_guardar_precio') };
   }
 }
 
@@ -120,7 +120,7 @@ async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<Res
     // es lo que permite cachar el día uno que el IVA quedó del lado equivocado.
     return { ok: t('neg5.cf_mensualidad_emitida', { monto: mxn(r.monto), subtotal: mxn(r.subtotal), iva: mxn(r.iva), referencia: r.referencia, nota: anotado ? '' : AVISO_SIN_BITACORA }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'emitir la mensualidad') };
+    return { error: await mensajeDeFalla(e, 'verbo.costos_emitir_mensualidad') };
   }
 }
 
@@ -157,15 +157,15 @@ async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<
       // A37-L-03: timeout/5xx/respuesta ilegible del PAC = el CFDI PUDO crearse. Decir
       // «NO se timbró» mandaba a timbrar a mano y emitía un segundo CFDI real.
       nota = (e as { ambiguo?: boolean } | null)?.ambiguo === true
-        ? t('costos_facturacion.el_pago_quedo_registrado', { e: mensajeParaPantalla(e, 'timbrar') })
-        : t('costos_facturacion.el_pago_quedo_registrado_2', { e: mensajeParaPantalla(e, 'timbrar') });
+        ? t('costos_facturacion.el_pago_quedo_registrado', { e: await mensajeDeFalla(e, 'verbo.costos_timbrar') })
+        : t('costos_facturacion.el_pago_quedo_registrado_2', { e: await mensajeDeFalla(e, 'verbo.costos_timbrar') });
     }
 
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
     return { ok: t('costos_facturacion.factura_marcada_como_pagada', { nota, anotado: anotado ? '' : AVISO_SIN_BITACORA }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'conciliar el pago') };
+    return { error: await mensajeDeFalla(e, 'verbo.costos_conciliar_pago') };
   }
 }
 

@@ -30,7 +30,7 @@ import { VistaAgenteProveedores } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 import type { Metadata } from 'next';
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT('agentes')).t('proveedores.page.titulo') };
 }
@@ -238,7 +238,7 @@ export default async function PaginaAgenteProveedores({
     try {
       await generarBuzonDeFlota(tenantId, { id: permiso.userId });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, tx('rest.generar_la_direccion_del_buzon')) };
+      return { error: mensajeParaPantalla(e, tx('rest.generar_la_direccion_del_buzon'), await idiomaActual()) };
     }
     // El redirect va FUERA del try: lanza NEXT_REDIRECT y un catch encima lo
     // convertiría en "falla del sistema" sobre una operación que sí ocurrió.
@@ -253,7 +253,7 @@ export default async function PaginaAgenteProveedores({
     try {
       await rotarBuzonDeFlota(tenantId, { id: permiso.userId });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, tx('rest.rotar_la_direccion_del_buzon')) };
+      return { error: mensajeParaPantalla(e, tx('rest.rotar_la_direccion_del_buzon'), await idiomaActual()) };
     }
     redirect(`/dashboard/agentes/proveedores${sufijo}`);
   }
@@ -311,9 +311,9 @@ export default async function PaginaAgenteProveedores({
       const r = lote ? await enviarLote(deps, lote) : null;
       logger.info('proveedores.entrega_manual', { tenantId, entrega: a.entregaId, facturas: a.nFacturas, resultado: r?.estado });
       if (r?.estado === 'enviada') return { aviso: tx('rest.enviado_factura_s_al_contador_aparece', { nFacturas: a.nFacturas }) };
-      return { aviso: tx('rest.el_lote_de_factura_s_quedo', { nFacturas: a.nFacturas, v: r?.detalle ?? 'no salió al primer intento' }) };
+      return { aviso: tx('rest.el_lote_de_factura_s_quedo', { nFacturas: a.nFacturas, v: r?.detalle ?? (await getT('dashboard_b')).t('pv.sin_primer_intento') }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, tx('rest.enviar_las_facturas_al_contador')) };
+      return { error: mensajeParaPantalla(e, tx('rest.enviar_las_facturas_al_contador'), await idiomaActual()) };
     }
   }
 
@@ -326,7 +326,7 @@ export default async function PaginaAgenteProveedores({
     if (!id) return { error: tx('rest.falta_el_lote') };
     try {
       return (await reintentarLote(tenantId, id, new Date())) ? { aviso: tx('rest.se_reintenta_en_la_siguiente_pasada') } : { error: tx('rest.ese_lote_ya_no_esta_en') };
-    } catch (e) { return { error: mensajeParaPantalla(e, tx('rest.reintentar_el_envio')) }; }
+    } catch (e) { return { error: mensajeParaPantalla(e, tx('rest.reintentar_el_envio'), await idiomaActual()) }; }
   }
 
   async function cancelarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
@@ -338,7 +338,7 @@ export default async function PaginaAgenteProveedores({
     if (!id) return { error: tx('rest.falta_el_lote') };
     try {
       return (await cancelarLote(tenantId, id)) ? { aviso: tx('rest.lote_cancelado_sus_facturas_vuelven_a') } : { error: tx('rest.ese_lote_ya_salio_o_ya') };
-    } catch (e) { return { error: mensajeParaPantalla(e, 'cancelar el lote') }; }
+    } catch (e) { return { error: mensajeParaPantalla(e, 'cancelar el lote', await idiomaActual()) }; }
   }
 
   async function descartarArchivo(_prev: Estado, fd: FormData): Promise<Estado> {
@@ -365,7 +365,7 @@ export default async function PaginaAgenteProveedores({
     try {
       url = facturaId ? await urlPdfDeFactura(tenantId, facturaId) : await urlPdfDeRecepcion(tenantId, recepcionId);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'abrir el PDF') };
+      return { error: mensajeParaPantalla(e, 'abrir el PDF', await idiomaActual()) };
     }
     if (!url) return { error: tx('rest.ese_archivo_no_tiene_pdf_guardado') };
     redirect(url);

@@ -31,7 +31,8 @@ export function diasDeCierre(periodo: string, cerradoEn: string | null): number 
 
 // ───────────────────────────── Guardia de números ─────────────────────────────
 
-const NUMERO = /-?\$?\d[\d,]*(?:\.\d{1,12})?/g;
+// Sin grupos opcionales cuantificados (el trinquete de lint rechaza las expresiones «inseguras»): un punto final suelto se ignora al convertir.
+const NUMERO = /-?\$?\d[\d,]*\.?\d*/g;
 
 /** Valor absoluto de un token numérico impreso (`-$1,160.00` → 1160). */
 function valorDeToken(t: string): number {

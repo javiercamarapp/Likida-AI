@@ -1,6 +1,10 @@
+'use client';
+
 import { Inbox } from 'lucide-react';
 import { isValidElement, type ReactNode } from 'react';
 import './estados.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { dashboard_a as dashboard_aEs } from '@/lib/i18n/es/dashboard_a';
 import { BotonEnlace, EstadoError as EstadoErrorV2, EstadoVacio as EstadoVacioV2 } from '../ui-v2/componentes';
 
 // Los estados ÚNICOS (ui-v2) con la firma que ya usaban las pantallas de /dashboard. Así las ~50 pantallas dejan de pintar su propia
@@ -23,7 +27,7 @@ export const LARGO_MAX_VACIO = 150;
  *  altura de su vecino de rejilla (alto ≤ 220 px). `pantalla` lo pone en su propia caja con borde; `contenido={false}` lo suelta.
  *  Si la explicación es larga, queda plegada en «Ver más» en vez de un muro de texto centrado.
  *  `icono` (ReactNode heredado) se acepta y se ignora: el icono es el mismo en todo el producto. */
-export function EstadoVacio({ titulo = 'Sin datos todavía', children, accion, pantalla, contenido }: {
+export function EstadoVacio({ titulo, children, accion, pantalla, contenido }: {
   titulo?: string;
   /** Dentro de su propia caja con borde (pantalla vacía) y sin estirarse a la altura del vecino. */
   pantalla?: boolean;
@@ -33,11 +37,12 @@ export function EstadoVacio({ titulo = 'Sin datos todavía', children, accion, p
   children: ReactNode;
   accion?: { href: string; texto: string };
 }) {
+  const { t } = useT('dashboard_a', dashboard_aEs);
   const largo = largoTexto(children) > LARGO_MAX_VACIO;
   return (
-    <EstadoVacioV2 icono={Inbox} titulo={titulo} pantalla={pantalla} contenido={contenido ?? true}
+    <EstadoVacioV2 icono={Inbox} titulo={titulo ?? t('est.sinDatos')} pantalla={pantalla} contenido={contenido ?? true}
       accion={accion ? <BotonEnlace tamano="sm" href={accion.href}>{accion.texto}</BotonEnlace> : undefined}>
-      {largo ? <details className="rv-vacio__mas"><summary>Ver más</summary><span>{children}</span></details> : children}
+      {largo ? <details className="rv-vacio__mas"><summary>{t('est.verMas')}</summary><span>{children}</span></details> : children}
     </EstadoVacioV2>
   );
 }

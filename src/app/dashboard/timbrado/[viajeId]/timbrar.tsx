@@ -1,4 +1,4 @@
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { revalidatePath } from 'next/cache';
 import { exigirStepUpAccion } from '@/lib/auth/stepup';
@@ -75,6 +75,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
   searchParams: { tenant?: string; rol?: string; vista?: string };
 }) {
   const { t: tr } = await getT('dinero');
+  const { t: tb } = await getT('dashboard_b');
   const RUTA = '/dashboard/timbrado';
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, searchParams);
 
@@ -131,7 +132,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
       };
     } catch (e) {
       return {
-        error: tr('timbrado.viajeId.timbrar.errorPac', { mensaje: mensajeParaPantalla(e, 'timbrar') }),
+        error: tr('timbrado.viajeId.timbrar.errorPac', { mensaje: mensajeParaPantalla(e, 'timbrar', await idiomaActual()) }),
       };
     } finally {
       revalidatePath(rutaActual);
@@ -154,7 +155,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
       if (!r.ok) return { error: r.motivo };
       return { ok: tr('timbrado.viajeId.timbrar.bloqueoLiberadoYaPuedes') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'liberar el bloqueo de timbrado') };
+      return { error: mensajeParaPantalla(e, 'liberar el bloqueo de timbrado', await idiomaActual()) };
     } finally {
       revalidatePath(rutaActual);
     }
@@ -175,7 +176,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
       const r = await solicitarCancelacionTimbre(s.tenantId, v.viajeId, { id: s.userId }, { motivo, folioSustitucion: t(fd.get('folioSustitucion')) });
       return r.ok ? { ok: r.mensaje } : { error: r.motivo };
     } catch (e) {
-      return { error: tr('timbrado.viajeId.timbrar.noDesLaCancelacion', { v: mensajeParaPantalla(e, 'cancelar el CFDI') }) };
+      return { error: tr('timbrado.viajeId.timbrar.noDesLaCancelacion', { v: mensajeParaPantalla(e, 'cancelar el CFDI', await idiomaActual()) }) };
     } finally {
       revalidatePath(rutaActual);
     }
@@ -192,7 +193,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
       const r = await confirmarCancelacionTimbre(s.tenantId, v.viajeId, { id: s.userId }, fd.get('verificadoEnSat') === 'on');
       return r.ok ? { ok: r.mensaje } : { error: r.motivo };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'confirmar la cancelación') };
+      return { error: mensajeParaPantalla(e, 'confirmar la cancelación', await idiomaActual()) };
     } finally {
       revalidatePath(rutaActual);
     }
@@ -216,7 +217,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
     try {
       clienteId = (await leerContextoTimbre(s.tenantId, v.viajeId))?.clienteId ?? null;
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'leer el cliente del viaje') };
+      return { error: mensajeParaPantalla(e, 'leer el cliente del viaje', await idiomaActual()) };
     }
     if (clienteId === null) return { error: tr('timbrado.viajeId.timbrar.elViajeNoTiene') };
     try {
@@ -227,7 +228,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
         cpFiscal: t(fd.get('cpFiscal')),
       }, { id: s.userId });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar los datos fiscales del cliente') };
+      return { error: mensajeParaPantalla(e, 'guardar los datos fiscales del cliente', await idiomaActual()) };
     }
     revalidatePath(rutaActual);
     return { ok: tr('timbrado.viajeId.timbrar.datosFiscalesDelCliente2') };
@@ -272,7 +273,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
               <p className="rv-timb__texto">
                 {tr('timbrado.viajeId.timbrar.siYaVerificasteEn', { MINUTOS_MIN_LIBERAR_RESERVA })}
               </p>
-              <FormaConAviso accion={liberarReserva} boton="Liberar el bloqueo" columnas="md:grid-cols-1">
+              <FormaConAviso accion={liberarReserva} boton={tb('tm.liberar')} columnas="md:grid-cols-1">
                 <Casilla name="verificadoEnPac" etiqueta={tr('timbrado.viajeId.timbrar.verifiqueEnElPanel')} />
               </FormaConAviso>
             </>
@@ -316,7 +317,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
         {ctx.clienteId !== null && puedeEmitir && (
           <Disclosure variante="linea" titulo={tr('timbrado.viajeId.timbrar.datosFiscalesDelCliente')}>
-            <FormaConAviso accion={guardarReceptor} boton="Guardar datos del cliente" columnas="md:grid-cols-2">
+            <FormaConAviso accion={guardarReceptor} boton={tb('tm.guardar_cliente')} columnas="md:grid-cols-2">
               <CampoTexto id="razonSocial" name="razonSocial" etiqueta={tr('timbrado.viajeId.timbrar.razonSocialExactaA')} defaultValue={ctx.receptor.razonSocial ?? ''} />
               <CampoTexto id="regimenFiscal" name="regimenFiscal" etiqueta={tr('timbrado.viajeId.timbrar.regimenFiscalClave')} defaultValue={ctx.receptor.regimenFiscal ?? ''} placeholder="601" />
               <CampoTexto id="usoCfdi" name="usoCfdi" etiqueta={tr('timbrado.viajeId.timbrar.usoCfdi')} defaultValue={ctx.receptor.usoCfdi ?? ''} placeholder="S01 o G03" />
@@ -340,7 +341,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
                 {' '}= <strong>{tr('timbrado.viajeId.timbrar.total', { v: mxn(ensayo.total) })}</strong>.
               </p>
             )}
-            <FormaConAviso accion={timbrar} boton={ctx.emisor.modo === 'sandbox' ? 'Timbrar (PRUEBA)' : 'Timbrar'} columnas="md:grid-cols-2">
+            <FormaConAviso accion={timbrar} boton={ctx.emisor.modo === 'sandbox' ? tb('tm.timbrar_prueba') : tb('tm.timbrar')} columnas="md:grid-cols-2">
               {/* AUDITORÍA 24, FIS-8 (MEDIO): el valor por defecto era PPD, y un CFDI PPD OBLIGA a emitir después un complemento de pago (CFDI de Pagos 2.0) al cobrar. Likida no lo emite todavía — `pac/sw.ts` lo declara, la pantalla no — y sin el REP el cliente de la flota no puede acreditar su IVA y la flota queda con una obligación pendiente que su sistema no le dijo. El defecto pasa a PUE (pago en una exhibición: se agota con el timbre y no arrastra nada) y PPD queda como elección explícita, con lo que arrastra escrito al lado. */}
               <CampoSelect id="metodoPago" name="metodoPago" etiqueta={tr('timbrado.viajeId.timbrar.metodoDePago')} defaultValue="PUE">
                 <option value="PUE">{tr('timbrado.viajeId.timbrar.puePagoEnUna')}</option>

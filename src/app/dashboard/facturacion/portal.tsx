@@ -1,4 +1,4 @@
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
@@ -80,7 +80,7 @@ export async function BloquePortalPago({
         ok: tr('facturacion.portal.enlaceGeneradoCopialoAhora', { url: liga.url, v: fechaMx(liga.expiraEn) }),
       };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'generar el enlace de pago') };
+      return { error: mensajeParaPantalla(e, 'generar el enlace de pago', await idiomaActual()) };
     }
   }
 
@@ -95,7 +95,7 @@ export async function BloquePortalPago({
       revalidatePath(RUTA);
       return { ok: tr('facturacion.portal.enlaceRevocadoQuienLo') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'revocar el enlace') };
+      return { error: mensajeParaPantalla(e, 'revocar el enlace', await idiomaActual()) };
     }
   }
 
@@ -110,7 +110,7 @@ export async function BloquePortalPago({
       revalidatePath(RUTA);
       return { ok: tr('facturacion.portal.conciliadoEntraronALa', { v: mxn(r.monto) }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'conciliar el pago') };
+      return { error: mensajeParaPantalla(e, 'conciliar el pago', await idiomaActual()) };
     }
   }
 
@@ -130,7 +130,7 @@ export async function BloquePortalPago({
       revalidatePath(RUTA);
       return { ok: tr('facturacion.portal.descartadoConTuMotivo') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'descartar el registro') };
+      return { error: mensajeParaPantalla(e, 'descartar el registro', await idiomaActual()) };
     }
   }
 
@@ -153,7 +153,7 @@ export async function BloquePortalPago({
       revalidatePath(RUTA);
       return { ok: tr('facturacion.portal.complementoRegistradoTuClien') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'registrar el complemento de pago') };
+      return { error: mensajeParaPantalla(e, 'registrar el complemento de pago', await idiomaActual()) };
     }
   }
 

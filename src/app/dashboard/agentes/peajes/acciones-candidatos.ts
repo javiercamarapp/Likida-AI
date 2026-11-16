@@ -13,6 +13,7 @@ import {
 } from '@/lib/likida/peajes/candidatos_tabla';
 import { getT } from '@/lib/i18n/servidor';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES SOBRE LA TABLA DE CANDIDATOS (T-A2-28b): reclamar / descartar / justificar,
@@ -53,11 +54,11 @@ const textoOmitida = (tx: TAgentes = TR_ES.t): Record<MotivoNoAplica | 'sin_tari
   sin_tarifa: tx('rest.son_de_clase_distinta_de_3'),
   ya_decidido: tx('rest.ya_tenian_decision'), no_reclamable: tx('rest.son_avisos_atipicos_o_asuntos_internos'), sin_fecha: tx('rest.no_traen_fecha_no_se_puede'),
 });
-const VERBO: Record<AccionCandidato, { hecho: string; nada: string }> = {
-  reclamado: { hecho: 'marcado como reclamado', nada: 'reclamar' },
-  descartado: { hecho: 'descartado', nada: 'descartar' },
-  justificado: { hecho: 'justificado', nada: 'justificar' },
-};
+const verbo = (t: TrDe<'dashboard_b'>): Record<AccionCandidato, { hecho: string; nada: string }> => ({
+  reclamado: { hecho: t('acc.hecho.reclamado'), nada: t('acc.nada.reclamar') },
+  descartado: { hecho: t('acc.hecho.descartado'), nada: t('acc.nada.descartar') },
+  justificado: { hecho: t('acc.hecho.justificado'), nada: t('acc.nada.justificar') },
+});
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -72,6 +73,8 @@ export function aplicablesDelFiltro(filas: readonly FilaCandidato[], filtros: Re
 
 export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion): Promise<ResultadoAccion> {
   const { t: tx } = await getT('agentes');
+  const { t, tp } = await getT('dashboard_b');
+  const VERBO = verbo(t);
   if (!UUID.test(e.desgloseId)) return { ok: false, error: tx('rest.falta_el_desglose') };
   if (!(ACCIONES_CANDIDATO as readonly string[]).includes(e.accion)) return { ok: false, error: tx('rest.accion_no_valida') };
   const m = validarMotivoAccion(e.accion, e.motivo);
@@ -140,7 +143,7 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
   if (aplicables.length === 0) {
     // Una sola fila que no aplica es un error que se dice; un lote sin nada nuevo es un doble clic inocuo.
     return e.fila
-      ? { ok: false, error: tx('rest.no_se_puede_ese_candidato', { nada: VERBO[e.accion].nada, v: textoOmitidas || 'ya tenía decisión' }) }
+      ? { ok: false, error: tx('rest.no_se_puede_ese_candidato', { nada: VERBO[e.accion].nada, v: textoOmitidas || t('acc.ya_decision') }) }
       : { ok: true, aplicadas: 0, omitidas: objetivo.length, reclamos: 0, mensaje: tx('rest.no_habia_nada_nuevo_que', { nada: VERBO[e.accion].nada, v: textoOmitidas ? ` (${textoOmitidas})` : '' }) };
   }
 
@@ -185,7 +188,7 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
             // A39-S14-01: un reclamo de TODA la categoría ya cubre esos cruces: reclamarlos por candidatos los duplicaría.
             return { ok: false, error: tx('rest.ya_registraste_un_reclamo_de_toda', { categoria }) };
           }
-          return { ok: false, error: tx('rest.no_se_pudo_registrar_el_reclamo', { categoria, v: reclamos > 0 ? ` (los ${reclamos} anteriores sí quedaron)` : '' }) };
+          return { ok: false, error: tx('rest.no_se_pudo_registrar_el_reclamo', { categoria, v: reclamos > 0 ? t('acc.anteriores', { n: reclamos }) : '' }) };
         }
       }
     }
@@ -209,8 +212,8 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
       tenant: tenantId, desglose: desgloseId, accion: e.accion, filas: efectivas.length, reclamos, lote: e.filtro !== undefined, actor: e.actor,
     });
     const omitidas = objetivo.length - efectivas.length;
-    const base = `${efectivas.length} ${efectivas.length === 1 ? 'cruce' : 'cruces'} ${VERBO[e.accion].hecho}${reclamos > 0 ? ` en ${reclamos} ${reclamos === 1 ? 'reclamo' : 'reclamos'}` : ''}.`;
-    return { ok: true, aplicadas: efectivas.length, omitidas, reclamos, mensaje: omitidas > 0 && textoOmitidas ? `${base} Se omitieron: ${textoOmitidas}.` : base };
+    const base = tp('acc.cruces', efectivas.length, { hecho: VERBO[e.accion].hecho, reclamos: reclamos > 0 ? tp('acc.en_reclamos', reclamos) : '' });
+    return { ok: true, aplicadas: efectivas.length, omitidas, reclamos, mensaje: omitidas > 0 && textoOmitidas ? t('acc.omitieron', { base, lista: textoOmitidas }) : base };
   } catch (err) {
     logger.error('peajes.candidatos_accion_fallo', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
     return { ok: false, error: tx('rest.no_se_pudo_guardar_la_decision') };

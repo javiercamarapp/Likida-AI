@@ -9,7 +9,7 @@ import {
   aprobarPieza, rechazarPieza, enviarPiezaPorCorreo, liberarEnvioAmbiguo,
   type PiezaEnCola,
 } from '@/lib/likida/agentes/cola';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { fechaHoraMx } from '@/lib/formato';
 import {
   contarVencidas, vaciarVencidas, leerResumenBandeja, normalizarParametros,
@@ -77,7 +77,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
       }
       return { error: t('aprobaciones.esa_operacion_no_existe') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, operacion === 'rechazar' ? 'rechazar la pieza' : 'aprobar la pieza') };
+      return { error: await mensajeDeFalla(e, operacion === 'rechazar' ? 'verbo.apr_rechazar_pieza' : 'verbo.apr_aprobar_pieza') };
     }
   }
 
@@ -90,7 +90,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
       revalidatePath('/admin/aprobaciones');
       return { ok: t('aprobaciones.enviada_a_resend_la', { destinatario: r.destinatario, providerId: r.providerId }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'enviar la pieza') };
+      return { error: await mensajeDeFalla(e, 'verbo.apr_enviar_pieza') };
     }
   }
 
@@ -107,7 +107,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
         ? { ok: t('aprobaciones.liberada_vuelve_a_aprobadas') }
         : { ok: t('aprobaciones.liberada_pero_no_se') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'liberar el envío ambiguo') };
+      return { error: await mensajeDeFalla(e, 'verbo.apr_liberar_envio') };
     }
   }
 
@@ -124,7 +124,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
         entrada: { dias: String(fd.get('dias') ?? ''), limite: String(fd.get('limite') ?? ''), tipos: String(fd.get('tipos') ?? '') },
       };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'contar las piezas vencidas') };
+      return { error: await mensajeDeFalla(e, 'verbo.apr_contar_vencidas') };
     }
   }
 
@@ -148,7 +148,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
       const bitacora = r.bitacoraEscrita === false ? t('aprobaciones.ojo_el_lote_se') : t('aprobaciones.quedo_firmado_en_la');
       return { ok: t('aprobaciones.archivadas_piezas_vencidas', { resueltas: r.resueltas, resto, bitacora }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'archivar las piezas vencidas') };
+      return { error: await mensajeDeFalla(e, 'verbo.apr_archivar_vencidas') };
     }
   }
 

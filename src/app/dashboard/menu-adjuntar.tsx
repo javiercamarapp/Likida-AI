@@ -3,6 +3,8 @@
 import { Camera, FileImage, Paperclip } from 'lucide-react';
 import type { RefObject } from 'react';
 import { MenuItem, MenuList, Popover } from '../ui-v2/componentes/overlay';
+import { useT } from '@/lib/i18n/proveedor';
+import { dashboard_b as dashboard_bEs } from '@/lib/i18n/es/dashboard_b';
 
 /**
  * El menú «Adjuntar» del chat: tomar foto / subir imágenes / adjuntar archivos (los tres terminan en el mismo OCR real).
@@ -18,18 +20,19 @@ export default function MenuAdjuntar({ abierto, onCerrar, ancla, onCamara, onIma
   onImagen: () => void;
   onArchivo: () => void;
 }) {
+  const { t } = useT('dashboard_b', dashboard_bEs);
   const elegir = (accion: () => void) => () => { onCerrar(); accion(); };
   return (
-    <Popover abierto={abierto} onCerrar={onCerrar} ancla={ancla} etiqueta="Adjuntar" alineacion="fin" className="rv-pop--adjuntar">
-      <MenuList etiqueta="Adjuntar">
+    <Popover abierto={abierto} onCerrar={onCerrar} ancla={ancla} etiqueta={t('adj.etiqueta')} alineacion="fin" className="rv-pop--adjuntar">
+      <MenuList etiqueta={t('adj.etiqueta')}>
         <MenuItem icono={<Camera aria-hidden="true" />} onSelect={elegir(onCamara)}>
-          <span>Tomar foto</span><span className="rv-menu__apoyo">Con la cámara del teléfono</span>
+          <span>{t('adj.foto')}</span><span className="rv-menu__apoyo">{t('adj.foto_apoyo')}</span>
         </MenuItem>
         <MenuItem icono={<FileImage aria-hidden="true" />} onSelect={elegir(onImagen)}>
-          <span>Subir imágenes</span><span className="rv-menu__apoyo">Fotos de tickets desde tu equipo</span>
+          <span>{t('adj.imagenes')}</span><span className="rv-menu__apoyo">{t('adj.imagenes_apoyo')}</span>
         </MenuItem>
         <MenuItem icono={<Paperclip aria-hidden="true" />} onSelect={elegir(onArchivo)}>
-          <span>Adjuntar archivos</span><span className="rv-menu__apoyo">PDF, Excel, CSV, XML de CFDI…</span>
+          <span>{t('adj.archivos')}</span><span className="rv-menu__apoyo">{t('adj.archivos_apoyo')}</span>
         </MenuItem>
       </MenuList>
     </Popover>

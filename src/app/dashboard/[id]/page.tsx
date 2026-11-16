@@ -145,7 +145,7 @@ export default async function Detalle({
    */
   async function reabrir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tra } = await getT('dinero');
+    const { t: tra, idioma } = await getT('dinero');
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
     if (!puedeAdministrar(s.rol)) {
       return { error: tra('liquidacion.accion.reabrirSinPermiso') };
@@ -161,7 +161,7 @@ export default async function Detalle({
       revalidatePath(`/dashboard/${id}`);
       return { ok: tra(pdfPerdido ? 'liquidacion.accion.reabrirOkConPdf' : 'liquidacion.accion.reabrirOk', { folio: d!.folio }) };
     } catch (err) {
-      return { error: mensajeParaPantalla(err, 'reabrir el viaje') };
+      return { error: mensajeParaPantalla(err, 'reabrir el viaje', idioma) };
     }
   }
 
@@ -176,7 +176,7 @@ export default async function Detalle({
    */
   async function reasignar(_previo: ResultadoAccion, formData: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tra } = await getT('dinero');
+    const { t: tra, idioma } = await getT('dinero');
     // Repite la comprobación de permiso EN el server action: el `puedeAsignar`
     // de arriba solo decide si el <form> se pinta. Sin este segundo chequeo,
     // un contador que arme la petición a mano (misma sesión válida, sin el
@@ -197,7 +197,7 @@ export default async function Detalle({
     try {
       cambio = await reasignarOperador(t, d!.viajeId, operadorId);
     } catch (err) {
-      return { error: mensajeParaPantalla(err, 'reasignar el chofer') };
+      return { error: mensajeParaPantalla(err, 'reasignar el chofer', idioma) };
     }
     // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 1): esta pantalla reseteaba
     // `avisado_en` (dentro de `reasignarOperador`, en cada cambio REAL de
@@ -291,7 +291,7 @@ export default async function Detalle({
    */
   async function revisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tra } = await getT('dinero');
+    const { t: tra, idioma } = await getT('dinero');
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
     if (!puedeVerArea(s.rol, 'dinero') || !puedeFirmarLiquidacion(s.rol)) {
       return { error: tra('liquidacion.revision.rolNoFirma') };
@@ -330,7 +330,7 @@ export default async function Detalle({
       }
       return { ok: tra('liquidacion.accion.revisarAprobada', { folio: r.folio }) };
     } catch (err) {
-      return { error: mensajeParaPantalla(err, 'firmar la liquidación') };
+      return { error: mensajeParaPantalla(err, 'firmar la liquidación', idioma) };
     }
   }
 
@@ -378,7 +378,7 @@ export default async function Detalle({
 
   async function reintentarPdf(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tra } = await getT('dinero');
+    const { t: tra, idioma } = await getT('dinero');
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
     if (!puedeVerArea(s.rol, 'dinero') || !puedeFirmarLiquidacion(s.rol)) {
       return { error: tra('liquidacion.accion.pdfSinPermiso') };
@@ -391,7 +391,7 @@ export default async function Detalle({
       revalidatePath(`/dashboard/${id}`);
       return r.regenerado ? { ok: tra('liquidacion.accion.pdfOk') }
         : { error: tra('liquidacion.accion.pdfPendiente') };
-    } catch (error) { return { error: mensajeParaPantalla(error, 'regenerar el PDF') }; }
+    } catch (error) { return { error: mensajeParaPantalla(error, 'regenerar el PDF', idioma) }; }
   }
 
   // Cuántos choferes activos hay — `count exact, head`, cero filas de vuelta.

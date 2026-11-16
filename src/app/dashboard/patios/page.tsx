@@ -65,12 +65,12 @@ export default async function PaginaPatios({
   let patioDelJefe: string | null = null;
   if (!administra) {
     const alcance = await alcanceDePatio(tenantId, userId, rol);
-    if (alcance?.tipo === 'patio') patioDelJefe = (patios ?? []).find((p) => p.id === alcance.terminalId)?.nombre ?? 'tu patio';
+    if (alcance?.tipo === 'patio') patioDelJefe = (patios ?? []).find((p) => p.id === alcance.terminalId)?.nombre ?? (await getT('dashboard_a')).t('pat.tuPatio');
   }
 
   async function crear(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-  const { t } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.crea') };
@@ -80,13 +80,13 @@ export default async function PaginaPatios({
       revalidatePath(RUTA);
       return { ok: true, mensaje: t('patios.a.creado', { nombre: nombre.replace(/\s+/g, ' ').trim() }) };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'crear el patio') };
+      return { ok: false, error: mensajeParaPantalla(e, 'crear el patio', idioma) };
     }
   }
 
   async function editar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-  const { t } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.edita') };
@@ -97,13 +97,13 @@ export default async function PaginaPatios({
       revalidatePath(RUTA);
       return { ok: true, mensaje: t('patios.a.actualizado') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar el patio') };
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar el patio', idioma) };
     }
   }
 
   async function eliminar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-  const { t } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.borra') };
@@ -112,13 +112,13 @@ export default async function PaginaPatios({
       revalidatePath(RUTA);
       return { ok: true, mensaje: t('patios.a.borrado', { operadores: q.operadores, unidades: q.unidades }) };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'borrar el patio') };
+      return { ok: false, error: mensajeParaPantalla(e, 'borrar el patio', idioma) };
     }
   }
 
   async function asignarJefe(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-  const { t } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.jefes') };
@@ -133,13 +133,13 @@ export default async function PaginaPatios({
           : t('patios.a.jefe.toda'),
       };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'asignar el patio al jefe') };
+      return { ok: false, error: mensajeParaPantalla(e, 'asignar el patio al jefe', idioma) };
     }
   }
 
   async function asignarSinPatioAccion(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-  const { t } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.sinpatio') };
@@ -150,7 +150,7 @@ export default async function PaginaPatios({
       revalidatePath(RUTA);
       return { ok: true, mensaje: n === 0 ? t('patios.a.nadie') : t(`patios.a.listo.${tabla}`, { n }) };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'asignar el patio') };
+      return { ok: false, error: mensajeParaPantalla(e, 'asignar el patio', idioma) };
     }
   }
 

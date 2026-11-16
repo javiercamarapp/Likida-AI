@@ -1,4 +1,6 @@
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import { trDashboardAEs } from '@/lib/i18n/tr_dashboard_a';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 import type { Rentabilidad, Cobranza } from '@/lib/likida/comercial';
 import { mxn, fechaCorta, numero, porcentaje } from '@/lib/formato';
 import { EnlacePagina, NavPaginas } from '../paginador';
@@ -34,12 +36,14 @@ export function hrefPagina(sufijo: string, pagina: number, periodo: PeriodoRenta
 type FilaCartera = NonNullable<Cobranza['facturas']>[number];
 
 export function VistaRentabilidad({
-  rentabilidad, cobranza, sufijo = '', periodo = 'todo', tr = trEs,
+  rentabilidad, cobranza, sufijo = '', periodo = 'todo', tr = trEs, ta = trDashboardAEs,
 }: {
   rentabilidad: Rentabilidad | null;
   cobranza: Cobranza | null;
   /** El `?tenant=`/`?vista=`/`?rol=` que hay que conservar al pasar de página. */
   sufijo?: string; tr?: Tr;
+  /** Traductor de `dashboard_a` (la página lo arma con `getT`); sin él, español. */
+  ta?: TrDe<'dashboard_a'>;
   /** La ventana de viajes que mide el margen (`?periodo=`). */
   periodo?: PeriodoRentabilidad;
 }) {
@@ -76,7 +80,7 @@ export function VistaRentabilidad({
     {
       id: 'vence', titulo: tr('rentabilidad.vista.vence'),
       celda: (f) => (f.vencida
-        ? <StatusChip tono="bad">{`venció ${fechaCorta(f.venceEn)}`}</StatusChip>
+        ? <StatusChip tono="bad">{ta('rent.vencio', { fecha: fechaCorta(f.venceEn) })}</StatusChip>
         : (f.venceEn ? fechaCorta(f.venceEn) : <span className="rv-rent__tenue">{tr('rentabilidad.vista.sinCondiciones')}</span>)),
     },
   ];

@@ -1,4 +1,6 @@
 import type { Conector } from '@/lib/likida/conexiones';
+import { trDashboardAEs } from '@/lib/i18n/tr_dashboard_a';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ALERTAS DE LA FLOTA — el patrón que faltaba en el panel del
@@ -69,7 +71,8 @@ export interface SenalesFlota {
   sinSenalDeVida?: number | null;
 }
 
-/** Cómo se llama cada señal cuando hay que confesar que no se pudo leer. */
+/** Cómo se llama cada señal cuando hay que confesar que no se pudo leer. El español es la llave estable de `id` (no se traduce);
+ *  el rótulo que se lee en pantalla sale del diccionario (`cal.rot.<señal>`). */
 const ROTULO: Record<keyof Omit<SenalesFlota, 'sinSenalDeVida'>, string> = {
   tareasAsistente: 'tareas del asistente',
   excepcionesConductor: 'excepciones de viajes en vivo',
@@ -80,7 +83,6 @@ const ROTULO: Record<keyof Omit<SenalesFlota, 'sinSenalDeVida'>, string> = {
   conectores: 'estado de las conexiones',
 };
 
-const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios);
 
 /**
  * El orden NO es cosmético: es el orden en que un contralor debe atacarlas.
@@ -101,6 +103,7 @@ export function calcularAlertasFlota(
   s: SenalesFlota,
   sufijo = '',
   puedeVer: (href: string) => boolean = () => true,
+  t: TrDe<'dashboard_a'> = trDashboardAEs,
 ): AlertaFlota[] {
   const alertas: AlertaFlota[] = [];
 
@@ -108,16 +111,17 @@ export function calcularAlertasFlota(
   // significado de todo lo de abajo: con una señal caída, "sin novedades" ya
   // no quiere decir "todo en orden", quiere decir "no sé". Callarlo sería la
   // afirmación más cara que puede hacer este producto.
-  const ciegas = (Object.keys(ROTULO) as Array<keyof typeof ROTULO>)
-    .filter((k) => s[k] === null)
-    .map((k) => ROTULO[k]);
+  const ciegasK = (Object.keys(ROTULO) as Array<keyof typeof ROTULO>)
+    .filter((k) => s[k] === null);
+  const ciegas = ciegasK.map((k) => ROTULO[k]);
+  const ciegasTxt = ciegasK.map((k) => t(`cal.rot.${k}` as const));
   if (ciegas.length > 0) {
     alertas.push({
       id: `ilegibles:${ciegas.slice().sort().join('-')}`,
       tipo: 'atencion',
       texto: ciegas.length === 1
-        ? `No se pudo revisar ${ciegas[0]} — el dato de abajo está incompleto, no en cero.`
-        : `No se pudieron revisar ${ciegas.length} señales (${ciegas.join(', ')}) — lo de abajo está incompleto, no en cero.`,
+        ? t('cal.ciega.una', { que: ciegasTxt[0] })
+        : t('cal.ciega.varias', { n: ciegas.length, lista: ciegasTxt.join(', ') }),
       href: '/dashboard/soporte',
     });
   }
@@ -133,8 +137,8 @@ export function calcularAlertasFlota(
       id: `conectores:${rotos.map((c) => c.id).sort().join('-')}`,
       tipo: 'atencion',
       texto: rotos.length === 1
-        ? `${rotos[0].nombre} está a medias: ${rotos[0].falta[0] ?? 'le falta un dato'}.`
-        : `${rotos.length} conexiones están a medias (${rotos.map((c) => c.nombre).join(', ')}).`,
+        ? t('cal.conector.una', { nombre: rotos[0].nombre, falta: rotos[0].falta[0] ?? t('cal.leFaltaDato') })
+        : t('cal.conector.varias', { n: rotos.length, lista: rotos.map((c) => c.nombre).join(', ') }),
       href: '/dashboard/conexiones',
     });
   }
@@ -145,16 +149,18 @@ export function calcularAlertasFlota(
     alertas.push({
       id: `tareas-asistente:${s.tareasAsistente}`,
       tipo: 'atencion',
-      texto: `${s.tareasAsistente} ${plural(s.tareasAsistente, 'tarea del asistente espera', 'tareas del asistente esperan')} a una persona — algo delicado que la IA no decide.`,
+      texto: t(s.tareasAsistente === 1 ? 'cal.tareas.uno' : 'cal.tareas.otros', { n: s.tareasAsistente }),
       href: '/dashboard/viajes-en-vivo',
     });
   }
   if (s.excepcionesConductor != null && s.excepcionesConductor > 0) {
-    const sinSenal = s.sinSenalDeVida != null && s.sinSenalDeVida > 0 ? ` (${s.sinSenalDeVida} sin señal de vida)` : '';
+    const sinSenal = s.sinSenalDeVida != null && s.sinSenalDeVida > 0 ? s.sinSenalDeVida : 0;
     alertas.push({
       id: `excepciones-conductor:${s.excepcionesConductor}:${s.sinSenalDeVida ?? 0}`,
       tipo: s.sinSenalDeVida != null && s.sinSenalDeVida > 0 ? 'atencion' : 'aviso',
-      texto: `${s.excepcionesConductor} ${plural(s.excepcionesConductor, 'viaje en curso tiene', 'viajes en curso tienen')} excepciones del Conductor${sinSenal}.`,
+      texto: sinSenal > 0
+        ? t(s.excepcionesConductor === 1 ? 'cal.excSin.uno' : 'cal.excSin.otros', { n: s.excepcionesConductor, sin: sinSenal })
+        : t(s.excepcionesConductor === 1 ? 'cal.exc.uno' : 'cal.exc.otros', { n: s.excepcionesConductor }),
       href: '/dashboard/viajes-en-vivo',
     });
   }
@@ -165,7 +171,7 @@ export function calcularAlertasFlota(
     alertas.push({
       id: `escalados:${s.escalados}`,
       tipo: 'atencion',
-      texto: `${s.escalados} ${plural(s.escalados, 'viaje escalado', 'viajes escalados')} — el agente dejó de avanzar y espera a una persona.`,
+      texto: t(s.escalados === 1 ? 'cal.escalados.uno' : 'cal.escalados.otros', { n: s.escalados }),
       href: '/dashboard/viajes',
     });
   }
@@ -176,7 +182,7 @@ export function calcularAlertasFlota(
     alertas.push({
       id: `huerfanos:${s.huerfanos}`,
       tipo: 'atencion',
-      texto: `${s.huerfanos} ${plural(s.huerfanos, 'comprobante llegó', 'comprobantes llegaron')} sin viaje al cual pegarse.`,
+      texto: t(s.huerfanos === 1 ? 'cal.huerf.uno' : 'cal.huerf.otros', { n: s.huerfanos }),
       href: '/dashboard/huerfanos',
     });
   }
@@ -185,7 +191,7 @@ export function calcularAlertasFlota(
     alertas.push({
       id: `duplicados:${s.duplicados}`,
       tipo: 'atencion',
-      texto: `${s.duplicados} ${plural(s.duplicados, 'comprobante repetido', 'comprobantes repetidos')} entre viajes distintos.`,
+      texto: t(s.duplicados === 1 ? 'cal.dup.uno' : 'cal.dup.otros', { n: s.duplicados }),
       href: '/dashboard/huerfanos',
     });
   }
@@ -195,7 +201,7 @@ export function calcularAlertasFlota(
     alertas.push({
       id: `por-revisar:${s.porRevisar}`,
       tipo: 'aviso',
-      texto: `${s.porRevisar} ${plural(s.porRevisar, 'liquidación lista', 'liquidaciones listas')} para tu revisión.`,
+      texto: t(s.porRevisar === 1 ? 'cal.rev.uno' : 'cal.rev.otros', { n: s.porRevisar }),
       href: '/dashboard/viajes',
     });
   }

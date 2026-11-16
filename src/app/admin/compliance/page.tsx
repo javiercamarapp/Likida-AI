@@ -11,7 +11,7 @@ import { traerTodo, conteo } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
 import { agregarDiasHabiles } from '@/lib/admin/dias-habiles';
-import { mensajeParaPantalla } from '@/lib/likida/administracion';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, FilaTarjetas, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
 import { Columnas, DonaMini } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
@@ -76,7 +76,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
     try {
       r = await resolverSolicitudArco(sol.tenant_id as string, solicitudId, resolucion);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'resolver la solicitud', idioma) };
+      return { error: await mensajeDeFalla(e, 'verbo.cmp_resolver_solicitud') };
     }
     revalidatePath('/admin/compliance');
     // A37-S05-04: el resultado del envío NO se descarta — la pantalla no

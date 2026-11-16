@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { appUrl } from '@/lib/env';
 import { nombreDeRolTr } from '@/lib/i18n/rotulos_tr';
 import { mensajeDeBaja } from '@/lib/auth/mensaje_baja';
@@ -29,7 +29,7 @@ function refrescar() {
 }
 
 export async function accionCambiarRolUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t, idioma } = await getT('admin_sistema');
+  const { t } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
   if (pasoMfa) return { error: pasoMfa };
@@ -41,24 +41,23 @@ export async function accionCambiarRolUsuario(_previo: ResultadoAccion, fd: Form
       : (r.llavesApiRevocadas?.length ? t('usuarios_acciones.se_revocaron_sus_llaves_de_api', { r: r.llavesApiRevocadas.join(', ') }) : '');
     return { ok: t('usuarios_acciones.rol_cambiado_de_a_aplica_en', { nombreDeRol: nombreDeRolTr(r.de, t), nombreDeRol2: nombreDeRolTr(r.a, t), llaves }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'cambiar el rol', idioma) };
+    return { error: await mensajeDeFalla(e, 'verbo.usr_cambiar_rol') };
   }
 }
 
 export async function accionDarDeBajaUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   try {
     const r = await darDeBajaDesdeAdmin(id(fd), s);
     refrescar();
     return { ok: mensajeDeBaja(r).mensaje };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'dar de baja la cuenta', idioma) };
+    return { error: await mensajeDeFalla(e, 'verbo.usr_baja_cuenta') };
   }
 }
 
 export async function accionReactivarUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t, idioma } = await getT('admin_sistema');
+  const { t } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   // Reactivar devuelve el acceso con el rol que la cuenta tenía (puede ser dueño o contador): mismo paso que cambiar el rol.
   const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
@@ -70,12 +69,12 @@ export async function accionReactivarUsuario(_previo: ResultadoAccion, fd: FormD
       ? { ok: t('usuarios_acciones.cuenta_reactivada_ya_puede_volver_a') }
       : { error: t('usuarios_acciones.cuenta_reactivada_en_el_panel_pero') };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'reactivar la cuenta', idioma) };
+    return { error: await mensajeDeFalla(e, 'verbo.usr_reactivar_cuenta') };
   }
 }
 
 export async function accionReenviarAccesoUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t, idioma } = await getT('admin_sistema');
+  const { t } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   try {
     const r = await reenviarAccesoDesdeAdmin(id(fd), s);
@@ -86,12 +85,12 @@ export async function accionReenviarAccesoUsuario(_previo: ResultadoAccion, fd: 
         : t('usuarios_acciones.el_correo_de_acceso_no_salio', { appUrl: appUrl() }),
     };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'reenviar el acceso', idioma) };
+    return { error: await mensajeDeFalla(e, 'verbo.usr_reenviar_acceso') };
   }
 }
 
 export async function accionCerrarSesionesUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t, idioma } = await getT('admin_sistema');
+  const { t } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   try {
     const r = await cerrarSesionesDesdeAdmin(id(fd), s);
@@ -99,7 +98,7 @@ export async function accionCerrarSesionesUsuario(_previo: ResultadoAccion, fd: 
       ? { ok: t('usuarios_acciones.listo_todas_sus_sesiones_quedaron_cerradas') }
       : { error: t('usuarios_acciones.no_se_pudo_confirmar_el_cierre') };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'cerrar sus sesiones', idioma) };
+    return { error: await mensajeDeFalla(e, 'verbo.usr_cerrar_sesiones') };
   }
 }
 
@@ -108,7 +107,7 @@ export async function accionCerrarSesionesUsuario(_previo: ResultadoAccion, fd: 
 const sinAsiento = (t: TSistema = T_SISTEMA_ES) => (t('usuarios_acciones.ojo_el_acto_ya_se_hizo'));
 
 export async function accionDarDeBajaPersonalLikida(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t, idioma } = await getT('admin_sistema');
+  const { t } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
   if (pasoMfa) return { error: pasoMfa };
@@ -120,12 +119,12 @@ export async function accionDarDeBajaPersonalLikida(_previo: ResultadoAccion, fd
       : t('usuarios_acciones.la_cuenta_quedo_de_baja_pero');
     return { ok: t('usuarios_acciones.baja_hecha', { rol: nombreDeRolTr(r.rol, t), sesion, asiento: r.bitacora ? '' : sinAsiento(t) }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'dar de baja al personal de Likida', idioma) };
+    return { error: await mensajeDeFalla(e, 'verbo.usr_baja_personal') };
   }
 }
 
 export async function accionReactivarPersonalLikida(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t, idioma } = await getT('admin_sistema');
+  const { t } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
   if (pasoMfa) return { error: pasoMfa };
@@ -136,6 +135,6 @@ export async function accionReactivarPersonalLikida(_previo: ResultadoAccion, fd
       ? { ok: t('usuarios_acciones.cuenta_reactivada_rol', { rol: nombreDeRolTr(r.rol, t), asiento: r.bitacora ? '' : sinAsiento(t) }) }
       : { error: t('usuarios_acciones.cuenta_reactivada_en_el_panel_pero_2') };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'reactivar al personal de Likida', idioma) };
+    return { error: await mensajeDeFalla(e, 'verbo.usr_reactivar_personal') };
   }
 }

@@ -81,6 +81,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
   tenantExiste?: boolean;
 }) {
   const { t: tr } = await getT('dinero');
+  const { t: ta } = await getT('dashboard_a');
   const { tenantId } = await resolverTenantEfectivo('/dashboard/descarga-sat', searchParams);
   const proveedor = estadoDescargaSat();
   const datos: VistaDescargaSat = tenantExiste
@@ -90,7 +91,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   async function guardar(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     // El rol del render NO es el de la acción: se re-gatea adentro, mismo
     // criterio que Políticas y el estímulo de peaje.
     const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
@@ -113,7 +114,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         activa: t(fd.get('activa')) !== 'pausada',
       }, { id: s.userId });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar la configuración de descarga') };
+      return { error: mensajeParaPantalla(e, 'guardar la configuración de descarga', idioma) };
     }
     revalidatePath('/dashboard/descarga-sat');
     return { ok: tr('descargaSat.vista.configuracionGuardadaElSigui') };
@@ -121,7 +122,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   async function verificar(): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: tr('descargaSat.vista.tuRolNoPuede2') };
@@ -133,13 +134,13 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
       // verificar" no le dice a nadie que le falta subir su e.firma.
       return r.ok ? { ok: r.mensaje } : { error: r.mensaje };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'verificar la e.firma con el proveedor') };
+      return { error: mensajeParaPantalla(e, 'verificar la e.firma con el proveedor', idioma) };
     }
   }
 
   async function pedir(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: tr('descargaSat.vista.tuRolNoPuede3') };
@@ -153,7 +154,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
       revalidatePath('/dashboard/descarga-sat');
       return r.ok ? { ok: r.mensaje } : { error: r.mensaje };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'pedir el rango al SAT') };
+      return { error: mensajeParaPantalla(e, 'pedir el rango al SAT', idioma) };
     }
   }
 
@@ -199,7 +200,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
       <Tarjeta titulo={tr('descargaSat.vista.tuConexion')}
         acciones={cfg === null ? undefined : (
         <CajonConfigFiscal id="buzon" titulo={tr('descargaSat.vista.declaraTuBuzon')} descripcion={tr('descargaSat.vista.elRfcDelQue')} disparador={tr('descargaSat.vista.configurarBuzon')}>
-          <FormaConAviso accion={guardar} boton="Guardar" columnas="md:grid-cols-1">
+          <FormaConAviso accion={guardar} boton={ta('dsat.guardar')} columnas="md:grid-cols-1">
             <CampoTexto id="rfc" name="rfc" etiqueta={tr('descargaSat.vista.rfcDelBuzon')} defaultValue={cfg?.rfc ?? ''} placeholder="EKU9003173C9" obligatorio />
             <CampoSelect id="modo" name="modo" etiqueta={tr('descargaSat.vista.servicioDelSat')} defaultValue={cfg?.modo ?? 'webservice'}>
               <option value="webservice">{tr('descargaSat.vista.webService200000')}</option>
@@ -219,7 +220,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
           <EstadoVacio titulo={tr('descargaSat.vista.buzonSinDeclarar')} icono={FileQuestion} contenido
             accion={(
         <CajonConfigFiscal id="buzon" titulo={tr('descargaSat.vista.declaraTuBuzon')} descripcion={tr('descargaSat.vista.elRfcDelQue')} disparador={tr('descargaSat.vista.configurarBuzon')}>
-          <FormaConAviso accion={guardar} boton="Guardar" columnas="md:grid-cols-1">
+          <FormaConAviso accion={guardar} boton={ta('dsat.guardar')} columnas="md:grid-cols-1">
             <CampoTexto id="rfc" name="rfc" etiqueta={tr('descargaSat.vista.rfcDelBuzon')} defaultValue="" placeholder="EKU9003173C9" obligatorio />
             <CampoSelect id="modo" name="modo" etiqueta={tr('descargaSat.vista.servicioDelSat')} defaultValue="webservice">
               <option value="webservice">{tr('descargaSat.vista.webService200000')}</option>
@@ -271,7 +272,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
           {tr('descargaSat.vista.paraUnPeriodoViejo', { VENTANA_MAX_DIAS })}
         </p>
         {motivoBloqueo === null ? (
-          <FormaConAviso accion={pedir} boton="Pedir al SAT" columnas="md:grid-cols-1">
+          <FormaConAviso accion={pedir} boton={ta('dsat.pedir')} columnas="md:grid-cols-1">
             <CampoFecha id="desde" name="desde" etiqueta={tr('descargaSat.vista.desde')} defaultValue={`${hoy.slice(0, 8)}01`} obligatorio />
             <CampoFecha id="hasta" name="hasta" etiqueta={tr('descargaSat.vista.hasta')} defaultValue={hoy} obligatorio />
             <CampoSelect id="tipo" name="tipo" etiqueta={tr('descargaSat.vista.queBuzon')} defaultValue="recibidos">

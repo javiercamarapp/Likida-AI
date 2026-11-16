@@ -76,6 +76,7 @@ export default async function PaginaOperadores({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string; p?: string; editar?: string }>;
 }) {
   const sp = await searchParams;
+  const { t: ta } = await getT('dashboard_a');
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
@@ -87,7 +88,7 @@ export default async function PaginaOperadores({
   let patios: Awaited<ReturnType<typeof getTerminales>> = [];
   try { patios = await getTerminales(tenantId); } catch { /* el selector no se pinta; el servidor sigue exigiendo el alcance */ }
   const patioDelJefe = alcance?.tipo === 'patio'
-    ? (patios.find((p) => p.id === alcance.terminalId)?.nombre ?? 'tu patio')
+    ? (patios.find((p) => p.id === alcance.terminalId)?.nombre ?? ta('pat.tuPatio'))
     : null;
   const camposOcultos = camposDeSufijo(sp);
 
@@ -197,7 +198,8 @@ export default async function PaginaOperadores({
 
   async function guardarOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-  const { t } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
+    const { t: ta2 } = await getT('dashboard_a');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('op.a.rolver') };
     if (!puedeEditarCatalogoOperativo(s.rol)) {
@@ -256,19 +258,19 @@ export default async function PaginaOperadores({
         mensaje: activo === false
           ? t('op.a.baja')
           : activo === true ? t('op.a.reactivado')
-            : 'Datos del operador actualizados.',
+            : ta2('opr.actualizado'),
       };
     } catch (e) {
       // `DatoInvalido` sale VERBATIM (dice qué corregir); cualquier otra cosa
       // se loguea y sale como falla del sistema.
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar los datos del operador') };
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar los datos del operador', idioma) };
     }
   }
 
   /** El alta de UN operador (la guía de arranque mandaba aquí y solo se editaba). */
   async function altaOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-  const { t } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('op.a.rolver') };
     if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: t('op.a.rolalta') };
@@ -293,7 +295,7 @@ export default async function PaginaOperadores({
           : t('op.a.alta.ok', { nombre: nombre.trim() }),
       };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'dar de alta al operador') };
+      return { ok: false, error: mensajeParaPantalla(e, 'dar de alta al operador', idioma) };
     }
   }
 
@@ -318,7 +320,7 @@ export default async function PaginaOperadores({
   /** Las invitaciones por WhatsApp: a uno, a los pendientes, o reintento de los fallidos. */
   async function invitar(_previo: ResultadoInvitar, fd: FormData): Promise<ResultadoInvitar> {
     'use server';
-  const { t } = await getT('operacion');
+  const { t, idioma } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('op.a.rolver') };
     if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: t('op.a.rolinvitar') };
@@ -335,7 +337,7 @@ export default async function PaginaOperadores({
       revalidatePath(RUTA);
       return mensajeDeInvitacion(r);
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'enviar las invitaciones') };
+      return { ok: false, error: mensajeParaPantalla(e, 'enviar las invitaciones', idioma) };
     }
   }
 

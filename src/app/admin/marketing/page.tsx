@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { aprobarPieza, rechazarPieza } from '@/lib/likida/agentes/cola';
 import {
   listarHooks, listarReferencias, piezasEstudioPendientes, piezasEstudioAprobadasRecientes,
@@ -67,7 +67,7 @@ export default async function EstudioMarketingPage() {
       const r: UrlFirmadaSubida = await pedirUrlFirmadaHook(mime);
       return { ok: true, bucket: r.bucket, path: r.path, token: r.token };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'preparar la subida del video') };
+      return { ok: false, error: await mensajeDeFalla(e, 'verbo.mkt_preparar_subida') };
     }
   }
 
@@ -79,7 +79,7 @@ export default async function EstudioMarketingPage() {
       revalidatePath('/admin/marketing');
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar el hook') };
+      return { ok: false, error: await mensajeDeFalla(e, 'verbo.mkt_guardar_hook') };
     }
   }
 
@@ -105,7 +105,7 @@ export default async function EstudioMarketingPage() {
       revalidatePath('/admin/marketing');
       return { ok: true };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'subir la referencia') };
+      return { error: await mensajeDeFalla(e, 'verbo.mkt_subir_referencia') };
     }
   }
 
@@ -123,7 +123,7 @@ export default async function EstudioMarketingPage() {
       revalidatePath('/admin/marketing');
       return { ok: t('marketing.referencia_borrada_fila_y') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'borrar la referencia') };
+      return { error: await mensajeDeFalla(e, 'verbo.mkt_borrar_referencia') };
     }
   }
 
@@ -136,7 +136,7 @@ export default async function EstudioMarketingPage() {
       revalidatePath('/admin/marketing');
       return { ok: t('marketing.publicada_quedo_aprobada_en') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'publicar la pieza') };
+      return { error: await mensajeDeFalla(e, 'verbo.mkt_publicar_pieza') };
     }
   }
 
@@ -149,7 +149,7 @@ export default async function EstudioMarketingPage() {
       revalidatePath('/admin/marketing');
       return { ok: t('marketing.rechazada_con_motivo') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'rechazar la pieza') };
+      return { error: await mensajeDeFalla(e, 'verbo.apr_rechazar_pieza') };
     }
   }
 

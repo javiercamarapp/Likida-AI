@@ -2,7 +2,7 @@
 
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { anotarAccionAdmin, AVISO_SIN_BITACORA } from '@/lib/admin/acciones_riesgo';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { facturasACsv } from '@/lib/saas/facturas-csv';
 import { listarFacturasSaas, TECHO_FACTURAS_SAAS } from '@/lib/saas/transferencia';
 import { hoyMx } from '@/lib/formato';
@@ -39,6 +39,6 @@ export async function accionExportarFacturas(fd: FormData): Promise<ResultadoExp
       aviso: anotado ? null : AVISO_SIN_BITACORA.trim(),
     };
   } catch (e) {
-    return { ok: false, error: mensajeParaPantalla(e, 'armar el archivo de facturas') };
+    return { ok: false, error: await mensajeDeFalla(e, 'verbo.fact_armar_archivo') };
   }
 }

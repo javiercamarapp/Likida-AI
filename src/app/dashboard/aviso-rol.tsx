@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Aviso } from '../ui-v2/componentes/aviso';
-import { ROTULOS_ROL } from '@/lib/auth/roles';
+import { useT } from '@/lib/i18n/proveedor';
+import { rico } from '@/lib/i18n/rico';
+import { dashboard_b as dashboard_bEs } from '@/lib/i18n/es/dashboard_b';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
 
 /** Los tres roles que un superadmin puede previsualizar (`PREVISUALIZABLES`
  *  de visibilidad.ts). El NOMBRE sale de `roles.ts` — H18 (auditoría 24):
@@ -12,6 +15,7 @@ import { ROTULOS_ROL } from '@/lib/auth/roles';
  *  el mismo rol, y dos nombres se leen como dos roles. `visibilidad.ts` no se
  *  importa aquí a propósito: este es un Client Component. */
 const PREVISUALIZABLES = ['flota_admin', 'encargado', 'contador'] as const;
+const CLAVE_ROL = { flota_admin: 'rol.flota_admin', encargado: 'rol.encargado', contador: 'rol.contador' } as const;
 
 /**
  * La cinta que avisa "estás viendo el panel con los ojos de otro rol".
@@ -42,6 +46,8 @@ const PREVISUALIZABLES = ['flota_admin', 'encargado', 'contador'] as const;
  * cuatro vistas, así que el regreso vive aquí.
  */
 export default function AvisoRol({ rolReal }: { rolReal: string }) {
+  const { t } = useT('dashboard_b', dashboard_bEs);
+  const { t: ts } = useT('shell', shellEs);
   const sp = useSearchParams();
   const pathname = usePathname();
   const rolVista = sp.get('rol');
@@ -49,7 +55,7 @@ export default function AvisoRol({ rolReal }: { rolReal: string }) {
   if (rolReal !== 'superadmin') return null;
 
   const comoRol = rolVista && (PREVISUALIZABLES as readonly string[]).includes(rolVista)
-    ? ROTULOS_ROL[rolVista].nombre
+    ? ts(CLAVE_ROL[rolVista as keyof typeof CLAVE_ROL])
     : null;
   // Sin rol previsualizado, esta cinta solo aplica al "ver como" por query
   // string (`?vista=demo` o `?tenant=`). Un superadmin SIN esos params está en
@@ -72,21 +78,17 @@ export default function AvisoRol({ rolReal }: { rolReal: string }) {
       className="mb-3"
       acciones={(
         <>
-          {comoRol && <Link href={`${pathname}${qs ? `?${qs}` : ''}`} className="underline">Quitar el rol</Link>}
+          {comoRol && <Link href={`${pathname}${qs ? `?${qs}` : ''}`} className="underline">{t('avr.quitar')}</Link>}
           <Link href="/admin" className="inline-flex items-center gap-1 font-medium underline">
-            <ArrowLeft width={11} height={11} strokeWidth={2} aria-hidden="true" /> Volver a mi consola
+            <ArrowLeft width={11} height={11} strokeWidth={2} aria-hidden="true" /> {t('avr.volver')}
           </Link>
         </>
       )}
     >
       {comoRol ? (
-        <>
-          Estás viendo el panel como <strong>{comoRol}</strong>. Solo cambia lo que se te enseña, no lo que puedes hacer.
-        </>
+        <>{rico(t('avr.como', { rol: comoRol }), { strong: (c) => <strong>{c}</strong> })}</>
       ) : (
-        <>
-          Estás previsualizando <strong>el panel del cliente</strong> con tu sesión de superadmin. Lo que ves es lo que vería el dueño de la flota.
-        </>
+        <>{rico(t('avr.previa'), { strong: (c) => <strong>{c}</strong> })}</>
       )}
     </Aviso>
   );

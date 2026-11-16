@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { crearFlota, mensajeParaPantalla } from '@/lib/likida/administracion';
+import { crearFlota } from '@/lib/likida/administracion';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { actualizarFacilidad15 } from '@/lib/likida/repo';
 import { pasoExtraSuperadmin } from '@/lib/admin/acciones_riesgo';
 import { altaDeUsuarioDesdeAdmin, fraseDeAlta } from '@/lib/auth/gestion_admin';
@@ -59,7 +60,7 @@ export async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): 
       { id: s.userId },
     ));
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'dar de alta la flota') };
+    return { error: await mensajeDeFalla(e, 'verbo.flotas_alta_flota') };
   }
   revalidatePath('/admin/flotas');
 
@@ -79,7 +80,7 @@ export async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): 
       revalidatePath('/admin/equipo');
     } catch (e) {
       fallo = true;
-      pendientes.push(t('flotas_acciones.no_se_pudo_dar', { e: mensajeParaPantalla(e, 'dar de alta al administrador') }));
+      pendientes.push(t('flotas_acciones.no_se_pudo_dar', { e: await mensajeDeFalla(e, 'verbo.flotas_alta_admin') }));
     }
   } else {
     pendientes.push(t('flotas_acciones.todavia_no_tiene_a'));
@@ -92,7 +93,7 @@ export async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): 
       revalidatePath(`/admin/flotas/${tenantId}`);
     } catch (e) {
       fallo = true;
-      pendientes.push(t('flotas_acciones.no_se_pudo_asignar', { e: mensajeParaPantalla(e, 'asignar el plan') }));
+      pendientes.push(t('flotas_acciones.no_se_pudo_asignar', { e: await mensajeDeFalla(e, 'verbo.flotas_asignar_plan') }));
     }
   }
 
@@ -118,7 +119,7 @@ export async function accionFacilidad(_previo: ResultadoAccion, fd: FormData): P
     // AUDITORÍA 28, FIS-A3: `actualizarFacilidad15` escribe también `tenant.perfil` (la fuente única de `facilidad15Vigente`).
     await actualizarFacilidad15(flotaId, ded, reg, s.userId);
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'guardar la declaración') };
+    return { error: await mensajeDeFalla(e, 'verbo.flotas_guardar_declaracion') };
   }
   revalidatePath('/admin/flotas');
   revalidatePath(`/admin/flotas/${flotaId}`);

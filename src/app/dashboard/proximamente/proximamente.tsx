@@ -1,5 +1,7 @@
 import { Clock } from 'lucide-react';
 import { BotonEnlace, Chip, EstadoVacio, MarcoPagina } from '@/app/ui-v2/componentes';
+import { trDashboardAEs } from '@/lib/i18n/tr_dashboard_a';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 import './proximamente.css';
 
 /** Lo que muestra la pantalla «Próximamente» de un módulo: texto fijo, jamás datos de la flota. */
@@ -21,17 +23,17 @@ export interface ContenidoProximamente {
  * eso no puede filtrar un dato ni disparar un envío (la prueba
  * `proximamente.test.ts` lo exige sobre el fuente).
  */
-export function Proximamente({ contenido, hrefResumen }: { contenido: ContenidoProximamente; hrefResumen: string }) {
+export function Proximamente({ contenido, hrefResumen, t = trDashboardAEs }: { contenido: ContenidoProximamente; hrefResumen: string; t?: TrDe<'dashboard_a'> }) {
   return (
-    <MarcoPagina area="Próximamente" titulo={contenido.nombre} idTitulo="proximamente-titulo" apoyo={contenido.queHara}
-      acciones={<Chip><Clock width={12} height={12} strokeWidth={2} aria-hidden="true" /> Próximamente</Chip>}>
+    <MarcoPagina area={t('prox.area')} titulo={contenido.nombre} idTitulo="proximamente-titulo" apoyo={contenido.queHara}
+      acciones={<Chip><Clock width={12} height={12} strokeWidth={2} aria-hidden="true" /> {t('prox.area')}</Chip>}>
       {/* Vacío de página (Rovaq): borde sólido de 12, icono, título, qué hará (lista corta) y UNA acción. */}
-      <EstadoVacio pantalla icono={Clock} titulo="Qué hará por tu operación"
-        accion={<BotonEnlace href={hrefResumen} variante="secondary" tamano="sm">Volver al Resumen</BotonEnlace>}>
+      <EstadoVacio pantalla icono={Clock} titulo={t('prox.titulo')}
+        accion={<BotonEnlace href={hrefResumen} variante="secondary" tamano="sm">{t('prox.volver')}</BotonEnlace>}>
         <ul className="rv-prox__puntos">
           {contenido.puntos.map((p) => <li key={p}>{p}</li>)}
         </ul>
-        <span className="rv-prox__nota">Todavía no está activo en tu cuenta: no muestra datos ni envía mensajes. Te avisaremos cuando esté listo.</span>
+        <span className="rv-prox__nota">{t('prox.nota')}</span>
       </EstadoVacio>
     </MarcoPagina>
   );

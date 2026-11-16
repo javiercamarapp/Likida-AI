@@ -212,7 +212,7 @@ export type Estado = 'ok' | 'warn' | 'bad' | 'neutral' | 'info';
 
 const ESTILO_ESTADO: Record<Estado, { bg: string; fg: string; label: string }> = {
   ok: { bg: 'var(--okbg)', fg: 'var(--ok)', label: 'OK' },
-  warn: { bg: 'var(--warnbg)', fg: 'var(--warn)', label: 'Atención' },
+  warn: { bg: 'var(--warnbg)', fg: 'var(--warn)', label: 'Warn' },
   bad: { bg: 'var(--badbg)', fg: 'var(--bad)', label: 'Error' },
   neutral: { bg: 'var(--canvas)', fg: 'var(--muted)', label: '—' },
   // Aditivo (v2): en v1 --info/--infobg no existen y caen a los neutros.

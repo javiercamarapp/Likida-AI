@@ -2,7 +2,7 @@ import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { MapPinOff } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
-import { nivelDePosicion, contarPorFrescura, ROTULO_FRESCURA, TONO_FRESCURA, MINUTOS_ATRASADA } from '@/lib/likida/gps_salud';
+import { nivelDePosicion, contarPorFrescura, TONO_FRESCURA, MINUTOS_ATRASADA } from '@/lib/likida/gps_salud';
 import { MapaVivo, type ViajeEnMapa, type PinUnidad } from './mapa-vivo';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
@@ -10,6 +10,8 @@ import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { Aviso, BarraPeriodo, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import './mapa.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
+import { trBCompleto } from '@/lib/i18n/tr_dashboard_b';
+import { rico } from '@/lib/i18n/rico';
 
 export interface SinUbicar {
   id: string;
@@ -64,6 +66,7 @@ function antiguedad(minutos: number, tr: TrOperacion): string {
 
 const columnasPines = (tr: TrOperacion): ColumnaBase<PinUnidad>[] => {
   const { t, idioma } = tr;
+  const tb = trBCompleto(idioma).t;
   return [
   {
     id: 'unidad', titulo: t('mapa.unidad'), principal: true,
@@ -75,7 +78,7 @@ const columnasPines = (tr: TrOperacion): ColumnaBase<PinUnidad>[] => {
       const nivel = nivelDePosicion(p.minutos);
       return (
         <>
-          <StatusChip tono={TONO_FRESCURA[nivel]}>{ROTULO_FRESCURA[nivel]}</StatusChip> {antiguedad(p.minutos, tr)}
+          <StatusChip tono={TONO_FRESCURA[nivel]}>{tb(nivel === 'en_vivo' ? 'mpv.fr.en_vivo' : nivel === 'atrasada' ? 'mpv.fr.atrasada' : 'mpv.fr.obsoleta')}</StatusChip> {antiguedad(p.minutos, tr)}
           <span className="rv-mp__sub">{fechaHoraMx(p.medidaEn, idioma)}</span>
         </>
       );
@@ -111,6 +114,7 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
   rastreo: Rastreo;
 }) {
   const { t, idioma } = tr;
+  const { t: tb, tp: tpb } = trBCompleto(idioma);
   const escalados = ubicados.filter((v) => v.escalado).length;
   const dibujados = ubicados.length + sinUbicar.length;
   const recortado = totalVivos !== null && totalVivos > dibujados;
@@ -131,7 +135,7 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
       nota: rastreo.error !== null
         ? t('mapa.norastreo')
         : rastreo.ultimaPosicion !== null
-          ? `última: ${fechaHoraMx(rastreo.ultimaPosicion, idioma)}`
+          ? tb('mpv.ultima', { fecha: fechaHoraMx(rastreo.ultimaPosicion, idioma) })
           : t('mapa.sinposicion'),
       tono: rastreo.error !== null ? 'warn' : undefined, info: 'mapa.unidades_con_posicion' },
   ];
@@ -143,7 +147,7 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
       // Barra de alcance entre las pestañas y la tira (cabecera → filtros → mapa): chips con lo que el mapa dibuja, medido, sin filtros inventados.
       filtros={<BarraPeriodo etiqueta={t('mapa.filtros')} periodo={{ etiqueta: t('mapa.filtros'), valor: 'encurso', opciones: [{ valor: 'encurso', etiqueta: `${t('mapa.filtros.encurso')}${totalVivos === null ? '' : ` · ${numero(totalVivos, idioma)}`}`, href: '#' }] }} chips={[{ id: 'dibujo', etiqueta: recortado ? t('mapa.filtros.recorte', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) }) : t('mapa.filtros.todos') }]} />}
       cifras={cifrasUniformes(cifras)}
-      selloCifras={selloHoy('Viajes en curso')}
+      selloCifras={selloHoy(tb('mpv.sello'), tb, idioma)}
       variante="12"
       graficas={[<MapaVivo key="mapa" viajes={ubicados} pines={rastreo.pines} sinUbicar={sinUbicar.length}
         // El tope se declara. La nota de método va DENTRO de la tarjeta, bajo el mapa (Rovaq), no suelta sobre el lienzo.
@@ -162,11 +166,19 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
           {/* AUDITORÍA 28, FE-M4: `p.error` (`conector_poll_estado.ultimo_error`) ya es una frase NUESTRA — se pinta tal cual, sin acotar. */}
           {rastreo.polls.map((p) => (
             <p key={`${p.proveedor}:${p.recurso}`} className="rv-mp__poll" data-tono={p.backlogPendiente || p.eventosCuarentenaMuertos > 0 || p.eventosOutboxMuertos > 0 || p.avisosMuertos > 0 ? 'warn' : undefined}>
-              {p.proveedor} · {p.recurso}: poll {p.ultimoPoll ? fechaHoraMx(p.ultimoPoll, idioma) : 'nunca'};
-              {' '}medida {p.ultimaMedida ? fechaHoraMx(p.ultimaMedida, idioma) : 'ninguna'};
-              {' '}{p.backlogPendiente ? `backlog pendiente${p.error ? ` (${p.error.slice(0, 100)})` : ''}` : `${numero(p.elementos, idioma)} elementos / ${numero(p.paginas, idioma)} páginas`}.
+              {tb('mpv.poll', {
+                proveedor: p.proveedor, recurso: p.recurso,
+                poll: p.ultimoPoll ? fechaHoraMx(p.ultimoPoll, idioma) : tb('mpv.poll.nunca'),
+                medida: p.ultimaMedida ? fechaHoraMx(p.ultimaMedida, idioma) : tb('mpv.poll.ninguna'),
+                estado: p.backlogPendiente
+                  ? (p.error ? tb('mpv.poll.backlog_err', { error: p.error.slice(0, 100) }) : tb('mpv.poll.backlog'))
+                  : tb('mpv.poll.volumen', { e: numero(p.elementos, idioma), p: numero(p.paginas, idioma) }),
+              })}
               {p.recurso === 'eventos' && (p.eventosEnCuarentena + p.eventosOutboxPendientes + p.avisosPendientes + p.eventosCuarentenaMuertos + p.eventosOutboxMuertos + p.avisosMuertos > 0)
-                ? ` Atención: ${numero(p.eventosEnCuarentena, idioma)} en cuarentena, ${numero(p.eventosOutboxPendientes, idioma)} eventos pendientes, ${numero(p.avisosPendientes, idioma)} avisos pendientes; ${numero(p.eventosCuarentenaMuertos + p.eventosOutboxMuertos + p.avisosMuertos, idioma)} agotaron reintentos.`
+                ? tb('mpv.poll.atencion', {
+                  q: numero(p.eventosEnCuarentena, idioma), ev: numero(p.eventosOutboxPendientes, idioma), av: numero(p.avisosPendientes, idioma),
+                  m: numero(p.eventosCuarentenaMuertos + p.eventosOutboxMuertos + p.avisosMuertos, idioma),
+                })
                 : ''}
             </p>
           ))}
@@ -174,18 +186,17 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
             const c = contarPorFrescura(rastreo.pines.map((p) => p.minutos));
             return (
               <div className="rv-mp__frescura">
-                <span>Frescura del dato:</span>
-                <StatusChip tono="ok">{numero(c.en_vivo, idioma)} en vivo</StatusChip>
-                <StatusChip tono="warn">{numero(c.atrasada, idioma)} atrasadas</StatusChip>
-                <StatusChip tono="bad">{numero(c.obsoleta, idioma)} obsoletas</StatusChip>
-                <span>(en vivo ≤ 30 min, atrasada ≤ {Math.round(MINUTOS_POSICION_FRESCA / 60)} h). Un camión parado puede tener la posición vieja sin que nada falle.</span>
+                <span>{tb('mpv.fresc.titulo')}</span>
+                <StatusChip tono="ok">{tb('mpv.fresc.en_vivo', { n: numero(c.en_vivo, idioma) })}</StatusChip>
+                <StatusChip tono="warn">{tb('mpv.fresc.atrasadas', { n: numero(c.atrasada, idioma) })}</StatusChip>
+                <StatusChip tono="bad">{tb('mpv.fresc.obsoletas', { n: numero(c.obsoleta, idioma) })}</StatusChip>
+                <span>{tb('mpv.fresc.pie', { h: Math.round(MINUTOS_POSICION_FRESCA / 60) })}</span>
               </div>
             );
           })()}
           {typeof rastreo.huerfanos === 'number' && rastreo.huerfanos > 0 && (
             <Aviso tono="warn">
-              {numero(rastreo.huerfanos, idioma)} {rastreo.huerfanos === 1 ? 'dispositivo que reporta tu proveedor no está ligado' : 'dispositivos que reporta tu proveedor no están ligados'} a ninguna unidad:
-              no se dibujan (Likida no inventa camiones). Lígalos en <Link href="/dashboard/conexiones#gps" className="rv-mp__enlace">Conexiones</Link>.
+              {rico(tpb('mpv.huerf', rastreo.huerfanos, { n: numero(rastreo.huerfanos, idioma) }), { enlace: (c) => <Link href="/dashboard/conexiones#gps" className="rv-mp__enlace">{c}</Link> })}
             </Aviso>
           )}
           <p className="rv-mp__nota">
@@ -196,7 +207,7 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
             <div className="rv-mp__chips">
               {rastreo.proveedores.map((p) => (
                 <StatusChip key={p.proveedor} tono={p.ultimoError ? 'bad' : p.activo ? 'ok' : 'muted'}>
-                  {p.proveedor} · {p.ultimoError ? `con error: ${p.ultimoError.slice(0, 60)}` : p.activo ? 'conectado' : 'apagado'}
+                  {p.ultimoError ? tb('mpv.chip.error', { prov: p.proveedor, err: p.ultimoError.slice(0, 60) }) : p.activo ? tb('mpv.chip.conectado', { prov: p.proveedor }) : tb('mpv.chip.apagado', { prov: p.proveedor })}
                   {p.ultimos4 && <> ····{p.ultimos4}</>}
                 </StatusChip>
               ))}
@@ -213,9 +224,7 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
             <>
               <TablaBase<PinUnidad> etiqueta={t('mapa.unidades.ultimo')} columnas={columnasPines(tr)} filas={rastreo.pines} idFila={(p) => p.unidadId} tarjetaMovil />
               <p className="rv-mp__nota">
-                Lo atrasado se marca en ámbar y lo obsoleto (más de {Math.round(MINUTOS_POSICION_FRESCA / 60)} horas) en rojo
-                aquí, y se dibuja apagado en el mapa: sigue siendo la última posición conocida, no dónde
-                está el camión ahora.
+                {tb('mpv.nota_frescura', { h: Math.round(MINUTOS_POSICION_FRESCA / 60) })}
               </p>
             </>
           )}

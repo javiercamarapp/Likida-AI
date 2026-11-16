@@ -15,6 +15,7 @@ import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
+import { dashboard_b as dashboard_bEs } from '@/lib/i18n/es/dashboard_b';
 
 // ════════════════════════════════════════════════════════════════════════════
 // «VINCULAR» — el paso humano del CAPTCHA/MFA, con pantalla en el producto (0540).
@@ -33,6 +34,7 @@ const rotulo = (tx: TAgentes = TR_ES.t): Record<string, string> => ({
 
 export function VincularAsistida({ clave, nombre, flota = null }: { clave: string; nombre: string; flota?: string | null }) {
   const { t: tx } = useT('agentes', agentesEs);
+  const { t: tb } = useT('dashboard_b', dashboard_bEs);
   const router = useRouter();
   const { notificar } = useNotificar();
   const [res, iniciar, iniciando] = useActionState<ResultadoVincular | null, FormData>(accionIniciarVinculacion, null);
@@ -56,12 +58,12 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
         notificar({ tono: 'ok', mensaje: tx('rest.quedo_vinculado_el_agente_ya_puede', { nombre }) });
         setCerrado(true); router.refresh();
       } else if (e.estado === 'fallida' || e.estado === 'expirada' || e.estado === 'cancelada') {
-        notificar({ tono: 'error', mensaje: tx('rest.no_se_vinculo_pide_otro_codigo', { nombre, v: e.motivo ?? (e.estado === 'expirada' ? 'el código venció' : 'se canceló') }) });
+        notificar({ tono: 'error', mensaje: tx('rest.no_se_vinculo_pide_otro_codigo', { nombre, v: e.motivo ?? (e.estado === 'expirada' ? tb('vin.vencio') : tb('vin.cancelo')) }) });
         setCerrado(true); router.refresh();
       }
     }, 4_000);
     return () => { vivo = false; clearInterval(t); };
-  }, [hayCodigo, clave, nombre, flota, notificar, router, tx]);
+  }, [hayCodigo, clave, nombre, flota, notificar, router, tx, tb]);
 
   if (!hayCodigo) {
     return (
@@ -70,7 +72,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
         {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
         <div>
           <Boton type="submit" variante="ghost" tamano="sm" loading={iniciando} icono={<Icono icono={MonitorSmartphone} tam={14} />}>
-            {iniciando ? 'Generando…' : tx('rest.vincular_con_codigo')}
+            {iniciando ? tb('vin.generando') : tx('rest.vincular_con_codigo')}
           </Boton>
         </div>
         {res && !res.ok && <span role="alert" className="rv-fact__nota" data-tono="bad">{res.error}</span>}
@@ -80,7 +82,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
 
   const vivo = estado?.ok ? estado.estado : 'pendiente';
   return (
-    <div className="rv-fact__relogin" role="region" aria-label={`Vincular ${nombre}`}>
+    <div className="rv-fact__relogin" role="region" aria-label={tb('vin.aria', { nombre })}>
       <div className="rv-fact__pila">
         <p className="rv-fact__titulo">{tx('rest.vincular')}{' '}{nombre}</p>
         <ol className="rv-fact__pasos">
@@ -104,7 +106,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
             onClick={() => empezarCancelar(async () => {
               const fd = new FormData(); fd.set('comercio', clave); if (flota) fd.set(CAMPO_FLOTA_PINTADA, flota);
               const r = await accionCancelarVinculacion(null, fd);
-              notificar(r.error ? { tono: 'error', mensaje: r.error } : { tono: 'info', mensaje: r.ok ?? 'Cancelada.' });
+              notificar(r.error ? { tono: 'error', mensaje: r.error } : { tono: 'info', mensaje: r.ok ?? tb('vin.cancelada') });
               setCerrado(true); router.refresh();
             })}>{tx('rest.cancelar_y_anular_el_codigo')}</Boton>
         </div>

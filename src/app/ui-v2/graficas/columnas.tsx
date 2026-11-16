@@ -7,6 +7,8 @@ import { cadaCuantas, compactEs, esConteoPequeno, geometriaColumnas, indicesEtiq
 import type { TipoDato } from './kind-badge';
 import { CintaLectura, LecturaPunto, LeyendaFina, TablaGrafica, TEXTO_SIN_DATO, useAncho } from './partes';
 import { resolverFormato, type FormatoGrafica } from './formatos';
+import { useT } from '@/lib/i18n/proveedor';
+import { ui_comun as uiEs } from '@/lib/i18n/es/ui_comun';
 
 export interface ColumnaDato {
   /** Etiqueta corta del eje X («7 sep»). */
@@ -26,7 +28,7 @@ const PAD_T = 20, PAD_B = 22, PAD_R = 6;
  *  anterior, foco por columna con flechas, «Ver como tabla» y estados sin dato (s/d) / parcial (trama) / estimado (KindBadge).
  *  Un valor null NUNCA se dibuja como cero. Todo en cero o sin dato ⇒ plano vacío con UNA línea que dice qué falta.
  *  Crecen una vez al montar (CSS, 420 ms, escalón de 14 ms); con reduced-motion aparecen quietas. */
-export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vacio = 'Sin datos en el periodo', tipo = 'observado', alto = 168, variacion = true, unidad, tinta = 'matiz' }: {
+export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vacio: vacioProp, tipo = 'observado', alto = 168, variacion = true, unidad, tinta = 'matiz' }: {
   datos: readonly ColumnaDato[];
   matiz?: Matiz;
   etiqueta: string;
@@ -41,6 +43,8 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vac
   /** `neutra` = identidad Rovaq (TOKENS #24): barras en tinta neutra y el último periodo / el activo en tinta fuerte. `matiz` (por omisión) conserva el color de la métrica. */
   tinta?: 'matiz' | 'neutra';
 }) {
+  const { t: tu } = useT('ui_comun', uiEs);
+  const vacio = vacioProp ?? tu('comun.sin_datos_periodo');
   const formato = resolverFormato(formatoProp);
   const [ref, ancho] = useAncho<HTMLDivElement>();
   const [activa, setActiva] = useState<number | null>(null);
