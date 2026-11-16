@@ -1,7 +1,7 @@
 import { fechaMx } from '@/lib/formato';
 import { KindBadge, type TipoDato } from '../graficas/kind-badge';
 import { cx } from '../componentes/clases';
-import { textoUi } from '../componentes/texto-ui';
+import { idiomaUi, textoUi } from '../componentes/texto-ui';
 import type { Idioma } from '@/lib/i18n/idioma';
 
 type Instante = string | number | Date | null | undefined;
@@ -68,15 +68,17 @@ export function textoSello(p: Pick<PropsSelloDato, 'fuente' | 'corte' | 'leidoEn
 
 /** El sello de procedencia de una cifra o tabla: clase de dato + fuente + corte real + «actualizado hace». Reutiliza `KindBadge`:
  *  el punto silencioso de «observado» y la marca de estimado / inferido / sin dato (icono + texto, nunca solo color). */
-export function SelloDato({ tipo, className, edad = true, ...resto }: PropsSelloDato) {
+export function SelloDato({ tipo, className, edad = true, ...props }: PropsSelloDato) {
+  const idioma = idiomaUi(props.idioma);
+  const resto = { ...props, idioma };
   const t = textoSello(resto);
-  const tu = textoUi(resto.idioma);
+  const tu = textoUi(idioma);
   const ref = aMs(resto.corte) !== null ? resto.corte : resto.leidoEn;
   const ms = aMs(ref);
   const dateTime = typeof ref === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ref.trim()) ? ref.trim() : ms !== null ? new Date(ms).toISOString() : undefined;
   return (
     <span className={cx('rv-sello', className)} data-tipo={tipo} title={t.ayuda}>
-      {tipo === 'observado' ? <i className="rv-sello__punto" aria-hidden="true" /> : <KindBadge tipo={tipo} idioma={resto.idioma} />}
+      {tipo === 'observado' ? <i className="rv-sello__punto" aria-hidden="true" /> : <KindBadge tipo={tipo} idioma={idioma} />}
       <time className="rv-sello__texto" dateTime={dateTime}>{t.texto}</time>
       {edad && t.actualizado ? <span className="rv-sello__edad"> · {tu('sello.actualizado', { edad: t.actualizado })}</span> : null}
     </span>

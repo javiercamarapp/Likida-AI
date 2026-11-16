@@ -170,7 +170,7 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
       ) : null}
     >
       {filas.length > 0 ? (
-        <FilaTarjetas variante="6-6">
+        <FilaTarjetas variante="6-6" className="fin16c-arriba">
           <Tarjeta entra="tarjeta" titulo={t('flotas.mix_planes_titulo')}>
             <BarList
               etiqueta={t('flotas.mix_planes_etiqueta')}

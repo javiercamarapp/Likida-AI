@@ -1,5 +1,5 @@
 import { Aviso } from './aviso';
-import { textoUi } from './texto-ui';
+import { idiomaUi, textoUi } from './texto-ui';
 import type { Idioma } from '@/lib/i18n/idioma';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -54,7 +54,7 @@ export function AvisoResultado({ estado, compacto = false, idioma }: {
   /** La versión de una fila (margen superior). */
   compacto?: boolean;
 }) {
-  const r = leerResultado(estado, idioma);
+  const r = leerResultado(estado, idiomaUi(idioma));
   if (!r) return null;
   // El `Aviso` único de ui-v2: icono + texto, `role="alert"` el error y `role="status"` el éxito.
   return <Aviso tono={r.tono === 'ok' ? 'ok' : 'error'} className={compacto ? 'mt-2' : undefined}>{r.texto}</Aviso>;

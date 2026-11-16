@@ -14,8 +14,8 @@ export interface FuenteCobertura {
 /** «Fuentes 5 de 7»: cuántas se leyeron de las que hay, con los FALLOS a la vista (nombre y motivo). Una fuente caída jamás se
  *  cuenta como cero: el total que dependa de ella se lee con este «n de N» al lado. Sin fuentes, no pinta nada. */
 export function BandaCobertura({ fuentes, etiqueta: etiquetaProp, className, idioma }: { fuentes: readonly FuenteCobertura[]; etiqueta?: string; className?: string; idioma?: Idioma }) {
-  if (fuentes.length === 0) return null;
   const t = textoUi(idioma);
+  if (fuentes.length === 0) return null;
   const etiqueta = etiquetaProp ?? t('banda.etiqueta');
   const leidas = fuentes.filter((f) => f.estado !== 'fallo').length;
   const fallos = fuentes.filter((f) => f.estado === 'fallo');

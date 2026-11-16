@@ -19,6 +19,7 @@ import '../ui-v2/tokens.css';
 import '../ui-v2/fonts.css';
 import '../ui-v2/shell.css';
 import './admin-shell.css';
+import './fin16c.css';
 import '../ui-v2/pie-sidebar.css';
 import '../ui-v2/componentes.css';
 import '../ui-v2/overlay.css';

@@ -10,7 +10,7 @@ import { BotonReintentar } from '../componentes/boton-reintentar';
 import { ConteoKpi } from './conteo-kpi';
 import { KindBadge, type TipoDato } from './kind-badge';
 import { Sparkline } from './sparkline';
-import { textoUi } from '../componentes/texto-ui';
+import { idiomaUi, textoUi } from '../componentes/texto-ui';
 import type { Idioma } from '@/lib/i18n/idioma';
 
 export interface SegmentoKpi { etiqueta: string; valor: number | null }
@@ -81,7 +81,8 @@ function tonoDelta(d: NonNullable<PropsCifra['delta']>): 'ok' | 'bad' | 'neutral
  *  o de atención, nota y sello de procedencia de UNA línea, y sparkline 60×24 o barra segmentada. Sin count-up por omisión: el valor
  *  real está en el primer render. Observado es silencioso (punto); Estimado / Inferido / Sin dato muestran su marca. */
 export function Cifra(p: PropsCifra) {
-  const t = textoUi(p.idioma);
+  const idioma = idiomaUi(p.idioma);
+  const t = textoUi(idioma);
   const error = p.estado === 'error';
   const vacio = !error && (p.estado === 'vacio' || p.valor === null || p.valor === undefined || p.valor === '—');
   const m = p.metrica ? metrica(p.metrica) : null;
@@ -113,7 +114,7 @@ export function Cifra(p: PropsCifra) {
       </span>
       {error ? (
         <span className="rv-kpi__error" role="alert">
-          <span>{p.mensaje ?? (p.idioma === 'en' ? t('comun.no_disponible_cero') : MENSAJE_CIFRA_ERROR)}</span>
+          <span>{p.mensaje ?? (idioma === 'en' ? t('comun.no_disponible_cero') : MENSAJE_CIFRA_ERROR)}</span>
           {p.reintentar ? <BotonReintentar contexto={p.etiqueta} /> : null}
         </span>
       ) : null}
@@ -133,7 +134,7 @@ export function Cifra(p: PropsCifra) {
         ) : null}
         {p.tono && !sinValor ? <span className="rv-kpi__atencion" data-tono={p.tono}>{t(CLAVE_TONO[p.tono])}</span> : null}
         {p.deltaPct === null && !sinValor ? <span className="rv-kpi__sinbase">{t('cifra.sin_periodo')}</span> : null}
-        {tipo && tipo !== 'observado' ? <KindBadge tipo={tipo} idioma={p.idioma} /> : null}
+        {tipo && tipo !== 'observado' ? <KindBadge tipo={tipo} idioma={idioma} /> : null}
         {tipo === 'observado' || sello ? (
           <span className="rv-kpi__sello">
             {tipo === 'observado' ? <i className="rv-kpi__punto" aria-hidden="true" /> : null}{sello}
@@ -171,6 +172,7 @@ export function TiraCifras({ items, children, etiqueta, sello, className, elevar
   elevar?: boolean;
   entra?: 'tarjeta' | 'seccion';
 }) {
+  const idiomaTira = idiomaUi(idioma);
   const hijos = Children.map(children, (c) => {
     if (!isValidElement(c)) return c;
     const el = c as ReactElement<PropsCifra>;
@@ -179,8 +181,8 @@ export function TiraCifras({ items, children, etiqueta, sello, className, elevar
     return Object.keys(extra).length ? cloneElement(el, extra) : c;
   });
   return (
-    <section className={className ? `rv-kpis ${className}` : 'rv-kpis'} aria-label={etiqueta ?? textoUi(idioma)('comun.indicadores')} data-lift={elevar || undefined} data-entra={entra}>
-      {items ? items.map((it) => <Cifra key={it.etiqueta} {...it} idioma={it.idioma ?? idioma} sello={it.sello ?? sello} />) : null}
+    <section className={className ? `rv-kpis ${className}` : 'rv-kpis'} aria-label={etiqueta ?? textoUi(idiomaTira)('comun.indicadores')} data-lift={elevar || undefined} data-entra={entra}>
+      {items ? items.map((it) => <Cifra key={it.etiqueta} {...it} idioma={it.idioma ?? idiomaTira} sello={it.sello ?? sello} />) : null}
       {hijos}
     </section>
   );

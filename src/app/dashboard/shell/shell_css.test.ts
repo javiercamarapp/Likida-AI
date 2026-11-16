@@ -132,25 +132,23 @@ describe('paleta de MARCA de Likida: naranja ladrillo, azul marino y crema (deci
   const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const oscuro = tokens.slice(tokens.indexOf(':root[data-theme="dark"] [data-ui="v2"].tema-neutro'));
   const claro = tokens.slice(0, tokens.indexOf(':root[data-theme="dark"] [data-ui="v2"].tema-neutro'));
-  it('primario NARANJA con texto blanco, barra del activo NARANJA (#fb923c en oscuro) y señal burdeos como acento puntual', () => {
-    expect(claro).toMatch(/--btn-bg:\s*#c2410c/); // primario naranja ladrillo
-    expect(claro).toMatch(/--btn-fg:\s*#ffffff/); // con texto blanco
-    expect(claro).toMatch(/--marca:\s*#2a3f5f/); // marino de marca
-    expect(claro).toMatch(/--info:\s*#2a3f5f/);
-    expect(claro).toMatch(/--ui-focus:\s*#2a3f5f/);
-    expect(claro).toMatch(/--bg:\s*#f8f5f0/); // fondos crema cálidos
-    expect(claro).toMatch(/--canvas:\s*#f2eee7/);
-    expect(claro).toMatch(/--ui-activo-barra:\s*var\(--nav-activo-barra\)/); // alias que sigue a la barra naranja
-    expect(claro).toMatch(/--nav-activo-barra:\s*#c2410c/);
-    expect(claro).toMatch(/--kpi-filete:\s*#c2410c/);
+  it('cromo NEGRO (primario y barra del activo; claro en oscuro), fondos grises de siempre, marino de marca solo en info/series y señal burdeos como acento puntual', () => {
+    expect(claro).toMatch(/--btn-bg:\s*#0e0e10/); // primario negro (16-nov: el dueño devolvió el negro)
+    expect(claro).toMatch(/--btn-fg:\s*#ffffff/);
+    expect(claro).toMatch(/--marca:\s*#0e0e10/);
+    expect(claro).toMatch(/--info:\s*#2a3f5f/); // el marino de marca queda en info (notas y banners con color propio)
+    expect(claro).toMatch(/--bg:\s*#f6f6f7/); // fondos grises de siempre
+    expect(claro).toMatch(/--canvas:\s*#f1f1f2/);
+    expect(claro).toMatch(/--ui-activo-barra:\s*var\(--nav-activo-barra\)/);
+    expect(claro).toMatch(/--nav-activo-barra:\s*#0e0e10/);
+    expect(claro).toMatch(/--kpi-filete:\s*#0e0e10/);
     expect(tokens).not.toMatch(/--acento-marca/);
-    expect(claro).toMatch(/--senal:\s*#a6264a/); // la señal burdeos sigue siendo el acento puntual
-    // oscuro: naranja #fb923c sobre tinta cálida, azul claro #9db8e0, señal #cc4a6c
-    expect(oscuro).toMatch(/--btn-bg:\s*#fb923c/);
-    expect(oscuro).toMatch(/--btn-fg:\s*#1a0e05/);
-    expect(oscuro).toMatch(/--nav-activo-barra:\s*#fb923c/);
-    expect(oscuro).toMatch(/--bg:\s*#13100e/);
-    expect(oscuro).toMatch(/--marca:\s*#9db8e0/);
+    expect(claro).toMatch(/--senal:\s*#a6264a/);
+    expect(oscuro).toMatch(/--btn-bg:\s*#f4f4f5/);
+    expect(oscuro).toMatch(/--btn-fg:\s*#0e0e10/);
+    expect(oscuro).toMatch(/--nav-activo-barra:\s*#f4f4f5/);
+    expect(oscuro).toMatch(/--bg:\s*#0e0e10/);
+    expect(oscuro).toMatch(/--marca:\s*#f4f4f5/);
     expect(oscuro).toMatch(/--info:\s*#9db8e0/);
     expect(oscuro).toMatch(/--senal:\s*#cc4a6c/);
   });

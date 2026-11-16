@@ -23,7 +23,7 @@
 .ven-campo > span { font-size: var(--t-small); font-weight: 600; }
 .ven-detalle__pie { position: sticky; bottom: 0; display: flex; justify-content: flex-end; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); background: var(--surface); }
 
-.ven-tarjeta { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.ven-tarjeta { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 8px; border: 1px solid var(--line2); background: var(--ui-surface); }
 .ven-tarjeta[data-pendiente="true"] { opacity: .6; }
 .ven-tarjeta__empresa { font-size: var(--t-body); font-weight: 600; line-height: 1.3; color: var(--ink); }
 .ven-tarjeta__tenue { margin: 0; font-size: var(--t-micro); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -34,17 +34,17 @@
 .ven-tarjeta__ok { margin: 0; font-size: var(--t-micro); color: var(--ok); }
 .ven-tarjeta__error { margin: 0; font-size: var(--t-micro); color: var(--bad); }
 
-.ven-btn { height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t-micro); font-weight: 500; cursor: pointer; transition: background-color 120ms ease-out; }
+.ven-btn { height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line2); background: var(--ui-surface); color: var(--ink); font: inherit; font-size: var(--t-micro); font-weight: 500; cursor: pointer; transition: background-color 120ms ease-out; }
 .ven-btn:hover:not(:disabled) { background: var(--canvas); }
 .ven-btn:disabled { opacity: .5; cursor: not-allowed; }
 .ven-btn:focus-visible, .ven-select:focus-visible, .ven-nota textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .ven-btn--ancho { width: 100%; height: auto; min-height: 28px; padding: 5px 8px; line-height: 1.25; white-space: normal; text-wrap: balance; }
 .ven-btn[data-sentido="perdido"] { color: var(--bad); }
 .ven-btn[data-sentido="ganado"] { color: var(--ok); }
-.ven-select { width: 100%; height: 28px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t-micro); }
+.ven-select { width: 100%; height: 28px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line2); background: var(--ui-surface); color: var(--ink); font: inherit; font-size: var(--t-micro); }
 .ven-nota { font-size: var(--t-small); }
 .ven-nota { display: flex; flex-direction: column; gap: 8px; }
-.ven-nota textarea { width: 100%; margin-top: 4px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t-micro); resize: vertical; }
+.ven-nota textarea { width: 100%; margin-top: 4px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line2); background: var(--ui-surface); color: var(--ink); font: inherit; font-size: var(--t-micro); resize: vertical; }
 .ven-nota .ven-btn { margin-top: 4px; }
 
 /* Formas de /admin/vendedores */

@@ -32,12 +32,9 @@ describe('CabeceraEscritorio: título, Guía pegada al título y ⌘K visible (i
     expect(guia).toBeLessThan(der);
   });
 
-  it('el buscador ⌘K tiene disparador visible con <kbd>, atajo anunciado y abre un diálogo', () => {
-    expect(html).toContain('rv-cab-esc__buscar');
-    expect(html).toMatch(/aria-keyshortcuts="Meta\+K Control\+K"/);
-    expect(html).toContain('aria-haspopup="dialog"');
-    expect(html).toContain('<kbd>⌘K</kbd>');
-    expect(html.indexOf('rv-cab-esc__buscar')).toBeGreaterThan(html.indexOf('rv-cab-esc__der'));
+  it('la cabecera ya no pinta el botón «Buscar ⌘K» (el dueño lo quitó el 16-nov); el atajo de teclado sigue vivo en la paleta', () => {
+    expect(html).not.toContain('rv-cab-esc__buscar');
+    expect(html).not.toContain('<kbd>');
   });
 
   it('la cabecera no trae botón de plegar (vive en la marca del sidebar) y no usa title=', () => {

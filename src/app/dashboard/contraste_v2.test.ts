@@ -154,9 +154,9 @@ describe('tokens v2: paleta de marca de Likida en las series de datos', () => {
     // La serie 8 (pizarra) es la más tenue: basta con un matiz mínimo; las demás, claramente cromáticas.
     for (const [i, h] of hex.entries()) expect(matiz(h), `--chart-${i + 1} = ${h} es gris`).toBeGreaterThanOrEqual(i === 7 ? 20 : 40);
   });
-  it('la marca está en el cromo: botón primario naranja (claro) y barra del activo naranja en ambos temas', () => {
-    expect(resolver(TEMAS[0][1], '--btn-bg').toLowerCase()).toBe('#c2410c');
-    for (const [, t] of TEMAS) expect(matiz(resolver(t, '--nav-activo-barra'))).toBeGreaterThanOrEqual(100);
+  it('el cromo (botón primario y barra del activo) vuelve a ser NEGRO/tinta en claro y claro en oscuro (16-nov: el color vive en datos y recuadros)', () => {
+    expect(resolver(TEMAS[0][1], '--btn-bg').toLowerCase()).toBe('#0e0e10');
+    for (const [, t] of TEMAS) expect(matiz(resolver(t, '--nav-activo-barra'))).toBeLessThanOrEqual(8);
   });
 });
 

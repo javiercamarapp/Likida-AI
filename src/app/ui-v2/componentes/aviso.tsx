@@ -47,7 +47,8 @@ export function AvisoCompacto({ tono = 'info', resumen, mas, etiquetaMas, classN
   className?: string;
 }) {
   const Glifo = ICONO[tono];
-  const rotuloMas = etiquetaMas ?? textoUi(idioma)('comun.ver_mas');
+  const verMas = textoUi(idioma)('comun.ver_mas');
+  const rotuloMas = etiquetaMas ?? verMas;
   return (
     <div className={cx('rv-aviso', 'rv-aviso--compacto', className)} data-tono={tono} role={tono === 'error' ? 'alert' : 'status'}>
       <Glifo className="rv-aviso__icono" width={14} height={14} strokeWidth={2} aria-hidden="true" />

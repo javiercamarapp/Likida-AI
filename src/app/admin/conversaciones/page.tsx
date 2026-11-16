@@ -19,6 +19,8 @@ import { getT } from '@/lib/i18n/servidor';
 import '../resumen.css';
 import './conversaciones.css';
 import '../compacto-lote-a.css';
+import '../fin16c.css';
+import { NotaVacia } from '../nota-vacia';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,11 +126,10 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
         )}
       </Tarjeta>
 
-      {/* Lo que NO se sabe va en su caja punteada, DENTRO de una tarjeta y a la izquierda (Rovaq «Qué no se sabe»), no como un párrafo centrado suelto. */}
-      <Tarjeta titulo={ts('conversaciones.que_no_se_sabe')} className="adm-nosabe">
-        <p>{t('conversaciones_pagina.no_se_sabe_1')}</p>
-        <p>{t('conversaciones_pagina.no_se_sabe_2')}</p>
-      </Tarjeta>
+      {/* Lo que NO se sabe va en una nota compacta con icono y sello (no en un recuadro alto). */}
+      <NotaVacia tono="warn" sello={ts('conversaciones.que_no_se_sabe')} className="fin16c-saber">
+        {t('conversaciones_pagina.no_se_sabe_1')} {t('conversaciones_pagina.no_se_sabe_2')}
+      </NotaVacia>
     </PantallaConversaciones>
   );
 }

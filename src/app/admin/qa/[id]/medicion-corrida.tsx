@@ -218,6 +218,6 @@ function ValorCampo({ clave, v, vacio }: { clave: ClaveVerdad; v: string | numbe
     return <span className="rv-qa-tenue">{vacio}</span>;
   }
   if (clave === 'monto') return <span className="tabular">{mxn(Number(v))}</span>;
-  if (clave === 'fecha') return <span className="whitespace-nowrap">{fechaCorta(String(v))}</span>;
-  return <span className="break-all">{String(v)}</span>;
+  if (clave === 'fecha') return <span className="rv-qa-nowrap">{fechaCorta(String(v))}</span>;
+  return <span className="rv-qa-rompe">{String(v)}</span>;
 }

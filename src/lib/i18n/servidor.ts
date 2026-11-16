@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { CLAVE_PREFERENCIA, COOKIE_IDIOMA, idiomaServible, resolverIdioma, type Idioma } from './idioma';
 import { cargarDiccionarios, type ClaveDe, type DiccionarioDe, type Namespace } from './catalogo';
 import { crearTraductor, type Traductor } from './traducir';
+import { fijarIdiomaAmbiente } from './ambiente';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IDIOMA EN EL SERVIDOR (Server Components, layouts, route handlers).
@@ -33,7 +34,12 @@ async function leerIdiomaActual(): Promise<Idioma> {
 }
 
 /** El idioma de ESTA petición (memorizado por petición con `cache()`). Nunca lanza: ante cualquier fallo, es. */
-export const idiomaActual = cache(async (): Promise<Idioma> => idiomaServible(await leerIdiomaActual()));
+export const idiomaActual = cache(async (): Promise<Idioma> => {
+  const idioma = idiomaServible(await leerIdiomaActual());
+  // Los componentes compartidos de ui-v2 (síncronos) lo leen de aquí cuando no reciben la prop `idioma`.
+  fijarIdiomaAmbiente(idioma);
+  return idioma;
+});
 
 /** El traductor de un namespace para un Server Component: `const { t } = await getT('shell')`. No manda nada al navegador. */
 export async function getT<N extends Namespace>(ns: N): Promise<Traductor<DiccionarioDe<N>>> {

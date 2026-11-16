@@ -27,11 +27,11 @@
    queda son los semáforos de estado (--ok/--warn/--bad, siempre con texto o icono) y la señal burdeos (--senal) de «requiere acción». */
 :root [data-ui="v2"] {
   /* Marco y superficies */
-  --bg: #f8f5f0;
+  --bg: #f6f6f7;
   --surface: #ffffff;
   --panel: var(--surface);
-  --canvas: #f2eee7;
-  --canvas2: #f8f5f0;
+  --canvas: #f1f1f2;
+  --canvas2: #f7f7f8;
 
   /* Tinta */
   --ink: #0e0e10;
@@ -40,27 +40,27 @@
   --faint: #66666d;
 
   /* Líneas y controles */
-  --line: #e7e0d4;
-  --line2: #d6ccbb;
+  --line: #e6e6e8;
+  --line2: #d6d6d9;
   --input: #76767e;
 
   /* --marca = TINTA como relleno neutro (anillo, interruptor, foco del recorrido, mosaicos de icono de KPI, barras): lo leen los
      componentes de B/C y el kit. */
-  --marca: #2a3f5f;
+  --marca: #0e0e10;
   --marca-fg: #ffffff;
-  --marca-hover: #1c2c45;
-  --accent: #2a3f5f;
+  --marca-hover: #3a3a40;
+  --accent: #0e0e10;
   --accent-fg: #ffffff;
   /* ◆ Botón primario = NEGRO (tinta; en oscuro invertido), compacto y sin azul; máx. 1 por pliegue (decisión de Javier, 31-oct).
      Secundario y tenue: superficie con borde de control (ver componentes.css). */
-  --btn-bg: #c2410c;
+  --btn-bg: #0e0e10;
   --btn-fg: #ffffff;
-  --btn-borde: #c2410c;
-  --btn-hover: #9a3412;
+  --btn-borde: #0e0e10;
+  --btn-hover: #3a3a40;
   /* Variante secundaria suave: gris muy claro. */
-  --btn-soft: #f2eee7;
+  --btn-soft: #f1f1f2;
   --btn-soft-fg: #3a3a40;
-  --btn-soft-hover: #e7dfd2;
+  --btn-soft-hover: #e4e4e6;
   --ctl-vacio-bd: #8a8a90;
   /* ◆ Señal «requiere acción» = burdeos, ≤2 % del área; nunca hover, relleno de botón ni «Salir».
      #a6264a sobre blanco mide ≥7:1. ÚNICO color de marca. */
@@ -107,7 +107,7 @@
   --ink-5: #43286b; --ink-6: #2f4a08; --ink-7: #163f5f;
   --ink-8: #334155;
   /* Filete superior de las tiras de KPI: NEGRO para todas las métricas (el color por métrica de la ola anterior queda anulado). */
-  --kpi-filete: #c2410c;
+  --kpi-filete: #0e0e10;
 
   /* Alias del sistema v2 (ESTILO-LIKIDA §1) */
   /* Ítem activo = fondo suave + barra izquierda NEGRA (--nav-activo-barra; en oscuro, blanca). El burdeos (--senal) es un
@@ -153,16 +153,16 @@
 
   /* Navegación: ítem activo = barra izquierda inset + fondo tinta al 7 % + peso 500. UN solo token para el color de la barra (--nav-activo-barra): NEGRA
      (decisión del dueño, 11-nov-2026, que anula el rojo de Rovaq; en oscuro, blanca). Cambiarlo aquí cambia todos los menús (aside, riel y hoja). Lo lee shell.css. */
-  --nav-activo-bg: color-mix(in srgb, #2a3f5f 9%, transparent);
+  --nav-activo-bg: color-mix(in srgb, var(--ink) 7%, transparent);
   --nav-activo-fg: var(--ink);
   --nav-activo-peso: 500;
-  --nav-activo-barra: #c2410c;
+  --nav-activo-barra: #0e0e10;
   /* Sombra suave del marco (sidebar flotante), como Vexa; las tarjetas del flujo siguen sin sombra. */
   --sh-marco: 0 1px 2px #0e0e1005, 0 8px 24px -16px #0e0e1020;
 
   --ui-canvas: var(--bg);
   /* Fondo HUNDIDO del contenido (Rovaq `--ui-sunken`): la tarjeta blanca flota sobre él dentro del marco (`.rv-col`). */
-  --ui-sunken: #f2eee7;
+  --ui-sunken: #f1f1f2;
   --ui-surface: var(--surface);
   --ui-soft: var(--canvas);
   --ui-elevated: #ffffff;
@@ -170,7 +170,7 @@
   --ui-line-strong: var(--line2);
   --ui-input: var(--input);
   --ui-secondary: var(--ink2);
-  --ui-focus: #2a3f5f;
+  --ui-focus: #0e0e10;
   --ui-scrim: var(--scrim);
   --ui-tip-bg: var(--tip);
   --ui-tip-ink: var(--tip-ink);
@@ -338,32 +338,32 @@
 /* Oscuro: negro neutro, sin matiz cálido. */
 :root[data-theme="dark"] [data-ui="v2"].tema-neutro,
 :root[data-theme="dark"] [data-ui="v2"] {
-  --bg: #13100e;
-  --surface: #1c1815;
-  --canvas: #241f1b;
-  --canvas2: #1c1815;
+  --bg: #0e0e10;
+  --surface: #17171a;
+  --canvas: #1f1f23;
+  --canvas2: #17171a;
 
   --ink: #f4f4f5;
   --ink2: #d4d4d8;
   --muted: #a3a3ab;
   --faint: #9a9aa2;
 
-  --line: #2e2823;
-  --line2: #3d352d;
+  --line: #26262b;
+  --line2: #34343a;
   --input: #8b8b93;
 
-  --marca: #9db8e0;
-  --marca-fg: #0e1a2e;
-  --marca-hover: #c3d4ee;
-  --accent: #9db8e0;
-  --accent-fg: #0e1a2e;
-  --btn-bg: #fb923c;
-  --btn-fg: #1a0e05;
-  --btn-borde: #fb923c;
-  --btn-hover: #fdba74;
-  --btn-soft: #241f1b;
+  --marca: #f4f4f5;
+  --marca-fg: #0e0e10;
+  --marca-hover: #ffffff;
+  --accent: #f4f4f5;
+  --accent-fg: #0e0e10;
+  --btn-bg: #f4f4f5;
+  --btn-fg: #0e0e10;
+  --btn-borde: #f4f4f5;
+  --btn-hover: #d4d4d8;
+  --btn-soft: #1f1f23;
   --btn-soft-fg: #d4d4d8;
-  --btn-soft-hover: #302a24;
+  --btn-soft-hover: #2a2a2f;
   --ctl-vacio-bd: #7a7a82;
   --senal: #cc4a6c;
 
@@ -381,8 +381,8 @@
   --seg-activo-borde: #f4f4f5;
   --seg-activo-fg: #f4f4f5;
   --seg-activo-hover: #3e3e45;
-  --nav-activo-barra: #fb923c;
-  --kpi-filete: #fb923c;
+  --nav-activo-barra: #f4f4f5;
+  --kpi-filete: #f4f4f5;
 
   --g1: #1c1815;
   --g2: #241f1b;
@@ -407,9 +407,9 @@
   --ink-5: #e2d8f6; --ink-6: #d6efb4; --ink-7: #c5e3f6;
   --ink-8: #dbe3ee;
 
-  --ui-elevated: #241f1b;
-  --ui-sunken: #13100e;
-  --carga-fondo: #13100e;
+  --ui-elevated: #1f1f23;
+  --ui-sunken: #0e0e10;
+  --carga-fondo: #0e0e10;
   --tint-info: #1b1b1f;
   --tabla-cab-bg: #1f1f23;
   --tabla-cab-ink: #f4f4f5;
@@ -473,9 +473,9 @@ html:root:has([data-ui="v2"]) {
   --carga-fondo: #ffffff;
 }
 html:root[data-theme="dark"]:has([data-ui="v2"]) {
-  --bg: #13100e;
+  --bg: #0e0e10;
   --ink: #f4f4f5;
-  --carga-fondo: #13100e;
+  --carga-fondo: #0e0e10;
 }
 
 /* Tarjetas: 12 px, sin sombra. Selector de clase propio del alcance (0,2,0)

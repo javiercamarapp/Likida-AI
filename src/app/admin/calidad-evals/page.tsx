@@ -17,6 +17,7 @@ import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import type { Idioma } from '@/lib/i18n/idioma';
 import './calidad-evals.css';
 import '../compacto-lote-a.css';
+import { SaberesNotas } from '../saberes-notas';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -182,22 +183,8 @@ export default async function CalidadEvalsPage() {
           ) : null}
         </Tarjeta>,
       ]}
-      saberes={{
-        seSabe: {
-          titulo: tx('saberes.se_sabe'),
-          items: sabe.length > 0 ? sabe : [tx('calidad_evals.nada_medido')],
-        },
-        noSeSabe: {
-          titulo: tx('saberes.no_se_sabe'),
-          items: [
-            t('calidad_evals.feedback_del_contralor_sobre'),
-            t('calidad_evals.csat_necesita_encuestas_a'),
-            t('calidad_evals.drift_de_calidad_en'),
-          ],
-        },
-      }}
     >
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="fin16c-arriba">
         {/* ── 1 · El examen del analista (EVALOPS 0134) ── */}
         <TarjetaExamen tx={tx} idioma={idioma}
           titulo={t('calidad_evals.el_examen_del_analista')}
@@ -214,7 +201,7 @@ export default async function CalidadEvalsPage() {
       </FilaTarjetas>
 
       {/* ── 2 y 3 · Corridas de agentes (0102) y precisión del OCR (0239/0246): tabla y filas medidas, sin prosa ─ */}
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="fin16c-arriba">
         <Tarjeta
           titulo={t('calidad_evals.corridas_de_agentes_ultimos', { DIAS_VENTANA })}
           contenida
@@ -248,7 +235,7 @@ export default async function CalidadEvalsPage() {
           ) : ocr.fotosMedidas === 0 ? (
             <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.el_banco_existe_y_ninguna_foto'), { e0: (c) => <Link href="/admin/qa" className="rv-ce-enlace">{c}</Link> })}</p>
           ) : (
-            <ul className="adm-sis-lista">
+            <ul className="fin16c-pares">
               <li>
                 <span>{tx('calidad_evals.precision_de_campos')}</span>
                 <span className="tabular">
@@ -276,6 +263,21 @@ export default async function CalidadEvalsPage() {
           )}
         </Tarjeta>
       </FilaTarjetas>
+
+      <SaberesNotas
+        seSabe={{
+          titulo: tx('saberes.se_sabe'),
+          items: sabe.length > 0 ? sabe : [tx('calidad_evals.nada_medido')],
+        }}
+        noSeSabe={{
+          titulo: tx('saberes.no_se_sabe'),
+          items: [
+            t('calidad_evals.feedback_del_contralor_sobre'),
+            t('calidad_evals.csat_necesita_encuestas_a'),
+            t('calidad_evals.drift_de_calidad_en'),
+          ],
+        }}
+      />
     </EsqueletoPanelCifras>
   );
 }

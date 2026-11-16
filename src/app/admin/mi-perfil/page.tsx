@@ -106,7 +106,7 @@ export default async function MiPerfilPage({
 
   return (
     <EsqueletoConfiguracion
-      titulo={ts('mi_perfil.titulo')} apoyo={ts('mi_perfil.apoyo')}
+      area={ts('fin16c.area_cuenta')} titulo={ts('mi_perfil.titulo')} apoyo={ts('mi_perfil.apoyo')}
       avisos={(
         <>
           {sp.ok && <AvisoCompacto tono="ok" resumen={sp.ok === 'avatar' ? ts('mi_perfil.ok_avatar') : ts('mi_perfil.ok_nombre')} />}

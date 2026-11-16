@@ -11,7 +11,7 @@ import {
   type Dir, type ParamsURL, type ValorOrden,
 } from './estado-tabla';
 import { TablaTeclado } from './tabla-teclado';
-import { textoUi } from '../componentes/texto-ui';
+import { idiomaUi, textoUi } from '../componentes/texto-ui';
 import type { Idioma } from '@/lib/i18n/idioma';
 
 export interface ColumnaTabla<T> {
@@ -112,7 +112,8 @@ function Cabecera<T>({ col, estadoOrden, ordenable, hrefOrden, accion }: {
  *  opcional y, bajo 820 px, cada fila se vuelve una tarjeta (el lote de responsive afina el resto). No pone estado oculto: lo que
  *  se ve se reproduce con la dirección de la página. */
 export function TablaLista<T>(p: PropsTablaLista<T>) {
-  const tu = textoUi(p.idioma);
+  const idioma = idiomaUi(p.idioma);
+  const tu = textoUi(idioma);
   const idLeyenda = useId();
   const local = p.orden !== undefined;
   const inicial = typeof p.orden === 'object' ? p.orden.inicial : undefined;
@@ -121,9 +122,9 @@ export function TablaLista<T>(p: PropsTablaLista<T>) {
   const k = clavesTabla(p.prefijo);
 
   if (p.estado === 'cargando') return <EsqTablaV2 plana />;
-  if (p.estado === 'error') return <EstadoError reintentar={p.reintentar} idioma={p.idioma}>{p.mensajeError}</EstadoError>;
+  if (p.estado === 'error') return <EstadoError reintentar={p.reintentar} idioma={idioma}>{p.mensajeError}</EstadoError>;
   if (p.filas.length === 0) {
-    return <EstadoVacio titulo={p.vacio?.titulo ?? 'Sin registros'} accion={p.vacio?.accion}>{p.vacio?.texto}</EstadoVacio>;
+    return <EstadoVacio titulo={p.vacio?.titulo ?? tu('tabla.sin_registros')} accion={p.vacio?.accion}>{p.vacio?.texto}</EstadoVacio>;
   }
 
   const col = estado.orden ? p.columnas.find((c) => c.id === estado.orden) : undefined;
@@ -190,7 +191,7 @@ export function TablaLista<T>(p: PropsTablaLista<T>) {
       <TablaTeclado seleccion={sel ? { singular: sel.singular, plural: sel.plural } : undefined}>{tabla}</TablaTeclado>
       {pag && pag.paginas > 1 ? (
         <nav className="rv-tl__pie" aria-label={tu('tabla.paginas_de', { etiqueta: p.etiqueta })}>
-          <span className="rv-tl__rango">{tu('tabla.rango', { desde: numero(pag.desde, p.idioma), hasta: numero(pag.hasta, p.idioma), total: numero(pag.total, p.idioma) })}</span>
+          <span className="rv-tl__rango">{tu('tabla.rango', { desde: numero(pag.desde, idioma), hasta: numero(pag.hasta, idioma), total: numero(pag.total, idioma) })}</span>
           <ul className="rv-tl__paginas">
             {pag.pagina > 1 ? <li><Link className="rv-tl__pag" rel="prev" href={hrefPagina(pag.pagina - 1)} prefetch={false} scroll={false}>{tu('tabla.anterior')}</Link></li> : null}
             {ventanaPaginas(pag.pagina, pag.paginas).map((n, i) => n === null ? (
@@ -204,7 +205,7 @@ export function TablaLista<T>(p: PropsTablaLista<T>) {
             {pag.pagina < pag.paginas ? <li><Link className="rv-tl__pag" rel="next" href={hrefPagina(pag.pagina + 1)} prefetch={false} scroll={false}>{tu('tabla.siguiente')}</Link></li> : null}
           </ul>
         </nav>
-      ) : pag ? <p className="rv-tl__rango rv-tl__rango--solo">{tu(pag.total === 1 ? 'tabla.fila' : 'tabla.filas', { n: numero(pag.total, p.idioma) })}</p> : null}
+      ) : pag ? <p className="rv-tl__rango rv-tl__rango--solo">{tu(pag.total === 1 ? 'tabla.fila' : 'tabla.filas', { n: numero(pag.total, idioma) })}</p> : null}
       {p.pie}
     </div>
   );

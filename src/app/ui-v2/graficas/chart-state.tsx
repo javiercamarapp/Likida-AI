@@ -21,11 +21,11 @@ export function ChartState({ estado, children, mensaje, accion, alto = 200, idio
   accion?: ReactNode;
   alto?: number;
 }) {
-  if (estado === 'ok') return <>{children}</>;
   const t = textoUi(idioma);
+  if (estado === 'ok') return <>{children}</>;
   if (estado === 'cargando') {
     return (
-      <div className="rv-chartstate" style={{ minHeight: alto }} role="status" aria-busy="true" aria-label={mensaje ?? 'Cargando'}>
+      <div className="rv-chartstate" style={{ minHeight: alto }} role="status" aria-busy="true" aria-label={mensaje ?? t('comun.cargando')}>
         <Logo alto="h-[26px]" className="likida-respira" />
       </div>
     );

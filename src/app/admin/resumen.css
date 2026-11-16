@@ -53,7 +53,7 @@
 /* Pila de bloques bajo las gráficas de un panel (misma separación de 12 px que el marco) y acción bloqueada punteada (Rovaq). */
 [data-ui="v2"] .adm-pila { display: flex; flex-direction: column; gap: var(--sp-gap, 12px); min-width: 0; }
 [data-ui="v2"] .adm-forma-fina .rv-btn:disabled,
-[data-ui="v2"] .adm-forma-fina button[type="submit"]:disabled { background: transparent; color: var(--muted); border: 1px dashed #bfbfc2; opacity: 1; }
+[data-ui="v2"] .adm-forma-fina button[type="submit"]:disabled { background: transparent; color: var(--muted); border: 1px dashed var(--line2); opacity: 1; }
 
 /* Equipo (Rovaq CF): filas rótulo-control en el formulario de alta, select de rol de 28 px y acciones de fila. */
 [data-ui="v2"] .adm-forma-filas .rv-esq__fila-control { min-width: 0; }
@@ -147,7 +147,7 @@
 /* pf-tile (Rovaq, medido): 130 px de alto, padding 20, rótulo 12/600 con «● Observado» a la DERECHA en la misma fila, cifra 26/600 con tracking -0.91 px. */
 [data-ui="v2"] .adm-res-tiles .rv-kpi { min-height: 130px; }
 [data-ui="v2"] .adm-res-tiles .rv-kpi__pie { min-height: 0; margin-top: 0; }
-[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-size: 26px; letter-spacing: -.035em; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-size: var(--t-kpi); letter-spacing: -.035em; }
 @media (min-width: 1100px) {
   [data-ui="v2"] .adm-res-tiles .rv-kpi__sello { position: absolute; top: 20px; right: 20px; flex: 0 0 auto; width: auto; height: auto; overflow: visible; clip-path: none; white-space: nowrap; font-size: var(--t-small); font-weight: 500; color: var(--muted); }
   [data-ui="v2"] .adm-res-tiles .rv-kpi__cab { padding-right: 92px; }

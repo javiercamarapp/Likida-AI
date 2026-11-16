@@ -11,6 +11,7 @@ import '../sistema.css';
 import { numero as num, usd as dolares, fechaCorta } from '@/lib/formato';
 import { getT } from '@/lib/i18n/servidor';
 import '../compacto-lote-a.css';
+import { SaberesNotas } from '../saberes-notas';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,17 +51,18 @@ export default async function AgenteCuadrePage() {
           textos={{ modelo: t('agente_fase.col_modelo'), llamadas: t('agente_fase.col_llamadas'), costo: t('agente_fase.col_costo'), vacio: t('agente_fase.sin_modelos'), vacioDetalle: t('agente_fase.sin_modelos_detalle') }}
         />,
       ]}
-      saberes={{
-        seSabe: {
+    >
+      <SaberesNotas
+        seSabe={{
           titulo: t('saberes.se_sabe'),
           items: [
             t('agente_fase.se_gasto', { fase: 'Cuadre', costo: dolares(cuadre ? cuadre.costoUsd : 0), n: num(cuadre ? cuadre.n : 0) }),
             t('agente_cuadre.se_viajes', { n: num(r.viajesProcesados) }),
           ],
-        },
-        noSeSabe: { titulo: t('saberes.no_se_sabe'), items: [t('agente_cuadre.likida_sabe_cuantos_viajes_se_procesaron', { viajesProcesados: r.viajesProcesados })] },
-      }}
-    />
+        }}
+        noSeSabe={{ titulo: t('saberes.no_se_sabe'), items: [t('agente_cuadre.likida_sabe_cuantos_viajes_se_procesaron', { viajesProcesados: r.viajesProcesados })] }}
+      />
+    </EsqueletoPanelCifras>
   );
 }
 

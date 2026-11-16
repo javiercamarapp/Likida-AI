@@ -1679,4 +1679,5 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'cer16.rampa_etapa': 'Predominant stage per state; darker means more prospects',
   'cer16.tarjeta_aria': '{empresa}: stage {etapa}, urgency {urgencia}',
   'cer16.cargando_prospectos': 'Loading prospects',
+  'fin16c.area_cuenta': 'Account',
 };
