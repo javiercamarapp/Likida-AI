@@ -9,8 +9,12 @@
    oculta en el riel. NO se edita shell.css (lo cambia otra fase).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-[data-ui="v2"] .adm-fila { gap: 16px; }
-/* El sidebar de /admin lleva el MISMO margen derecho (16 px) que el del dashboard: antes se anulaba aquí y quedaba pegado al contenido. */
+/* Marco IDÉNTICO al del dashboard: el hueco sidebar↔contenido lo da SOLO el margen derecho del sidebar (16 px, shell.css) y el `gap` de la fila es 0.
+   Antes el gap de 16 y el margen competían según el orden de las hojas CSS: unas veces quedaba pegado y otras con 32 px. Especificidad (0,3,0): no depende del orden.
+   El panel del Copiloto (cerrado = ancho 0) ya no necesita cancelar el gap con -16; abierto, separa 16 px de la columna. */
+[data-ui="v2"] .adm-fila.rv-fila { gap: 0; }
+[data-ui="v2"] .adm-fila > .rv-copiloto-panel { margin-left: 0; }
+[data-ui="v2"] .adm-fila > .rv-copiloto-panel[data-abierto="true"] { margin-left: 16px; }
 /* Sin padding SOLO para las pantallas que aún dibujan su propio lienzo; las que ya vienen en `MarcoPagina` (`.rv-marco`) conservan el
    relleno del shell. La compatibilidad se retira cuando la última pantalla migre. */
 /* El chat del Copiloto (`.rv-chat-pagina`) trae su propio relleno (chat.css): sin esta salvedad se lo quitábamos y «Historial» quedaba pegado al borde. */
