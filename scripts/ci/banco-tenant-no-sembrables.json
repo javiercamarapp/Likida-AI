@@ -5,6 +5,14 @@
     {
       "tabla": "public.llm_alerta_tope",
       "motivo": "CHECK llm_alerta_tope_nivel_check (nivel smallint in (80, 100)): la siembra automatica no deduce los literales de un IN sobre smallint (320 intentos). Tabla solo service_role (RLS sin politicas, grants revocados a anon/authenticated). Cubierta por la fase estatica (RLS y grants) y por supabase/tests/0990_llm_alerta_tope_persistida.sql, que incluye el rechazo a authenticated."
+    },
+    {
+      "tabla": "public.bo_comision_mov",
+      "motivo": "Tabla de PLATAFORMA del back-office (mig. 1010): `tenant_id` es solo una referencia informativa a la flota cuyo cobro generó la comisión, nunca dueña de la fila. Solo service_role (RLS sin políticas, grants revocados a anon/authenticated), solo inserción, y un disparador exige factura pagada y conciliada, base igual al subtotal y clawback exactamente contrario al origen: ninguna fila válida se genera sin una cadena factura_saas → prospecto → vendedor. Cubierta por la fase estática (RLS y grants) y por supabase/tests/1010_bo_comisiones.sql, que incluye el rechazo a authenticated."
+    },
+    {
+      "tabla": "public.bo_contrato",
+      "motivo": "Tabla de PLATAFORMA del back-office (mig. 1011): `tenant_id` es una referencia opcional (on delete set null) a la flota con la que Likida firmó un contrato de cliente; la fila pertenece a Likida, no a una flota. Solo service_role (RLS sin políticas, grants revocados a anon/authenticated). Una restricción de coherencia (tipo, fechas, estado, índice anti-duplicado de contrato vivo) hace inviable la siembra automática. Cubierta por la fase estática (RLS y grants) y por supabase/tests/1011_bo_contratos_vencimientos.sql, que incluye el rechazo a authenticated."
     }
   ]
 }
