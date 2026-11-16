@@ -26,8 +26,8 @@ describe('controles finos · alturas y forma', () => {
     expect(valor('--btn-h-movil')).toBe('var(--ctl-h-movil)');
     expect(valor('--toque')).toBe('44px');
   });
-  it('--item-h sigue literal en 32 px (shell_css.test lo cruza con ALTO_ITEM_PX)', () => {
-    expect(valor('--item-h')).toBe('32px');
+  it('--item-h sigue literal en 38 px (shell_css.test lo cruza con ALTO_ITEM_PX)', () => {
+    expect(valor('--item-h')).toBe('38px');
   });
   it('radios por TIPO de control: 8 control, 12 tarjeta, 999 píldora, 8 tooltip', () => {
     expect(valor('--r-control')).toBe('8px');

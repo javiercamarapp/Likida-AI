@@ -39,7 +39,10 @@ describe('shell.css ↔ marco-v2.ts', () => {
     expect(activo).toContain('background: var(--nav-activo-bg)');
     expect(activo).toContain('color: var(--nav-activo-fg)');
     expect(activo).toContain('font-weight: var(--nav-activo-peso)');
-    expect(activo).toContain('box-shadow: inset 3px 0 0 var(--nav-activo-barra)');
+    // 16-nov-2026: la barra pasó de sombra interna (el radio de 8 px la recortaba en curva) a una pieza propia (::before) de 3 px, por el mismo token.
+    const barra = regla('[data-ui="v2"] .rv-item[aria-current="page"]::before');
+    expect(barra).toContain('width: 3px');
+    expect(barra).toContain('background: var(--nav-activo-barra)');
     expect(regla('[data-ui="v2"] .rv-puesta[aria-current="page"]')).not.toMatch(/box-shadow|inset/);
     expect(activo).not.toMatch(/background:\s*var\(--marca\)/);
     expect(regla('[data-ui="v2"] .rv-fila', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`padding: ${MARCO_PX}px`);

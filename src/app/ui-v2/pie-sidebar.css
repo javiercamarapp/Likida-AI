@@ -3,7 +3,7 @@
    Se apoya en lo que ya da shell.css (`.rv-pie`, `.rv-item`, `.rv-cuenta`, `.rv-avatar`, el riel). Aquí solo lo propio del pie.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-[data-ui="v2"] .rv-ps { gap: 8px; }
+[data-ui="v2"] .rv-ps { gap: 10px; }
 [data-ui="v2"] .rv-ps .rv-item { margin: 0; }
 [data-ui="v2"] .rv-ps-sr {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
@@ -11,7 +11,7 @@
 }
 
 /* Organización: rótulo en mayúsculas 11/500 con tracking, selector de 32 y «Ir ↗». Tipografía del pie como Rovaq (medido en vivo 10-nov): selector 12/400, «Ir» y acceso cruzado 12/500 (antes 13). */
-[data-ui="v2"] .rv-ps-org { display: grid; gap: 5px; margin: 0; padding: 0 2px 2px; min-width: 0; }
+[data-ui="v2"] .rv-ps-org { display: grid; gap: 6px; margin: 0; padding: 0 2px 4px; min-width: 0; }
 [data-ui="v2"] .rv-ps-cap { margin: 0 2px; font-size: 11px; font-weight: 500; line-height: 1.5; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 [data-ui="v2"] .rv-ps-org__fila { display: flex; align-items: center; gap: 6px; min-width: 0; }
 [data-ui="v2"] .rv-ps-select { position: relative; display: block; flex: 1 1 0%; min-width: 0; }
