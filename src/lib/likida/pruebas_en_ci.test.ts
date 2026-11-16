@@ -183,6 +183,17 @@ describe('lo que se salta bajo cobertura sí corre en CI', () => {
     expect(configNext, 'next.config.ts dejó de apuntar el build a tsconfig.build.json').toMatch(
       /tsconfigPath:\s*'tsconfig\.build\.json'/,
     );
+    // 16-nov-2026: con el typecheck de producción en ≈4.1 GB, `next build` ya no lo repite (ignoreBuildErrors). Eso solo es aceptable mientras
+    // el CI SIGA corriendo el typecheck COMPLETO (código y pruebas) como requisito para mergear: si alguien quita esa garantía, esta prueba cae.
+    expect(configNext, 'next.config.ts: el build de Vercel debe omitir el typecheck repetido (ignoreBuildErrors) o volverá el OOM').toMatch(
+      /ignoreBuildErrors:\s*true/,
+    );
+    const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+    expect(ci, 'ci.yml dejó de correr el typecheck completo: ignoreBuildErrors en next.config.ts ya no tendría respaldo').toMatch(
+      /name:\s*Typecheck[\s\S]{0,200}npm run typecheck/,
+    );
+    expect(paquete.scripts.typecheck, 'npm run typecheck debe revisar con tsconfig.json (el completo)').toMatch(/tsc/);
+    expect(paquete.scripts.typecheck, 'npm run typecheck no debe usar tsconfig.build.json (perdería las pruebas)').not.toMatch(/tsconfig\.build/);
 
     const tsBuild = JSON.parse(readFileSync('tsconfig.build.json', 'utf8')) as {
       extends?: string;
