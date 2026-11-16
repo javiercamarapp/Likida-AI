@@ -83,7 +83,8 @@ declare g uuid; err text;
 begin
   select id into g from public.bo_gasto where concepto = 'Idem';
   update public.bo_gasto set conciliado_en = now(), conciliado_por = '99100000-0000-4000-8000-0000000000c1', referencia_banco = 'SPEI 99887766' where id = g;
-  begin update public.bo_gasto set conciliado_en = now() where id = g; raise exception 'no lanzo';
+  -- Reescribir la evidencia (referencia distinta) debe fallar; con `now()` en la misma transaccion el instante no cambia, asi que se cambia la referencia.
+  begin update public.bo_gasto set referencia_banco = 'SPEI 11223344' where id = g; raise exception 'no lanzo';
   exception when others then get stacked diagnostics err = message_text; if err = 'no lanzo' then raise exception '1009(8): conciliar dos veces debia fallar'; end if; end;
   update public.bo_gasto set deducible_en_forma = 'no_evaluable', cuenta_contable = 'Costos de nube' where id = g;
 end $$;
