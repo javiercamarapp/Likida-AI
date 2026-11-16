@@ -15,6 +15,7 @@ import { observadas } from '../sello-observado';
 import '../resumen.css';
 import './mapa-actividad.css';
 import { SelectorVista } from '../selector-vista';
+import { NotaVacia } from '../nota-vacia';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -140,13 +141,13 @@ export default async function DevPage() {
       <FilaTarjetas variante="8-4" className="adm-fila-pareja">
         <Tarjeta titulo={t('dev.mapa_de_actividad_pushes_por_dia')}>
           {mapa.estado === 'sin_token' && (
-            <p className="adm-dev-nota">{t('dev.sin_el_acceso_a_github_no_hay_mapa')}</p>
+            <NotaVacia tono="warn">{t('dev.sin_el_acceso_a_github_no_hay_mapa')}</NotaVacia>
           )}
           {mapa.estado === 'error' && (
-            <p className="adm-dev-nota">{t('dev.github_no_contesto_el_histograma_recarga')}</p>
+            <NotaVacia tono="warn">{t('dev.github_no_contesto_el_histograma_recarga')}</NotaVacia>
           )}
           {mapa.estado === 'generando' && (
-            <p className="adm-dev-nota">{t('dev.github_esta_recalculando_el_histograma_tras')}</p>
+            <NotaVacia tono="info">{t('dev.github_esta_recalculando_el_histograma_tras')}</NotaVacia>
           )}
           {mapa.estado === 'ok' && <MapaActividad semanas={mapa.semanas.slice(-26)} total={mapa.total} />}
         </Tarjeta>
@@ -158,10 +159,10 @@ export default async function DevPage() {
             />
           )}
           {autores.estado === 'generando' && (
-            <p className="adm-dev-nota">{t('dev.github_lo_esta_recalculando')}</p>
+            <NotaVacia tono="info">{t('dev.github_lo_esta_recalculando')}</NotaVacia>
           )}
           {(autores.estado === 'error' || autores.estado === 'sin_token') && (
-            <p className="adm-dev-nota">{t('dev.no_se_pudo_leer_no_es')}</p>
+            <NotaVacia tono="warn">{t('dev.no_se_pudo_leer_no_es')}</NotaVacia>
           )}
         </Tarjeta>
       </FilaTarjetas>
@@ -171,7 +172,7 @@ export default async function DevPage() {
       <FilaTarjetas variante="6-6" className="adm-fila-pareja">
         <Tarjeta titulo={t('dev.slos_objetivos_contra_lo_medido')}>
           {slos === null && (
-            <p className="adm-dev-nota">{t('dev.no_se_pudieron_leer_los_slos')}</p>
+            <NotaVacia tono="warn">{t('dev.no_se_pudieron_leer_los_slos')}</NotaVacia>
           )}
           {slos !== null && (
             <TablaBase
@@ -187,10 +188,10 @@ export default async function DevPage() {
         </Tarjeta>
         <Tarjeta titulo={t('dev.eventos_de_seguridad')}>
           {seguridad === null && (
-            <p className="adm-dev-nota">{t('dev.no_se_pudieron_leer_que_no')}</p>
+            <NotaVacia tono="warn">{t('dev.no_se_pudieron_leer_que_no')}</NotaVacia>
           )}
           {seguridad !== null && seguridad.length === 0 && (
-            <p className="adm-dev-nota">{t('dev.sin_eventos_registrados_eso_no_prueba')}</p>
+            <NotaVacia tono="muted">{t('dev.sin_eventos_registrados_eso_no_prueba')}</NotaVacia>
           )}
           {seguridad !== null && seguridad.length > 0 && (
             <TablaBase
@@ -237,10 +238,10 @@ export default async function DevPage() {
       ) : (
         <Tarjeta titulo={t('dev.actividad_del_codigo_en_vivo')}>
           {actividad.estado === 'sin_token' && (
-            <p className="adm-dev-nota">{t('dev.sin_el_acceso_a_github_esta_seccion')}</p>
+            <NotaVacia tono="warn">{t('dev.sin_el_acceso_a_github_esta_seccion')}</NotaVacia>
           )}
           {actividad.estado === 'error' && (
-            <p className="adm-dev-nota">{t('dev.github_no_contesto_no_se_sabe')}</p>
+            <NotaVacia tono="warn">{t('dev.github_no_contesto_no_se_sabe')}</NotaVacia>
           )}
         </Tarjeta>
       )}
@@ -253,7 +254,7 @@ export default async function DevPage() {
           </a>
         </Tarjeta>
         <Tarjeta titulo={t('dev.lo_que_falta')}>
-          <p className="adm-dev-nota">{t('dev.calendario_de_contribuciones_deploys_de_vercel')}</p>
+          <NotaVacia tono="muted">{t('dev.calendario_de_contribuciones_deploys_de_vercel')}</NotaVacia>
         </Tarjeta>
       </FilaTarjetas>
     </EsqueletoTablaMaestra>

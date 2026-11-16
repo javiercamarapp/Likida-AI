@@ -13,6 +13,8 @@ export const ui_comun = {
   'comun.ver_mas': 'Ver más',
   'comun.valor_no_valido': 'Valor no válido',
   'comun.indicadores': 'Indicadores',
+  'comun.cargando': 'Cargando',
+  'tabla.sin_registros': 'Sin registros',
   // Cifra
   'cifra.al_dia': 'Al día',
   'cifra.atencion': 'Atención',

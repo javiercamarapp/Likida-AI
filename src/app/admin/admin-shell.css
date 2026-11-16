@@ -10,7 +10,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 [data-ui="v2"] .adm-fila { gap: 16px; }
-[data-ui="v2"] .adm-fila .rv-sb { margin-right: 0; }
+/* El sidebar de /admin lleva el MISMO margen derecho (16 px) que el del dashboard: antes se anulaba aquí y quedaba pegado al contenido. */
 /* Sin padding SOLO para las pantallas que aún dibujan su propio lienzo; las que ya vienen en `MarcoPagina` (`.rv-marco`) conservan el
    relleno del shell. La compatibilidad se retira cuando la última pantalla migre. */
 /* El chat del Copiloto (`.rv-chat-pagina`) trae su propio relleno (chat.css): sin esta salvedad se lo quitábamos y «Historial» quedaba pegado al borde. */

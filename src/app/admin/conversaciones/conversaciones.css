@@ -5,7 +5,7 @@
 [data-ui="v2"] .rv-conv-fila[data-rol="assistant"] { justify-content: flex-end; }
 [data-ui="v2"] .rv-conv-burbuja {
   max-width: 80%; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 12px; padding: 8px 14px;
-  font-size: var(--t-body); line-height: 1.45; color: var(--ink); background: var(--canvas); border: 1px solid var(--line2, var(--line));
+  font-size: var(--t-body); line-height: 1.45; color: var(--ink); background: var(--ui-sunken); border: 1px solid var(--line2, var(--line));
 }
 [data-ui="v2"] .rv-conv-burbuja[data-rol="assistant"] { background: var(--marca, var(--ink)); color: var(--marca-fg, var(--surface)); border-color: transparent; }
 [data-ui="v2"] .rv-conv-tel { display: block; font-size: var(--t-body); font-weight: 500; }

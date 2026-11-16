@@ -1,6 +1,7 @@
 import type { InfoTexto } from '../info-catalogo';
 import { KindBadge } from '../graficas/kind-badge';
 import type { Idioma } from '@/lib/i18n/idioma';
+import { idiomaUi } from './texto-ui';
 
 /** Rótulos fijos del cajón por idioma (el texto de cada entrada viene del catálogo, ya en su idioma). */
 const ROTULOS = {
@@ -16,7 +17,8 @@ const ROTULOS = {
  * Lo que no sabemos (lista) · Qué hacer con esto · Estado (solo «por confirmar») · sello «Clase de dato».
  * Todo campo opcional vacío o ausente se omite: nunca se pinta un hueco ni se inventa texto.
  */
-export function ContenidoInfo({ texto, idioma = 'es' }: { texto: InfoTexto; idioma?: Idioma }) {
+export function ContenidoInfo({ texto, idioma: idiomaProp }: { texto: InfoTexto; idioma?: Idioma }) {
+  const idioma = idiomaUi(idiomaProp);
   const r = ROTULOS[idioma];
   const limites = (texto.loQueNoSabemos ?? []).filter((x) => x.trim() !== '');
   const pares: Array<[string, string]> = [[r.fuente, texto.fuente]];

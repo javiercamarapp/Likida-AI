@@ -1677,4 +1677,5 @@ export const admin_sistema = {
   'cer16.rampa_etapa': 'Etapa predominante por estado; más oscuro, más prospectos',
   'cer16.tarjeta_aria': '{empresa}: etapa {etapa}, urgencia {urgencia}',
   'cer16.cargando_prospectos': 'Cargando prospectos',
+  'fin16c.area_cuenta': 'Cuenta',
 } as const;

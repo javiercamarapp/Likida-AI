@@ -320,7 +320,7 @@ export default async function SaludSistemaPage() {
         />
       </Tarjeta>
 
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="fin16c-arriba">
         <Tarjeta key="rutas" titulo={tx('salud_sistema.grafica_rutas')} contenida reintentar
           estado={latencias === null || latencias.rutas === null ? 'error' : p95Rutas.length === 0 ? 'vacio' : 'ok'}
           mensaje={latencias === null || latencias.rutas === null ? tx('observabilidad.no_se_pudo_leer_la_latencia') : tx('observabilidad.sin_muestras_todavia')}
@@ -346,7 +346,7 @@ export default async function SaludSistemaPage() {
         </section>
       ) : null}
 
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="fin16c-arriba">
         <section className="adm-sis-bloque adm-sis-caja"><QuemaSlo evaluaciones={quemaSlo} t={tMon} /></section>
         <section className="adm-sis-bloque adm-sis-caja" aria-labelledby="fuentes-sistema">
           <h2 className="adm-sis-titulo" id="fuentes-sistema">{tf('admin.titulo')}</h2>

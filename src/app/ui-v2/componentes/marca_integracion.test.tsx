@@ -85,7 +85,7 @@ describe('ChipFuente (píldora tipo casilla, sin JavaScript)', () => {
     expect(h).toContain('<form method="get">');
     expect(readFileSync(join(__dirname, 'marca-integracion.tsx'), 'utf8')).not.toMatch(/onClick|onChange|=>\s*void/);
   });
-  it('CSS: píldora de 28 px, padding 0 10, radio 999, 12/500, borde 1 px --line2 (#d6ccbb en claro), aire 6; marcado con los tokens --seg-activo-*', () => {
+  it('CSS: píldora de 28 px, padding 0 10, radio 999, 12/500, borde 1 px --line2 (#d6d6d9 en claro), aire 6; marcado con los tokens --seg-activo-*', () => {
     const css = readFileSync(join(__dirname, '..', 'piezas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const base = /\[data-ui="v2"\] \.rv-chipfuente \{([^}]*)\}/.exec(css)?.[1] ?? '';
     for (const re of [/height:\s*28px/, /padding:\s*0 10px/, /border-radius:\s*999px/, /font:\s*500 12px/, /border:\s*1px solid var\(--line2\)/, /gap:\s*6px/]) expect(base).toMatch(re);
@@ -93,7 +93,7 @@ describe('ChipFuente (píldora tipo casilla, sin JavaScript)', () => {
     for (const t of ['--seg-activo-bg', '--seg-activo-borde', '--seg-activo-fg']) expect(activo).toContain(t);
     // El borde lee el token: se comprueba el token (crema cálido de marca), no un literal copiado en la regla.
     const tokens = readFileSync(join(__dirname, '..', 'tokens.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(/--line2:\s*(#[0-9a-fA-F]{6})/.exec(tokens)?.[1]).toBe('#d6ccbb');
+    expect(/--line2:\s*(#[0-9a-fA-F]{6})/.exec(tokens)?.[1]).toBe('#d6d6d9');
     expect(base).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 });

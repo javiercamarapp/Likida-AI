@@ -105,7 +105,7 @@ describe.skipIf(SIN_NAVEGADOR)('Campos · comportamiento en Chromium', () => {
     expect(await p.evaluate(() => { const i = document.getElementById('c1')!; return document.getElementById(i.getAttribute('aria-describedby')!)?.textContent; })).toBe('Llegan por correo');
     await p.close();
   });
-  it('casilla: caja de 16 px propia (no la nativa), marcada pinta el marino de marca y tiene foco visible', async () => {
+  it('casilla: caja de 16 px propia (no la nativa), marcada pinta tinta y tiene foco visible', async () => {
     const p = await abrir();
     const r = await p.evaluate(() => {
       const i = document.getElementById('c1') as HTMLInputElement;
@@ -115,7 +115,7 @@ describe.skipIf(SIN_NAVEGADOR)('Campos · comportamiento en Chromium', () => {
       return { caja, marcado: getComputedStyle(i).backgroundColor, marca: getComputedStyle(document.documentElement).getPropertyValue('--marca') };
     });
     expect(r.caja).toEqual(['16px', '16px', 'none']);
-    expect(r.marcado).toBe('rgb(42, 63, 95)'); // --marca = marino #2a3f5f (16-nov-2026)
+    expect(r.marcado).toBe('rgb(14, 14, 16)');
     await p.keyboard.press('Tab');
     expect(await p.evaluate(() => getComputedStyle(document.activeElement!).outlineStyle)).toBe('solid');
     await p.close();

@@ -5,7 +5,7 @@ import { cx } from './clases';
 import { EstadoVacio } from './estado-vacio';
 import { EstadoError } from './estado-error';
 import { InfoTip } from './info-tip';
-import { textoUi } from './texto-ui';
+import { idiomaUi, textoUi } from './texto-ui';
 import type { Idioma } from '@/lib/i18n/idioma';
 
 export type EstadoTarjeta = 'ok' | 'vacio' | 'cargando' | 'error';
@@ -44,7 +44,8 @@ export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detall
   children?: ReactNode;
   className?: string;
 }) {
-  const t = textoUi(idioma);
+  const idiomaEf = idiomaUi(idioma);
+  const t = textoUi(idiomaEf);
   return (
     <section className={cx('rv-tarjeta', className)} data-contenida={contenida || undefined} data-lift={elevar || undefined} data-entra={entra} aria-busy={estado === 'cargando' || undefined} data-estado={estado}>
       <header className="rv-tarjeta__cab">
@@ -54,7 +55,7 @@ export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detall
       </header>
       <div className="rv-tarjeta__cuerpo">
         {estado === 'vacio' ? <EstadoVacio titulo={mensaje ?? t('comun.sin_datos_periodo')} accion={accionVacio} icono={iconoVacio} contenido={contenida}>{detalle}</EstadoVacio> : null}
-        {estado === 'error' ? <EstadoError onReintentar={onReintentar} reintentar={reintentar} compacto idioma={idioma}>{mensaje}</EstadoError> : null}
+        {estado === 'error' ? <EstadoError onReintentar={onReintentar} reintentar={reintentar} compacto idioma={idiomaEf}>{mensaje}</EstadoError> : null}
         {estado === 'cargando' && esqueleto ? esqueleto : null}
         {estado === 'ok' || (estado === 'cargando' && !esqueleto) ? children : null}
       </div>

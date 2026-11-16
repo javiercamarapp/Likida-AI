@@ -177,7 +177,7 @@ export function FormaLiberarAmbiguo({ pieza, accion }: { pieza: PiezaEnCola; acc
   const [estado, liberar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   if (estado?.ok) return <span className="bj-sub" data-tono="ok" role="status">{estado.ok}</span>;
   return (
-    <form action={liberar} className="inline-flex items-center gap-2">
+    <form action={liberar} className="bj-acciones">
       <input type="hidden" name="pieza" value={pieza.id} />
       <BotonConfirmar
         etiqueta={pendiente ? t('aprobaciones_forma_pieza.liberando') : t('aprobaciones_forma_pieza.confirmar_que_no_salio')}

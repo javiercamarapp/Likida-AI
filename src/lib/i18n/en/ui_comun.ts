@@ -13,6 +13,8 @@ export const ui_comun: Record<keyof typeof ui_comunEs, string> = {
   'comun.ver_mas': 'Show more',
   'comun.valor_no_valido': 'Invalid value',
   'comun.indicadores': 'Indicators',
+  'comun.cargando': 'Loading',
+  'tabla.sin_registros': 'No records',
   'cifra.al_dia': 'Up to date',
   'cifra.atencion': 'Attention',
   'cifra.critico': 'Critical',

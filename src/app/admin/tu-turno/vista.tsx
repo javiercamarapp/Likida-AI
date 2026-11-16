@@ -303,7 +303,7 @@ export function VistaTuTurno({
       ) : null}
 
       {ver('envios') || ver('escalaciones') ? (
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="fin16c-arriba">
         {/* ── 2 · Envíos redactados (0117) — dinero directo, se resuelven en Aprobaciones ─ */}
         {ver('envios') ? <Tarjeta
           titulo={t('tu_turno_vista.envios_por_aprobar_2', { length: envios.length })}
@@ -342,7 +342,7 @@ export function VistaTuTurno({
       ) : null}
 
       {ver('cambios') || ver('escalaciones') ? (
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="fin16c-arriba">
         {/* ── 3 · Cambios de código (PRs) — la aprobación de CÓDIGO es fusionarlos en GitHub, no un botón aquí ── */}
         {!ver('cambios') ? null : prs.estado === 'sin_token' ? (
           <Tarjeta titulo={t('tu_turno_vista.cambios_por_aprobar')} estado="vacio" contenida mensaje={t('tu_turno_vista.falta_conectar_github')}

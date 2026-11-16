@@ -101,7 +101,7 @@ export default async function IntegracionesPage() {
           : { etiqueta: t('integraciones.kpi_modelos'), valor: r.porModelo.length, formato: 'entero' as const },
       ]), t('a1r4.observado'))}
     >
-      <FilaTarjetas variante="4-8">
+      <FilaTarjetas variante="4-8" className="fin16c-arriba">
         <Tarjeta entra="tarjeta" titulo={t('integraciones.grafica_estado')}>
           <DonaMini
             etiqueta={t('integraciones.grafica_estado')}
@@ -129,7 +129,7 @@ export default async function IntegracionesPage() {
       ) : r.porModelo.length === 0 ? (
         <Tarjeta entra="tarjeta" titulo={t('integraciones.proveedores_de_modelos_de_ia')} estado="vacio" mensaje={t('integraciones.sin_llamadas_registradas_todavia')} detalle={t('integraciones.aparecen_aqui_los_modelos_en_cuanto')} contenida />
       ) : (
-        <FilaTarjetas variante="6-6">
+        <FilaTarjetas variante="6-6" className="fin16c-arriba">
           <Tarjeta entra="tarjeta" titulo={t('integraciones.grafica_gasto')}>
             <BarList
               etiqueta={t('integraciones.grafica_gasto')}

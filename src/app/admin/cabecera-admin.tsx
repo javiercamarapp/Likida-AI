@@ -7,7 +7,6 @@ import { CircleHelp, LayoutGrid, LifeBuoy, Users } from 'lucide-react';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
 import { Popover, MenuList } from '../ui-v2/componentes/overlay';
-import BotonBuscar from '../dashboard/shell/boton-buscar';
 import { entradaDeRuta } from './rutas';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 import type { RequiereAccion } from './requiere-accion';
@@ -95,7 +94,6 @@ export default function CabeceraAdmin() {
         <GuiaAdmin />
       </div>
       <div className="rv-cab-esc__der">
-        <BotonBuscar />
       </div>
     </header>
   );

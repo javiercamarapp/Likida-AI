@@ -2,7 +2,7 @@
    y todo bajo [data-ui="v2"]. La rejilla de áreas y las filas de métricas no dejan huecos: todas las tarjetas miden lo mismo. */
 
 /* Ocho tarjetas de área: se reparten en columnas de ≥248 px; cada una llena su celda y el pie (enlaces) queda abajo. */
-[data-ui="v2"] .bo-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: var(--sp-gap, 12px); min-width: 0; }
+[data-ui="v2"] .bo-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: var(--ui-rhythm, 12px); min-width: 0; }
 [data-ui="v2"] .bo-areas > .rv-tarjeta { height: 100%; }
 [data-ui="v2"] .bo-areas .rv-tarjeta__cuerpo { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
 

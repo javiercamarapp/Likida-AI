@@ -1,6 +1,6 @@
 /* La Bandeja de /admin (Tu turno · Aprobaciones · Escalaciones): solo lo que las piezas de ui-v2 no traen. Sin hex: solo tokens. */
 
-.bj-nota { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.bj-nota { margin: 0; font-size: var(--t-small); line-height: 1.45; color: var(--muted); }
 .bj-nota + .bj-nota { margin-top: 4px; }
 
 .bj-bloque { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -12,40 +12,40 @@
 
 /* Filas de lista dentro de una tarjeta: título que se corta, apoyo apagado y la edad a la derecha. */
 .bj-lista { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.bj-lista > li { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 13px; }
+.bj-lista > li { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: var(--t-body); }
 .bj-lista > li + li { border-top: 1px solid var(--line); }
 .bj-lista__texto { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bj-lista__apoyo { flex: none; font-size: 12px; color: var(--muted); }
+.bj-lista__apoyo { flex: none; font-size: var(--t-small); color: var(--muted); }
 .bj-lista__enlace { margin-top: 8px; }
 
 /* Piezas de las rutinas de la Mac: rejilla de alto uniforme; la imagen vive en un marco 16:9 con tope. */
 .bj-piezas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; align-items: stretch; }
 .bj-pieza { display: flex; flex-direction: column; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-.bj-pieza__marco { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 9; max-height: 176px; overflow: hidden; background: var(--canvas); color: var(--faint); font-size: 12px; }
+.bj-pieza__marco { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 9; max-height: 176px; overflow: hidden; background: var(--canvas); color: var(--faint); font-size: var(--t-small); }
 .bj-pieza__marco img { width: 100%; height: 100%; object-fit: cover; }
 .bj-pieza__cuerpo { display: flex; flex: 1 1 auto; flex-direction: column; gap: 8px; padding: 12px; min-width: 0; }
-.bj-pieza__meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.bj-pieza__meta { display: flex; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); }
 .bj-pieza__edad { margin-left: auto; }
-.bj-pieza__titulo { margin: 0; min-height: 2.6em; font-size: 13px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.bj-pieza__copy { font-size: 12px; color: var(--muted); }
+.bj-pieza__titulo { margin: 0; min-height: 2.6em; font-size: var(--t-body); font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bj-pieza__copy { font-size: var(--t-small); color: var(--muted); }
 .bj-pieza__copy pre { margin: 8px 0 0; white-space: pre-wrap; font: inherit; }
 .bj-pieza__acciones { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
 
 /* Aprobaciones: cada pieza de la cola, con su borrador completo y desplazable. */
-.bj-cola { display: flex; flex-direction: column; gap: 10px; }
+.bj-cola { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--ui-rhythm, 12px); align-items: start; min-width: 0; }
 .bj-item { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-.bj-item__cab { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.bj-item__cab { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: var(--t-body); }
 .bj-item__titulo { font-weight: 600; }
-.bj-item__meta { font-size: 12px; color: var(--muted); }
-.bj-item__fecha { margin-left: auto; flex: none; font-size: 12px; color: var(--faint); }
-.bj-item__borrador { max-height: 14rem; margin: 8px 0 0; padding: 8px 12px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font: inherit; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.bj-item__meta { font-size: var(--t-small); color: var(--muted); }
+.bj-item__fecha { margin-left: auto; flex: none; font-size: var(--t-small); color: var(--faint); }
+.bj-item__borrador { max-height: 14rem; margin: 8px 0 0; padding: 8px 12px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font: inherit; font-size: var(--t-body); line-height: 1.5; white-space: pre-wrap; }
 .bj-item__forma { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .bj-item__fila { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.bj-item__aviso { margin: 8px 0 0; font-size: 12px; color: var(--bad); }
-.bj-item--hecha { color: var(--muted); font-size: 13px; }
+.bj-item__aviso { margin: 8px 0 0; font-size: var(--t-small); color: var(--bad); }
+.bj-item--hecha { color: var(--muted); font-size: var(--t-body); }
 .bj-item--envio { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
 .bj-item--envio > form { margin-left: auto; flex: none; }
-.bj-sub { flex-basis: 100%; font-size: 12px; }
+.bj-sub { flex-basis: 100%; font-size: var(--t-small); }
 .bj-sub[data-tono="warn"] { color: var(--warn); }
 .bj-sub[data-tono="bad"] { color: var(--bad); }
 .bj-sub[data-tono="ok"] { color: var(--ok); }
@@ -53,7 +53,7 @@
 /* Limpieza por lotes. */
 .bj-lote { display: flex; flex-direction: column; gap: 12px; }
 .bj-lote__campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-.bj-lote__resumen { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.bj-lote__resumen { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: var(--t-body); }
 .bj-lote__desglose { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Vistas de Aprobaciones: los paneles inactivos se ocultan, todos quedan en el documento. */
@@ -77,14 +77,14 @@
 .bj-piezas--compacta .bj-pieza__marco { width: 96px; flex: none; aspect-ratio: 1; max-height: none; }
 .bj-piezas--compacta .bj-pieza__cuerpo { padding: 8px 10px; gap: 6px; }
 .bj-piezas--compacta .bj-pieza__titulo { min-height: 0; }
-.bj-siguiente { margin: 0; font: 600 13px/1.4 var(--font-sans-ui, inherit); color: var(--ink); }
+.bj-siguiente { margin: 0; font: 600 var(--t-body)/1.4 var(--font-sans-ui, inherit); color: var(--ink); }
 @media (max-width: 479px) { .bj-piezas--compacta .bj-pieza__marco { width: 72px; } }
 
 /* F26 ronda 4: las vistas de la pantalla son el SEGMENTADO de la barra de filtros (Rovaq BF: segmentado · Filtros · responsable) con contador, de 28 px; el único nivel de pestañas subrayadas es el del grupo (barra automática). */
 [data-ui="v2"] .bj-vistas > .rv-seg { width: fit-content; max-width: 100%; overflow-x: auto; }
-[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 28px; font-size: 13px; font-weight: 500; }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 28px; font-size: var(--t-body); font-weight: 500; }
 [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn[aria-checked="true"] { font-weight: 600; }
-[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__conteo { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); color: var(--ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__conteo { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); color: var(--ink); font-size: var(--t-small); font-weight: 600; font-variant-numeric: tabular-nums; }
 @media (max-width: 819px) { [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 36px; } }
 
 /* Botones de fila: una línea y 28 px; un rótulo largo no parte el botón en dos (antes 39 px). */
@@ -113,18 +113,18 @@
 .bj-grupo { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .bj-grupo + .bj-grupo { padding-top: 12px; border-top: 1px solid var(--line); }
 .bj-grupo__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
-.bj-grupo__titulo { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--ink); }
-.bj-grupo__nota { margin: 0; font-size: 12px; color: var(--muted); }
+.bj-grupo__titulo { margin: 0; font-size: var(--t-small); font-weight: 600; letter-spacing: .02em; color: var(--ink); }
+.bj-grupo__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
 .bj-grupo__nota[data-tono="bad"] { color: var(--bad); }
 
 /* F26 ronda 5 · Escalaciones: los seis conteos por fuente como una fila de chips sobre la cola (la tira de arriba quedó en 4 celdas). */
 .bj-chips-fuente { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.bj-chips-fuente > li { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font-size: 12px; color: var(--ink2, var(--muted)); }
+.bj-chips-fuente > li { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font-size: var(--t-small); color: var(--ink2, var(--muted)); }
 .bj-chips-fuente > li b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
 
 /* F26 ronda 5 · Tu turno: «Siguiente mejor acción» destacada (Rovaq `hoy-sig`; pul9: sin filete izquierdo, es la tarjeta estándar), título 16/600 y la acción primaria a la vista. */
 [data-ui="v2"] .rv-tarjeta.bj-sig .rv-tarjeta__titulo { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
-[data-ui="v2"] .rv-tarjeta.bj-sig .bj-siguiente { font-size: 14px; line-height: 1.45; font-weight: 500; }
+[data-ui="v2"] .rv-tarjeta.bj-sig .bj-siguiente { font-size: var(--t-card); line-height: 1.45; font-weight: 500; }
 /* Ronda 7: la tarjeta lateral se estira a la altura de «Piezas para tu tap» (no `align-self: start`) y el cuerpo la llena: la acción arriba,
    el conteo REAL de cada fuente al pie, sin hueco. */
 [data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.bj-sig { align-self: stretch; }

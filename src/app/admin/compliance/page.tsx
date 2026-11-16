@@ -208,7 +208,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
               <Tarjeta titulo={t('compliance.solicitudes_arco')} estado="vacio" mensaje={t('compliance.ninguna_solicitud_arco_registrada')}
                 detalle={t('compliance.cuando_un_operador_escribe_privacidad_por')} />
             ) : (
-          <section className="adm-sis-bloque" aria-label={t('compliance.por_responder')}>
+          <section className="adm-sis-bloque fin16c-rejilla" aria-label={t('compliance.por_responder')}>
             {pendientes.length === 0 ? (
               <Tarjeta titulo={t('compliance.solicitudes_arco')} estado="vacio" mensaje={t('compliance.nada_por_responder')} detalle={t('compliance.todas_las_solicitudes_registradas_ya_tienen')} />
             ) : pendientes.map((s) => {

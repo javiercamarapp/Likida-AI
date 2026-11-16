@@ -83,7 +83,7 @@ export function GestionPersona({ p, acciones, yo, bajaLikidaHabilitada, t = trAd
           </CampoSelect>
         </FormaConAviso>
       )}
-      <div>
+      <div className="fin16c-acciones">
         {p.activa && (
           <FormaConAviso accion={acciones.reenviarAcceso} boton="Reenviar acceso" enLinea>{oculto(p.id)}</FormaConAviso>
         )}

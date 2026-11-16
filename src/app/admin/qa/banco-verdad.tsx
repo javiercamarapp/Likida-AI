@@ -361,6 +361,6 @@ function Valor({ clave, v }: { clave: ClaveVerdad; v: string | number | null }) 
     return <span className="rv-qa-tenue">{t('qa_medicion_corrida.no_leyo_nada')}</span>;
   }
   if (clave === 'monto') return <span className="tabular">{mxn(Number(v), idioma)}</span>;
-  if (clave === 'fecha') return <span className="whitespace-nowrap">{fechaCorta(String(v), idioma)}</span>;
-  return <span className="break-all">{String(v)}</span>;
+  if (clave === 'fecha') return <span className="rv-qa-nowrap">{fechaCorta(String(v), idioma)}</span>;
+  return <span className="rv-qa-rompe">{String(v)}</span>;
 }

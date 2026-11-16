@@ -1,7 +1,7 @@
 import { AlertTriangle, CircleCheck, Clock } from 'lucide-react';
 import { fechaMx } from '@/lib/formato';
 import { cx } from '../componentes/clases';
-import { textoUi } from '../componentes/texto-ui';
+import { idiomaUi, textoUi } from '../componentes/texto-ui';
 import type { Idioma } from '@/lib/i18n/idioma';
 
 export type EstadoCorte = 'al_dia' | 'parcial' | 'obsoleto';
@@ -42,7 +42,8 @@ export function AvisoCorte({ fuente, corte, estado, leidas, total, rotuloUnidad,
 }) {
   const e = estado ?? estadoDeCorte({ corte, ahora, maxEdadDias, leidas, total });
   const Icono = ICONO[e];
-  const t = textoUi(idioma);
+  const idiomaEf = idiomaUi(idioma);
+  const t = textoUi(idiomaEf);
   const titulo = t(`corte.${e}` as const);
   const cobertura = leidas !== undefined && total !== undefined ? ` ${t('corte.cobertura', { leidas, total, unidad: rotuloUnidad ?? t('corte.unidad') })}` : '';
   return (
@@ -50,7 +51,7 @@ export function AvisoCorte({ fuente, corte, estado, leidas, total, rotuloUnidad,
       <Icono className="rv-corte__icono" width={14} height={14} strokeWidth={2} aria-hidden="true" />
       <p className="rv-corte__texto">
         <strong>{titulo}.</strong>{' '}
-        {corte ? <>{t('corte.con', { fuente })} <time dateTime={corte}>{fechaMx(corte, idioma)}</time>.</> : <>{t('corte.sin', { fuente })}</>}
+        {corte ? <>{t('corte.con', { fuente })} <time dateTime={corte}>{fechaMx(corte, idiomaEf)}</time>.</> : <>{t('corte.sin', { fuente })}</>}
         {cobertura}
         {children ? <> {children}</> : null}
       </p>

@@ -17,6 +17,7 @@ import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { rico } from '@/lib/i18n/rico';
 import '../compacto-lote-a.css';
+import { SaberesNotas } from '../saberes-notas';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -71,24 +72,6 @@ export default async function AgenteOcrPage() {
           textos={{ modelo: ts('agente_fase.col_modelo'), llamadas: ts('agente_fase.col_llamadas'), costo: ts('agente_fase.col_costo'), vacio: t('agente_ocr.sin_modelos_tabla'), vacioDetalle: t('agente_ocr.no_modelo') }}
         />,
       ]}
-      saberes={{
-        seSabe: {
-          titulo: ts('saberes.se_sabe'),
-          items: [
-            t('agente_ocr.se_gasto', { costo: usd(ocr ? ocr.costoUsd : 0), n: numero(ocr ? ocr.n : 0) }),
-            t('agente_ocr.se_facturas', { n: numero(r.facturasTotal) }),
-            ...(precision !== null && precision.global.exactitud !== null ? [t('agente_ocr.se_exactitud', { pct: pct(precision.global.exactitud), campos: numero(precision.global.medidos), fotos: numero(precision.fotos) })] : []),
-          ],
-        },
-        noSeSabe: {
-          titulo: ts('saberes.no_se_sabe'),
-          items: [
-            t('agente_ocr.no_produccion'),
-            ...(precision === null || precision.global.exactitud === null ? [t('agente_ocr.no_sin_medir')] : []),
-            ...(!desgloseSeparable ? [t('agente_ocr.no_modelo')] : []),
-          ],
-        },
-      }}
     >
       <Tarjeta key="lee" titulo={t('agente_ocr.que_tan_bien_lee')}
         acciones={precision === null || precision.global.exactitud === null ? <BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.abrir_calidad')}</BotonEnlace> : undefined}>
@@ -113,6 +96,24 @@ export default async function AgenteOcrPage() {
           </>
         )}
       </Tarjeta>
+      <SaberesNotas
+        seSabe={{
+          titulo: ts('saberes.se_sabe'),
+          items: [
+            t('agente_ocr.se_gasto', { costo: usd(ocr ? ocr.costoUsd : 0), n: numero(ocr ? ocr.n : 0) }),
+            t('agente_ocr.se_facturas', { n: numero(r.facturasTotal) }),
+            ...(precision !== null && precision.global.exactitud !== null ? [t('agente_ocr.se_exactitud', { pct: pct(precision.global.exactitud), campos: numero(precision.global.medidos), fotos: numero(precision.fotos) })] : []),
+          ],
+        }}
+        noSeSabe={{
+          titulo: ts('saberes.no_se_sabe'),
+          items: [
+            t('agente_ocr.no_produccion'),
+            ...(precision === null || precision.global.exactitud === null ? [t('agente_ocr.no_sin_medir')] : []),
+            ...(!desgloseSeparable ? [t('agente_ocr.no_modelo')] : []),
+          ],
+        }}
+      />
     </EsqueletoPanelCifras>
   );
 }
