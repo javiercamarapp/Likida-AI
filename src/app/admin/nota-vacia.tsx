@@ -1,30 +1,27 @@
 import type { ReactNode } from 'react';
-import { AlertTriangle, Check, Info, OctagonAlert } from 'lucide-react';
+import { Aviso } from '@/app/ui-v2/componentes';
 import './aud16b.css';
 
 export type TonoNota = 'info' | 'ok' | 'warn' | 'bad' | 'muted';
 
-const ICONO = { info: Info, ok: Check, warn: AlertTriangle, bad: OctagonAlert, muted: Info } as const;
+const TONO_AVISO = { info: 'info', ok: 'ok', warn: 'warn', bad: 'error', muted: 'info' } as const;
 
-/** Nota de UNA línea (lote B, auditoría visual 16-nov): sustituye al recuadro alto y punteado de «sin dato / qué no se sabe».
- *  Icono pequeño + sello opcional con el color semántico + título en negrita + línea de apoyo, sobre su propia superficie con borde.
- *  Nunca color solo: el texto siempre dice el estado. Se puede pintar desde un componente de servidor. */
+/** Nota de UNA línea de /admin: es el `Aviso` compartido de ui-v2 (la misma pieza que usa el dashboard), no una caja propia.
+ *  Icono + tono semántico + título en negrita + línea de apoyo. El `sello` (rótulo corto: «Observado», «No disponible») ocupa el lugar
+ *  del título cuando no hay otro. Nunca color solo: el texto siempre dice el estado. Se puede pintar desde un componente de servidor. */
 export function NotaVacia({ tono = 'muted', sello, titulo, children, className }: {
   tono?: TonoNota;
-  /** Rótulo corto en píldora («Observado», «No disponible»). */
+  /** Rótulo corto en negrita («Observado», «No disponible»). */
   sello?: string;
   titulo?: string;
   children?: ReactNode;
   className?: string;
 }) {
-  const Glifo = ICONO[tono];
   return (
-    <p className={className ? `aud16b-nota ${className}` : 'aud16b-nota'} data-tono={tono} role="status">
-      <Glifo className="aud16b-nota__icono" width={14} height={14} strokeWidth={2} aria-hidden="true" />
-      {sello ? <span className="aud16b-nota__sello">{sello}</span> : null}
-      {titulo ? <strong className="aud16b-nota__titulo">{titulo}</strong> : null}
-      {children ? <span className={titulo ? 'aud16b-nota__texto' : 'aud16b-nota__titulo aud16b-nota__solo'}>{children}</span> : null}
-    </p>
+    <Aviso tono={TONO_AVISO[tono]} titulo={sello ?? titulo} className={className}>
+      {sello && titulo ? <strong>{titulo}</strong> : null}
+      {children}
+    </Aviso>
   );
 }
 

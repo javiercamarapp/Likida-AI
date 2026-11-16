@@ -5,7 +5,7 @@ import type { InterruptorPipelineTenant } from '@/lib/admin/negocio';
 import type { CasillaArranque } from '@/lib/admin/arranque';
 import type { Persona } from '@/lib/admin/personas';
 import { nombreDeRol } from '@/lib/auth/roles';
-import { BotonEnlace, Disclosure, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '../../../ui-v2/componentes';
+import { BotonEnlace, Disclosure, EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '../../../ui-v2/componentes';
 import type { PropsCifra } from '../../../ui-v2/graficas';
 import { FormaConAviso, type AccionDeForma } from '../../ui/forma';
 import { CampoTexto } from '../../../ui-v2/componentes/campos';
@@ -88,7 +88,7 @@ export function Ficha360({
       <Tarjeta titulo={t('flotas_ficha.ultimas_corridas_de_agentes')} estado={f.corridas === null ? 'error' : 'ok'}
         mensaje={t('flotas_ficha.no_se_pudieron_leer_2')}>
         <p className="adm-eyebrow">{t('flotas_ficha.eb_corridas')}</p>
-        {f.corridas !== null && f.corridas.length === 0 ? <p className="adm-vacio-linea">{t('flotas_ficha.sin_corridas_de_agentes')}</p> : <TablaBase tarjetaMovil
+        {f.corridas !== null && f.corridas.length === 0 ? <EstadoVacio contenido titulo={t('flotas_ficha.sin_corridas_de_agentes')} /> : <TablaBase tarjetaMovil
           etiqueta={t('flotas_ficha.corridas_de_agentes_de')} filas={f.corridas ?? []} idFila={(c) => `${c.agente}-${c.fin}`}
           columnas={[
             { id: 'agente', titulo: t('flotas_ficha.agente'), principal: true, celda: (c) => c.agente },
@@ -108,7 +108,7 @@ export function Ficha360({
       <Tarjeta titulo={t('flotas_ficha.soporte')} estado={f.tickets === null ? 'error' : 'ok'} mensaje={t('flotas_ficha.no_se_pudieron_leer')}
         acciones={<BotonEnlace href="/admin/soporte" variante="secondary" tamano="sm">{t('flotas_ficha.ver_soporte')}</BotonEnlace>}>
         <p className="adm-eyebrow">{t('flotas_ficha.eb_tickets')}</p>
-        {f.tickets !== null && f.tickets.length === 0 ? <p className="adm-vacio-linea">{t('flotas_ficha.sin_tickets_de_esta')}</p> : <TablaBase tarjetaMovil
+        {f.tickets !== null && f.tickets.length === 0 ? <EstadoVacio contenido titulo={t('flotas_ficha.sin_tickets_de_esta')} /> : <TablaBase tarjetaMovil
           etiqueta={t('flotas_ficha.tickets_de_la_flota')} filas={(f.tickets ?? []).slice(0, 5)} idFila={(t) => t.id}
           columnas={[
             { id: 'asunto', titulo: t('flotas_ficha.asunto'), principal: true, celda: (t) => t.asunto },

@@ -2,9 +2,7 @@
    (sin hex, sin tamaños sueltos); las clases son nuevas (prefijo fin16c) para no chocar con las de otras hojas. Movimiento solo con
    movimiento permitido y solo transform/opacity. */
 
-/* «Qué se sabe / Qué no se sabe»: notas de una línea de texto corrido, no cajas altas. */
 [data-ui="v2"] .fin16c-saberes { align-items: start; }
-[data-ui="v2"] .fin16c-saber .aud16b-nota__solo { font-weight: 400; color: var(--ink2); font-size: var(--t-small); flex: 1 1 18ch; }
 
 /* Rejilla que reparte tarjetas bajas según el ancho y no las estira a la altura de la vecina (sin cajas altas casi vacías). */
 [data-ui="v2"] .fin16c-rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--ui-rhythm, 12px); align-items: start; min-width: 0; }
@@ -20,14 +18,6 @@
 
 /* Chip neutro con contraste: superficie propia y borde visible (nunca gris sobre gris). */
 [data-ui="v2"] .fin16c-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border: 1px solid var(--line2); border-radius: var(--r-pill); background: var(--ui-surface); color: var(--ink); font-size: var(--t-small); font-weight: 500; }
-
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes fin16c-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  [data-ui="v2"] .fin16c-rejilla > .rv-tarjeta, [data-ui="v2"] .fin16c-pares > li { animation: fin16c-entra 180ms var(--ui-ease, ease-out) backwards; }
-  [data-ui="v2"] .fin16c-rejilla > :nth-child(2), [data-ui="v2"] .fin16c-pares > :nth-child(2) { animation-delay: 30ms; }
-  [data-ui="v2"] .fin16c-rejilla > :nth-child(3), [data-ui="v2"] .fin16c-pares > :nth-child(3) { animation-delay: 60ms; }
-  [data-ui="v2"] .fin16c-rejilla > :nth-child(n+4), [data-ui="v2"] .fin16c-pares > :nth-child(n+4) { animation-delay: 90ms; }
-}
 
 /* Una fila de tarjetas que se acomoda arriba: cada tarjeta mide lo suyo, sin hueco bajo la más corta. */
 [data-ui="v2"] .rv-fila-tarjetas.fin16c-arriba { align-items: start; }

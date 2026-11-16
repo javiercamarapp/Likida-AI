@@ -1,29 +1,6 @@
-/* Auditoría visual 16-nov, lote B (superadmin): notas compactas, grupos y movimiento sobrio. Solo tokens del sistema (sin hex, sin
-   tamaños sueltos). Los matices se derivan con color-mix de --info/--ok/--warn/--bad para seguir la paleta cuando cambie. */
-[data-ui="v2"] .aud16b-nota {
-  --aud-c: var(--muted);
-  margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 12px; border: 1px solid var(--line2); border-left: 3px solid var(--aud-c); border-radius: var(--r-control); background: var(--ui-sunken); color: var(--ink); font-size: var(--t-body); line-height: 1.4; text-align: left; min-width: 0; }
-[data-ui="v2"] .aud16b-nota[data-tono="info"] {
-  --aud-c: var(--info);
-  }
-[data-ui="v2"] .aud16b-nota[data-tono="ok"] {
-  --aud-c: var(--ok);
-  }
-[data-ui="v2"] .aud16b-nota[data-tono="warn"] {
-  --aud-c: var(--warn);
-  }
-[data-ui="v2"] .aud16b-nota[data-tono="bad"] {
-  --aud-c: var(--bad);
-  }
-[data-ui="v2"] .aud16b-nota:not([data-tono="muted"]) { background: color-mix(in srgb, var(--aud-c) 7%, var(--ui-surface)); border-color: color-mix(in srgb, var(--aud-c) 28%, var(--line)); border-left-color: var(--aud-c); }
-[data-ui="v2"] .aud16b-nota__icono { flex: none; color: var(--aud-c); }
-[data-ui="v2"] .aud16b-nota__sello { flex: none; padding: 1px 8px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--aud-c) 12%, var(--ui-surface)); border: 1px solid color-mix(in srgb, var(--aud-c) 30%, var(--line)); color: var(--aud-c); font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
-[data-ui="v2"] .aud16b-nota__titulo { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
-[data-ui="v2"] .aud16b-nota__texto { flex: 1 1 16ch; min-width: 0; color: var(--muted); font-size: var(--t-small); overflow-wrap: anywhere; }
+/* Auditoría visual 16-nov, lote B (superadmin): grupos de notas y colores con propósito. La nota en sí es el `Aviso` compartido de ui-v2
+   (ver nota-vacia.tsx); aquí no hay cajas ni movimiento propios. Solo tokens del sistema. */
 [data-ui="v2"] .aud16b-notas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 8px; align-items: start; min-width: 0; }
-
-/* Una nota dentro de una tarjeta de gráfica o lista no necesita aire extra debajo del título. */
-[data-ui="v2"] .rv-tarjeta__cuerpo > .aud16b-nota:only-child { align-self: stretch; }
 
 /* Color con propósito en el Resumen y el back-office: el dinero que entra en --ok, lo vencido o por cobrar en --warn y el riesgo en
    --bad; el rótulo siempre acompaña al color. */
@@ -44,19 +21,3 @@
 [data-ui="v2"] .aud16b-leyenda [data-m="ok"] { --aud-punto: var(--ok); }
 [data-ui="v2"] .aud16b-leyenda [data-m="warn"] { --aud-punto: var(--warn); }
 [data-ui="v2"] .aud16b-leyenda [data-m="bad"] { --aud-punto: var(--bad); }
-
-/* Movimiento sobrio: solo transform y opacity, 120-220 ms, y únicamente con movimiento permitido. */
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes aud16b-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  [data-ui="v2"] .aud16b-nota,
-  [data-ui="v2"] .aud16b-notas > *,
-  [data-ui="v2"] .adm-res-lista > .adm-res-fila,
-  [data-ui="v2"] .aud16b-fila-entra > * { animation: aud16b-entra 180ms ease-out both; }
-  [data-ui="v2"] .aud16b-notas > :nth-child(2), [data-ui="v2"] .adm-res-lista > .adm-res-fila:nth-child(2), [data-ui="v2"] .aud16b-fila-entra > :nth-child(2) { animation-delay: 40ms; }
-  [data-ui="v2"] .aud16b-notas > :nth-child(3), [data-ui="v2"] .adm-res-lista > .adm-res-fila:nth-child(3), [data-ui="v2"] .aud16b-fila-entra > :nth-child(3) { animation-delay: 80ms; }
-  [data-ui="v2"] .aud16b-notas > :nth-child(4), [data-ui="v2"] .adm-res-lista > .adm-res-fila:nth-child(4), [data-ui="v2"] .aud16b-fila-entra > :nth-child(4) { animation-delay: 120ms; }
-  [data-ui="v2"] .aud16b-notas > :nth-child(n+5), [data-ui="v2"] .adm-res-lista > .adm-res-fila:nth-child(n+5), [data-ui="v2"] .aud16b-fila-entra > :nth-child(n+5) { animation-delay: 160ms; }
-  [data-ui="v2"] .adm-res-lista--tarjetas .adm-res-fila { transition: transform 120ms ease-out; }
-  [data-ui="v2"] .adm-res-lista--tarjetas .adm-res-fila:hover { transform: translateY(-1px); }
-  [data-ui="v2"] .adm-res-lista--tarjetas .adm-res-fila:active { transform: translateY(0); }
-}

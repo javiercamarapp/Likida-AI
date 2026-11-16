@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { CircleHelp, LayoutGrid, LifeBuoy, Users } from 'lucide-react';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
-import { Popover, MenuList } from '../ui-v2/componentes/overlay';
+import { Popover, MenuList, Tooltip } from '../ui-v2/componentes/overlay';
 import { entradaDeRuta } from './rutas';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 import type { RequiereAccion } from './requiere-accion';
@@ -38,23 +38,27 @@ export function useRequiereAccion(): RequiereAccion | undefined {
 }
 
 /**
- * El botón «Guía» de /admin: la misma píldora que la del dashboard (`.rv-guia__btn`). /admin aún no tiene recorrido guiado propio, así que el
- * menú ofrece solo lo que existe: el Centro de ayuda y la salida a los otros paneles (selector de flota). Sin recorrido que inventar.
+ * El botón «Guía» de /admin: la misma pieza que `MenuGuia` del dashboard (píldora `.rv-guia__btn` en la topbar; solo icono de 44 px, con tooltip,
+ * en la cabecera móvil). /admin aún no tiene recorrido guiado propio, así que el menú ofrece solo lo que existe: el Centro de ayuda y la salida
+ * a los otros paneles (selector de flota). Sin recorrido que inventar.
  */
-function GuiaAdmin() {
+export function GuiaAdmin({ compacto = false }: { compacto?: boolean }) {
   const { t } = useT('shell', shellEs);
   const [abierto, setAbierto] = useState(false);
   const gatillo = useRef<HTMLButtonElement>(null);
   const idMenu = useId();
   const cerrar = () => setAbierto(false);
+  const boton = (
+    <button ref={gatillo} type="button" className={compacto ? 'rv-icono-boton' : 'rv-guia__btn'} aria-haspopup="menu" aria-expanded={abierto} aria-controls={abierto ? idMenu : undefined}
+      aria-label={compacto ? t('cab.guia') : undefined} onClick={() => setAbierto((a) => !a)}>
+      <CircleHelp width={compacto ? 18 : 14} height={compacto ? 18 : 14} strokeWidth={TRAZO_ICONO} aria-hidden />
+      {!compacto && <span>{t('cab.guia')}</span>}
+    </button>
+  );
   return (
     <div className="rv-guia">
-      <button ref={gatillo} type="button" className="rv-guia__btn" aria-haspopup="menu" aria-expanded={abierto} aria-controls={abierto ? idMenu : undefined}
-        onClick={() => setAbierto((a) => !a)}>
-        <CircleHelp width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
-        <span>{t('cab.guia')}</span>
-      </button>
-      <Popover abierto={abierto} onCerrar={cerrar} ancla={gatillo} etiqueta={t('cab.guia')} alineacion="inicio">
+      {compacto ? <Tooltip texto={t('cab.guia')}>{boton}</Tooltip> : boton}
+      <Popover abierto={abierto} onCerrar={cerrar} ancla={gatillo} etiqueta={t('cab.guia')} alineacion={compacto ? 'fin' : 'inicio'}>
         <div id={idMenu} onKeyDownCapture={(e) => { if (e.key === 'Tab') cerrar(); }}>
           <MenuList etiqueta={t('cab.guia')}>
             <Link role="menuitem" tabIndex={-1} href="/dashboard/soporte" className="rv-menu__item" onClick={cerrar}>

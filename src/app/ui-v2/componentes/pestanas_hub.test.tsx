@@ -28,7 +28,7 @@ describe('PestanasHub', () => {
     const css = readFileSync(join(__dirname, '..', 'piezas.css'), 'utf8');
     expect(css).toMatch(/\.rv-tabs \{[^}]*overflow-x: auto/);
     expect(css).toMatch(/\.rv-tabs__tab \{[^}]*flex: none[^}]*white-space: nowrap/);
-    const shell = readFileSync(join(__dirname, '..', '..', 'admin', 'admin-shell.css'), 'utf8');
+    const shell = readFileSync(join(__dirname, '..', 'shell.css'), 'utf8');
     expect(shell).toMatch(/\.rv-marco > \.rv-marco__pestanas \{[^}]*min-width: 0/);
   });
 });
