@@ -52,7 +52,13 @@ const nextConfig: NextConfig = {
   // (≈5 500 archivos, ≈4 GB). El build de producción solo necesita revisar el código de producción:
   // `tsconfig.build.json` lo excluye (≈3 600 archivos, ≈3 GB). El typecheck COMPLETO, pruebas incluidas,
   // sigue en CI (`verificar > Typecheck` con `tsconfig.json`), así que no se pierde ninguna garantía.
-  typescript: { tsconfigPath: 'tsconfig.build.json' },
+  // 16-nov-2026 (build del PR #855): el paso «Running TypeScript» volvió a agotar la memoria del contenedor de Vercel (SIGKILL tras ~4.5 min,
+  // «Out of Memory»). Medido en frío: el typecheck de producción solo (`tsc -p tsconfig.build.json`) ya pide ≈4.1 GB; con el heap de webpack
+  // todavía vivo en el mismo proceso rebasa los 8 GB del contenedor. Esa revisión es REDUNDANTE: `verificar > Typecheck` (requisito para
+  // mergear a master) corre `npm run typecheck` sobre `tsconfig.json`, es decir, el código de producción Y las pruebas. Se apaga aquí solo la
+  // repetición dentro de `next build` (ahorra además ~1 min de Build CPU por despliegue); `pruebas_en_ci.test.ts` vigila que el typecheck
+  // completo siga en el CI.
+  typescript: { tsconfigPath: 'tsconfig.build.json', ignoreBuildErrors: true },
   // `zxing-wasm` va aquí a propósito: el lector es WebAssembly y el `.wasm` se
   // lee de node_modules en tiempo de ejecución (ver cfdi.ts). Si el bundler se
   // lo lleva, el binario deja de estar donde `require.resolve` lo busca y el
