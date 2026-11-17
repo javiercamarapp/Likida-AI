@@ -35,7 +35,7 @@ export function hrefBandeja(f: FiltrosBandeja, extra: { chat?: string | null; su
 }
 
 function conParams(ruta: string, ocultos: ReadonlyArray<readonly [string, string]>): string {
-  const q = new URLSearchParams([...ocultos]).toString();
+  const q = new URLSearchParams(ocultos.map(([a, b]): [string, string] => [a, b])).toString();
   return q ? ruta + '?' + q : ruta;
 }
 
@@ -194,7 +194,7 @@ function Detalle({ tr, d, f, hilo, filtros, ocultos, puedeDecidir, acciones }: {
         )}
         <dl className="rv-bj__datos">
           <div><dt>{tx('bj.detalle.quien')}</dt><dd>{quienContesta(f, tx)}</dd></div>
-          <div><dt>{tx('bj.detalle.nivel')}</dt><dd>{tx(`bj.detalle.nivel_${Math.min(2, f.escalamientoNivel)}`)}</dd></div>
+          <div><dt>{tx('bj.detalle.nivel')}</dt><dd>{tx((['bj.detalle.nivel_0', 'bj.detalle.nivel_1', 'bj.detalle.nivel_2'] as const)[Math.min(2, Math.max(0, f.escalamientoNivel))])}</dd></div>
           <div className="rv-bj__ancho"><dt>{tx('bj.detalle.responsables')}</dt>
             <dd>
               {resp.servicio.length > 0 && <span className="rv-bj__resp">{tx('bj.detalle.resp_servicio')}: {lista(resp.servicio)}</span>}
