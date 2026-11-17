@@ -107,6 +107,7 @@ export const shell: Record<keyof typeof shellEs, string> = {
   'guia.repetir': 'Repeat the full tour',
   'guia.saltar': 'Jump to a screen',
   'guia.porAgente': 'Tour by agent',
+  'guia.verCaso': 'See a case for this screen',
   'guia.primerosPasos': 'Getting started',
   'guia.noVolver': 'Stop showing invitations',
   // Telón de carga

@@ -11,7 +11,8 @@ const CLIENTE = [
   'app/ui-v2/movimiento/tour/invitacion.tsx', 'app/ui-v2/movimiento/tour/pista.tsx', 'app/ui-v2/movimiento/tour/lanzador.tsx',
   'app/ui-v2/movimiento/tour/anfitrion-dom.ts', 'app/dashboard/shell/menu-guia.tsx',
 ];
-const PROHIBIDOS = ['app/ui-v2/onboarding/pantallas.ts', 'app/ui-v2/onboarding/tour.ts', 'app/ui-v2/onboarding/agentes.ts', 'app/ui-v2/onboarding/cobertura.ts', 'app/ui-v2/onboarding/roles.ts'];
+const PROHIBIDOS = ['app/ui-v2/onboarding/pantallas.ts', 'app/ui-v2/onboarding/tour.ts', 'app/ui-v2/onboarding/agentes.ts', 'app/ui-v2/onboarding/cobertura.ts', 'app/ui-v2/onboarding/roles.ts',
+  'app/ui-v2/onboarding/casos/index.ts', 'app/ui-v2/onboarding/casos/recorrido.ts'];
 
 function resolver(desde: string, spec: string): string | null {
   const base = spec.startsWith('@/') ? join(SRC, spec.slice(2)) : spec.startsWith('.') ? join(SRC, desde, '..', spec) : null;

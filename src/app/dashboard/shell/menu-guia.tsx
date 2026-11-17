@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from 'react';
 import Link from 'next/link';
-import { BellOff, CircleHelp, Compass, LifeBuoy, ListChecks, Play, RotateCcw, Zap } from 'lucide-react';
+import { BellOff, CircleHelp, Compass, BookOpen, LifeBuoy, ListChecks, Play, RotateCcw, Zap } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { Popover, MenuList, Tooltip } from '../../ui-v2/componentes/overlay';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
@@ -12,6 +12,7 @@ import { useTourOpcional, useProgresoTour } from '../../ui-v2/movimiento/tour';
 import { hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import { indiceDeMenu } from './nav-utiles';
+import { slugDe } from '../../ui-v2/onboarding/anclas';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 const HREF_AYUDA = '/dashboard/soporte';
@@ -27,7 +28,7 @@ export default function MenuGuia({ rol, perfil, compacto = false, alineacion = '
   const [abierto, setAbierto] = useState(false);
   const gatillo = useRef<HTMLButtonElement>(null);
   const idMenu = useId();
-  const { sufijo, menu } = useMenuV2(rol, perfil);
+  const { sufijo, menu, pathname } = useMenuV2(rol, perfil);
   const hrefs = hrefsDelMenu(menu);
   const cerrar = () => setAbierto(false);
   const tour = useTourOpcional();
@@ -59,7 +60,7 @@ export default function MenuGuia({ rol, perfil, compacto = false, alineacion = '
           if (nuevo !== null) { e.preventDefault(); e.stopPropagation(); lista[nuevo]?.focus(); }
         }}>
           <MenuList etiqueta={t('cab.guia')}>
-            {hayRecorrido ? <FilasRecorrido alElegir={cerrar} hrefs={hrefs} /> : null}
+            {hayRecorrido ? <FilasRecorrido alElegir={cerrar} hrefs={hrefs} pathname={pathname} /> : null}
             {asistente && (
               <Link role="menuitem" tabIndex={-1} href={`${asistente.href}${sufijo}`} className="rv-menu__item" onClick={cerrar}>
                 <span className="rv-menu__icono" aria-hidden><ListChecks width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
@@ -90,7 +91,7 @@ function Fila({ icono, texto, onClick }: { icono: React.ReactNode; texto: string
 }
 
 /** Corto · Completo (o Retomar) · Saltar a una pantalla · un recorrido por agente. Cada grupo desaparece si no tiene filas. */
-export function FilasRecorrido({ alElegir, hrefs }: { alElegir: () => void; hrefs?: readonly string[] }) {
+export function FilasRecorrido({ alElegir, hrefs, pathname }: { alElegir: () => void; hrefs?: readonly string[]; pathname?: string | null }) {
   const { t } = useT('shell', shellEs);
   const tour = useTourOpcional();
   const p = tour?.principal ?? '';
@@ -104,6 +105,9 @@ export function FilasRecorrido({ alElegir, hrefs }: { alElegir: () => void; href
   const pantallas = tour.pantallas(`${p}.completo`).filter((s) => visible(s.href));
   const agentes = tour.agentes.filter((a) => visible(tour.pantallas(a.id)[0]?.href));
   const ir = (fn: () => void) => () => { alElegir(); fn(); };
+  // «Ver caso de esta pantalla»: solo si la pantalla ACTUAL tiene caso (el servidor lo arma solo para lo que el rol puede abrir).
+  const idCaso = pathname ? `caso.${slugDe(pathname.replace(/\/+$/, '') || '/dashboard')}` : null;
+  const hayCaso = Boolean(idCaso && tour.existe(idCaso) && visible(pathname?.replace(/\/+$/, '')));
   return (
     <>
       {retoma ? (
@@ -111,6 +115,7 @@ export function FilasRecorrido({ alElegir, hrefs }: { alElegir: () => void; href
       ) : null}
       {hayCorto ? <Fila icono={<Zap width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={t('guia.corto')} onClick={ir(() => tour.reiniciar(`${p}.corto`))} /> : null}
       <Fila icono={<Play width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={retoma ? t('guia.repetir') : t('guia.completo')} onClick={ir(() => tour.reiniciar(`${p}.completo`))} />
+      {hayCaso && idCaso ? <Fila icono={<BookOpen width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={t('guia.verCaso')} onClick={ir(() => tour.reiniciar(idCaso))} /> : null}
       {pantallas.length > 0 ? (
         <>
           <p className="rv-guia-sub" id="rv-guia-pantallas">{t('guia.saltar')}</p>
