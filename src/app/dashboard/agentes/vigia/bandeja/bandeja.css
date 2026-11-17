@@ -1,0 +1,56 @@
+/* Bandeja de atención del Vigía · lista a la izquierda, hilo a la derecha; en móvil una sola columna. Solo tokens; sin style=. */
+.rv-bj__raiz { display: grid; gap: 12px; min-width: 0; }
+.rv-bj { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; min-width: 0; }
+.rv-bj__lista, .rv-bj__detalle { display: grid; gap: 12px; min-width: 0; align-content: start; }
+@media (max-width: 899px) {
+  .rv-bj[data-detalle="1"] .rv-bj__lista { display: none; }
+  .rv-bj[data-detalle="0"] .rv-bj__detalle { display: none; }
+}
+@media (min-width: 900px) {
+  .rv-bj { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); }
+  .rv-bj__volver { display: none; }
+}
+.rv-bj__volver { display: inline-flex; align-items: center; gap: 4px; }
+.rv-bj__grupo { display: grid; gap: 6px; }
+.rv-bj__grupo-titulo { margin: 0; font-size: var(--t-micro, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-bj__grupo-titulo[data-prio="urgente"] { color: var(--bad); }
+.rv-bj__grupo-titulo[data-prio="alta"] { color: var(--warn); }
+.rv-bj__items { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-bj__item { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.rv-bj__item[data-activa="1"] { border-color: var(--ink); background: var(--canvas); }
+.rv-bj__enlace { display: grid; gap: 4px; padding: 10px 12px; min-width: 0; color: inherit; text-decoration: none; border-radius: 8px; }
+.rv-bj__enlace:hover { background: var(--canvas); }
+.rv-bj__fila1, .rv-bj__fila3 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rv-bj__nombre { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-body, 13px); }
+.rv-bj__espera { flex: 0 0 auto; font-size: var(--t-micro, 11px); font-variant-numeric: tabular-nums; color: var(--warn); }
+.rv-bj__espera[data-tono="bad"] { color: var(--bad); }
+.rv-bj__ultimo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small, 12px); color: var(--muted); }
+.rv-bj__quien { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-micro, 11px); color: var(--faint); }
+.rv-bj__fila3 { flex-wrap: nowrap; }
+.rv-bj__datos { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin: 0; font-size: var(--t-small, 12px); }
+.rv-bj__datos > div { min-width: 0; display: grid; gap: 2px; }
+.rv-bj__datos dt { font-size: var(--t-micro, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-bj__datos dd { margin: 0; overflow-wrap: anywhere; }
+.rv-bj__ancho { grid-column: 1 / -1; }
+.rv-bj__resp { display: block; overflow-wrap: anywhere; }
+.rv-bj__hilo { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 480px; overflow: auto; }
+.rv-bj__msg { display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; max-width: 92%; min-width: 0; background: var(--surface); }
+.rv-bj__msg[data-lado="nuestro"] { justify-self: end; background: var(--canvas); }
+.rv-bj__msg[data-tipo="propuesta"] { border-style: dashed; }
+.rv-bj__msg-cab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: var(--t-small, 12px); }
+.rv-bj__msg-texto { margin: 0; font-size: var(--t-small, 12px); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Entrada sutil de la lista y de las cifras; con movimiento reducido no se anima nada. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes rv-bj-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .rv-bj__entra, .rv-bj__item, .rv-bj__msg { animation: rv-bj-entra 240ms ease both; }
+  .rv-bj__item[data-orden="1"] { animation-delay: 30ms; }
+  .rv-bj__item[data-orden="2"] { animation-delay: 60ms; }
+  .rv-bj__item[data-orden="3"] { animation-delay: 90ms; }
+  .rv-bj__item[data-orden="4"] { animation-delay: 120ms; }
+  .rv-bj__item[data-orden="5"] { animation-delay: 150ms; }
+  .rv-bj__item[data-orden="6"] { animation-delay: 180ms; }
+  .rv-bj__item[data-orden="7"] { animation-delay: 210ms; }
+  .rv-bj__item[data-orden="8"] { animation-delay: 240ms; }
+  .rv-bj__enlace { transition: background-color 120ms ease; }
+}

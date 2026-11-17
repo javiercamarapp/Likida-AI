@@ -363,7 +363,8 @@ import { join, relative } from 'node:path';
 // `bo_*` (plataforma, SIN tenant_id: gastos, comisiones, contratos, libro contable, cierre mensual) bajo `src/lib/backoffice/*`. No caben en `repo.ts`/`pg.ts`, que
 // están hechos para datos de flota con `tenant_id`: estas tablas son de la plataforma, solo las toca `supabaseAdmin()` tras `requireSuperadmin()`, tienen RLS sin políticas y
 // grants solo a service_role, y las lecturas largas paginan con `traerTodo` (que falla cerrado sin conteo exacto). Funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 368;
+// Conversaciones con operadores (17-nov-2026): +1 archivo y +8 llamadas (368 -> 369; 2,649 -> 2,657): `conductor/repo_conversaciones.ts`, el único acceso a datos de esa pestaña (viaje, viaje_hito, viaje_hito_aviso, viaje_hito_validacion, viaje_hito_evento, orquestador_escalacion), todo por `acotada` y con `tenant_id`. Funcionalidad nueva, solo lecturas.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 369;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -745,7 +746,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 368;
 // w15/perf (11-nov-2026): 2,565 → 2,566. UNA entrada nueva (`tablaProspecto()` en lib/admin/prospectos-mapa.ts) que sirve a las tres lecturas ligeras
 // con las que /admin/crecimiento, /admin/vendedores y /admin/mapa-prospectos dejan de bajar la tabla ancha (con `notas`) de 33 mil filas; sin archivos nuevos.
 // (Back-office de Likida, 15-nov-2026: +75 llamadas, ver el comentario del techo de archivos.)
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_648;
+// Bandeja de atención del Vigía: 2,648 → 2,649 (+1, 0 archivos nuevos): `vigia/repo.ts#cargarHiloConversacion`, la lectura del hilo de UNA conversación
+// (por `acotada`, con tenant_id y `.order('id')`); el resto de la bandeja reutiliza `cargarTablero`.
+// Conversaciones con operadores (17-nov-2026): +8 llamadas (2,649 -> 2,657), todas de `conductor/repo_conversaciones.ts` (ver el techo de archivos).
+// Conexiones, cuenta de demostración (17-nov-2026): 2,657 → 2,658 (+1, 0 archivos nuevos): `conexiones.ts` lee `tenant.nombre` (por `acotada`, con tenant_id) para rotular lo simulado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_658;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

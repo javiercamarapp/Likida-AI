@@ -953,7 +953,15 @@ export interface ConversacionTablero {
   atendida: boolean;
   ultimaEntradaEn: string | null;
   ultimoMensajeCliente: string | null;
+  /** Bandeja de atención: el cliente (id), quién tomó el hilo (usuario), cuándo se avisó y la última salida. Opcionales: el tablero de siempre no los pide. */
+  clienteId?: string | null;
+  tomadaPor?: string | null;
+  escaladoEn?: string | null;
+  ultimaSalidaEn?: string | null;
 }
+
+/** Cuántas conversaciones activas trae `cargarTablero` (el corte: si llega a este número puede haber más). */
+export const TOPE_CONVERSACIONES_TABLERO = 100;
 
 export interface PendienteTablero {
   id: string;
@@ -1015,7 +1023,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
 
   const convRows = (exigir('tablero_conv', await acotada(db.from('vigia_conversacion')
     .select(colsConv()).eq('tenant_id', tenantId).eq('estado', 'activa')
-    .order('updated_at', { ascending: false }).order('id').limit(100), 'vigia.tablero_conv')) as Fila[] | null ?? []).map(aConversacion);
+    .order('updated_at', { ascending: false }).order('id').limit(TOPE_CONVERSACIONES_TABLERO), 'vigia.tablero_conv')) as Fila[] | null ?? []).map(aConversacion);
 
   const contactosRows = (exigir('tablero_contactos', await acotada(db.from('vigia_contacto')
     .select(COLS_CONTACTO).eq('tenant_id', tenantId).neq('estado', 'suprimido')
@@ -1042,6 +1050,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
     clienteNombre: nombreCliente.get(c.clienteId) ?? null, control: c.control, sinRespuestaDesde: c.sinRespuestaDesde,
     molestiaNivel: c.molestiaNivel, molestiaMotivos: c.molestiaMotivos, prioridad: c.prioridad ?? 0, escalamientoNivel: c.escalamientoNivel,
     atendida: c.atendidaEn !== null, ultimaEntradaEn: c.ultimaEntradaEn, ultimoMensajeCliente: ultimos.get(c.id) ?? null,
+    clienteId: c.clienteId, tomadaPor: c.tomadaPor, escaladoEn: c.escaladoEn, ultimaSalidaEn: c.ultimaSalidaEn,
   }));
 
   // Cola de aprobación.
@@ -1127,6 +1136,42 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
       estado: c.estado, consentimientoEn: c.consentimientoEn, gerenteUserId: c.gerenteUserId,
     })),
   };
+}
+
+// ── Bandeja de atención: el hilo completo de UNA conversación ──────────────────
+
+/** Un mensaje del hilo tal como lo ve quien atiende: lo que escribió el cliente, lo que propuso el agente y lo que salió. */
+export interface MensajeHilo {
+  id: string;
+  direccion: 'entrante' | 'saliente';
+  autor: 'cliente' | 'agente' | 'humano';
+  texto: string | null;
+  estado: MensajeVigia['estado'];
+  intencion: Intencion | null;
+  riesgo: MensajeVigia['riesgo'];
+  autoenviado: boolean;
+  editado: boolean;
+  enviadoEn: string | null;
+  error: string | null;
+  creadoEn: string;
+}
+
+/** Cuántos mensajes se leen de un hilo (los MÁS RECIENTES; si llega al tope hay más atrás y la pantalla lo dice). */
+export const TOPE_MENSAJES_HILO = 200;
+
+/**
+ * El hilo de una conversación DE ESTA FLOTA, del más antiguo al más reciente. Solo lectura. Falla cerrado: si la lectura falla lanza
+ * (la pantalla dice «no se pudo leer», no «sin mensajes»).
+ */
+export async function cargarHiloConversacion(tenantId: string, conversacionId: string): Promise<MensajeHilo[]> {
+  const db = supabaseAdmin();
+  const filas = (exigir('bandeja_hilo', await acotada(db.from('vigia_mensaje')
+    .select(COLS_MSG).eq('tenant_id', tenantId).eq('conversacion_id', conversacionId)
+    .order('created_at', { ascending: false }).order('id').limit(TOPE_MENSAJES_HILO), 'vigia.bandeja_hilo')) as Fila[] | null ?? []).map(aMensaje);
+  return filas.reverse().map((m): MensajeHilo => ({
+    id: m.id, direccion: m.direccion, autor: m.autor, texto: m.texto, estado: m.estado, intencion: m.intencion, riesgo: m.riesgo,
+    autoenviado: m.autoenviado, editado: m.editado, enviadoEn: m.enviadoEn, error: m.error, creadoEn: m.createdAt,
+  }));
 }
 
 // ── Acciones de la flota (las validaciones viven aquí y se prueban con dobles) ─────
