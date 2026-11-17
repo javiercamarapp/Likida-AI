@@ -11,7 +11,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       const cadena: Record<string, unknown> = {};
       const resultado = () => {
         if (tabla === 'tenant' && columnas === 'nombre') {
-          return d.demo === 'error' ? { data: null, error: { message: 'x' } } : { data: { nombre: d.demo ? 'DEMO INNOVATIVOS' : 'Innovativos' }, error: null };
+          return d.demo === 'error' ? { data: null, error: { message: 'x' } } : { data: { nombre: d.demo ? 'DEMO GENERAL' : 'Flota Real' }, error: null };
         }
         if (tabla === 'tenant') return { data: { buzon_token: null }, error: null };
         return { data: [], error: null, count: 0 };

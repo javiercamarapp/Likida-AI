@@ -202,7 +202,7 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
       .eq('id', tenantId)
       .maybeSingle(), 'conexiones.buzon')
       .then(({ data, error }) => (error || !data ? null : Boolean(data.buzon_token))) as Promise<boolean | null>,
-    // Cuenta de DEMOSTRACIÓN: su nombre empieza con «DEMO » (DEMO GENERAL, DEMO INNOVATIVOS). `tenant.config` no admite llaves
+    // Cuenta de DEMOSTRACIÓN: su nombre empieza con «DEMO ». `tenant.config` no admite llaves
     // nuevas y `plan = 'demo'` también lo tiene una flota real en prueba, así que el nombre es la marca. Fallar cerrado: si no se
     // puede leer, la cuenta NO se trata como simulada y todo se mide como siempre.
     acotada(supabaseAdmin()
