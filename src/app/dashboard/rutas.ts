@@ -292,12 +292,12 @@ export const ENTRADAS_DASHBOARD: readonly Entrada[] = [
     p('/dashboard/agentes/carta-porte/referencia', 'Referencia'), p('/dashboard/agentes/carta-porte/configuracion', 'Salida'),
   ], ['borrador', 'complemento']),
   entrada('servicio-cliente', 'automatizacion', 'Servicio al cliente', Headset, [
-    p('/dashboard/agentes/vigia', 'Panel'), p('/dashboard/agentes/vigia/avisos', 'Avisos'), p('/dashboard/agentes/vigia/programa', 'Programa'),
+    p('/dashboard/agentes/vigia', 'Panel'), p('/dashboard/agentes/vigia/bandeja', 'Bandeja'), p('/dashboard/agentes/vigia/avisos', 'Avisos'), p('/dashboard/agentes/vigia/programa', 'Programa'),
     p('/dashboard/agentes/vigia/importacion', 'Importación'), p('/dashboard/agentes/vigia/sin-atender', 'Sin atender'), p('/dashboard/agentes/vigia/historial', 'Histórico'),
   ], ['vigía', 'vigia', 'atención a clientes']),
   entrada('comunicacion', 'automatizacion', 'Comunicación con operadores', MessagesSquare, [
     p('/dashboard/agentes/conductores', 'Panel'), p('/dashboard/agentes/conductores/sitios', 'Sitios'),
-    p('/dashboard/agentes/conductores/estadias', 'Estadías'), p('/dashboard/agentes/conductores/configuracion', 'Configuración'),
+    p('/dashboard/agentes/conductores/conversaciones', 'Conversaciones'), p('/dashboard/agentes/conductores/estadias', 'Estadías'), p('/dashboard/agentes/conductores/configuracion', 'Configuración'),
   ], ['conductores', 'hitos', 'avisos a choferes']),
   entrada('comprobantes', 'automatizacion', 'Comprobantes y facturas', ReceiptText, [
     p('/dashboard/agentes/facturas', 'Facturas'), p('/dashboard/agentes/cobranza', 'Seguimiento'), p('/dashboard/agentes/proveedores', 'Proveedores'),

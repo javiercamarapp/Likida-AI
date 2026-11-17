@@ -7,6 +7,7 @@ import { ANCLAS_DERIVADAS, anclaNav } from './anclas';
 import { ANCLA_BLOQUE, ANCLA_TITULO, PANTALLAS } from './pantallas';
 import { AGENTES, construirRecorridoAgente } from './agentes';
 import { construirRecorrido } from './tour';
+import { recorridosDeCasos } from './casos/recorrido';
 import { ROLES_MATRIZ } from './cobertura';
 
 const SRC = join(process.cwd(), 'src');
@@ -46,6 +47,7 @@ describe('anclas del recorrido', () => {
     for (const perfil of [null, 'cinco_agentes'] as const) for (const rol of ROLES_MATRIZ) {
       for (const modo of ['corto', 'completo'] as const) for (const p of construirRecorrido(rol, perfil, modo)?.pasos ?? []) if (p.ancla) citadas.add(p.ancla);
       for (const ag of AGENTES) for (const p of construirRecorridoAgente(ag, rol, perfil)?.pasos ?? []) if (p.ancla) citadas.add(p.ancla);
+      for (const r of recorridosDeCasos(rol, perfil)) for (const p of r.pasos) if (p.ancla) citadas.add(p.ancla);
     }
     const menus = new Set<string>();
     for (const perfil of [null, 'cinco_agentes'] as const) for (const rol of ROLES_MATRIZ) for (const h of hrefsDelMenu(menuPorPerfil(rol, perfil))) menus.add(anclaNav(h));

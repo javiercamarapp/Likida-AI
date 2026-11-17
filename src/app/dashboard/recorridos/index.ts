@@ -5,6 +5,7 @@ import { AGENTES, construirRecorridoAgente } from '@/app/ui-v2/onboarding/agente
 import { PISTAS_CONTEXTUALES } from '@/app/ui-v2/onboarding/pistas';
 import { pistaDeRol } from '@/app/ui-v2/onboarding/roles';
 import { construirRecorrido } from '@/app/ui-v2/onboarding/tour';
+import { recorridosDeCasos } from '@/app/ui-v2/onboarding/casos/recorrido';
 import type { PistaContextual } from '@/app/ui-v2/onboarding/tipos';
 import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Idioma } from '@/lib/i18n/idioma';
@@ -37,7 +38,7 @@ export function onboardingDeLaSesion(rol: string, perfil: PerfilTenant | null | 
   const completo = construirRecorrido(rol, perfil, 'completo', idioma);
   if (!corto || !completo) return vacio;
   const agentes = AGENTES.map((a) => construirRecorridoAgente(a, rol, perfil, idioma)).filter((r): r is Recorrido => r !== null);
-  const recorridos = [corto, completo, ...agentes];
+  const recorridos = [corto, completo, ...agentes, ...recorridosDeCasos(rol, perfil, idioma)];
 
   const menu = menuPorPerfil(rol, perfil);
   const nombreDe = (href: string) => [...menu.resumen, ...menu.grupos.flatMap((g) => g.items), ...menu.pie].find((i) => i.href === href)?.nombre;

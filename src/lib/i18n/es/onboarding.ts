@@ -24,6 +24,15 @@ export const onboarding = {
   'agente.limite.titulo': 'Qué no hace',
   'agente.cierre.titulo': 'Eso es {nombre}',
   'agente.cierre.texto': 'Repite este recorrido desde la Guía. Los demás agentes tienen el suyo.',
+  // Casos por pantalla
+  'caso.titulo': 'Caso',
+  'caso.etapa.entra': 'Entra',
+  'caso.etapa.procesa': 'Procesa',
+  'caso.etapa.decide': 'Decide',
+  'caso.etapa.sale': 'Sale',
+  'caso.persona.titulo': 'Aquí interviene una persona',
+  'caso.cierre.titulo': 'Fue un ejemplo de {nombre}',
+  'caso.cierre.texto': 'Es un caso ilustrativo, no datos de tu flota. Repítelo desde la Guía cuando quieras.',
   // Tarjeta del recorrido
   'ui.estado.muestra': 'Datos de muestra',
   'ui.estado.comprobando': 'Comprobando…',

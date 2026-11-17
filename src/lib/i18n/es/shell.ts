@@ -115,6 +115,7 @@ export const shell = {
   'guia.repetir': 'Repetir recorrido completo',
   'guia.saltar': 'Saltar a una pantalla',
   'guia.porAgente': 'Recorrido por agente',
+  'guia.verCaso': 'Ver caso de esta pantalla',
   'guia.primerosPasos': 'Primeros pasos',
   'guia.noVolver': 'No volver a mostrar invitaciones',
   // Telón de carga
