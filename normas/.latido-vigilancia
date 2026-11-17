@@ -1,7 +1,7 @@
 ---
-fecha_corrida: 2026-11-16 (lunes)
+fecha_corrida: 2026-11-17 (martes) — confirma lo mismo que el 16-nov, un día después
 ultimo_dia_barrido: 2026-09-10 (sin cambio — mismo bloqueo, ver abajo)
-rango_pendiente: 2026-09-11 — 2026-11-15 (sigue creciendo; ya son ~9 semanas
+rango_pendiente: 2026-09-11 — 2026-11-16 (sigue creciendo; ya son ~9 semanas
   sin barrer desde esta rutina remota)
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha no
@@ -9,32 +9,26 @@ anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha no
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
 cuota_diesel: no_evaluable_hoy — hoy no es viernes; sigue sin verificar desde
   esta rutina desde el 05-sep.
-etag_sat: no_evaluable — hoy es lunes (toca verificar), pero el mismo bloqueo
-  de egreso impidió el HEAD a www.sat.gob.mx.
+etag_sat: no_aplica_hoy — hoy es martes, no lunes.
 deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-ene-2027).
 estado: >
-  INFRA, pero YA NO ES EL CANAL PRIMARIO — desde el 14-nov-2026 esta
-  vigilancia corre como cron de producción
-  (GET /api/cron/vigilancia-normativa, diario 13:30 UTC,
-  src/lib/likida/normas/vigilancia/, migración 1007) que vive en la
-  infraestructura de Vercel/producción, no en este entorno programado, y
-  manda su propio correo de hallazgos al operador. Esta rutina remota quedó
-  de RESPALDO a propósito porque la política de egreso de este entorno
-  bloquea sidofqa.segob.gob.mx, www.sat.gob.mx y www.diputados.gob.mx (lo
-  mismo que en las corridas del 12, 15 y 20 de septiembre). Verificado hoy
-  con tres rutas independientes, las tres con el mismo resultado: (1) curl
-  directo por HTTPS_PROXY → "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx y
-  www.dof.gob.mx; (2) /root/.ccr/__agentproxy/status confirma
-  "connect_rejected" (rechazo de política, no caída de red) para
-  sidofqa.segob.gob.mx:443 explícitamente en recentRelayFailures; (3)
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la sesión)
+  INFRA, sin cambio frente al 16-nov — sigue de RESPALDO, el cron de
+  producción (GET /api/cron/vigilancia-normativa, diario 13:30 UTC,
+  src/lib/likida/normas/vigilancia/, migración 1007, PR #851) es el canal
+  primario desde el 14-nov-2026 y manda su propio correo de hallazgos.
+  Verificado hoy con las mismas tres rutas que el 16-nov, las tres con el
+  mismo resultado: (1) curl directo por HTTPS_PROXY → "CONNECT tunnel
+  failed, response 403" contra sidofqa.segob.gob.mx, www.sat.gob.mx y
+  www.diputados.gob.mx; (2) /root/.ccr/__agentproxy/status confirma
+  "connect_rejected" (rechazo de política, no caída de red); (3) WebFetch
   devuelve "getaddrinfo ENOTFOUND sidofqa.segob.gob.mx" — el dominio no
-  está en la lista de permitidos del entorno, ni siquiera resuelve. No se
-  tocó ninguna ficha de normas/. No se abrió PR (no hay hallazgo que
-  reportar, solo el bloqueo ya conocido y ya mitigado por el cron de
-  producción). No requiere intervención humana nueva: el gap que esto
-  dejaba (ventana ciega sin la rutina remota) ya se cerró con el cron de
-  producción descrito arriba. Si se quiere que esta rutina remota vuelva a
-  ser útil como verificación independiente, el entorno programado necesita
-  que se le permitan esos cuatro dominios en su política de egreso.
+  resuelve porque no está en la lista de permitidos del entorno. No se
+  tocó ninguna ficha de normas/. No se abre PR nuevo: ya hay tres PRs
+  abiertos y sin mergear con esta misma conclusión (#844 14-nov, #854
+  15-nov, #860 16-nov) — este latido se sube como un commit más al branch
+  de #860 en vez de sumar un cuarto. No requiere intervención humana
+  nueva más allá de lo ya pedido: o se mergean/cierran esos PRs de latido
+  para que normas/.latido-vigilancia en master deje de estar congelado en
+  el 20-sep, o se le permiten sidofqa.segob.gob.mx / www.sat.gob.mx /
+  www.diputados.gob.mx a este entorno programado si se quiere que la
+  rutina remota vuelva a servir de verificación independiente del cron.
