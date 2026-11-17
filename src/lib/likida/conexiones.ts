@@ -202,14 +202,15 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
       .eq('id', tenantId)
       .maybeSingle(), 'conexiones.buzon')
       .then(({ data, error }) => (error || !data ? null : Boolean(data.buzon_token))) as Promise<boolean | null>,
-    // Cuenta de DEMOSTRACIÓN: `tenant.config.demo_simulado = true` (lo pone Likida a mano, solo en las cuentas demo). Fallar
-    // cerrado: si no se puede leer, la cuenta NO se trata como simulada y todo se mide como siempre.
+    // Cuenta de DEMOSTRACIÓN: su nombre empieza con «DEMO » (DEMO GENERAL, DEMO INNOVATIVOS). `tenant.config` no admite llaves
+    // nuevas y `plan = 'demo'` también lo tiene una flota real en prueba, así que el nombre es la marca. Fallar cerrado: si no se
+    // puede leer, la cuenta NO se trata como simulada y todo se mide como siempre.
     acotada(supabaseAdmin()
       .from('tenant')
-      .select('config')
+      .select('nombre')
       .eq('id', tenantId)
       .maybeSingle(), 'conexiones.demo')
-      .then(({ data, error }) => !error && Boolean((data?.config as { demo_simulado?: unknown } | null)?.demo_simulado === true)),
+      .then(({ data, error }) => !error && typeof data?.nombre === 'string' && data.nombre.startsWith('DEMO ')),
   ]);
 
   const conectores: Conector[] = [];

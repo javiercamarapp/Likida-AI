@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Cuenta de demostración: `tenant.config.demo_simulado = true` muestra lo no conectado como «(simulado)», nunca como medición real.
+// Cuenta de demostración: el nombre de la cuenta empieza con «DEMO » muestra lo no conectado como «(simulado)», nunca como medición real.
 const d = vi.hoisted(() => ({ demo: false as boolean | 'error' }));
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -10,8 +10,8 @@ vi.mock('@/lib/supabase/admin', () => ({
       // Cadena genérica: cualquier filtro devuelve la misma cadena; `maybeSingle` y el `await` entregan el dato de la tabla.
       const cadena: Record<string, unknown> = {};
       const resultado = () => {
-        if (tabla === 'tenant' && columnas === 'config') {
-          return d.demo === 'error' ? { data: null, error: { message: 'x' } } : { data: { config: d.demo ? { demo_simulado: true } : {} }, error: null };
+        if (tabla === 'tenant' && columnas === 'nombre') {
+          return d.demo === 'error' ? { data: null, error: { message: 'x' } } : { data: { nombre: d.demo ? 'DEMO INNOVATIVOS' : 'Innovativos' }, error: null };
         }
         if (tabla === 'tenant') return { data: { buzon_token: null }, error: null };
         return { data: [], error: null, count: 0 };
