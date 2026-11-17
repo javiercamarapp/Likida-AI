@@ -82,6 +82,7 @@ export const dashboard_a = {
   'mv.nota.sinPines': 'El ARCO es el trayecto ilustrativo entre origen y destino, no la ruta que hizo el camión. Cuando una unidad reporte posición (conector GPS o pin del chofer por WhatsApp) aparece aquí como un rombo.',
   'mv.nota.pines.uno': 'El ARCO es el trayecto ilustrativo entre origen y destino, no la ruta que hizo el camión. Con {n} rombo, que es una posición MEDIDA — con su hora y su origen en la lista de abajo.',
   'mv.nota.pines.otros': 'El ARCO es el trayecto ilustrativo entre origen y destino, no la ruta que hizo el camión. Los {n} rombos son posiciones MEDIDAS — con su hora y su origen en la lista de abajo.',
+  'mv.grupo': '{n} unidades cercanas; toca para acercar el mapa y separarlas',
   'mv.escalado': 'Escalado',
   'mv.enRuta': 'En ruta',
   'mv.dias.uno': '{n} día',

@@ -23,18 +23,27 @@
 .rv-mp__svg { display: block; width: 100%; height: auto; }
 .rv-mp__vacio { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .rv-mp__vacio p { margin: 0; max-width: 36ch; padding: 10px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted); font-size: var(--t-body); text-align: center; }
-.rv-mp__arco { cursor: pointer; opacity: .55; }
+.rv-mp__arco { cursor: pointer; opacity: .55; transition: opacity .3s ease; }
+.rv-mp__arco[data-fuera] { opacity: .12; }
+.rv-mp__trazo { stroke: var(--muted); }
+.rv-mp__arco[data-escalado] .rv-mp__trazo { stroke: var(--bad); }
+.rv-mp__extremo { fill: var(--muted); }
+.rv-mp__arco[data-escalado] .rv-mp__extremo { fill: var(--bad); }
 .rv-mp__arco:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .rv-mp__cards { display: grid; gap: 8px; align-content: start; }
 @media (min-width: 1024px) { .rv-mp__cards { max-height: 520px; overflow-y: auto; padding-right: 4px; } }
-.rv-mp__card { display: block; width: 100%; padding: 12px; text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.rv-mp__card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; width: 100%; min-width: 0; padding: 10px 12px; contain: layout paint; content-visibility: auto; contain-intrinsic-size: auto 72px; transition: border-color .15s ease, background-color .15s ease; text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
 .rv-mp__card[data-activo] { border-color: var(--ink); }
 .rv-mp__card:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.rv-mp__card-cab { display: flex; align-items: center; gap: 8px; }
-.rv-mp__card-cab > strong { font-size: var(--t-body); font-weight: 500; }
+.rv-mp__card-cab { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rv-mp__card-cab > .rv-estado { flex: none; }
+.rv-mp__card-folio { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-body); font-weight: 500; }
 .rv-mp__card-dias { margin-left: auto; flex: none; font-size: var(--t-micro); color: var(--muted); font-variant-numeric: tabular-nums; }
-.rv-mp__card-ruta { margin-top: 4px; font-size: var(--t-small); }
-.rv-mp__card-pie { margin-top: 2px; font-size: var(--t-micro); color: var(--faint); }
+.rv-mp__card-ruta, .rv-mp__card-pie { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-mp__card-ruta { font-size: var(--t-small); }
+.rv-mp__card-pie { font-size: var(--t-micro); color: var(--faint); }
+.rv-mp__card[data-activo] { background: var(--canvas); }
+.rv-mp__card[data-escalado] { box-shadow: inset 2px 0 0 var(--bad); }
 
 @media (prefers-reduced-motion: no-preference) {
   .rv-mp__activo { stroke-dasharray: 5 6; animation: rv-mp-flujo 1.2s linear infinite; }
@@ -84,7 +93,7 @@
    en el alto del mapa (no pegado arriba con el resto en blanco) y nota de método dentro de la tarjeta. */
 .rv-mp__tarjeta .rv-tarjeta__cab { height: auto; min-height: 32px; flex-wrap: wrap; row-gap: 6px; }
 .rv-mp__tarjeta .rv-tarjeta__titulo { white-space: nowrap; }
-.rv-mp__nota--pie { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.rv-mp__nota--pie { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: var(--t-small); color: var(--muted); }
 @media (min-width: 1024px) {
   .rv-mp__panel .rv-mp__cards { display: flex; flex-direction: column; gap: 8px; }
   .rv-mp__panel .rv-mp__cards > .rv-vacio { margin: auto 0; }
@@ -99,3 +108,41 @@
   .rv-mp__panel > .rv-mp__nota { margin-top: auto; }
 }
 .rv-mp__panel .rv-vacio { padding: 14px 20px; min-height: 0; border: 1px dashed var(--line2); border-radius: 8px; box-shadow: none; }
+
+/* Mapa limpio con muchos viajes: rótulos solo donde hacen falta (activo, escalados, ciudades, pin elegido), posiciones agrupadas por cercanía y estados por color. */
+.rv-mp__txt { font-family: inherit; font-weight: 600; fill: var(--ink); stroke: var(--surface); stroke-linejoin: round; paint-order: stroke; pointer-events: none; }
+.rv-mp__txt--activo { font-size: var(--t-small); stroke-width: 3px; }
+.rv-mp__txt--ciudad { font-size: var(--t-micro); stroke-width: 2.4px; fill: var(--muted); }
+.rv-mp__txt--esc { font-size: var(--t-micro); stroke-width: 2.4px; fill: var(--bad); }
+.rv-mp__txt--pin { font-size: var(--t-micro); stroke-width: 2.4px; }
+.rv-mp__txt--grupo { font-size: var(--t-micro); stroke: none; fill: var(--surface); }
+.rv-mp__ciudad-punto { fill: var(--faint); }
+.rv-mp__esc { cursor: pointer; }
+.rv-mp__esc-punto { fill: var(--bad); stroke: var(--surface); stroke-width: 1px; }
+.rv-mp__esc-pulso { fill: var(--bad); opacity: 0; }
+.rv-mp__pin { cursor: pointer; }
+.rv-mp__rombo { stroke: var(--surface); stroke-width: 1.2px; transition: transform .2s ease; }
+.rv-mp__pin[data-nivel="en_vivo"] .rv-mp__rombo { fill: var(--ok); }
+.rv-mp__pin[data-nivel="atrasada"] .rv-mp__rombo { fill: var(--warn); }
+.rv-mp__pin[data-nivel="obsoleta"] .rv-mp__rombo { fill: var(--faint); }
+.rv-mp__grupo { cursor: zoom-in; }
+.rv-mp__grupo-disco { stroke: var(--surface); stroke-width: 1.4px; opacity: .92; }
+.rv-mp__grupo[data-nivel="en_vivo"] .rv-mp__grupo-disco { fill: var(--ok); }
+.rv-mp__grupo[data-nivel="atrasada"] .rv-mp__grupo-disco { fill: var(--warn); }
+.rv-mp__grupo[data-nivel="obsoleta"] .rv-mp__grupo-disco { fill: var(--faint); }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* El trazo se dibuja al entrar (y de nuevo al cambiar Por destino / Por origen, que remonta los arcos); escalonado en 6 tandas sin estilos por elemento. */
+  .rv-mp__trazo { stroke-dasharray: 1; stroke-dashoffset: 1; animation: rv-mp-dibujo .9s ease-out both; }
+  .rv-mp__arco[data-r="1"] .rv-mp__trazo { animation-delay: .06s; }
+  .rv-mp__arco[data-r="2"] .rv-mp__trazo { animation-delay: .12s; }
+  .rv-mp__arco[data-r="3"] .rv-mp__trazo { animation-delay: .18s; }
+  .rv-mp__arco[data-r="4"] .rv-mp__trazo { animation-delay: .24s; }
+  .rv-mp__arco[data-r="5"] .rv-mp__trazo { animation-delay: .3s; }
+  .rv-mp__arco .rv-mp__extremo { animation: rv-mp-aparece .5s ease-out both; }
+  .rv-mp__esc-pulso { transform-box: fill-box; transform-origin: center; animation: rv-mp-pulso 2.4s ease-out infinite; }
+  .rv-mp__grupo, .rv-mp__pin { animation: rv-mp-aparece .35s ease-out both; }
+  .rv-mp__pin:hover .rv-mp__rombo { transform: scale(1.35); transform-box: fill-box; transform-origin: center; }
+  @keyframes rv-mp-dibujo { to { stroke-dashoffset: 0; } }
+  @keyframes rv-mp-aparece { from { opacity: 0; } to { opacity: 1; } }
+}

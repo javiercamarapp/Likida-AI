@@ -84,6 +84,7 @@ export const dashboard_a: Record<keyof typeof dashboard_aEs, string> = {
   'mv.nota.sinPines': 'The ARC is the illustrative path between origin and destination, not the route the truck took. When a unit reports a position (GPS connector or the driver\'s WhatsApp pin) it appears here as a diamond.',
   'mv.nota.pines.uno': 'The ARC is the illustrative path between origin and destination, not the route the truck took. With {n} diamond, a MEASURED position — with its time and source in the list below.',
   'mv.nota.pines.otros': 'The ARC is the illustrative path between origin and destination, not the route the truck took. The {n} diamonds are MEASURED positions — with their time and source in the list below.',
+  'mv.grupo': '{n} nearby units; tap to zoom in and separate them',
   'mv.escalado': 'Escalated',
   'mv.enRuta': 'In transit',
   'mv.dias.uno': '{n} day',
