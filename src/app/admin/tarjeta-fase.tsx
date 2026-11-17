@@ -2,7 +2,7 @@ import './sistema.css';
 import './tarjeta-fase.css';
 import type { ReactNode } from 'react';
 import { usd, numero } from '@/lib/formato';
-import { Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EstadoVacio, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { BarList } from '@/app/ui-v2/graficas';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
@@ -64,7 +64,7 @@ export function TablaModelosFase({ titulo, modelos, textos }: {
       {modelos.length > 0
         ? <TablaBase etiqueta={titulo} columnas={columnas} filas={[...modelos]} idFila={(m) => m.modelo} densa altoMaximo={false} tarjetaMovil />
         // Vacío de UNA línea (1.5 px punteado), no una tarjeta alta medio vacía.
-        : <p className="adm-sis-vacio-linea" role="status"><b>{textos.vacio}</b> {textos.vacioDetalle}</p>}
+        : <EstadoVacio contenido titulo={textos.vacio}>{textos.vacioDetalle}</EstadoVacio>}
     </Tarjeta>
   );
 }

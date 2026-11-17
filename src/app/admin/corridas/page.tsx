@@ -140,14 +140,12 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
         <EstadoError reintentar>{tx('corridas.no_se_pudieron_leer_las_corridas')}</EstadoError>
       ) : (
         <>
-          <div className="adm-sis-caja">
           <TablaLista<CorridaCruzada>
             etiqueta={tx('corridas.corridas_de_agentes')} columnas={columnasTr(tx, idioma)} filas={resultado.corridas} idFila={(c) => c.id} base="/admin/corridas" params={params}
             vacio={hayFiltro
               ? { titulo: tx('corridas.ninguna_corrida_coincide'), texto: tx('corridas.ninguna_corrida_coincide_con_el_filtro') }
               : { titulo: tx('corridas.aun_no_hay_corridas'), texto: tx('corridas.cada_corrida_de_un_agente_deja') }}
           />
-          </div>
           {calor !== null && calor.contadas > 0 ? (
             <Tarjeta titulo={t('corridas.calor.titulo')} elevar entra="tarjeta">
               <MapaCalor etiqueta={t('corridas.calor.etiqueta')} columnas={BLOQUES_HORA} filas={calor.filas} mostrarValores />

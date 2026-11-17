@@ -8,6 +8,7 @@ import { getCalidadCorridas, getCalidadOcr } from '@/lib/admin/calidad';
 import { ahoraMs } from '@/lib/saludo';
 import { numero, porcentaje, fechaHoraMx } from '@/lib/formato';
 import { Aviso, FilaTarjetas, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { NotaVacia } from '../nota-vacia';
 import { BarList, BarraApilada } from '../../ui-v2/graficas';
 
 import { getT } from '@/lib/i18n/servidor';
@@ -214,9 +215,9 @@ export default async function CalidadEvalsPage() {
           ) : undefined}
         >
           {corridas === null ? (
-            <p className="adm-sis-vacio-linea">{t('calidad_evals.no_se_pudieron_leer')}</p>
+            <NotaVacia>{t('calidad_evals.no_se_pudieron_leer')}</NotaVacia>
           ) : corridas.total === 0 ? (
-            <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.cero_corridas_en_la_ventana_eso'), { e0: (c) => <Link href="/admin/crons" className="rv-ce-enlace">{c}</Link> })}</p>
+            <NotaVacia>{rico(tx('calidad_evals.cero_corridas_en_la_ventana_eso'), { e0: (c) => <Link href="/admin/crons" className="rv-ce-enlace">{c}</Link> })}</NotaVacia>
           ) : corridas.porAgente.some((a) => a.fallo > 0 || a.parcial > 0) ? (
             <TablaBase
               etiqueta={t('calidad_evals.agentes_con_tropiezos_en')}
@@ -226,14 +227,14 @@ export default async function CalidadEvalsPage() {
               altoMaximo={false}
               densa tarjetaMovil />
           ) : (
-            <p className="adm-sis-vacio-linea">{tx('calidad_evals.0_fallos')}</p>
+            <NotaVacia>{tx('calidad_evals.0_fallos')}</NotaVacia>
           )}
         </Tarjeta>
         <Tarjeta titulo={t('calidad_evals.precision_del_ocr_banco')} contenida>
           {ocr === null ? (
-            <p className="adm-sis-vacio-linea">{t('calidad_evals.no_se_pudo_leer')}</p>
+            <NotaVacia>{t('calidad_evals.no_se_pudo_leer')}</NotaVacia>
           ) : ocr.fotosMedidas === 0 ? (
-            <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.el_banco_existe_y_ninguna_foto'), { e0: (c) => <Link href="/admin/qa" className="rv-ce-enlace">{c}</Link> })}</p>
+            <NotaVacia>{rico(tx('calidad_evals.el_banco_existe_y_ninguna_foto'), { e0: (c) => <Link href="/admin/qa" className="rv-ce-enlace">{c}</Link> })}</NotaVacia>
           ) : (
             <ul className="fin16c-pares">
               <li>

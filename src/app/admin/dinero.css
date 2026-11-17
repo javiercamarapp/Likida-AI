@@ -37,10 +37,6 @@
 /* La tarjeta de una fila de gráficas llena su celda: dos tarjetas de la misma fila miden lo mismo (Rovaq), sin hueco bajo la más baja. */
 [data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta { height: 100%; }
 
-/* Vacío uniforme de la sección de dinero (Rovaq `ac-vacio`): 1 px punteado #e6e6e8, radio 8, relleno 20×14, SIEMPRE dentro de su tarjeta. Hoy la pieza
-   compartida lo pinta con borde solo en la variante `contenido`; mientras no se unifique allí (pedido_compartido: componentes.css `.rv-vacio`),
-   esta regla evita los dos vacíos distintos en la misma página (p. ej. «Facturado por mes» sin borde y «Por cobrar» punteado). */
-
 /* Formulario a todo el ancho de su tarjeta (Rovaq: filas rótulo-control, nunca una columna de 340 px con la otra mitad vacía):
    los campos se reparten en columnas de ≥220 px; avisos y botón ocupan la fila completa. */
 [data-ui="v2"] .adm-din-forma--ancha { max-width: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: start; }
@@ -69,8 +65,6 @@
 [data-ui="v2"] .adm-din-forma--ancha .rv-campo--casilla { max-width: none; }
 [data-ui="v2"] .adm-din-forma--ancha .rv-campo--casilla :is(.rv-ayuda, .rv-campo__ayuda, small) { max-width: 72ch; }
 
-/* Vacío de una línea (Rovaq ac-vacio): caja punteada, radio 8, relleno 20×14; la tarjeta ya no se estira a la altura de su vecina. */
-[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: var(--t-body); line-height: 1.4; color: var(--muted); text-align: center; }
 
 /* Ronda 8: periodo (segmentado) y filtros del cajón en UNA sola fila con gap 8, como el FilterBar de Rovaq. */
 [data-ui="v2"] .adm-filtros-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }

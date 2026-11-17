@@ -1,5 +1,4 @@
 import { Suspense } from 'react';
-import { ShieldCheck } from 'lucide-react';
 import { EsqCifrasV2, EsqTarjetaV2, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { Columnas, DonaMini, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import { uniformes } from './cifras-uniformes';
@@ -40,7 +39,7 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
           <BotonEnlace variante="primary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>
         </>
       )}
-      avisos={<p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={1.75} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>}
+      avisos={<Aviso tono="info">{t('consola.acceso_admin')}</Aviso>}
     >
       {/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas, luego los paneles con filas-tarjeta. */}
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
@@ -132,7 +131,7 @@ async function BloqueNorte() {
       {esSoloDemo && (
         <Aviso tono="info">{t('consola.cifras_reales_no_de')}</Aviso>
       )}
-      <TiraCifras items={observadas(uniformes(cifras), t('a1r4.observado'))} etiqueta={t('consola.numero_norte')} className="adm-res-tira" elevar entra="tarjeta" />
+      <TiraCifras items={observadas(uniformes(cifras), t('a1r4.observado'))} etiqueta={t('consola.numero_norte')} entra="seccion" />
     </>
   );
 }

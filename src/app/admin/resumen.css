@@ -21,17 +21,7 @@
 [data-ui="v2"] .adm-flota-id { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
 
 /* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas (pf-tile). */
-[data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 1023.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 479.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
 /* pf-tile de Rovaq: gap 16, padding 20, SIN filete, cifra 26/600. */
-[data-ui="v2"] .adm-res-tiles { gap: 16px; }
-[data-ui="v2"] .adm-res-tiles .rv-kpi { padding: 20px; border-top-width: 0; }
-[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-weight: 600; }
-@media (max-width: 767px) { [data-ui="v2"] .adm-res-tiles .rv-kpi { padding: 12px; } }
-/* Aviso de acceso: banner blanco con escudo (Rovaq P1), no una franja gris. */
-[data-ui="v2"] .adm-acceso { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: var(--t-body, 13px); color: var(--ink); }
-[data-ui="v2"] .adm-acceso svg { flex: none; color: var(--ink); }
 
 /* Ficha 360 (Rovaq P2b): seis tarjetas de cifra en 3 columnas y secciones apiladas con título de 13/600 (ov-section-title). */
 [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -87,20 +77,15 @@
 [data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) :is(.adm-res-fila__titulo, .adm-flota-id, svg, th) { color: inherit; }
 [data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]):hover { background: var(--ink); }
 
-/* Mismo vacío uniforme que dinero.css (pedido_compartido: unificar `.rv-vacio` en componentes.css). */
-
 /* ── Ronda 4 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 /* Una cifra suelta es su propia tira de UNA celda: la regla móvil de `.rv-kpis` (2 columnas) la dejaba en media caja (66 px de texto,
    palabras partidas). Una tira de una sola celda llena SIEMPRE su caja. (pedido_compartido: lo mismo en ui-v2/graficas.css.) */
 [data-ui="v2"] .rv-kpis:has(> .rv-kpi:only-child) { grid-template-columns: minmax(0, 1fr); }
 [data-ui="v2"] .rv-kpis:has(> .rv-kpi:only-child) .rv-kpi { overflow-wrap: normal; word-break: normal; }
 /* pf-tile: rótulo en altas y bajas 12/600 (no mayúsculas mono 11) con el sello «● Observado» debajo de la cifra. */
-[data-ui="v2"] .adm-res-tiles .rv-kpi__etq,
 [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__etq { font: 600 12px/1.3 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0; color: var(--ink2, var(--muted)); }
-[data-ui="v2"] .adm-res-tiles .rv-kpi__sello,
 [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__sello { flex: 0 0 auto; }
 @media (max-width: 1099px) {
-  [data-ui="v2"] .adm-res-tiles .rv-kpi__sello,
   [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__sello { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; }
 }
 /* Filas-tarjeta de los paneles (Rovaq): borde de 1 px, radio 10, píldora de estado y «Ver detalle ›». */
@@ -117,8 +102,6 @@
 [data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo { display: contents; }
 [data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo > .adm-eyebrow:first-child { order: -1; margin: 0 0 -4px; }
 [data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo > :not(.adm-eyebrow:first-child) { order: 1; }
-/* Vacío de una línea dentro de un panel (Rovaq ac-vacio): borde punteado, radio 8, relleno 20×14; sin tarjeta alta con un hueco. */
-[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: var(--t-body); line-height: 1.4; color: var(--muted); text-align: center; }
 /* Ficha 360 y consola: las tarjetas de cifra van SIN filete (Rovaq `pf-tile`); el color de dato no pinta un borde grueso. */
 [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi { border-top-width: 0; padding: 20px; }
 @media (max-width: 767px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi { padding: 12px; } }
@@ -145,12 +128,7 @@
 
 /* ── Ronda 6 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 /* pf-tile (Rovaq, medido): 130 px de alto, padding 20, rótulo 12/600 con «● Observado» a la DERECHA en la misma fila, cifra 26/600 con tracking -0.91 px. */
-[data-ui="v2"] .adm-res-tiles .rv-kpi { min-height: 130px; }
-[data-ui="v2"] .adm-res-tiles .rv-kpi__pie { min-height: 0; margin-top: 0; }
-[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-size: var(--t-kpi); letter-spacing: -.035em; }
 @media (min-width: 1100px) {
-  [data-ui="v2"] .adm-res-tiles .rv-kpi__sello { position: absolute; top: 20px; right: 20px; flex: 0 0 auto; width: auto; height: auto; overflow: visible; clip-path: none; white-space: nowrap; font-size: var(--t-small); font-weight: 500; color: var(--muted); }
-  [data-ui="v2"] .adm-res-tiles .rv-kpi__cab { padding-right: 92px; }
 }
 /* Los paneles de una fila 6-6 se igualan: el pie del más corto baja al fondo en vez de dejar un vacío bajo el cuerpo. */
 [data-ui="v2"] .rv-tarjeta .adm-res-pares ~ .adm-res-pie { margin-top: auto; }
@@ -194,18 +172,6 @@
 [data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > * > .rv-tarjeta { align-self: start; height: auto; }
 
 /* ── Ronda 7 (15-nov-2026): como el dashboard de clientes — tira unida, compacta, con visuales; sin vacíos ─────────────────── */
-/* Las seis cifras van en UNA tira (`TiraCifras`, la misma del dashboard): padding 14, gap 6, filete de 3 px. La serie o la barra
-   segmentada llenan el costado; el sello «● Observado» queda en el pie de cada celda. Tipografía solo por tokens. */
-[data-ui="v2"] .adm-res-tira .rv-kpi { padding: 12px 14px; gap: 6px; min-width: 0; overflow: hidden; }
-/* La etiqueta ocupa siempre dos líneas de alto: así la cifra de todas las celdas queda a la misma altura (había celdas de 1 y de 2 líneas). */
-[data-ui="v2"] .adm-res-tira .rv-kpi__cab { min-height: 2.6em; align-items: flex-start; }
-[data-ui="v2"] .adm-res-tira .rv-kpi__fila { min-width: 0; }
-[data-ui="v2"] .adm-res-tira .rv-kpi__valor { min-width: 0; }
-[data-ui="v2"] .adm-res-tira .rv-kpi__spark { flex: 0 1 64px; width: 64px; min-width: 0; overflow: hidden; }
-[data-ui="v2"] .adm-res-tira .rv-kpi__spark .rv-spark { width: 100%; height: auto; }
-[data-ui="v2"] .adm-res-tira .rv-kpi__segs { margin-top: 2px; }
-/* Aviso de acceso: una línea fina, no una banda de 40 px. */
-[data-ui="v2"] .adm-acceso { padding: 6px 12px; font-size: var(--t-small, 12px); border-radius: 8px; gap: 8px; }
 /* Dos paneles de la misma fila: cada uno mide lo que su contenido (nunca se estira con un vacío dentro; 15-nov, capturas del arnés). */
 [data-ui="v2"] .adm-fila-pareja { align-items: start; }
 [data-ui="v2"] .rv-fila-tarjetas.adm-fila-pareja > .rv-tarjeta { height: auto; }

@@ -3,7 +3,7 @@ import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo, contarConversacionesActivas } from '@/lib/admin/negocio';
-import { Tarjeta, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { EstadoVacio, Tarjeta, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
 import { Columnas } from '@/app/ui-v2/graficas';
 import { numero as num, usd as dolares, fechaCorta } from '@/lib/formato';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
@@ -46,7 +46,7 @@ export default async function AgenteWhatsappPage() {
         <Tarjeta key="serie" titulo={t('agente_fase.serie_costo_dia')} contenida>
           {r.porDia.length > 0
             ? <Columnas etiqueta={t('capacidad_forecast.costo_de_ia_por_dia')} datos={r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.costoUsd }))} formato="usd" />
-            : <p className="adm-sis-vacio-linea" role="status"><b>{t('model_ops.sin_actividad_de_ia')}</b> {t('agente_cuadre.el_costo_por_dia_no_se')}</p>}
+            : <EstadoVacio contenido titulo={t('model_ops.sin_actividad_de_ia')}>{t('agente_cuadre.el_costo_por_dia_no_se')}</EstadoVacio>}
         </Tarjeta>,
         <TablaModelosFase
           key="modelos"

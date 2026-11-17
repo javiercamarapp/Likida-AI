@@ -50,7 +50,7 @@ export default function ProveedorMarcoAdmin({ children }: { children: ReactNode 
   const area = areaDeRutaAdmin(pathname);
   return (
     <ProveedorAreaV2 value={area === null ? null : etiquetaNav(tr, area)}>
-      <ProveedorPestanasHub valor={valor} claseRespaldo="adm-pestanas">{children}</ProveedorPestanasHub>
+      <ProveedorPestanasHub valor={valor} claseRespaldo="rv-pestanas-dash">{children}</ProveedorPestanasHub>
     </ProveedorAreaV2>
   );
 }

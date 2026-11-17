@@ -8,7 +8,7 @@ import { leerUltimasLecturas } from '@/lib/admin/qa-storage';
 import { agregar, agregarPorCampo, type Agregado, type AgregadoPorCampo } from '@/lib/admin/qa-verdad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { numero, usd, fechaCorta } from '@/lib/formato';
-import { Tarjeta, BotonEnlace } from '@/app/ui-v2/componentes';
+import { EstadoVacio, Tarjeta, BotonEnlace } from '@/app/ui-v2/componentes';
 import { Columnas } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { TablaModelosFase } from '../tarjeta-fase';
@@ -63,7 +63,7 @@ export default async function AgenteOcrPage() {
         <Tarjeta key="serie" titulo={t('agente_ocr.serie_facturas')} contenida>
           {r.facturasPorDia.some((d) => d.n > 0)
             ? <Columnas etiqueta={t('agente_ocr.facturas_procesadas_por_dia')} datos={r.facturasPorDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.n }))} formato="numero" />
-            : <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.sin_facturas_en_7')}</b> {t('agente_ocr.aparecen_cuando_una_flota')}</p>}
+            : <EstadoVacio contenido titulo={t('agente_ocr.sin_facturas_en_7')}>{t('agente_ocr.aparecen_cuando_una_flota')}</EstadoVacio>}
         </Tarjeta>,
         <TablaModelosFase
           key="modelos"
@@ -76,9 +76,9 @@ export default async function AgenteOcrPage() {
       <Tarjeta key="lee" titulo={t('agente_ocr.que_tan_bien_lee')}
         acciones={precision === null || precision.global.exactitud === null ? <BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.abrir_calidad')}</BotonEnlace> : undefined}>
         {precision === null ? (
-          <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.no_se_pudo_leer')}</b> {t('agente_ocr.sin_campos_medidos_no')}</p>
+          <EstadoVacio contenido titulo={t('agente_ocr.no_se_pudo_leer')}>{t('agente_ocr.sin_campos_medidos_no')}</EstadoVacio>
         ) : precision.global.exactitud === null ? (
-          <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.el_ocr_todavia_no')}</b> {t('agente_ocr.sin_campos_medidos_no')}</p>
+          <EstadoVacio contenido titulo={t('agente_ocr.el_ocr_todavia_no')}>{t('agente_ocr.sin_campos_medidos_no')}</EstadoVacio>
         ) : (
           <>
             <p>

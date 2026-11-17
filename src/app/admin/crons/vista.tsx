@@ -151,8 +151,7 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
           </FilaTarjetas>
 
           {guias.length > 0 ? (
-            <section className="adm-sis-bloque adm-sis-caja" aria-labelledby="que-falta">
-              <h2 className="adm-sis-titulo" id="que-falta">{t('crons_vista.que_falta_para_que_corran_completos')}</h2>
+            <Tarjeta titulo={t('crons_vista.que_falta_para_que_corran_completos')}>
               {guias.map((g) => (
                 <Aviso key={g.cron} tono="warn" titulo={nombreReloj(t)[g.cron]}>
                   {g.queFalta} {g.quien}
@@ -164,19 +163,15 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
                   </Disclosure>
                 </Aviso>
               ))}
-            </section>
+            </Tarjeta>
           ) : null}
 
-          <section className="adm-sis-bloque adm-sis-caja" aria-labelledby="relojes-uno-por-uno">
-            <div className="adm-sis-cab-caja">
-              <span className="adm-sis-eyebrow">{t('crons_vista.eyebrow_relojes')}</span>
-              <h2 className="adm-sis-titulo" id="relojes-uno-por-uno">{t('crons_vista.uno_por_uno')}</h2>
-            </div>
+          <Tarjeta titulo={t('crons_vista.uno_por_uno')}>
             <TablaLista<Fila>
               etiqueta={t('crons_vista.relojes_del_sistema_uno_por_uno')} columnas={columnas} filas={lista} idFila={(x) => x.cron} base="/admin/crons" params={{}}
             />
             <p className="adm-sis-nota">{t('crons_vista.el_pulso_lo_escribe_cada_reloj')}</p>
-          </section>
+          </Tarjeta>
         </>
       )}
     </EsqueletoTablaMaestra>
