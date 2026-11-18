@@ -10,9 +10,9 @@ entrega la liquidación en PDF.
   Cruza TODOS los tenants a propósito (`lib/admin/negocio.ts` es la única
   función con ese permiso).
 - `/dashboard` — el panel del CLIENTE (flota_admin, contador, encargado).
-  **73 páginas** (`find src/app/dashboard -name page.tsx | wc -l`), todas
+  **75 páginas** (`find src/app/dashboard -name page.tsx | wc -l`), todas
   filtradas al tenant. **La librería de UI viva es `src/app/ui-v2/`**: en
-  `/dashboard` hay **433** imports de `ui-v2` contra **4** referencias al kit
+  `/dashboard` hay **438** imports de `ui-v2` contra **4** referencias al kit
   v1 de `/admin` (`grep -rn "ui-v2/" src/app/dashboard --include=*.tsx | wc -l`).
   Hasta la ronda 52 este párrafo decía lo contrario —«reusa los componentes de
   `/admin` (`ui/kit`, `ui/graficas`, `charts`), no hay una segunda librería»—
