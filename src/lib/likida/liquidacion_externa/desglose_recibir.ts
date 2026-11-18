@@ -100,16 +100,18 @@ const OPERADOR_SIMULADO_ID = '00000000-0000-0000-0000-000000000000';
 
 /**
  * Alta automática del operador que la bitácora trae y la flota no tiene (acuerdo del 17-nov-2026: no se pide correo; lo que llega se toma
- * como válido). Solo en una flota que entrega por correo (la misma compuerta del alta sin teléfono, 0932). Sin nombre utilizable (menos de
- * 3 letras) NO se inventa uno: queda la excepción. El operador nace activo, SIN teléfono (marcador) y SIN correo: la entrega le abrirá
+ * como válido). Solo en una flota que entrega por correo (la misma compuerta del alta sin teléfono, 0932). Sin nombre utilizable se rotula
+ * «Operador <número>» (Celinda, 17-nov: lo que manda la bitácora se toma como válido; no se lleva control de operadores). El operador nace activo, SIN teléfono (marcador) y SIN correo: la entrega le abrirá
  * `operador_sin_correo` hasta que haya contacto. Carrera (dos bitácoras del mismo operador a la vez): si el insert choca, se vuelve a resolver.
  */
 export async function altaOperadorDesdeBitacoraPorOmision(
   tenantId: string, numeroEmpleado: string, nombre: string | undefined, simular: boolean,
 ): Promise<OperadorDestino | null> {
   const numero = numeroEmpleado.trim();
-  const nom = (nombre ?? '').trim().replace(/\s+/g, ' ');
-  if (numero === '' || nom.length < 3 || nom.length > 120) return null;
+  // Sin nombre utilizable NO se inventa uno: se rotula con el número de empleado («Operador 1234»), que sí es dato de la bitácora.
+  const limpio = (nombre ?? '').trim().replace(/\s+/g, ' ');
+  const nom = limpio.length >= 3 && limpio.length <= 120 ? limpio : `Operador ${numero}`;
+  if (numero === '' || numero.length > 40) return null;
   const { permiteAltaSinTelefono } = await import('../operador_sin_telefono_canal');
   if (!(await permiteAltaSinTelefono(tenantId))) return null;
   if (simular) return { id: OPERADOR_SIMULADO_ID, nombre: nom, telefono: '', activo: true };
