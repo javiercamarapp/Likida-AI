@@ -13,7 +13,9 @@ type TraductorLogin = Traductor<DiccionarioDe<'login'>>;
 /** El traductor en español: lo que dice /login sin idioma elegido (y lo que usan las pruebas que recorren `VistaLogin`). */
 const TRADUCTOR_ES: TraductorLogin = crearTraductor<DiccionarioDe<'login'>>('es', loginEs, loginEs);
 
-const MOTIVOS_ERROR = ['caducado', 'caducado_reciente', 'navegador'] as const;
+const MOTIVOS_ERROR = ['caducado', 'caducado_reciente', 'navegador', 'codigo'] as const;
+/** Los estados en los que ofrecer el código de 6 dígitos: se acaba de pedir un correo, o el enlace falló por usado/otro navegador. */
+const MOTIVOS_CON_CODIGO: readonly string[] = ['caducado', 'caducado_reciente', 'navegador', 'codigo'];
 /** El texto del motivo de fallo (`?error=…`): el parámetro desconocido o `1` cae al mensaje genérico, como `mensajeDeError`. */
 function textoDeError(parametro: string, t: TraductorLogin['t']): string {
   const motivo = (MOTIVOS_ERROR as readonly string[]).includes(parametro) ? (parametro as (typeof MOTIVOS_ERROR)[number]) : 'generico';
@@ -36,6 +38,8 @@ export type PropsVistaLogin = {
   error?: string;
   entrarConGoogle: (formData: FormData) => void | Promise<void>;
   entrarConEmail: (formData: FormData) => void | Promise<void>;
+  /** Entrar con el código de 6 dígitos del correo (cualquier navegador). Sin ella, el bloque no se pinta. */
+  entrarConCodigo?: (formData: FormData) => void | Promise<void>;
   /** Clase de las variables de fuente (next/font) que el `page` carga solo para esta ruta. */
   claseFuentes?: string;
   /** El traductor del namespace `login` (la página lo arma en el servidor con `getT`). Sin él, español. */
@@ -53,7 +57,7 @@ function IconoGoogle(): ReactNode {
   );
 }
 
-export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, entrarConEmail, claseFuentes = '', tr = TRADUCTOR_ES }: PropsVistaLogin) {
+export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, entrarConEmail, entrarConCodigo, claseFuentes = '', tr = TRADUCTOR_ES }: PropsVistaLogin) {
   const { t } = tr;
   // El aviso legal lleva dos enlaces: la frase completa es UNA clave con `{terminos}` y `{privacidad}`, y aquí solo se parte donde están.
   const piezasLegal = t('pie.aceptas').split(/(\{terminos\}|\{privacidad\})/);
@@ -138,6 +142,39 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
                 )}
               </div>
             </form>
+
+            {entrarConCodigo && (enviado || (error !== undefined && MOTIVOS_CON_CODIGO.includes(error))) && (
+              <form action={entrarConCodigo} className="login-email login-entra" aria-label={t('codigo.resumen')}>
+                <input type="hidden" name="next" value={next} />
+                <p className="login-estado-titulo">{t('codigo.resumen')}</p>
+                <p className="login-estado-nota">{t('codigo.detalle')}</p>
+                <label className="sr-only" htmlFor="login-codigo-correo">{t('codigo.correo')}</label>
+                <input
+                  id="login-codigo-correo"
+                  name="email"
+                  type="email"
+                  required
+                  maxLength={254}
+                  placeholder={t('correo.placeholder')}
+                  autoComplete="email"
+                  className="login-campo"
+                />
+                <label className="sr-only" htmlFor="login-codigo">{t('codigo.etiqueta')}</label>
+                <input
+                  id="login-codigo"
+                  name="codigo"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9 ]{6,7}"
+                  required
+                  maxLength={7}
+                  placeholder={t('codigo.placeholder')}
+                  autoComplete="one-time-code"
+                  className="login-campo"
+                />
+                <BotonEnvio className="login-btn login-btn-tinta" reposo={t('codigo.reposo')} enVuelo={t('codigo.enVuelo')} />
+              </form>
+            )}
 
             <details className="login-access-help">
               <summary>{t('ayuda.resumen')}</summary>

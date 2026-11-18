@@ -86,15 +86,19 @@ export function aParametro(motivo: MotivoLogin): string {
  */
 export function mensajeDeError(parametro: string): string {
   if (parametro === 'caducado') {
-    return 'Ese enlace ya se usó o ya caducó. Pide uno nuevo con tu correo.';
+    return 'Ese enlace ya se usó o ya caducó (algunos correos de empresa abren los enlaces antes que tú). Escribe el código de 6 dígitos del correo, o pide uno nuevo con tu correo.';
   }
   // El reenvío automático (reenvio_enlace.ts) ya mandó uno hace <5 minutos:
   // mandar a la bandeja, no al formulario — otro clic aquí no manda nada.
   if (parametro === 'caducado_reciente') {
-    return 'Ese enlace ya se usó o ya caducó, y te mandamos uno nuevo hace unos minutos. Abre el correo más reciente.';
+    return 'Ese enlace ya se usó o ya caducó, y te mandamos uno nuevo hace unos minutos. Abre el correo más reciente o escribe su código de 6 dígitos.';
   }
   if (parametro === 'navegador') {
-    return 'Ese enlace se pidió desde otro navegador. Ábrelo en el navegador donde escribiste tu correo, o pide uno nuevo desde aquí.';
+    return 'Ese enlace se abrió en un navegador distinto al que lo pidió. Escribe el código de 6 dígitos del correo aquí, o pide uno nuevo desde este mismo navegador.';
+  }
+  // Entrar con el código de 6 dígitos (page.tsx · entrarConCodigo): un solo mensaje para código malo, vencido o cuenta inexistente.
+  if (parametro === 'codigo') {
+    return 'Ese código no es válido o ya venció. Usa el del correo más reciente, o pide uno nuevo.';
   }
   return 'Algo falló. Intenta otra vez.';
 }
