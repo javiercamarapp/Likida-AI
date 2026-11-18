@@ -30,7 +30,7 @@ export const ESTADOS_ENTREGADA: ReadonlySet<EstadoBitacora> = new Set<EstadoBita
 
 export interface MotivoResultado { codigo: string; campo?: string }
 
-/** Aviso que no cambia el estado: hoy solo `campo_desconocido` (nombre del campo, jamás su valor). */
+/** Aviso que no cambia el estado: `campo_desconocido` (nombre del campo, jamás su valor) o `monto_negativo_reubicado` (el renglón). */
 export interface AdvertenciaResultado { codigo: string; campo?: string }
 
 export interface ResultadoBitacoraApi {
