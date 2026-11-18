@@ -138,6 +138,19 @@ async function dentroDelLimitePorCuenta(email: string): Promise<boolean> {
 }
 
 /**
+ * Intentos de CÓDIGO de 6 dígitos (1 en 10^6): techo propio y más estrecho que el de pedir enlaces, porque aquí lo que se
+ * protege es que nadie adivine un código. Por cuenta Y por IP (5 / 5 min) y por cuenta global (15 / 5 min, para que varias
+ * IPs tampoco lo recorran). La ventana es corta a propósito: el peor caso es «espera 5 minutos», nunca un bloqueo largo.
+ */
+async function dentroDelLimiteCodigo(email: string): Promise<boolean> {
+  const ip = await ipDelCliente();
+  const porIp = await rateLimit(`login:codigo-cuenta-ip:${email}:${ip}`, 5, 5 * 60_000, { fallaCerrado: false });
+  const global = await rateLimit(`login:codigo-cuenta:${email}`, 15, 5 * 60_000, { fallaCerrado: false });
+  if (!(porIp && global)) void registrarLoginFallido({ motivo: 'limite_codigo', email });
+  return porIp && global;
+}
+
+/**
  * La allowlist de PREFIJOS DE RUTA PROPIOS a la que este login honra `next`
  * — mismo criterio, y las mismas dos rutas, que `destinoExplicito` en
  * `auth/callback/route.ts`. Antes de esto SOLO admitía `/dashboard`: quien
@@ -250,6 +263,32 @@ export default async function Login({
     redirect(`/login?next=${encodeURIComponent(dest)}&enviado=1`);
   }
 
+  /**
+   * Entrar con el CÓDIGO de 6 dígitos del correo (mismo correo que el enlace, `{{ .Token }}` en la plantilla de Auth).
+   * Existe porque el enlace de un solo uso falla justo donde más pesa: se abre en otro navegador que el que lo pidió (la
+   * cookie PKCE no está) o un correo de empresa lo abre antes que la persona y lo gasta. El código se escribe en /login,
+   * en el navegador de quien entra, y no se gasta al ser leído. Cualquier fallo —formato, límite, código malo, cuenta
+   * inexistente— sale como el MISMO error `codigo`: no enseña si la cuenta existe.
+   */
+  async function entrarConCodigo(formData: FormData) {
+    'use server';
+    const rawNext = String(formData.get('next') ?? '/dashboard');
+    const dest = destinoPermitido(rawNext) ? rawNext : '/dashboard';
+    const volver = (): never => redirect(`/login?next=${encodeURIComponent(dest)}&error=codigo`);
+    const email = String(formData.get('email') ?? '').trim().toLowerCase();
+    const codigo = String(formData.get('codigo') ?? '').replace(/\s+/g, '');
+    if (!email || !/^[0-9]{6}$/.test(codigo)) volver();
+    if (!(await dentroDelLimite('login:codigo')) || !(await dentroDelLimiteCodigo(email))) volver();
+    const sb = await supabaseServer();
+    // Mismo piso de tiempo que el envío: acertar y fallar tardan lo mismo para quien prueba.
+    const { error } = await conPisoDeTiempo(() => sb.auth.verifyOtp({ email, token: codigo, type: 'email' }));
+    if (error) {
+      void registrarLoginFallido({ motivo: 'codigo_invalido', email });
+      volver();
+    }
+    redirect(dest);
+  }
+
   // TEMA: esta pantalla es SIEMPRE clara (como la de Vexa: `color-scheme: light` en `login.css`); el script de
   // `layout.tsx` solo aplica el tema guardado bajo /dashboard. La presentación vive en `vista-login.tsx`; aquí
   // solo queda la lógica de arriba, que no se tocó.
@@ -262,6 +301,7 @@ export default async function Login({
       error: sp?.error,
       entrarConGoogle,
       entrarConEmail,
+      entrarConCodigo,
       claseFuentes: `${fraunces.variable} ${instrument.variable}`,
       tr,
     },

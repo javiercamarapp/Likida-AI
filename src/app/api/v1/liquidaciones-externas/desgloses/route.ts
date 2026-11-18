@@ -42,7 +42,9 @@ import { logger } from '@/lib/logger';
 import { registrarRechazoWebhookLiq } from '@/lib/seguridad/registro_acceso';
 import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora } from '@/lib/likida/liquidacion_externa/desglose_contrato';
-import { leerPadronOperadores } from '@/lib/likida/liquidacion_externa/repo';
+import { insertarOperadorDesdeBitacora, leerPadronOperadores } from '@/lib/likida/liquidacion_externa/repo';
+import { completarPadronConAltas } from '@/lib/likida/liquidacion_externa/alta_operadores_muestra';
+import { permiteAltaSinTelefono } from '@/lib/likida/operador_sin_telefono_canal';
 import { recibirDesglose } from '@/lib/likida/liquidacion_externa/desglose_recibir';
 import { CONCURRENCIA_DESGLOSES, mapAcotado, type CachePeticion } from '@/lib/likida/liquidacion_externa/concurrencia';
 import {
@@ -154,7 +156,11 @@ async function procesar(req: Request): Promise<Response> {
       if (!hab.ok) {
         return errorApi('sin_permiso', 'Este formato de entrega todavía no está habilitado para tu flota. Usa el contrato de desgloses vigente o pide que lo activen.');
       }
-      const m = prepararMuestraTms(cuerpo.cuerpo, await leerPadronOperadores(acceso.tenantId));
+      // Acuerdo del 17-nov: lo que la fuente manda es válido; el número de empleado sin alta se da de alta antes de resolver.
+      const padron = await completarPadronConAltas(acceso.tenantId, cuerpo.cuerpo, await leerPadronOperadores(acceso.tenantId), { simular }, {
+        permite: permiteAltaSinTelefono, insertar: insertarOperadorDesdeBitacora,
+      });
+      const m = prepararMuestraTms(cuerpo.cuerpo, padron);
       if (!m.ok) return errorApi('parametro_invalido', m.mensaje);
       // En simulación NO se abre ninguna excepción de revisión.
       if (!simular) await registrarRevisionesMuestra(acceso.tenantId, m.revisiones, (b) => claveDeBitacora(undefined, b), { abrirExcepcion, ahora: () => new Date() });

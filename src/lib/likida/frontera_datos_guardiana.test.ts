@@ -750,7 +750,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 369;
 // (por `acotada`, con tenant_id y `.order('id')`); el resto de la bandeja reutiliza `cargarTablero`.
 // Conversaciones con operadores (17-nov-2026): +8 llamadas (2,649 -> 2,657), todas de `conductor/repo_conversaciones.ts` (ver el techo de archivos).
 // Conexiones, cuenta de demostración (17-nov-2026): 2,657 → 2,658 (+1, 0 archivos nuevos): `conexiones.ts` lee `tenant.nombre` (por `acotada`, con tenant_id) para rotular lo simulado.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_658;
+// Alta del operador desde la bitácora (18-nov-2026): 2,658 → 2,659 (+1, 0 archivos nuevos): `liquidacion_externa/repo.ts#insertarOperadorDesdeBitacora`,
+// un INSERT de una fila en `operador` (por `acotada`, con tenant_id), sin lectura que paginar.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_659;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

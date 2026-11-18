@@ -34,10 +34,10 @@ describe('/login por idioma', () => {
   });
 
   it('cada motivo de fallo dice lo mismo que `mensajeDeError` en español y habla del enlace, no de la cuenta, en inglés', () => {
-    for (const motivo of ['caducado', 'caducado_reciente', 'navegador', '1']) {
+    for (const motivo of ['caducado', 'caducado_reciente', 'navegador', 'codigo', '1']) {
       expect(html({ error: motivo })).toContain(mensajeDeError(motivo).replace(/&/g, '&amp;'));
       expect(html({ error: motivo, tr: en })).not.toContain('Algo falló');
     }
-    expect(html({ error: 'caducado', tr: en })).toContain('That link was already used or has expired.');
+    expect(html({ error: 'caducado', tr: en })).toContain('That link was already used or has expired');
   });
 });

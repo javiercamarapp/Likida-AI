@@ -48,4 +48,42 @@ describe('clasificador de npm audit para dependencias runtime', () => {
   it('no deja que un conteo negativo cancele una vulnerabilidad real', () => {
     expect(clasificarAuditoriaRuntime(reporte({ ...conteosLimpios, high: 1, critical: -1 })).tipo).toBe('inconclusa');
   });
+
+  describe('aviso aceptado (GHSA-fc5q-39xc-vjpf, picomatch) hasta el 18-dic-2026', () => {
+    const GHSA = 'https://github.com/advisories/GHSA-fc5q-39xc-vjpf';
+    const conAviso = (extra: unknown[] = []) => ({
+      metadata: { vulnerabilities: { ...conteosLimpios, moderate: 1, high: 3, total: 4 } },
+      vulnerabilities: {
+        picomatch: { severity: 'high', via: [{ url: GHSA, severity: 'high' }, ...extra] },
+        fdir: { severity: 'high', via: ['picomatch'] },
+        '@sentry/nextjs': { severity: 'high', via: ['fdir', 'glob'] },
+        glob: { severity: 'moderate', via: [{ url: 'https://github.com/advisories/GHSA-zzzz-zzzz-zzzz', severity: 'moderate' }] },
+      },
+    });
+    const antes = new Date('2026-11-18T12:00:00Z');
+
+    it('con la fecha vigente, solo ese aviso y lo que arrastra deja el runtime limpio', () => {
+      expect(clasificarAuditoriaRuntime(conAviso(), antes)).toEqual({ tipo: 'limpia', high: 0, critical: 0 });
+    });
+
+    it('vencida la fecha vuelve a bloquear', () => {
+      expect(clasificarAuditoriaRuntime(conAviso(), new Date('2026-12-19T00:00:00Z')).tipo).toBe('vulnerable');
+    });
+
+    it('un aviso NUEVO en el mismo paquete sigue bloqueando', () => {
+      const nuevo = [{ url: 'https://github.com/advisories/GHSA-aaaa-bbbb-cccc', severity: 'high' }];
+      expect(clasificarAuditoriaRuntime(conAviso(nuevo), antes).tipo).toBe('vulnerable');
+    });
+
+    it('un high de otro paquete sigue bloqueando', () => {
+      const r = conAviso() as { metadata: { vulnerabilities: Record<string, number> }; vulnerabilities: Record<string, unknown> };
+      r.metadata.vulnerabilities.high = 4;
+      r.vulnerabilities.otro = { severity: 'high', via: [{ url: 'https://github.com/advisories/GHSA-xxxx-yyyy-zzzz', severity: 'high' }] };
+      expect(clasificarAuditoriaRuntime(r, antes).tipo).toBe('vulnerable');
+    });
+
+    it('sin detalle de paquetes no se cubre nada (falla cerrado)', () => {
+      expect(clasificarAuditoriaRuntime({ metadata: { vulnerabilities: { ...conteosLimpios, high: 3, total: 3 } } }, antes).tipo).toBe('vulnerable');
+    });
+  });
 });
