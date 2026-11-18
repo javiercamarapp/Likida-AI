@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { LayoutGrid } from 'lucide-react';
 import { COPILOTO, SECCIONES, type Item } from './rutas';
 import { PieAdmin } from './sidebar-nav';
-import { useRequiereAccion, etiquetaCampana } from './cabecera-admin';
+import { useRequiereAccion, etiquetaCampana, GuiaAdmin } from './cabecera-admin';
 import { CabeceraMovilVista } from '../dashboard/shell/cabecera-movil';
 import { BarraInferiorVista } from '../dashboard/shell/barra-inferior';
 import { HojaMasVista } from '../dashboard/shell/hoja-mas';
@@ -46,11 +46,11 @@ export function destinosBarraAdmin(): DestinoMovil[] {
   });
 }
 
-/** La cabecera móvil del admin: logo, fecha y campana (mismo conteo real de «Avisos»; lectura caída = «sin dato», sin punto). */
+/** La cabecera móvil del admin, como la del dashboard: logo, fecha, «Guía» (solo icono) y campana (mismo conteo real de «Avisos»; lectura caída = «sin dato», sin punto). */
 export function CabeceraMovilAdmin() {
   const r = useRequiereAccion();
   const tr = useT('shell', shellEs);
-  return <CabeceraMovilVista hrefCasa="/admin" hrefAvisos="/admin/notificaciones" etiquetaAvisos={etiquetaCampana(r, tr)} punto={!!r && (r.pendientes ?? 0) > 0} />;
+  return <CabeceraMovilVista hrefCasa="/admin" hrefAvisos="/admin/notificaciones" etiquetaAvisos={etiquetaCampana(r, tr)} punto={!!r && (r.pendientes ?? 0) > 0}><GuiaAdmin compacto /></CabeceraMovilVista>;
 }
 
 export default function NavegacionMovilAdmin({ nombre, avatarUrl, flotas, flotaActual, salir }: {

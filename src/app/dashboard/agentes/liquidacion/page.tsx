@@ -49,9 +49,15 @@ import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { cargarDetalle, leerIdDetalle } from './detalle_desglose';
 import { PaginaConteosNomina } from './conteos-nomina';
 import type { Metadata } from 'next';
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT('agentes')).t('liquidacion.page.titulo') };
+}
+
+/** El `Error` de una puerta de acción en el idioma activo: se arma DENTRO de la acción (una acción no captura un traductor). */
+async function falla(clave: 'lq.rol_no_ve' | 'lq.solo_duenio_desgloses' | 'lq.solo_duenio_correos' | 'lq.solo_duenio_liquidaciones' | 'lq.catalogo' | 'lq.solo_admin'): Promise<Error> {
+  const { t } = await getT('dashboard_b');
+  return new Error(t(clave));
 }
 
 export const dynamic = 'force-dynamic';
@@ -275,7 +281,7 @@ export default async function PaginaAgenteLiquidacion({
     'use server';
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
-    if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
+    if (!puedeOperarLiquidacion(s.rol)) throw await falla('lq.rol_no_ve');
     const id = leerIdDetalle(String(fd.get('id') ?? ''));
     const a = String(fd.get('a') ?? '');
     const motivo = String(fd.get('motivo') ?? 'manual');
@@ -300,7 +306,7 @@ export default async function PaginaAgenteLiquidacion({
     'use server';
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
-    if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
+    if (!puedeOperarLiquidacion(s.rol)) throw await falla('lq.rol_no_ve');
     const id = leerIdDetalle(String(fd.get('id') ?? ''));
     if (!id) return volverAlDetalle(contexto, null, 'r_entrada');
     let codigo: string;
@@ -323,7 +329,7 @@ export default async function PaginaAgenteLiquidacion({
     'use server';
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
-    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube desgloses.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw await falla('lq.solo_duenio_desgloses');
     const f = await leerArchivoCarga(fd);
     // A1-01: dos pasos. «Ver vista previa» solo cuenta (N desgloses / M correos); «Subir y enviar» exige haber escrito M.
     const confirmo = String(fd.get('paso') ?? '') === 'subir';
@@ -341,7 +347,7 @@ export default async function PaginaAgenteLiquidacion({
     'use server';
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
-    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube correos.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw await falla('lq.solo_duenio_correos');
     const f = await leerArchivoCarga(fd);
     await dejarFlash('/dashboard/agentes/liquidacion', f.ok ? await cargarContactosDePanel(s.tenantId, f.archivo) : { error: f.error });
     revalidatePath('/dashboard/agentes/liquidacion');
@@ -438,8 +444,8 @@ export default async function PaginaAgenteLiquidacion({
     'use server';
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) return [];
-    if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
-    if (tipo !== 'operador' && tipo !== 'unidad') throw new Error('Catálogo desconocido.');
+    if (!puedeOperarLiquidacion(s.rol)) throw await falla('lq.rol_no_ve');
+    if (tipo !== 'operador' && tipo !== 'unidad') throw await falla('lq.catalogo');
     return buscarCatalogo(s.tenantId, tipo, typeof q === 'string' ? q : '');
   }
 
@@ -483,7 +489,7 @@ export default async function PaginaAgenteLiquidacion({
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
-    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw await falla('lq.solo_admin');
     const id = String(fd.get('id') ?? '');
     let resultado: 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -501,9 +507,10 @@ export default async function PaginaAgenteLiquidacion({
   async function subirLiquidacionesExternas(fd: FormData): Promise<void> {
     'use server';
     const { t: tx } = await getT('agentes');
+    const { t: tb } = await getT('dashboard_b');
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
-    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube liquidaciones.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw await falla('lq.solo_duenio_liquidaciones');
     const a = fd.get('archivo');
     const params: Array<[string, string]> = [...contexto];
     // A37-S14-07: el detalle (texto) viaja en una cookie de servidor, no en la URL; en la URL solo quedan códigos validados.
@@ -515,7 +522,7 @@ export default async function PaginaAgenteLiquidacion({
     } else {
       try {
         const r = await importarLiquidacionesDeArchivo(s.tenantId, a.name, new Uint8Array(await a.arrayBuffer()));
-        const detalle = (r.error ?? r.problemas.slice(0, 5).map((x) => `${x.clave ?? 'archivo'}: ${x.motivo}`).join(' · ')).slice(0, 700);
+        const detalle = (r.error ?? r.problemas.slice(0, 5).map((x) => `${x.clave ?? tb('lq.archivo')}: ${x.motivo}`).join(' · ')).slice(0, 700);
         params.push(['ext_msg', r.error ? 'importacion_error' : 'importada'], ['ext_imp', `${r.recibidas}.${r.repetidas}.${r.problemas.length}`]);
         if (detalle) detalleImportacion = detalle;
       } catch {
@@ -533,7 +540,7 @@ export default async function PaginaAgenteLiquidacion({
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
-    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw await falla('lq.solo_admin');
     const id = String(fd.get('id') ?? '');
     let resultado: 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'canal_correo' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -556,7 +563,7 @@ export default async function PaginaAgenteLiquidacion({
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
-    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw await falla('lq.solo_admin');
     const id = String(fd.get('id') ?? '');
     let resultado: 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso' | 'canal_correo' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -615,7 +622,7 @@ export default async function PaginaAgenteLiquidacion({
       revalidatePath('/dashboard/agentes/liquidacion');
       return { ok: true, mensaje: tx('rest.listo_las_lecturas_por_debajo_de', { umbral }) };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar la estrategia') };
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar la estrategia', await idiomaActual()) };
     }
   }
 

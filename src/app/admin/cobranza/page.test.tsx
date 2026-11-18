@@ -58,6 +58,7 @@ it('MX-003: una factura con 4 toques alcanzados cuenta UN toque sin propuesta, n
 it('muestra el estado real: factura, toques alcanzados y toques sin propuesta', async () => {
   const h = await html();
   expect(h).toContain('Flota Demo');
+  // Un solo chip por fila (el toque más alto); el detalle de todos va en el title.
   expect(h).toContain('D-3 · sin propuesta (el agente solo propone el toque más alto)');
   expect(h).toContain('D+7 · sin propuesta<');
   expect(h).toContain('Nunca ha corrido');

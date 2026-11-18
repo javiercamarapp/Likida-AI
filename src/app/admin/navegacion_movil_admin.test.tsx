@@ -32,7 +32,7 @@ describe('Navegación móvil de /admin: cabecera, barra inferior y hoja «Más»
     expect(destinosBarraAdmin()).toHaveLength(4);
   });
 
-  it('todos los destinos existen en el mapa de rutas y la hoja cubre las cuatro secciones completas', () => {
+  it('todos los destinos existen en el mapa de rutas y la hoja cubre las cinco secciones completas', () => {
     const hrefs = new Set([...SECCIONES.flatMap((s) => s.items.map((i) => i.href)), '/admin']);
     for (const d of destinosBarraAdmin()) expect(hrefs.has(d.href)).toBe(true);
     expect(MENU_ADMIN.grupos.map((g) => g.titulo)).toEqual(SECCIONES.map((s) => s.titulo));
@@ -45,10 +45,12 @@ describe('Navegación móvil de /admin: cabecera, barra inferior y hoja «Más»
     expect(destinosBarraAdmin().map((d) => d.href)).not.toContain('/admin/copiloto');
   });
 
-  it('el CSS ya no deja el riel de 56 px bajo 768 px y deja aire inferior para la barra flotante', () => {
-    const css = readFileSync(new URL('./admin-shell.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).not.toMatch(/width:\s*56px/);
-    expect(css).toMatch(/max-width:\s*767\.98px\)\s*\{[^}]*\}[\s\S]*padding-bottom:\s*calc\(64px/);
+  it('el CSS ya no deja el riel de 56 px bajo 768 px y el contenido deja aire inferior para la barra flotante (lo pone el shell compartido, no un override de /admin)', () => {
+    const admin = readFileSync(new URL('./admin-shell.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const shell = readFileSync(new URL('../ui-v2/shell.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(admin).not.toMatch(/width:\s*56px/);
+    expect(admin).not.toMatch(/\.rv-contenido/);
+    expect(shell).toMatch(/max-width:\s*767\.98px\)\s*\{[^}]*padding-bottom:\s*calc\(64px/);
   });
 
   it('«Consumo de IA» aparece UNA sola vez en el menú del admin y el pie compartido no trae un atajo duplicado', () => {

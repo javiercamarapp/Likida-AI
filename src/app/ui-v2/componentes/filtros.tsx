@@ -5,6 +5,8 @@ import { Check, ChevronDown, Search } from 'lucide-react';
 import { useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import { cx } from './clases';
 import { Popover } from './overlay';
+import { useT } from '@/lib/i18n/proveedor';
+import { ui_comun as uiEs } from '@/lib/i18n/es/ui_comun';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FILTROS DE BARRA (LF, 31-oct): la ÚNICA familia de controles de filtro del panel.
@@ -49,6 +51,7 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
   className?: string;
   ariaLabel?: string;
 }) {
+  const { t: tu } = useT('ui_comun', uiEs);
   // Lo elegido localmente solo vale mientras el valor de la URL no cambie (al recargar con otro valor manda la URL).
   const [local, setLocal] = useState<{ base: string; v: string }>({ base: valor, v: valor });
   const actual = local.base === valor ? local.v : valor;
@@ -66,7 +69,7 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
   const elegida = opciones.find((o) => o.valor === actual);
   const activo = actual !== porDefecto;
   // B1: un valor de la URL que no está entre las opciones NO se pinta como id crudo.
-  const rotuloValor = elegida?.rotulo ?? 'Valor no válido';
+  const rotuloValor = elegida?.rotulo ?? tu('comun.valor_no_valido');
   const cerrar = () => { setAbierto(false); setConsulta(''); };
   const conBuscador = opciones.length > UMBRAL_BUSCADOR;
   const visibles = conBuscador && consulta.trim() !== ''

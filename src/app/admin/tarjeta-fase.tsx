@@ -2,8 +2,10 @@ import './sistema.css';
 import './tarjeta-fase.css';
 import type { ReactNode } from 'react';
 import { usd, numero } from '@/lib/formato';
-import { Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EstadoVacio, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { BarList } from '@/app/ui-v2/graficas';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 
 /**
  * LA FICHA DE UNA FASE DEL PIPELINE DEL VIAJE (OCR, Cuadre, WhatsApp). La comparten los paneles de cada agente y Modelos: una sola
@@ -13,7 +15,8 @@ import { BarList } from '@/app/ui-v2/graficas';
 export interface DatosFase { costoUsd: number; n: number }
 export interface ModeloFase { modelo: string; n: number; costoUsd: number }
 
-export function TarjetaFase({ titulo, queHace, datos, modelos, acciones, children }: {
+export function TarjetaFase({ titulo, queHace, datos, modelos, acciones, children, t = trAdminInicioEs }: {
+  t?: TrDe<'admin_inicio'>;
   titulo: string;
   queHace: string;
   datos: DatosFase | null | undefined;
@@ -26,16 +29,16 @@ export function TarjetaFase({ titulo, queHace, datos, modelos, acciones, childre
       <p className="rv-fase__texto">{queHace}</p>
       <p className="rv-fase__linea">
         {datos
-          ? <><strong>{usd(datos.costoUsd)}</strong> · {numero(datos.n)} llamadas</>
-          : 'Sin llamadas registradas para esta fase todavía.'}
+          ? <><strong>{usd(datos.costoUsd)}</strong> · {t('raiz7.fase_llamadas', { n: numero(datos.n) })}</>
+          : t('raiz7.fase_sin_llamadas')}
       </p>
       {modelos.length > 0 ? (
         <BarList
-          etiqueta={`Costo por modelo, ${titulo}`}
-          items={modelos.map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: `${usd(m.costoUsd)} · ${numero(m.n)} llamadas` }))}
+          etiqueta={t('raiz7.fase_costo_modelo', { titulo })}
+          items={modelos.map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: `${usd(m.costoUsd)} · ${t('raiz7.fase_llamadas', { n: numero(m.n) })}` }))}
         />
       ) : datos ? (
-        <p className="rv-fase__linea">El desglose por modelo de esta fase no se puede aislar con los datos de hoy.</p>
+        <p className="rv-fase__linea">{t('raiz7.fase_sin_desglose')}</p>
       ) : null}
       {children}
     </Tarjeta>
@@ -61,7 +64,7 @@ export function TablaModelosFase({ titulo, modelos, textos }: {
       {modelos.length > 0
         ? <TablaBase etiqueta={titulo} columnas={columnas} filas={[...modelos]} idFila={(m) => m.modelo} densa altoMaximo={false} tarjetaMovil />
         // Vacío de UNA línea (1.5 px punteado), no una tarjeta alta medio vacía.
-        : <p className="adm-sis-vacio-linea" role="status"><b>{textos.vacio}</b> {textos.vacioDetalle}</p>}
+        : <EstadoVacio contenido titulo={textos.vacio}>{textos.vacioDetalle}</EstadoVacio>}
     </Tarjeta>
   );
 }

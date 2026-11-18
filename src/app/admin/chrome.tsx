@@ -6,15 +6,16 @@ import CabeceraAdmin from './cabecera-admin';
 import NavegacionMovilAdmin, { CabeceraMovilAdmin } from './navegacion-movil-admin';
 import ProveedorMarcoAdmin from './pestanas-admin';
 import CapaCarga from '../dashboard/shell/capa-carga';
+import SaltarAlContenido from '../dashboard/shell/saltar-contenido';
 import CopilotoPanel from './copiloto-panel';
 
 /**
  * El marco de /admin sobre el MISMO sistema que el dashboard (7-nov-2026, ronda R8): `.rv-app`, `.rv-fila`, `.rv-sb`, `.rv-col` y
- * `.rv-contenido` de `ui-v2/shell.css` (sidebar flotante de 232 px, riel de 72, tarjeta de contenido). Lo propio de /admin vive en
+ * `.rv-contenido` de `ui-v2/shell.css` (sidebar flotante de 232 px, riel de 72, tarjeta de contenido; mismos márgenes, padding y móvil). Lo propio de /admin vive en
  * `admin-shell.css`. Puro dibujo, SIN autorización adentro (la puerta vive en `layout.tsx`), para poder verificar el marco real
  * en un render de prueba sin sesión.
  *
- * El Copiloto (⌘J, `copiloto-panel.tsx`) sigue siendo hermano de la columna dentro de la fila y cancela el gap con su margen -16.
+ * El Copiloto (⌘J, `copiloto-panel.tsx`) sigue siendo hermano de la columna dentro de la fila (el hueco de 16 solo lo trae abierto: `admin-shell.css`).
  */
 export default function AdminChrome({
   nombre, avatarUrl, cerrarSesion, flotas, flotaActual, children,
@@ -39,6 +40,8 @@ export default function AdminChrome({
     <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
       {/* El mismo telón de carga con el logo que el dashboard (una vez por sesión): /admin no lo montaba. */}
       <CapaCarga />
+      {/* El mismo primer elemento enfocable que el dashboard: mueve el foco a `#contenido-principal`. */}
+      <SaltarAlContenido className={CLASES_V2.saltar} />
       <CommandPalette />
       {/* Bajo 768 px: cabecera móvil, barra inferior y hoja «Más» del dashboard con los destinos del admin (el aside no se ve). */}
       <CabeceraMovilAdmin />
@@ -51,7 +54,7 @@ export default function AdminChrome({
           </div>
         </AsideAdmin>
 
-        <div className={`${CLASES_V2.columna} columna-centro`}>
+        <div className={CLASES_V2.columna}>
           <CabeceraAdmin />
           <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
             <ProveedorMarcoAdmin>{children}</ProveedorMarcoAdmin>

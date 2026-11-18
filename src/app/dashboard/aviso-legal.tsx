@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { SessionTenant } from '@/lib/auth/session';
+import { getT } from '@/lib/i18n/servidor';
 import { aceptacionesDeFlota, pendientesDeUsuario } from '@/lib/legal/aceptacion';
 
 /**
@@ -17,10 +18,11 @@ export async function AvisoLegalPendiente({ sesion }: { sesion: Pick<SessionTena
   } catch {
     return null;
   }
+  const { t } = await getT('dashboard_a');
   return (
     <div role="note" className="mt-3 rounded-lg px-3 py-2 text-[12px]" style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}>
-      Falta registrar tu aceptación de los Términos y del Aviso de privacidad vigentes.{' '}
-      <Link href="/dashboard/legal" className="underline font-medium">Revisar y aceptar</Link>
+      {t('legal.falta')}{' '}
+      <Link href="/dashboard/legal" className="underline font-medium">{t('legal.revisar')}</Link>
     </div>
   );
 }

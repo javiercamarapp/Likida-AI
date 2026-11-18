@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronRight, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
+import { LayoutGrid, ChevronRight, ChevronsLeft, ArrowLeftRight, LifeBuoy, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity, Landmark } from 'lucide-react';
 import { type Item, COPILOTO, SECCIONES, entradaDeRuta } from './rutas';
 import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
 import { useRequiereAccion } from './cabecera-admin';
@@ -24,7 +24,7 @@ import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vist
 // Icono de CADA sección: en el riel (72 px) solo se ve una sección abierta a la vez y las demás se reducen a su icono (antes el riel
 // pintaba las 43 páginas seguidas, la lista se cortaba a medias y se encimaba con el pie).
 const ICONO_SECCION: Record<string, typeof Workflow> = {
-  Agentes: Workflow, Negocio: Briefcase, Control: SlidersHorizontal, Sistema: Activity,
+  Agentes: Workflow, Negocio: Briefcase, Control: SlidersHorizontal, 'Back-office': Landmark, Sistema: Activity,
 };
 
 function idSeccion(titulo: string): string {
@@ -37,7 +37,8 @@ function Fila({ item, pathname }: { item: Item; pathname: string }) {
   const activo = entradaDeRuta(pathname)?.href === item.href;
   return (
     <li>
-      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={nombre} aria-label={nombre}>
+      {/* Igual que el ítem del dashboard: `title` con el nombre (en el riel es lo que se lee) y sin `aria-label` (el texto ya nombra el enlace). */}
+      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={nombre}>
         <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
         <span className="rv-item__txt">{nombre}</span>
       </Link>
@@ -98,7 +99,7 @@ export function MarcaAdmin() {
   );
 }
 
-// Las secciones salen de `rutas.ts` (SECCIONES: Agentes, Negocio, Control, Sistema), la misma fuente del rótulo de área de cada pantalla.
+// Las secciones salen de `rutas.ts` (SECCIONES: Agentes, Negocio, Control, Back-office, Sistema), la misma fuente del rótulo de área de cada pantalla.
 const TITULOS_ADMIN: Array<[string, Item[]]> = SECCIONES.map((s) => [s.titulo, s.items]);
 
 export default function SidebarNav() {
@@ -130,7 +131,7 @@ export default function SidebarNav() {
     <>
       <ul className="rv-lista">
         <li>
-          <Link href="/admin" className="rv-item" aria-current={resumenActivo ? 'page' : undefined} title={etiquetaNav({ t }, 'Resumen')} aria-label={etiquetaNav({ t }, 'Resumen')}>
+          <Link href="/admin" className="rv-item" aria-current={resumenActivo ? 'page' : undefined} title={etiquetaNav({ t }, 'Resumen')}>
             <LayoutGrid className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
             <span className="rv-item__txt">{etiquetaNav({ t }, 'Resumen')}</span>
           </Link>
@@ -185,10 +186,17 @@ export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir, alNave
       tarjeta={(
         <TarjetaUsuario nombre={nombre} rolEtiqueta={etiquetaRol(tr, 'superadmin', 'Superadmin')} iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} salir={salir} alElegir={alNavegar}
           menu={(
-            <Link role="menuitem" tabIndex={-1} href="/admin/mi-perfil" className="rv-menu__item" onClick={() => alNavegar?.()}>
-              <span className="rv-menu__icono" aria-hidden><UserRound width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
-              <span>{etiquetaNav(tr, 'Mi perfil')}</span>
-            </Link>
+            <>
+              <Link role="menuitem" tabIndex={-1} href="/admin/mi-perfil" className="rv-menu__item" onClick={() => alNavegar?.()}>
+                <span className="rv-menu__icono" aria-hidden><UserRound width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
+                <span>{etiquetaNav(tr, 'Mi perfil')}</span>
+              </Link>
+              {/* La misma fila «Ayuda» que trae el menú de la tarjeta del dashboard. */}
+              <Link role="menuitem" tabIndex={-1} href="/dashboard/soporte" className="rv-menu__item" onClick={() => alNavegar?.()}>
+                <span className="rv-menu__icono" aria-hidden><LifeBuoy width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
+                <span>{tr.t('cuenta.ayuda')}</span>
+              </Link>
+            </>
           )} />
       )}
     />

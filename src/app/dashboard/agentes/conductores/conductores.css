@@ -101,3 +101,48 @@
 /* Columnas iguales en tarjeta (Rovaq): «Lo que entiende por WhatsApp» y los Insights son fichas de la misma altura, no bloques sueltos. */
 .rv-cd__tres { align-items: stretch; }
 .rv-cd__tres > .rv-cd__col { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+
+/* Conversaciones con operadores: lista a la izquierda, hilo a la derecha (una columna en móvil). */
+.rv-conv { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.rv-conv[data-abierto] .rv-conv__lista { display: none; }
+.rv-conv:not([data-abierto]) .rv-conv__detalle { display: none; }
+@media (min-width: 900px) {
+  .rv-conv { grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); }
+  .rv-conv[data-abierto] .rv-conv__lista, .rv-conv:not([data-abierto]) .rv-conv__detalle { display: block; }
+  .rv-conv__fichas { max-height: 70vh; overflow: auto; }
+  .rv-conv__volver { display: none; }
+}
+.rv-conv__lista, .rv-conv__detalle { min-width: 0; }
+.rv-conv__fichas { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-conv__ficha { display: grid; gap: 3px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); text-decoration: none; min-width: 0; }
+.rv-conv__ficha[data-estado="escalado"] { border-left: 3px solid var(--bad); }
+.rv-conv__ficha[data-estado="sin_respuesta"] { border-left: 3px solid var(--warn); }
+.rv-conv__ficha[data-activa] { border-color: var(--ink); }
+.rv-conv__ficha:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-conv__fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.rv-conv__nombre { font-size: var(--t-small, 12px); font-weight: 500; }
+.rv-conv__linea { font-size: var(--t-micro, 11px); color: var(--muted); }
+.rv-conv__linea[data-tono="warn"] { color: var(--warn); }
+.rv-conv__hilo-cab { display: grid; gap: 2px; margin-bottom: 10px; min-width: 0; }
+.rv-conv__hilo { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 10px; max-height: 60vh; overflow: auto; }
+.rv-conv__msg { display: grid; gap: 3px; max-width: 86%; min-width: 0; }
+.rv-conv__msg[data-actor="operador"] { justify-self: end; }
+.rv-conv__msg[data-actor="agente"], .rv-conv__msg[data-actor="trafico"] { justify-self: start; }
+.rv-conv__msg[data-actor="sistema"] { justify-self: center; max-width: 100%; }
+.rv-conv__cab { display: flex; gap: 8px; font-size: var(--t-micro, 11px); color: var(--faint); }
+.rv-conv__burbuja { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: var(--t-small, 12px); overflow-wrap: anywhere; }
+.rv-conv__msg[data-actor="operador"] .rv-conv__burbuja { background: var(--bg-soft, var(--surface)); }
+.rv-conv__burbuja[data-tono="ok"] { border-color: var(--ok); }
+.rv-conv__burbuja[data-tono="warn"] { border-color: var(--warn); }
+.rv-conv__burbuja[data-tono="bad"] { border-color: var(--bad); }
+.rv-conv__texto { display: block; }
+.rv-conv__atencion, .rv-conv__responder { display: grid; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.rv-conv__responder-fila { display: flex; gap: 8px; align-items: flex-start; }
+.rv-conv__campo { flex: 1; min-width: 0; resize: none; font: inherit; font-size: var(--t-small, 12px); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); }
+.rv-conv__campo:disabled, .rv-conv__enviar:disabled { cursor: not-allowed; opacity: .6; }
+.rv-conv__enviar { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: var(--t-small, 12px); padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .rv-conv__msg { animation: rv-conv-entra .24s ease-out both; }
+  .rv-conv__ficha { transition: border-color .15s ease; }
+  @keyframes rv-conv-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}

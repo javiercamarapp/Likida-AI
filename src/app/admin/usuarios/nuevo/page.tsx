@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { requireSuperadmin } from '@/lib/auth/guard';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,4 +17,7 @@ export default async function NuevoUsuario({ searchParams }: { searchParams?: Pr
   redirect(flota ? `/admin/equipo?flota=${encodeURIComponent(flota)}` : '/admin/equipo');
 }
 
-export const metadata: Metadata = { title: 'Nuevo acceso' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('ctl.nu_meta') };
+}

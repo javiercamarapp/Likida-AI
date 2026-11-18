@@ -1,4 +1,4 @@
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 import { type Tr } from '@/lib/i18n/dinero_tr';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -153,7 +153,7 @@ export default async function PaginaDocumentos({
       if (p && p.ok && p.estado === 'dividido') return { ok: true, mensaje: mensajeDeDivision(tr, p.embarques) };
       return { ok: true, mensaje: tr('cartaPorte.documentos.page.documentoLeidoYaEsta') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'subir el documento') };
+      return { ok: false, error: mensajeParaPantalla(e, 'subir el documento', await idiomaActual()) };
     }
   }
 
@@ -172,7 +172,7 @@ export default async function PaginaDocumentos({
       if (p.ok && p.estado === 'dividido') return { ok: true, mensaje: mensajeDeDivision(tr, p.embarques) };
       return p.ok ? { ok: true, mensaje: tr('cartaPorte.documentos.page.documentoLeido') } : { ok: false, error: p.mensaje };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'leer el documento') };
+      return { ok: false, error: mensajeParaPantalla(e, 'leer el documento', await idiomaActual()) };
     }
   }
 
@@ -186,7 +186,7 @@ export default async function PaginaDocumentos({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('cartaPorte.documentos.page.buzonActivado') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'activar el buzón') };
+      return { ok: false, error: mensajeParaPantalla(e, 'activar el buzón', await idiomaActual()) };
     }
   }
 
@@ -202,9 +202,9 @@ export default async function PaginaDocumentos({
       if (mala) return { ok: false, error: tr('cartaPorte.documentos.page.noPareceUnCorreo', { v: mala.slice(0, 60) }) };
       await repo.configurarBuzon(s.tenantId, { remitentesPermitidos: [...new Set(lista)] });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: lista.length === 0 ? tr('cartaPorte.documentos.page.sinListaElBuzon') : `Guardados ${lista.length} remitentes.` };
+      return { ok: true, mensaje: lista.length === 0 ? tr('cartaPorte.documentos.page.sinListaElBuzon') : (await getT('dashboard_b')).t('doc.guardados', { n: lista.length }) };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar los remitentes') };
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar los remitentes', await idiomaActual()) };
     }
   }
 
@@ -226,7 +226,7 @@ export default async function PaginaDocumentos({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('cartaPorte.documentos.page.formatoGuardadoYaAparece', { nombre }) };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar el formato') };
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar el formato', await idiomaActual()) };
     }
   }
 
@@ -242,7 +242,7 @@ export default async function PaginaDocumentos({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('cartaPorte.documentos.page.formatoQuitado') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'quitar el formato') };
+      return { ok: false, error: mensajeParaPantalla(e, 'quitar el formato', await idiomaActual()) };
     }
   }
 
@@ -260,7 +260,7 @@ export default async function PaginaDocumentos({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('cartaPorte.documentos.page.elPerfilVolvioA', { version }) };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'cambiar la versión') };
+      return { ok: false, error: mensajeParaPantalla(e, 'cambiar la versión', await idiomaActual()) };
     }
   }
 

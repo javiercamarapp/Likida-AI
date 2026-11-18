@@ -1,12 +1,13 @@
 'use client';
 
 import { nivelDePosicion, ROTULO_FRESCURA, type NivelFrescura } from '@/lib/likida/gps_salud';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { numero } from '@/lib/formato';
-import { Boton, Disclosure, EstadoVacio, SegmentedControl, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
+import { Disclosure, EstadoVacio, SegmentedControl, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
 import { KindBadge } from '@/app/ui-v2/graficas';
 import { useT } from '@/lib/i18n/proveedor';
 import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
+import { dashboard_a as dashboard_aEs } from '@/lib/i18n/es/dashboard_a';
 import '../estados.css';
 import { VIEWBOX, TRAZO_MEXICO, PUNTOS_MEXICO } from './mexico-geo';
 import './mapa.css';
@@ -102,6 +103,24 @@ function rankingDe(viajes: ViajeEnMapa[], eje: 'destino' | 'origen'): Array<{ no
     .sort((a, b) => b.cuenta - a.cuenta || a.nombre.localeCompare(b.nombre)).slice(0, 8);
 }
 
+/** Agrupa por rejilla las posiciones medidas: con ~140 unidades juntas entre Guadalajara y Monterrey las etiquetas se montaban. `celda` va en unidades del
+ *  viewBox y se achica con el zoom, así que al acercar los grupos se separan. El grupo solo cuenta y promedia posiciones MEDIDAS; no inventa ninguna. */
+export interface GrupoPines { clave: string; x: number; y: number; pines: PinUnidad[]; nivel: NivelFrescura }
+const GRAVEDAD: Record<NivelFrescura, number> = { en_vivo: 0, atrasada: 1, obsoleta: 2 };
+export function agruparPines(pines: PinUnidad[], celda: number): GrupoPines[] {
+  const celdas = new Map<string, PinUnidad[]>();
+  for (const p of pines) {
+    const k = `${Math.floor(p.x / celda)}:${Math.floor(p.y / celda)}`;
+    const l = celdas.get(k);
+    if (l) l.push(p); else celdas.set(k, [p]);
+  }
+  return [...celdas.entries()].map(([clave, ps]) => {
+    let nivel: NivelFrescura = 'en_vivo';
+    for (const p of ps) { const n = nivelDePosicion(p.minutos); if (GRAVEDAD[n] > GRAVEDAD[nivel]) nivel = n; }
+    return { clave, x: ps.reduce((a, p) => a + p.x, 0) / ps.length, y: ps.reduce((a, p) => a + p.y, 0) / ps.length, pines: ps, nivel };
+  });
+}
+
 export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0, nota }: {
   viajes: ViajeEnMapa[];
   /** Viajes en curso que NO se pudieron dibujar (origen o destino fuera del catálogo): el rótulo del vacío tiene que decirlo, no afirmar «sin viajes». */
@@ -115,7 +134,10 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
 }) {
   const [fijo, setFijo] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  const [pinFijo, setPinFijo] = useState<string | null>(null);
+  const [pinHover, setPinHover] = useState<string | null>(null);
   const { t } = useT('operacion', operacionEs);
+  const { t: ta } = useT('dashboard_a', dashboard_aEs);
   // Zoom del lienzo (1 a 3): recorta el viewBox alrededor del viaje activo (o del centro). Solo cambia el encuadre, nunca los datos.
   const [zoom, setZoom] = useState(1);
   // Ranking del panel (Rovaq: «mayor concentración · elige otro»): cuenta MEDIDA de los viajes dibujados por destino u origen.
@@ -126,6 +148,21 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
   const activoId = hover ?? fijo ?? visibles[0]?.id ?? viajes[0]?.id ?? null;
   const activo = viajes.find((v) => v.id === activoId) ?? null;
 
+  // Al elegir un viaje en el mapa, su fila se trae a la vista en la lista (la lista a mapa ya funciona por hover/clic).
+  useEffect(() => {
+    if (!fijo) return;
+    const el = document.getElementById(`rv-mp-v-${fijo}`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }, [fijo]);
+  const grupos = agruparPines(pines, 16 / zoom);
+  const enVisibles = new Set(visibles.map((v) => v.id));
+  const escalados = viajes.filter((v) => v.escalado && v.id !== activoId);
+  // Etiquetas de ciudades: las del ranking (medidas), con las coordenadas del primer viaje que las usa.
+  const ciudades = ranking.slice(0, 6).flatMap((r) => {
+    const v = viajes.find((x) => (eje === 'destino' ? x.destinoNombre : x.origenNombre) === r.nombre);
+    if (!v || r.nombre === activo?.origenNombre || r.nombre === activo?.destinoNombre) return [];
+    return [{ nombre: r.nombre, x: eje === 'destino' ? v.dx : v.ox, y: eje === 'destino' ? v.dy : v.oy }];
+  });
   const ancho = VIEWBOX.w / zoom, alto = VIEWBOX.h / zoom;
   const cx = activo ? (activo.ox + activo.dx) / 2 : VIEWBOX.w / 2;
   const cy = activo ? (activo.oy + activo.dy) / 2 : VIEWBOX.h / 2;
@@ -169,71 +206,86 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
             <button type="button" className="rv-mp__zbtn" onClick={() => setZoom(1)} disabled={zoom === 1} aria-label={t('mapa.zoom.reset')}>⤢</button>
           </div>
           <svg viewBox={`${vx.toFixed(1)} ${vy.toFixed(1)} ${ancho.toFixed(1)} ${alto.toFixed(1)}`} className="rv-mp__svg" role="img"
-            aria-label="Mapa de México con los viajes en curso">
+            aria-label={ta('mv.aria')}>
             {/* La tierra: trazo tenue + la matriz de puntos */}
             <path d={TRAZO_MEXICO} fillRule="evenodd" fill="var(--g1)" stroke="var(--line2)" strokeWidth={0.7} />
             {PUNTOS_MEXICO.map(([x, y], i) => (
               <circle key={i} cx={x} cy={y} r={1.25} fill="var(--g3)" opacity={0.5} />
             ))}
 
-            {/* Los arcos de fondo (todos los viajes menos el activo) */}
-            {viajes.map((v) => {
+            {/* Los arcos de fondo (todos los viajes menos el activo): se dibujan al entrar y se reanima al cambiar de eje; los que no son del lugar elegido se atenúan. */}
+            {viajes.map((v, i) => {
               if (v.id === activoId) return null;
               const d = arcoDe(v);
               return (
-                <g key={v.id} className="rv-mp__arco" onMouseEnter={() => setHover(v.id)}
-                  onMouseLeave={() => setHover(null)} onClick={() => setFijo(v.id)}>
-                  {d && <path d={d} fill="none" stroke="var(--muted)" strokeWidth={1.1} />}
+                <g key={`${eje}:${v.id}`} className="rv-mp__arco" data-r={i % 6} data-fuera={enVisibles.has(v.id) ? undefined : true} data-escalado={v.escalado || undefined}
+                  onMouseEnter={() => setHover(v.id)} onMouseLeave={() => setHover(null)} onClick={() => setFijo(v.id)}>
+                  {d && <path d={d} fill="none" strokeWidth={1.1} pathLength={1} className="rv-mp__trazo" />}
                   {/* Zona de clic generosa e invisible */}
                   {d && <path d={d} fill="none" stroke="transparent" strokeWidth={12} />}
-                  <circle cx={v.ox} cy={v.oy} r={1.8} fill="var(--muted)" />
-                  <circle cx={v.dx} cy={v.dy} r={1.8} fill="var(--muted)" />
+                  <circle cx={v.ox} cy={v.oy} r={1.8} className="rv-mp__extremo" />
+                  <circle cx={v.dx} cy={v.dy} r={1.8} className="rv-mp__extremo" />
                 </g>
               );
             })}
+
+            {/* Escalados: pulso suave en el destino; su folio se rotula solo si son pocos o hay zoom (si no, se montan). */}
+            {escalados.map((v) => (
+              <g key={`esc:${v.id}`} className="rv-mp__esc" onMouseEnter={() => setHover(v.id)} onMouseLeave={() => setHover(null)} onClick={() => setFijo(v.id)}>
+                <circle cx={v.dx} cy={v.dy} r={3} className="rv-mp__esc-punto" />
+                <circle cx={v.dx} cy={v.dy} r={3} className="rv-mp__esc-pulso" />
+                {(escalados.length <= 6 || zoom >= 2) && <text x={v.dx} y={v.dy - 6} textAnchor="middle" className="rv-mp__txt rv-mp__txt--esc">{v.folio}</text>}
+              </g>
+            ))}
+
+            {/* Ciudades del ranking */}
+            {ciudades.map((c) => (
+              <g key={`ciu:${c.nombre}`}>
+                <circle cx={c.x} cy={c.y} r={2} className="rv-mp__ciudad-punto" />
+                <text x={c.x} y={c.y - 5} textAnchor="middle" className="rv-mp__txt rv-mp__txt--ciudad">{c.nombre}</text>
+              </g>
+            ))}
 
             {/* El viaje activo, encima de todo */}
             {activo && (() => {
               const d = arcoDe(activo);
               return (
-                <g>
+                <g key={`activo:${activo.id}`}>
                   {d && <path d={d} fill="none" stroke="var(--ink)" strokeWidth={2} className="rv-mp__activo" />}
                   <circle cx={activo.ox} cy={activo.oy} r={3} fill="none" stroke="var(--ink)" strokeWidth={1.5} />
                   <circle cx={activo.dx} cy={activo.dy} r={3.2} fill="var(--ink)" />
                   <circle cx={activo.dx} cy={activo.dy} r={3.2} fill="var(--ink)" className="rv-mp__pulso" />
-                  <text x={activo.ox} y={activo.oy - 7} textAnchor="middle" fontSize={12} fontWeight={600}
-                    fill="var(--ink)" stroke="var(--surface)" strokeWidth={3} paintOrder="stroke">
-                    {activo.origenNombre}
-                  </text>
-                  <text x={activo.dx} y={activo.dy - 7} textAnchor="middle" fontSize={12} fontWeight={600}
-                    fill="var(--ink)" stroke="var(--surface)" strokeWidth={3} paintOrder="stroke">
-                    {activo.destinoNombre}
-                  </text>
+                  <text x={activo.ox} y={activo.oy - 7} textAnchor="middle" className="rv-mp__txt rv-mp__txt--activo">{activo.origenNombre}</text>
+                  <text x={activo.dx} y={activo.dy - 7} textAnchor="middle" className="rv-mp__txt rv-mp__txt--activo">{activo.destinoNombre}</text>
                 </g>
               );
             })()}
 
-            {/* Los PINES medidos, encima de todo: cuadrado girado 45° (no un círculo, que es el vocabulario de los extremos del arco)
-                y en --ok si reportó hace poco, --faint si lleva horas callado. */}
-            {pines.map((p) => {
+            {/* Las posiciones MEDIDAS, encima de todo: rombo (no círculo, que es el vocabulario de los extremos del arco) con el color de su frescura.
+                Cercanas entre sí se agrupan con su contador; el rótulo solo sale en la elegida o bajo el cursor. */}
+            {grupos.map((g) => {
+              if (g.pines.length > 1) {
+                return (
+                  <g key={`g:${g.clave}`} className="rv-mp__grupo" data-nivel={g.nivel} onClick={() => setZoom((z) => Math.min(3, z + 1))}>
+                    <title>{ta('mv.grupo', { n: numero(g.pines.length) })}</title>
+                    <circle cx={g.x} cy={g.y} r={5 + Math.min(4, Math.log2(g.pines.length))} className="rv-mp__grupo-disco" />
+                    <text x={g.x} y={g.y} textAnchor="middle" dominantBaseline="central" className="rv-mp__txt rv-mp__txt--grupo">{numero(g.pines.length)}</text>
+                  </g>
+                );
+              }
+              const p = g.pines[0];
               const nivel: NivelFrescura = nivelDePosicion(p.minutos);
               const fresco = nivel === 'en_vivo';
-              const relleno = nivel === 'en_vivo' ? 'var(--ok)' : nivel === 'atrasada' ? 'var(--warn)' : 'var(--faint)';
+              const rotulo = pinFijo === p.unidadId || pinHover === p.unidadId;
               return (
-                <g key={p.unidadId}>
-                  <rect x={p.x - 3.2} y={p.y - 3.2} width={6.4} height={6.4}
-                    transform={`rotate(45 ${p.x} ${p.y})`}
-                    fill={relleno}
-                    stroke="var(--surface)" strokeWidth={1.2}>
+                <g key={p.unidadId} className="rv-mp__pin" data-nivel={nivel} onMouseEnter={() => setPinHover(p.unidadId)} onMouseLeave={() => setPinHover(null)}
+                  onClick={() => setPinFijo((f) => (f === p.unidadId ? null : p.unidadId))}>
+                  <rect x={p.x - 3.2} y={p.y - 3.2} width={6.4} height={6.4} transform={`rotate(45 ${p.x} ${p.y})`} className="rv-mp__rombo">
                     <title>
-                      {`${p.etiqueta} — ${ROTULO_FRESCURA[nivel]}${fresco ? '' : ': última posición conocida, no dónde está ahora'} (${p.respaldoWa ? 'pin del chofer, respaldo del GPS' : p.proveedor})`}
+                      {ta(fresco ? 'mv.pin.fresco' : 'mv.pin.viejo', { etiqueta: p.etiqueta, frescura: ROTULO_FRESCURA[nivel], fuente: p.respaldoWa ? ta('mv.pin.respaldo') : p.proveedor })}
                     </title>
                   </rect>
-                  <text x={p.x} y={p.y + 11} textAnchor="middle" fontSize={11} fontWeight={600}
-                    fill="var(--ink)" stroke="var(--surface)" strokeWidth={2.4} paintOrder="stroke"
-                    opacity={nivel === 'obsoleta' ? 0.6 : 1}>
-                    {p.etiqueta}
-                  </text>
+                  {rotulo && <text x={p.x} y={p.y + 11} textAnchor="middle" className="rv-mp__txt rv-mp__txt--pin">{p.etiqueta}</text>}
                 </g>
               );
             })}
@@ -253,10 +305,9 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
           {/* AUDITORÍA 20 (H5): esta leyenda decía «Likida no rastrea GPS» y dejó de ser verdad — `posicion` tiene escritores y los
               pines de arriba salen de ahí. Lo ilustrativo sigue siendo el ARCO, y eso es lo que la leyenda tiene que decir ahora. */}
           <p className="rv-mp__nota">
-            El ARCO es el trayecto ilustrativo entre origen y destino, no la ruta que hizo el
-            camión. {pines.length > 0
-              ? `Los ${numero(pines.length)} ${pines.length === 1 ? 'rombo es una posición MEDIDA' : 'rombos son posiciones MEDIDAS'} — con su hora y su origen en la lista de abajo.`
-              : 'Cuando una unidad reporte posición (conector GPS o pin del chofer por WhatsApp) aparece aquí como un rombo.'}
+            {pines.length > 0
+              ? ta(pines.length === 1 ? 'mv.nota.pines.uno' : 'mv.nota.pines.otros', { n: numero(pines.length) })
+              : ta('mv.nota.sinPines')}
           </p>
         </div>
 
@@ -286,25 +337,24 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
             vacioPanel
           ) : visibles.map((v) => {
             const esActivo = v.id === activoId;
+            const operador = v.operadorNombre ?? ta('mv.sinOperador');
+            const pie = `${operador} · ${ta('mv.km', { km: numero(v.kmRecta) })}${v.fotos > 0 ? ` · ${ta(v.fotos === 1 ? 'mv.fotos.uno' : 'mv.fotos.otros', { n: numero(v.fotos) })}` : ''}`;
+            const ruta = `${v.origenNombre} → ${v.destinoNombre}`;
             return (
-              <Boton key={v.id} variante="ghost"
-                onMouseEnter={() => setHover(v.id)} onMouseLeave={() => setHover(null)}
+              <button key={v.id} id={`rv-mp-v-${v.id}`} type="button"
+                onMouseEnter={() => setHover(v.id)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(v.id)} onBlur={() => setHover(null)}
                 onClick={() => setFijo((f) => (f === v.id ? null : v.id))}
-                className="rv-mp__card !flex !h-auto !w-full !flex-col !items-stretch !justify-start !whitespace-normal !text-left" data-activo={esActivo || undefined} aria-pressed={esActivo}>
-                <div className="rv-mp__card-cab">
-                  <strong>{v.folio}</strong>
-                  {v.escalado ? <StatusChip tono="bad">Escalado</StatusChip> : <StatusChip tono="ok">En ruta</StatusChip>}
+                className="rv-mp__card" data-activo={esActivo || undefined} data-escalado={v.escalado || undefined} aria-pressed={esActivo}>
+                <span className="rv-mp__card-cab">
+                  <strong className="rv-mp__card-folio" title={v.folio}>{v.folio}</strong>
+                  {v.escalado ? <StatusChip tono="bad">{ta('mv.escalado')}</StatusChip> : <StatusChip tono="ok">{ta('mv.enRuta')}</StatusChip>}
                   {v.dias !== null && (
-                    <span className="rv-mp__card-dias">{numero(v.dias)} {v.dias === 1 ? 'día' : 'días'}</span>
+                    <span className="rv-mp__card-dias">{ta(v.dias === 1 ? 'mv.dias.uno' : 'mv.dias.otros', { n: numero(v.dias) })}</span>
                   )}
-                </div>
-                <div className="rv-mp__card-ruta">{v.origenNombre} → {v.destinoNombre}</div>
-                <div className="rv-mp__card-pie">
-                  {v.operadorNombre ?? 'Sin operador asignado'}
-                  {' · '}≈ {numero(v.kmRecta)} km en línea recta
-                  {v.fotos > 0 && <> · {numero(v.fotos)} {v.fotos === 1 ? 'foto' : 'fotos'} en proceso</>}
-                </div>
-              </Boton>
+                </span>
+                <span className="rv-mp__card-ruta" title={ruta}>{ruta}</span>
+                <span className="rv-mp__card-pie" title={pie}>{pie}</span>
+              </button>
             );
           })}
         </div>
@@ -321,7 +371,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0
               { id: 'operador', titulo: t('mapa.tabla.operador'), celda: (v) => v.operadorNombre ?? '—' },
               { id: 'dias', titulo: t('mapa.tabla.dias'), celda: (v) => (v.dias === null ? '—' : numero(v.dias)) },
               { id: 'km', titulo: t('mapa.tabla.km'), celda: (v) => numero(v.kmRecta) },
-              { id: 'estado', titulo: t('mapa.tabla.estado'), celda: (v) => (v.escalado ? <StatusChip tono="bad">Escalado</StatusChip> : <StatusChip tono="ok">En ruta</StatusChip>) },
+              { id: 'estado', titulo: t('mapa.tabla.estado'), celda: (v) => (v.escalado ? <StatusChip tono="bad">{ta('mv.escalado')}</StatusChip> : <StatusChip tono="ok">{ta('mv.enRuta')}</StatusChip>) },
             ]} />
         </Disclosure>
       ) : null}

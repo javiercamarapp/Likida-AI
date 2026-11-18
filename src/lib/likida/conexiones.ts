@@ -182,7 +182,7 @@ export interface SenalesRastreo {
 }
 
 export async function getConexiones(tenantId: string): Promise<Conector[]> {
-  const [fiscal, rastreo, buzon] = await Promise.all([
+  const [fiscal, rastreo, buzon, simulada] = await Promise.all([
     getFiscalDeFlota(tenantId).catch(() => null),
     // ── LA TABLA CORRECTA (arreglo de agosto-2026) ────────────────────────
     // Este renglón contaba `rastreo_credencial` (0050), que NO tiene un solo
@@ -202,6 +202,15 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
       .eq('id', tenantId)
       .maybeSingle(), 'conexiones.buzon')
       .then(({ data, error }) => (error || !data ? null : Boolean(data.buzon_token))) as Promise<boolean | null>,
+    // Cuenta de DEMOSTRACIÓN: su nombre empieza con «DEMO ». `tenant.config` no admite llaves
+    // nuevas y `plan = 'demo'` también lo tiene una flota real en prueba, así que el nombre es la marca. Fallar cerrado: si no se
+    // puede leer, la cuenta NO se trata como simulada y todo se mide como siempre.
+    acotada(supabaseAdmin()
+      .from('tenant')
+      .select('nombre')
+      .eq('id', tenantId)
+      .maybeSingle(), 'conexiones.demo')
+      .then(({ data, error }) => !error && typeof data?.nombre === 'string' && data.nombre.startsWith('DEMO ')),
   ]);
 
   const conectores: Conector[] = [];
@@ -305,6 +314,18 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
       : 'En modo de ensayo: las facturas (CFDI) se preparan pero no se timbran de verdad. La emisión real se activa con el equipo de Likida cuando tu alta fiscal esté lista; escríbele para pedirlo.',
     falta: [],
   });
+
+  // En una cuenta de demostración lo que no está listo se muestra como conectado, pero ROTULADO como simulado: el nombre lo dice y el
+  // detalle explica que no es una medición. Nunca se hace pasar por real (regla del producto: un rótulo tiene que ser verdad).
+  if (simulada) {
+    return conectores.map((c) => c.estado === 'listo' ? c : ({
+      ...c,
+      nombre: `${c.nombre} (simulado)`,
+      estado: 'listo' as const,
+      detalle: 'Simulado en esta cuenta de demostración: así se vería con la conexión activa. No es una medición real ni una entrega real.',
+      falta: [],
+    }));
+  }
 
   return conectores;
 }

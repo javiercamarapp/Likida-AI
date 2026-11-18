@@ -8,11 +8,14 @@ import { sentryActivo } from '@/lib/observability/sentry';
 import { correoConfigurado } from '@/lib/correo/enviar';
 import { hookDeCorreoConfigurado } from '@/lib/correo/auth';
 import { envHealth, faltantes } from '@/lib/env';
-import { Disclosure, EstadoError, Tarjeta } from '../../ui-v2/componentes';
+import { Disclosure, EstadoError, FilaTarjetas, Tarjeta } from '../../ui-v2/componentes';
+import { BarList, DonaMini } from '../../ui-v2/graficas';
+import { observadas } from '../sello-observado';
 import { TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaRenglones, type RenglonSistema } from '../renglon-sistema';
 import '../sistema.css';
+import '../resumen.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
@@ -88,7 +91,7 @@ export default async function IntegracionesPage() {
     <EsqueletoTablaMaestra
       titulo={t('integraciones.integraciones')}
       apoyo={t('integraciones.los_servicios_reales_de_los_que')}
-      cifras={uniformes([
+      cifras={observadas(uniformes([
         { etiqueta: t('integraciones.conectores'), valor: conectores.length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : conectores.some((c) => c.tono === 'warn') ? 'warn' : 'ok' },
         { etiqueta: t('integraciones.kpi_ok'), valor: conectores.filter((c) => c.tono === 'ok').length, formato: 'entero' },
         { etiqueta: t('integraciones.kpi_atencion'), valor: conectores.filter((c) => c.tono === 'warn').length, formato: 'entero', tono: conectores.some((c) => c.tono === 'warn') ? 'warn' : undefined },
@@ -96,23 +99,48 @@ export default async function IntegracionesPage() {
         r === null
           ? { etiqueta: t('integraciones.kpi_modelos'), valor: null, estado: 'vacio' as const, mensaje: t('integraciones.no_se_pudo_leer_el_gasto') }
           : { etiqueta: t('integraciones.kpi_modelos'), valor: r.porModelo.length, formato: 'entero' as const },
-      ])}
+      ]), t('a1r4.observado'))}
     >
-      <Tarjeta titulo={t('integraciones.conectores')}>
-        <TablaRenglones
-          renglones={conectores} etiqueta={t('integraciones.conectores')}
-          columnas={{ servicio: t('salud_sistema.col_servicio'), estado: t('salud_sistema.estado'), significa: t('salud_sistema.col_significa'), enlace: t('salud_sistema.col_enlace') }}
-          rotuloArreglo={(n) => t('salud_sistema.como_arreglar_n', { n })}
-        />
-      </Tarjeta>
+      <FilaTarjetas variante="4-8" className="fin16c-arriba">
+        <Tarjeta entra="tarjeta" titulo={t('integraciones.grafica_estado')}>
+          <DonaMini
+            etiqueta={t('integraciones.grafica_estado')}
+            centro={String(conectores.length)}
+            formato="numero"
+            gajos={[
+              { etiqueta: t('integraciones.kpi_ok'), valor: conectores.filter((c) => c.tono === 'ok').length },
+              { etiqueta: t('integraciones.kpi_atencion'), valor: conectores.filter((c) => c.tono === 'warn').length },
+              { etiqueta: t('integraciones.kpi_faltan'), valor: conectores.filter((c) => c.tono === 'bad').length },
+              { etiqueta: t('integraciones.sin_medir'), valor: conectores.filter((c) => c.tono === 'neutral').length },
+            ]}
+          />
+        </Tarjeta>
+        <Tarjeta entra="tarjeta" titulo={t('integraciones.conectores')}>
+          <TablaRenglones
+            renglones={conectores} etiqueta={t('integraciones.conectores')}
+            columnas={{ servicio: t('salud_sistema.col_servicio'), estado: t('salud_sistema.estado'), significa: t('salud_sistema.col_significa'), enlace: t('salud_sistema.col_enlace') }}
+            rotuloArreglo={(n) => t('salud_sistema.como_arreglar_n', { n })}
+          />
+        </Tarjeta>
+      </FilaTarjetas>
 
       {r === null ? (
         <EstadoError reintentar>{t('integraciones.no_se_pudo_leer_el_gasto')}</EstadoError>
+      ) : r.porModelo.length === 0 ? (
+        <Tarjeta entra="tarjeta" titulo={t('integraciones.proveedores_de_modelos_de_ia')} estado="vacio" mensaje={t('integraciones.sin_llamadas_registradas_todavia')} detalle={t('integraciones.aparecen_aqui_los_modelos_en_cuanto')} contenida />
       ) : (
-        <Tarjeta titulo={t('integraciones.proveedores_de_modelos_de_ia')} estado={r.porModelo.length === 0 ? 'vacio' : 'ok'} mensaje={t('integraciones.sin_llamadas_registradas_todavia')} detalle={t('integraciones.aparecen_aqui_los_modelos_en_cuanto')}>
-          <p className="adm-sis-nota">{t('integraciones.no_es_un_catalogo_de_lo')}</p>
-          <TablaBase etiqueta={t('integraciones.modelos_que_ya_corrieron')} columnas={columnasModelo(t, idioma)} filas={r.porModelo} idFila={(m) => m.modelo} densa tarjetaMovil />
-        </Tarjeta>
+        <FilaTarjetas variante="6-6" className="fin16c-arriba">
+          <Tarjeta entra="tarjeta" titulo={t('integraciones.grafica_gasto')}>
+            <BarList
+              etiqueta={t('integraciones.grafica_gasto')}
+              items={[...r.porModelo].sort((a, b) => b.costoUsd - a.costoUsd).slice(0, 6).map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: usd(m.costoUsd), nota: t('integraciones.n_llamadas', { n: numero(m.n, idioma) }) }))}
+            />
+          </Tarjeta>
+          <Tarjeta entra="tarjeta" titulo={t('integraciones.proveedores_de_modelos_de_ia')}>
+            <p className="adm-sis-nota">{t('integraciones.no_es_un_catalogo_de_lo')}</p>
+            <TablaBase etiqueta={t('integraciones.modelos_que_ya_corrieron')} columnas={columnasModelo(t, idioma)} filas={r.porModelo} idFila={(m) => m.modelo} densa tarjetaMovil />
+          </Tarjeta>
+        </FilaTarjetas>
       )}
 
       <Disclosure titulo={t('compliance.lo_que_aun_no_existe_aqui')} resumen={t('integraciones.rotacion_de_llaves')}>

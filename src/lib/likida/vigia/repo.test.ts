@@ -46,7 +46,7 @@ vi.mock('../contactos', () => ({
 }));
 
 const repoMod = await import('./repo');
-const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia, validarServicio, guardarServicioVigia, quitarServicioVigia, fijarTurnoDirector, listarFestivos, guardarFestivo } = repoMod;
+const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, cargarHiloConversacion, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia, validarServicio, guardarServicioVigia, quitarServicioVigia, fijarTurnoDirector, listarFestivos, guardarFestivo } = repoMod;
 const { T1, T2, CLIENTE_A, VIAJE_1 } = await import('./datos.fixture');
 const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
 
@@ -111,6 +111,7 @@ describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () 
       ['altaContacto', () => altaContactoVigia(T1, 'u', { clienteId: CLIENTE_A, telefono: '5511110001', nombre: null, gerenteUserId: 'u-ger', consentimiento: true })],
       ['bajaManual', () => bajaManualContacto(T1, 'u', id)],
       ['tablero', () => cargarTablero(T1)],
+      ['hilo', () => cargarHiloConversacion(T1, id)],
     ];
     for (const [nombre, f] of metodos) {
       llamadas = [];
@@ -657,6 +658,28 @@ describe('cargarTablero', () => {
     const t = await cargarTablero(T1);
     expect(t.respuesta).toEqual({ muestra: 0, promedioMin: null, medianaMin: null });
     expect(t.config.habilitado).toBe(false);
+  });
+});
+
+describe('cargarHiloConversacion (bandeja de atención)', () => {
+  const conv = '00000000-0000-4000-8000-000000000001';
+  it('lee solo los mensajes de ESA conversación y de esta flota, y los entrega del más antiguo al más reciente', async () => {
+    respuesta = () => ({ data: [
+      { id: 'm2', tenant_id: T1, conversacion_id: conv, direccion: 'saliente', autor: 'agente', estado: 'pendiente_aprobacion', texto: 'propuesta', created_at: '2026-10-01T17:01:00Z' },
+      { id: 'm1', tenant_id: T1, conversacion_id: conv, direccion: 'entrante', autor: 'cliente', estado: 'recibido', texto: '¿dónde va?', created_at: '2026-10-01T17:00:00Z' },
+    ], error: null });
+    llamadas = [];
+    const h = await cargarHiloConversacion(T1, conv);
+    expect(h.map((m) => m.id)).toEqual(['m1', 'm2']);
+    expect(h[0]).toMatchObject({ direccion: 'entrante', autor: 'cliente', texto: '¿dónde va?' });
+    expect(h[1]).toMatchObject({ direccion: 'saliente', estado: 'pendiente_aprobacion' });
+    const l = llamadas.find((x) => x.tabla === 'vigia_mensaje')!;
+    expect(tiene(l, 'eq', 'tenant_id', T1)).toBe(true);
+    expect(tiene(l, 'eq', 'conversacion_id', conv)).toBe(true);
+  });
+  it('una base caída lanza: no se lee como «sin mensajes»', async () => {
+    respuesta = () => ({ data: null, error: { message: 'caída' } });
+    await expect(cargarHiloConversacion(T1, conv)).rejects.toThrow();
   });
 });
 

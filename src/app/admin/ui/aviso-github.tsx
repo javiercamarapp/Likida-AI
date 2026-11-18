@@ -1,4 +1,6 @@
 import { AvisoCompacto } from '../../ui-v2/componentes/aviso';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 
 /**
  * Aviso COMPACTO y accionable cuando GitHub no se puede leer desde /admin (Dev y Actividad de código). Es una falta de configuración, no
@@ -7,20 +9,20 @@ import { AvisoCompacto } from '../../ui-v2/componentes/aviso';
  * `sin_token`: la variable no existe. `error`: existe pero GitHub la rechazó o no contestó (un 401 = token vencido o sin permiso de lectura).
  * Sin funciones como props: se pinta desde componentes de servidor.
  */
-export function AvisoGitHub({ causa }: { causa: 'sin_token' | 'error' }) {
+export function AvisoGitHub({ causa, t = trAdminInicioEs }: { causa: 'sin_token' | 'error'; t?: TrDe<'admin_inicio'> }) {
   // Lo visible NO nombra variables de entorno ni paneles de despliegue (Rovaq nunca los muestra): el nombre de la variable y dónde
   // se define quedan en el comentario de arriba, para quien arregle la configuración.
   return (
     <AvisoCompacto
       tono="warn"
       resumen={causa === 'sin_token'
-        ? <>Falta configurar el acceso a GitHub: pídele al equipo técnico que conecte la lectura del repositorio.</>
-        : <>GitHub no dejó leer el repositorio: el acceso configurado puede haber vencido o no tener permiso de lectura.</>}
+        ? <>{t('raiz7.github_sin_token')}</>
+        : <>{t('raiz7.github_error')}</>}
       mas={(
         <>
-          <p>Es una configuración del servidor, no algo que se corrija desde esta pantalla; el acceso debe ser de solo lectura sobre el repositorio y se estrena con un nuevo despliegue.</p>
-          {causa === 'error' && <p>Si GitHub rechazó el acceso (vencido o revocado), hay que generar uno nuevo y sustituirlo.</p>}
-          <p>Mientras tanto estas secciones no afirman nada: no es que no haya commits, es que no se pudieron leer.</p>
+          <p>{t('raiz7.github_mas_config')}</p>
+          {causa === 'error' && <p>{t('raiz7.github_mas_rechazo')}</p>}
+          <p>{t('raiz7.github_mas_mientras')}</p>
         </>
       )}
     />

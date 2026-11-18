@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { admin_sistema as dicEs } from '@/lib/i18n/es/admin_sistema';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 13, seguridad, MEDIO — el avatar del superadmin subía SIN
@@ -67,8 +68,11 @@ describe('admin/mi-perfil: el avatar del superadmin valida tipo y peso antes de 
 describe('A37-S07-05: admin/mi-perfil muestra mensajes propios para tipo y peso', () => {
   it('mapea error=tipo y error=peso a mensajes que hablan de la imagen, no del nombre', () => {
     const mapa = PAGINA.slice(PAGINA.indexOf("sp.error === 'avatar'"));
-    expect(mapa).toMatch(/sp\.error === 'tipo'\s*\?\s*'[^']*(JPG|imagen)[^']*'/);
-    expect(mapa).toMatch(/sp\.error === 'peso'\s*\?\s*'[^']*2 MB[^']*'/);
+    // Los mensajes salen del diccionario: la página mapea cada error a su clave y el texto en español habla de la imagen.
+    expect(mapa).toMatch(/sp\.error === 'tipo'\s*\?\s*ts\('mi_perfil\.error_tipo'\)/);
+    expect(mapa).toMatch(/sp\.error === 'peso'\s*\?\s*ts\('mi_perfil\.error_peso'\)/);
+    expect(dicEs['mi_perfil.error_tipo']).toMatch(/JPG|imagen/);
+    expect(dicEs['mi_perfil.error_peso']).toMatch(/2 MB/);
   });
 
   it('el input acepta solo los tipos que el servidor acepta (no image/*)', () => {

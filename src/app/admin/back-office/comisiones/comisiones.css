@@ -1,0 +1,8 @@
+/* Comisiones y pagos a vendedores del Back-office. Solo tokens globales (--ink, --muted, --line, --surface). Sin hex, sin style en el JSX. */
+[data-ui="v2"] .bo-com-celda { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+[data-ui="v2"] .bo-com-celda__nombre { font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+[data-ui="v2"] .bo-com-celda__tenue { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
+[data-ui="v2"] .bo-com-regla { display: grid; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; font-size: var(--t-body); color: var(--ink); }
+[data-ui="v2"] .bo-com-regla li { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+[data-ui="v2"] .bo-com-regla__rotulo { color: var(--muted); }
+[data-ui="v2"] .bo-monto { white-space: nowrap; font-variant-numeric: tabular-nums; }

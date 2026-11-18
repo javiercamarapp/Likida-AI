@@ -1,7 +1,10 @@
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 import { datosParaProveedor } from '@/lib/i18n/servidor';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import { trDashboardBEs } from '@/lib/i18n/tr_dashboard_b';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import type { Idioma } from '@/lib/i18n/idioma';
 import {
   Aviso, BarraPeriodo, BotonEnlace, CamposSistema, CampoFecha, CampoSelect, CampoTexto, EstadoError, EstadoVacio, Fieldset, Icono, StatusChip, TablaBase,
   type AccionDeForma, type ColumnaBase, type ResultadoAccion, type TonoEstado,
@@ -62,6 +65,7 @@ export default async function PaginaCotizaciones({
   searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; ver?: string; nuevo?: string }>;
 }) {
   const { t: tr } = await getT('dinero');
+  const { t: tb, idioma } = await getT('dashboard_b');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -95,7 +99,7 @@ export default async function PaginaCotizaciones({
         margenObjetivoPct: perilla(fd.get('margenObjetivoPct')),
       }, s.userId ?? null);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar los costos declarados') };
+      return { error: mensajeParaPantalla(e, 'guardar los costos declarados', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: tr('cotizaciones.page.costosDeclaradosLasCotizacio') };
@@ -119,7 +123,7 @@ export default async function PaginaCotizaciones({
         vigenteHasta: String(fd.get('vigenteHasta') ?? '') || null,
       }, s.userId ?? null);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'crear la cotización') };
+      return { error: mensajeParaPantalla(e, 'crear la cotización', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: tr('cotizaciones.page.cotizacionCreadaConSu') };
@@ -138,7 +142,7 @@ export default async function PaginaCotizaciones({
     try {
       await marcarEnviada(s.tenantId, String(fd.get('id') ?? ''));
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'marcar la cotización como enviada') };
+      return { error: mensajeParaPantalla(e, 'marcar la cotización como enviada', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: tr('cotizaciones.page.marcadaComoEnviada') };
@@ -153,7 +157,7 @@ export default async function PaginaCotizaciones({
     try {
       await marcarPerdida(s.tenantId, String(fd.get('id') ?? ''), como, s.userId ?? null);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, como === 'vencida' ? 'marcar como vencida' : 'marcar como perdida') };
+      return { error: mensajeParaPantalla(e, como === 'vencida' ? 'marcar como vencida' : 'marcar como perdida', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: como === 'vencida' ? tr('cotizaciones.page.marcadaVencida') : tr('cotizaciones.page.marcadaPerdida') };
@@ -172,7 +176,7 @@ export default async function PaginaCotizaciones({
     } catch (e) {
       // El motivo honesto (sin precio, ya decidida…) ahora también llega a
       // pantalla, no solo al log.
-      return { error: mensajeParaPantalla(e, 'crear el viaje desde esta cotización') };
+      return { error: mensajeParaPantalla(e, 'crear el viaje desde esta cotización', await idiomaActual()) };
     }
     revalidatePath(RUTA);
     return { ok: tr('cotizaciones.page.viajeCreadoDesdeEsta') };
@@ -237,7 +241,7 @@ export default async function PaginaCotizaciones({
         );
       },
     },
-    { id: 'estado', titulo: tr('cotizaciones.page.col.estado'), celda: (q) => <StatusChip tono={TONO_ESTADO[q.estado] ?? 'neutral'}>{q.estado}</StatusChip> },
+    { id: 'estado', titulo: tr('cotizaciones.page.col.estado'), celda: (q) => <StatusChip tono={TONO_ESTADO[q.estado] ?? 'neutral'}>{estadoCotizacion(tb, q.estado)}</StatusChip> },
     {
       id: 'acciones', titulo: tr('cotizaciones.page.col.acciones'), alinear: 'der',
       celda: (q) => (
@@ -306,7 +310,7 @@ export default async function PaginaCotizaciones({
               { etiqueta: tr('cotizaciones.page.col.margen'), valor: g === null || g.margenPct === null ? '—' : porcentaje(g.margenPct) },
             ]}
           >
-            <DetalleCotizacion tr={tr} q={elegida} />
+            <DetalleCotizacion tr={tr} tb={tb} idioma={idioma} q={elegida} />
           </CajonVistaRapida>
         );
       })()}
@@ -314,7 +318,7 @@ export default async function PaginaCotizaciones({
       {panel && sp.nuevo === 'costos' && (
         <CajonAlta titulo={tr('cotizaciones.page.costosDeclaradosDeLa')} hrefCerrar={hrefSinNuevo} idPrefijo="costos">
           <p className="rv-cot__nota">{tr('cotizaciones.page.loQueTuDeclaras')}</p>
-          <FormaDeCajon accion={guardarConfig} boton="Guardar costos" idPrefijo="costos">
+          <FormaDeCajon accion={guardarConfig} boton={tb('ct.guardar_costos')} idPrefijo="costos">
             <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.porKilometro')}>
               <div className="rv-forma__rejilla">
                 <CampoTexto id="dieselPorKm" name="dieselPorKm" etiqueta={tr('cotizaciones.page.dieselKm')} defaultValue={vInicial(c?.dieselPorKm)} ayuda={tr('cotizaciones.page.combustiblePorKmComo')} />
@@ -340,7 +344,7 @@ export default async function PaginaCotizaciones({
       {panel && sp.nuevo === 'cotizacion' && (
         <CajonAlta titulo={tr('cotizaciones.page.nuevaCotizacion')} hrefCerrar={hrefSinNuevo} ancho="xl" idPrefijo="cotizacion">
           <p className="rv-cot__nota">{tr('cotizaciones.page.siEstaRutaTiene')}</p>
-          <FormaDeCajon accion={cotizar} boton="Cotizar" idPrefijo="cotizacion">
+          <FormaDeCajon accion={cotizar} boton={tb('ct.cotizar')} idPrefijo="cotizacion">
             <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.ruta')}>
               <div className="rv-forma__rejilla">
                 <CampoSelect id="clienteId" name="clienteId" etiqueta={tr('cotizaciones.page.cliente')} defaultValue="">
@@ -383,11 +387,18 @@ function TablaCotizaciones({ columnas, filas, etiqueta, vacio }: {
   return <TablaBase<CotizacionRow> etiqueta={etiqueta} columnas={columnas} filas={filas} idFila={(q) => q.id} vacio={vacio} tarjetaMovil />;
 }
 
+const CLAVE_ESTADO = {
+  borrador: 'ct.estado.borrador', enviada: 'ct.estado.enviada', aceptada: 'ct.estado.aceptada', convertida: 'ct.estado.convertida',
+  perdida: 'ct.estado.perdida', vencida: 'ct.estado.vencida',
+} as const;
+/** El estado de una cotización en el idioma activo; uno desconocido sale crudo (visible, no roto). */
+const estadoCotizacion = (tb: TrDe<'dashboard_b'>, estado: string): string => (estado in CLAVE_ESTADO ? tb(CLAVE_ESTADO[estado as keyof typeof CLAVE_ESTADO]) : estado);
+
 const TONO_ESTADO: Record<string, TonoEstado> = {
   borrador: 'neutral', enviada: 'info', aceptada: 'ok', convertida: 'ok', perdida: 'bad', vencida: 'warn',
 };
 
-function DetalleCotizacion({ q, tr = trEs }: { q: CotizacionRow; tr?: Tr }) {
+function DetalleCotizacion({ q, tr = trEs, tb = trDashboardBEs, idioma = 'es' }: { q: CotizacionRow; tr?: Tr; tb?: TrDe<'dashboard_b'>; idioma?: Idioma }) {
   return (
     <div className="rv-cot__detalle">
       {q.desglose && (
@@ -401,7 +412,7 @@ function DetalleCotizacion({ q, tr = trEs }: { q: CotizacionRow; tr?: Tr }) {
             ))}
           </ul>
           <CamposSistema etiqueta={tr('cotizaciones.page.totalesDelDesglose')} campos={[
-            { etiqueta: 'Costo total', valor: q.desglose.costoTotal !== null ? mxn(q.desglose.costoTotal) : 'incompleto' },
+            { etiqueta: tb('ct.costo_total'), valor: q.desglose.costoTotal !== null ? mxn(q.desglose.costoTotal) : tb('ct.incompleto') },
             { etiqueta: tr('cotizaciones.page.precioSugerido'), valor: q.desglose.precioSugerido !== null ? mxn(q.desglose.precioSugerido) : tr('cotizaciones.page.sinSugerencia') },
           ]} />
           {q.tarifaCatalogo && (
@@ -426,8 +437,8 @@ function DetalleCotizacion({ q, tr = trEs }: { q: CotizacionRow; tr?: Tr }) {
       )}
 
       <div className="rv-cot__pie">
-        <span>{tr('cotizaciones.page.creada', { v: fechaHoraMx(q.creadaEn) })}</span>
-        {q.vigenteHasta && <span>{tr('cotizaciones.page.vigenteHasta2', { v: fechaMx(q.vigenteHasta) })}</span>}
+        <span>{tr('cotizaciones.page.creada', { v: fechaHoraMx(q.creadaEn, idioma) })}</span>
+        {q.vigenteHasta && <span>{tr('cotizaciones.page.vigenteHasta2', { v: fechaMx(q.vigenteHasta, idioma) })}</span>}
         {q.viajeId && <span>{tr('cotizaciones.page.viajeCreado')}</span>}
       </div>
     </div>

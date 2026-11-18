@@ -238,13 +238,13 @@ const traerResumenNegocio = conCacheDeConsola(leerResumenNegocio, ['admin', 'res
  * MISMA agregación en SQL que la consola; LANZA si la base no responde y el
  * llamador degrada diciéndolo — el widget jamás pinta $0 sin medición.
  */
-export async function costoIaMesActual(): Promise<{ mesUsd: number; llamadas: number; etiquetaMes: string }> {
+export async function costoIaMesActual(locale: string = 'es-MX'): Promise<{ mesUsd: number; llamadas: number; etiquetaMes: string }> {
   const ahora = new Date();
   // El MES de México, no el UTC — misma trampa que ya cobró en facturasPorDia.
   const mesMx = hoyMx(ahora).slice(0, 7);
   const desde = new Date(`${mesMx}-01T00:00:00-06:00`).toISOString();
   const r = await traerResumenCostoIa(desde, null);
-  const etiquetaMes = new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, month: 'long' }).format(ahora);
+  const etiquetaMes = new Intl.DateTimeFormat(locale, { timeZone: TZ_MX, month: 'long' }).format(ahora);
   return { mesUsd: round2(r.totales.costoUsd), llamadas: r.totales.n, etiquetaMes };
 }
 

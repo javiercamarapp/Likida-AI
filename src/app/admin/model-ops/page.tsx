@@ -9,6 +9,7 @@ import { DonaMini, BarList } from '@/app/ui-v2/graficas';
 import { TarjetaFase } from '../tarjeta-fase';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,7 @@ const fasesTr = (t: TSistema = T_SISTEMA_ES) => ([
  */
 export default async function ModelOpsPage() {
   const { t, idioma } = await getT('admin_sistema');
+  const { t: ti } = await getT('admin_inicio');
   await requireSuperadmin();
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo()]);
   const porFase = new Map(r.porFase.map((f) => [f.fase, f]));
@@ -49,7 +51,7 @@ export default async function ModelOpsPage() {
       variante="4-4-4"
       graficas={[
         ...fasesTr(t).map(({ fase, nombre, queHace }) => (
-          <TarjetaFase key={fase} titulo={nombre} queHace={queHace} datos={porFase.get(fase)} modelos={porFaseModelo.filter((m) => m.fase === fase)} />
+          <TarjetaFase key={fase} titulo={nombre} queHace={queHace} datos={porFase.get(fase)} modelos={porFaseModelo.filter((m) => m.fase === fase)} t={ti} />
         )),
         <Tarjeta key="por-fase" titulo={t('model_ops.costo_por_fase')} estado={r.porFase.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_actividad_de_ia')} detalle={t('model_ops.todavia_no_hay_actividad_de_ia')}>
           <DonaMini

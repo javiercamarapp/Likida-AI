@@ -135,11 +135,12 @@ describe('cascada (Waterfall) en la capa v2', () => {
 });
 
 describe('identidad Rovaq · tokens del paquete B1 (10-nov-2026)', () => {
-  it('fondo hundido del contenido, sombra del marco, --line2 oscuro y cabecera de tabla en negro', () => {
+  it('fondo hundido del contenido, sombra del marco, --line2 oscuro cálido y cabecera de tabla (paleta de marca 16-nov)', () => {
     expect(tok).toMatch(/--ui-sunken: #f1f1f2;/);
     expect(tok).toMatch(/--ui-sunken: #0e0e10;/);
     expect(tok).toMatch(/--sh-marco: 0 1px 2px #0e0e1005, 0 8px 24px -16px #0e0e1020;/);
     expect(tok).toMatch(/--sh-marco: none;/);
+    expect(tok).toMatch(/--line2: #d6d6d9;/);
     expect(tok).toMatch(/--line2: #34343a;/);
     // Cabecera de tabla (punto 10 del dueño, 11-nov; anula el petróleo de Rovaq): texto NEGRO sobre fondo neutro; en oscuro, texto claro.
     expect(tok).toMatch(/--tabla-cab-bg: #f1f1f2;\s*--tabla-cab-ink: #0e0e10;/);
@@ -147,9 +148,11 @@ describe('identidad Rovaq · tokens del paquete B1 (10-nov-2026)', () => {
     const shell = readFileSync(join(__dirname, 'shell.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(shell).toMatch(/\.rv-col \{[^}]*background: var\(--ui-sunken\)/);
   });
-  it('botón primario NEGRO por decisión del dueño (sin azul) y segmentado 500', () => {
+  it('botón primario NEGRO (hover #3a3a40; oscuro claro #f4f4f5/#d4d4d8): el dueño devolvió el cromo a negro el 16-nov y segmentado 500', () => {
     expect(tok).toMatch(/--btn-bg: #0e0e10;/);
     expect(tok).toMatch(/--btn-hover: #3a3a40;/);
+    expect(tok).toMatch(/--btn-bg: #f4f4f5;/);
+    expect(tok).toMatch(/--btn-hover: #d4d4d8;/);
     expect(readFileSync(join(__dirname, 'piezas.css'), 'utf8')).toMatch(/\.rv-seg__btn \{[^}]*font-weight: 500/);
   });
   it('cifra de KPI con tracking -.03em en la capa v2', () => {

@@ -25,6 +25,7 @@ import { useT } from '@/lib/i18n/proveedor';
 import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 import { rico } from '@/lib/i18n/rico';
 import { nombreEtapaTr, nombreGiroTr } from '@/lib/i18n/rotulos_tr';
+import { inicialesDe, nivelUrgencia, rotuloNivel, tonoDe } from './color';
 
 function escapar(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -73,7 +74,9 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
         const grupo = L.featureGroup(conCoords.map((p) => {
           // El color de la etapa lo pone cerebro.css por clase (`cer-e-<etapa>` → --etapa): aquí no hay un solo hex.
           const etapa = p.estado in COLOR_EMBUDO ? p.estado : 'nuevo';
-          const marcador = L.circleMarker([p.lat!, p.lng!], { radius: 9, className: `cer-pin-calle cer-e-${etapa}` });
+          // El color depende del conmutador «Colorear por» del Cerebro (cerebro.css, por `data-colorear` de la raíz): aquí solo van las dos clases.
+          const nivel = nivelUrgencia(p);
+          const marcador = L.circleMarker([p.lat!, p.lng!], { radius: 9, className: `cer-pin-calle cer-e-${etapa} cer-u-${nivel}` });
           // Los href de WhatsApp/correo salen de hrefWa/hrefCorreo (URLs que NOSOTROS construimos y codificamos): lo único del prospecto
           // que entra crudo al HTML pasa por `escapar`. Los popups son texto plano: sin emojis ni estilos en línea.
           const boton = (href: string, texto: string) =>
@@ -89,7 +92,8 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
             const correo = hrefCorreo(p, t);
             return `
             <div class="cer-pop cer-e-${etapa}">
-              <strong>${escapar(p.empresa)}</strong>
+              <strong class="cer-pop__nombre"><span class="cer-mono" data-tono="${tonoDe(p.empresa)}" aria-hidden="true">${escapar(inicialesDe(p.empresa))}</span>${escapar(p.empresa)}</strong>
+              <span class="cer-pop__linea"><span class="cer-urg" data-urgencia="${nivel}">${escapar(rotuloNivel(nivel, tx))}</span></span>
               <span class="cer-pop__linea"><i class="cer-punto" aria-hidden="true"></i> ${escapar(COLOR_EMBUDO[p.estado] ? nombreEtapaTr(p.estado, tx) : p.estado)} · ${escapar(nombreGiroTr(p.giro, tx))}</span>
               ${p.contacto ? `<span class="cer-pop__linea">${escapar(tx('mapa_prospectos_calles.contacto', { v: p.contacto }))}</span>` : ''}
               ${p.telefono ? tx('mapa_prospectos_calles.span_class_cer_pop_linea_telefono', { escapar: escapar(p.telefono), escapar2: escapar(p.telefono) }) : ''}

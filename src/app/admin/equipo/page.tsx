@@ -16,7 +16,11 @@ import {
   accionDarDeBajaPersonalLikida, accionReactivarPersonalLikida,
 } from '../usuarios/acciones';
 import { GestionPersona } from './gestion-persona';
+import { TiraCifras } from '../../ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import '../resumen.css';
+import '../pulido-c.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
@@ -44,6 +48,8 @@ function coincide(p: Persona, q: string): boolean {
  */
 export default async function EquipoPage({ searchParams }: { searchParams?: Promise<Params> }) {
   const { t } = await getT('admin_flotas');
+  const { t: tc } = await getT('resto');
+  const { t: ti } = await getT('admin_inicio');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   const sesion = await requireSuperadmin();
   const sp = (await searchParams) ?? {};
@@ -65,7 +71,7 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
   try {
     lectura = await getPersonas();
   } catch {
-    return marco(<Tarjeta titulo={t('equipo.personas', { flotaId: '' })}><EstadoError reintentar>{t('equipo.no_se_pudo_leer')}</EstadoError></Tarjeta>);
+    return marco(<Tarjeta entra="tarjeta" titulo={t('equipo.personas', { flotaId: '' })}><EstadoError reintentar>{t('equipo.no_se_pudo_leer')}</EstadoError></Tarjeta>);
   }
   const todas = ordenarPorJerarquia(lectura.personas);
   const nombreFlota = flotaId ? todas.find((p) => p.tenantId === flotaId)?.tenantNombre ?? null : null;
@@ -134,12 +140,12 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
         darDeBajaLikida: accionDarDeBajaPersonalLikida, reactivarLikida: accionReactivarPersonalLikida,
       }}
     />
-  ) : abrir ? <Tarjeta titulo={t('equipo.persona_no_encontrada')} estado="vacio" mensaje={t('equipo.esa_cuenta_ya_no')} detalle={t('equipo.vuelve_a_la_lista')} /> : null;
+  ) : abrir ? <Tarjeta entra="tarjeta" titulo={t('equipo.persona_no_encontrada')} estado="vacio" mensaje={t('equipo.esa_cuenta_ya_no')} detalle={t('equipo.vuelve_a_la_lista')} /> : null;
 
   const roles = Object.entries(ROTULOS_ROL).filter(([rol]) => rol !== 'operador');
 
   const cuerpoPersonas = todas.length === 0 ? (
-    <Tarjeta titulo={t('equipo.sin_personas_con_cuenta')} estado="vacio" mensaje={t('equipo.sin_personas_con_cuenta')} detalle={t('equipo.da_de_alta_a')} />
+    <Tarjeta entra="tarjeta" titulo={t('equipo.sin_personas_con_cuenta')} estado="vacio" mensaje={t('equipo.sin_personas_con_cuenta')} detalle={t('equipo.da_de_alta_a')} />
   ) : (
     <>
       <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta={t('equipo.filtros_del_equipo')} nActivos={nActivos}
@@ -158,22 +164,35 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
     </>
   );
 
+  const tira = todas.length === 0 ? null : (
+    <TiraCifras etiqueta={tc('ctl.eq_cifras')} items={observadas(uniformes([
+      { etiqueta: t('equipo.personas_con_cuenta'), valor: todas.length, formato: 'entero',
+        segmentos: [{ etiqueta: t('equipo.activas'), valor: conteo('activa') }, { etiqueta: t('equipo.de_baja'), valor: conteo('baja') }, { etiqueta: t('equipo.sin_cuenta_de_acceso'), valor: conteo('sin_acceso') }] },
+      { etiqueta: t('equipo.activas'), valor: conteo('activa'), formato: 'entero' },
+      { etiqueta: t('equipo.de_baja'), valor: conteo('baja'), formato: 'entero', tono: conteo('baja') > 0 ? 'warn' : undefined },
+      lectura.accesoLegible
+        ? { etiqueta: t('equipo.nunca_han_entrado'), valor: nuncaEntraron, formato: 'entero' }
+        : { etiqueta: t('equipo.nunca_han_entrado'), valor: null, estado: 'error', mensaje: t('equipo.no_se_pudo_leer_2') },
+    ]), ti('a1r4.observado'))} />
+  );
+
   return marco(
     <>
-      {gestion ? <Tarjeta titulo={t('equipo_gestion_persona.gestionar_a', { nombre: seleccionada?.nombre ?? seleccionada?.email ?? '' })}>{gestion}</Tarjeta> : null}
+      {tira}
+      {gestion ? <Tarjeta entra="tarjeta" titulo={t('equipo_gestion_persona.gestionar_a', { nombre: seleccionada?.nombre ?? seleccionada?.email ?? '' })}>{gestion}</Tarjeta> : null}
       <FilaTarjetas variante="8-4" className="adm-fila-alto-contenido">
-        <Tarjeta titulo={t('equipo.invitar_integrante')}>
+        <Tarjeta entra="tarjeta" titulo={t('equipo.invitar_integrante')}>
           <p className="adm-tarjeta-desc">{t('equipo.invitar_ayuda')}</p>
           <FormaNuevoAcceso flotas={flotas} preseleccion={flotas.some((f) => f.id === flotaId) ? flotaId : ''} t={t} />
         </Tarjeta>
-        <Tarjeta titulo={t('equipo.que_puede_hacer_cada')}>
+        <Tarjeta entra="tarjeta" titulo={t('equipo.que_puede_hacer_cada')}>
           <ul className="adm-roles">
             {roles.map(([rol, r]) => <li key={rol}><strong>{r.nombre}</strong><span>{r.detalle}</span></li>)}
           </ul>
           <p className="rv-esq__fila-ayuda">{t('equipo.el_chofer_no_tiene')}</p>
         </Tarjeta>
       </FilaTarjetas>
-      <Tarjeta titulo={t('equipo.personas', { flotaId: flotaId && nombreFlota ? `: ${nombreFlota}` : '' })}>
+      <Tarjeta entra="tarjeta" titulo={t('equipo.personas', { flotaId: flotaId && nombreFlota ? `: ${nombreFlota}` : '' })}>
         <p className="adm-tarjeta-desc">{resumenEquipo}</p>
         {cuerpoPersonas}
       </Tarjeta>

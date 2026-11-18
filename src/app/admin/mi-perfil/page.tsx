@@ -11,6 +11,7 @@ import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import AvatarUploader from './avatar-uploader';
 import { descartarAvataresViejos } from '@/lib/perfil/avatar_huerfanos';
 import '../resumen.css';
+import '../pulido-c.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,19 +97,19 @@ export default async function MiPerfilPage({
     redirect('/admin/mi-perfil?ok=avatar');
   }
 
-  const mensajeError = sp.error === 'avatar' ? 'No se pudo subir la foto — intenta con otra imagen.'
-    : sp.error === 'tipo' ? 'Solo se aceptan imágenes JPG, PNG o WebP.'
-      : sp.error === 'peso' ? 'La imagen pasa de 2 MB — usa una más ligera.'
-        : sp.error === 'avatar_guardar' ? 'La foto se subió, pero no se pudo guardar en tu perfil — intenta de nuevo.'
-          : sp.error === 'nombre_guardar' ? 'No se pudo guardar el nombre — intenta de nuevo.'
-            : 'El nombre no puede quedar vacío.';
+  const mensajeError = sp.error === 'avatar' ? ts('mi_perfil.error_avatar')
+    : sp.error === 'tipo' ? ts('mi_perfil.error_tipo')
+      : sp.error === 'peso' ? ts('mi_perfil.error_peso')
+        : sp.error === 'avatar_guardar' ? ts('mi_perfil.error_avatar_guardar')
+          : sp.error === 'nombre_guardar' ? ts('mi_perfil.error_nombre_guardar')
+            : ts('mi_perfil.error_nombre_vacio');
 
   return (
     <EsqueletoConfiguracion
-      titulo="Mi perfil" apoyo="Tu nombre y tu foto. El correo y el rol los define la cuenta."
+      area={ts('fin16c.area_cuenta')} titulo={ts('mi_perfil.titulo')} apoyo={ts('mi_perfil.apoyo')}
       avisos={(
         <>
-          {sp.ok && <AvisoCompacto tono="ok" resumen={sp.ok === 'avatar' ? 'Foto de perfil actualizada.' : 'Nombre guardado.'} />}
+          {sp.ok && <AvisoCompacto tono="ok" resumen={sp.ok === 'avatar' ? ts('mi_perfil.ok_avatar') : ts('mi_perfil.ok_nombre')} />}
           {sp.error && <AvisoCompacto tono="error" resumen={mensajeError} />}
         </>
       )}
@@ -136,7 +137,7 @@ export default async function MiPerfilPage({
               <PreferenciasFilas idiomaActivo={idioma} textos={{
                 idioma: t('cta.idioma'), ayudaIdioma: ts('mi_perfil.idioma_ayuda'), tema: t('cta.tema'), ayudaTema: ts('mi_perfil.tema_ayuda'),
                 temaClaro: t('cta.tema.claro'), temaSistema: t('cta.tema.sistema'), temaOscuro: t('cta.tema.oscuro'),
-                es: 'Español', en: 'English', enProximamente: t('cta.en_pronto'), fallo: t('cta.idioma.fallo'),
+                es: ts('mi_perfil.idioma_es'), en: ts('mi_perfil.idioma_en'), enProximamente: t('cta.en_pronto'), fallo: t('cta.idioma.fallo'),
               }} />
             </>
           ),
@@ -146,4 +147,7 @@ export default async function MiPerfilPage({
   );
 }
 
-export const metadata: Metadata = { title: 'Mi perfil' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('mi_perfil.titulo') };
+}

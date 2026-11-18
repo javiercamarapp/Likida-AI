@@ -52,7 +52,7 @@ export function PantallaQa({
   ver?: string;
 }) {
   const columnas: ColumnaBase<CorridaQA>[] = [
-    { id: 'corrida', titulo: t('qa_pantalla.corrida'), principal: true, celda: (c) => <Link href={`/admin/qa?ver=${c.id}`} scroll={false} className="font-mono">{c.id.slice(0, 8)}</Link> },
+    { id: 'corrida', titulo: t('qa_pantalla.corrida'), principal: true, celda: (c) => <Link href={`/admin/qa?ver=${c.id}`} scroll={false} className="rv-qa-mono">{c.id.slice(0, 8)}</Link> },
     { id: 'escenario', titulo: t('qa_pantalla.escenario'), celda: (c) => (c.escenario === 'demo_guion' ? t('qa_pantalla.guion_del_demo') : t('qa_pantalla.feliz')) },
     { id: 'lanzada', titulo: t('qa_pantalla.lanzada'), celda: (c) => fechaHoraMx(c.creadaEn, idioma) },
     {

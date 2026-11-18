@@ -11,6 +11,7 @@ import '../bandeja.css';
 
 import { useT } from '@/lib/i18n/proveedor';
 import { admin_inicio as admin_inicioEs } from '@/lib/i18n/es/admin_inicio';
+import { admin_dinero as admin_dineroEs } from '@/lib/i18n/es/admin_dinero';
 export type ResultadoPieza = { ok?: string; error?: string } | null;
 export type AccionPieza = (previo: ResultadoPieza, fd: FormData) => Promise<ResultadoPieza>;
 
@@ -22,6 +23,7 @@ export type AccionPieza = (previo: ResultadoPieza, fd: FormData) => Promise<Resu
  */
 export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
   const { t } = useT('admin_inicio', admin_inicioEs);
+  const { t: td } = useT('admin_dinero', admin_dineroEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   const [editando, setEditando] = useState(false);
   const [rechazando, setRechazando] = useState(false);
@@ -46,7 +48,7 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
       <pre className="bj-item__borrador">{pieza.cuerpo}</pre>
 
       {paresFuentes.length > 0 && (
-        <p className="bj-nota">Fuentes: {paresFuentes.map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>
+        <p className="bj-nota">{td('neg5.ap_fuentes')} {paresFuentes.map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>
       )}
 
       {estado?.error && <p className="bj-item__aviso" role="alert">{estado.error}</p>}
@@ -77,14 +79,14 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
             <>
               <Boton type="submit" name="operacion" value="rechazar" variante="danger" tamano="sm" disabled={pendiente}
                 icono={<X width={13} height={13} strokeWidth={1.75} />}>
-                Rechazar
+                {td('neg5.mk_rechazar')}
               </Boton>
-              <Boton variante="secondary" tamano="sm" onClick={() => setRechazando(false)}>Cancelar</Boton>
+              <Boton variante="secondary" tamano="sm" onClick={() => setRechazando(false)}>{td('neg5.mk_cancelar')}</Boton>
             </>
           ) : (
             <Boton variante="ghost" tamano="sm" onClick={() => { setRechazando(true); setEditando(false); }}
               icono={<X width={13} height={13} strokeWidth={1.75} />}>
-              Rechazar…
+              {td('neg5.mk_rechazar_puntos')}
             </Boton>
           )}
         </div>
@@ -121,6 +123,7 @@ const TIPOS_ENVIABLES_UI = new Set(['correo_frio', 'correo_seguimiento']);
  */
 export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
   const { t } = useT('admin_inicio', admin_inicioEs);
+  const { t: td } = useT('admin_dinero', admin_dineroEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   const enviable = TIPOS_ENVIABLES_UI.has(pieza.tipo);
 
@@ -132,11 +135,11 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
       <span className="bj-item__titulo">{pieza.titulo}</span>
       {pieza.cuerpoFinal && <StatusChip tono="neutral">{t('aprobaciones_forma_pieza.con_edicion')}</StatusChip>}
       <span className="bj-item__meta">
-        {pieza.prospectoEmpresa ? `→ ${pieza.prospectoEmpresa}` : 'sin prospecto'}
+        {pieza.prospectoEmpresa ? `→ ${pieza.prospectoEmpresa}` : td('neg5.ap_sin_prospecto')}
         {pieza.prospectoCorreo ? ` · ${pieza.prospectoCorreo}` : ''}
       </span>
       {pieza.envioError && (
-        <span className="bj-sub" data-tono="bad">último intento: {pieza.envioError}</span>
+        <span className="bj-sub" data-tono="bad">{td('neg5.ap_ultimo_intento', { error: pieza.envioError })}</span>
       )}
       {estado?.error && <span className="bj-sub" data-tono="bad" role="alert">{estado.error}</span>}
       <form action={enviar} className="ml-auto shrink-0">
@@ -148,11 +151,10 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
             etiqueta={pendiente ? t('aprobaciones_forma_pieza.enviando') : t('aprobaciones_forma_pieza.enviar_por_correo')}
             tono="peligro"
             deshabilitado={pendiente}
-            etiquetaConfirmar="Sí, enviar"
+            etiquetaConfirmar={td('neg5.ap_si_enviar')}
             titulo={t('aprobaciones_forma_pieza.enviar_por_correo')}
             descripcion={t('aprobaciones_forma_pieza.se_va_a_mandar', { titulo: pieza.titulo, prospectoEmpresa: pieza.prospectoEmpresa ? `${pieza.prospectoEmpresa} — ` : '' })
-              + `${pieza.prospectoCorreo}. Resend lo entrega al instante — es un correo real a un prospecto externo, `
-              + 'y no hay botón para deshacerlo.'}
+              + td('neg5.ap_envio_aviso', { correo: pieza.prospectoCorreo })}
             className={clasesBoton('primary', 'sm')}
           />
         ) : (
@@ -171,16 +173,17 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
  */
 export function FormaLiberarAmbiguo({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
   const { t } = useT('admin_inicio', admin_inicioEs);
+  const { t: td } = useT('admin_dinero', admin_dineroEs);
   const [estado, liberar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   if (estado?.ok) return <span className="bj-sub" data-tono="ok" role="status">{estado.ok}</span>;
   return (
-    <form action={liberar} className="inline-flex items-center gap-2">
+    <form action={liberar} className="bj-acciones">
       <input type="hidden" name="pieza" value={pieza.id} />
       <BotonConfirmar
         etiqueta={pendiente ? t('aprobaciones_forma_pieza.liberando') : t('aprobaciones_forma_pieza.confirmar_que_no_salio')}
         tono="peligro"
         deshabilitado={pendiente}
-        etiquetaConfirmar="Sí, verifiqué en Resend que no salió"
+        etiquetaConfirmar={td('neg5.ap_si_verifique')}
         titulo={t('aprobaciones_forma_pieza.liberar_el_envio_ambiguo')}
         descripcion={t('aprobaciones_forma_pieza.verifica_primero_en_resend', { titulo: pieza.titulo })}
         className={clasesBoton('primary', 'sm')}

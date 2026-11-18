@@ -3,7 +3,8 @@
 import { useActionState, useRef } from 'react';
 import { ROLES_INVITABLES } from '@/lib/auth/invitar';
 import { nombreDeRol } from '@/lib/auth/roles';
-import type { AccionDeForma, ResultadoAccion } from '../ui/forma';
+import { CampoSelect } from '../../ui-v2/componentes/campos';
+import type { AccionDeForma, ResultadoAccion } from '../../ui-v2/componentes/forma';
 
 /**
  * El rol de una persona como select de 28 px EN la fila de la tabla (Rovaq CF «Equipo»): elegir otro rol envía el cambio. La acción
@@ -16,12 +17,12 @@ export function CambiarRol({ id, rol, accion, etiqueta }: { id: string; rol: str
   return (
     <form ref={forma} action={enviar} className="adm-rol-celda">
       <input type="hidden" name="id" value={id} />
-      <select name="rol" aria-label={etiqueta} defaultValue={rol} disabled={pendiente}
-        className="adm-rol-select" onChange={() => forma.current?.requestSubmit()}>
+      <CampoSelect etiqueta={etiqueta} etiquetaOculta name="rol" defaultValue={rol} disabled={pendiente}
+        claseControl="adm-rol-select" onChange={() => forma.current?.requestSubmit()}>
         {/* Un rol que no se puede asignar desde aquí (p. ej. nómina) SÍ se muestra con su nombre real; no se ofrece como destino. */}
         {ROLES_INVITABLES.some((r) => r.valor === rol) ? null : <option value={rol} disabled>{rol ? nombreDeRol(rol) : '—'}</option>}
         {ROLES_INVITABLES.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
-      </select>
+      </CampoSelect>
       <span aria-live="polite" className="adm-rol-aviso" data-error={estado?.error ? '' : undefined}>{estado?.error ?? estado?.ok ?? ''}</span>
     </form>
   );

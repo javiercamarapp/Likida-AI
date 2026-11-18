@@ -17,6 +17,7 @@ import { observadas } from '../sello-observado';
 import '../dinero.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { NotaVacia } from '../nota-vacia';
 export const dynamic = 'force-dynamic';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -43,16 +44,16 @@ function condensarDetalle(detalle: string, nombres: ReadonlyMap<string, string>)
 }
 
 const tonoInsight = (ta: TrDe<'admin_dinero'>): Record<Insight['tipo'], { tono: TonoEstado; rotulo: string }> => ({
-  problema: { tono: 'bad', rotulo: 'Problema' },
+  problema: { tono: 'bad', rotulo: ta('neg5.cn_problema') },
   recomendacion: { tono: 'warn', rotulo: ta('consumo.recomendacion') },
-  insight: { tono: 'neutral', rotulo: 'Dato' },
+  insight: { tono: 'neutral', rotulo: ta('neg5.cn_dato') },
 });
 
 /** Cuántos días hacia atrás se listan los avisos de tope. */
 const DIAS_AVISOS_TOPE = 7;
 
 const faseRotulo = (ta: TrDe<'admin_dinero'>): Record<string, string> => ({
-  ocr: ta('consumo.lectura_de_comprobantes'), cuadre: 'Cuadre', escalacion: ta('consumo.escalacion'), chat: 'Chat', router: 'Enrutador', whatsapp: 'WhatsApp',
+  ocr: ta('consumo.lectura_de_comprobantes'), cuadre: ta('neg5.cn_fase_cuadre'), escalacion: ta('consumo.escalacion'), chat: 'Chat', router: ta('neg5.cn_fase_enrutador'), whatsapp: 'WhatsApp',
 });
 
 /** Texto del estado del crédito: qué pasa, qué consecuencia tiene y qué hacer. Sin variables de entorno ni jerga. */
@@ -128,7 +129,7 @@ export default async function ConsumoPage() {
       ? { etiqueta: ta('consumo.costo_por_viaje_procesado'), valor: costoPorViaje, formato: 'usd', nota: costoPorViaje === null ? ta('consumo.aun_no_hay_viajes') : ta('consumo.estimado_gasto_total_de'), tipo: 'estimado' }
       : { etiqueta: ta('consumo.costo_por_viaje_procesado'), valor: null, estado: 'error', reintentar: true },
     consumo
-      ? { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: gastoAgentes, formato: 'usd', nota: `${numero(corridas ?? 0)} corridas, ${numero(fallos ?? 0)} en fallo.` }
+      ? { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: gastoAgentes, formato: 'usd', nota: ta('neg5.cn_corridas', { n: numero(corridas ?? 0), f: numero(fallos ?? 0) }) }
       : { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: null, estado: 'error', mensaje: ta('consumo.la_medicion_por_agente'), reintentar: true },
     { etiqueta: ta('consumo.credito_del_proveedor'), valor: cifraCred.valor, nota: cifraCred.nota, tono: cifraCred.tono, estado: cifraCred.valor === null ? 'vacio' : 'ok', mensaje: ta('consumo.no_se_pudo_comprobar_2') },
   ]);
@@ -150,8 +151,8 @@ export default async function ConsumoPage() {
         <Tarjeta key="gasto" titulo={ta('consumo.gasto_de_ia_por')} estado={r && r.porDia.length > 1 ? 'ok' : r ? 'vacio' : 'error'} contenida={!!r && r.porDia.length <= 1} mensaje={r ? ta('consumo.sin_historial_suficiente') : undefined} detalle={ta('consumo.hacen_falta_al_menos')} reintentar>
           {r ? (
             <>
-              <Columnas etiqueta={ta('consumo.gasto_de_ia_por')} datos={r.porDia.map((d) => ({ etiqueta: d.dia.slice(5), largo: dia(d.dia), valor: d.costoUsd }))} formato="usd" vacio="Sin gasto registrado" />
-              <p className="adm-din-nota">Tokens usados, histórico: {numero(r.tokensIn)} de entrada y {numero(r.tokensOut)} de salida.</p>
+              <Columnas etiqueta={ta('consumo.gasto_de_ia_por')} datos={r.porDia.map((d) => ({ etiqueta: d.dia.slice(5), largo: dia(d.dia), valor: d.costoUsd }))} formato="usd" vacio={ta('neg5.cn_sin_gasto')} />
+              <p className="adm-din-nota">{ta('neg5.cn_tokens', { entrada: numero(r.tokensIn), salida: numero(r.tokensOut) })}</p>
             </>
           ) : null}
         </Tarjeta>,
@@ -159,13 +160,13 @@ export default async function ConsumoPage() {
       ]}
     >
       {todoCaido ? <EstadoError reintentar>{ta('consumo.no_se_pudo_leer')}</EstadoError> : <>
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
         <Tarjeta titulo={ta('consumo.por_modelo')} estado={!r ? 'error' : r.porModelo.length === 0 ? 'vacio' : 'ok'} mensaje={r ? ta('consumo.sin_llamadas_registradas') : ta('consumo.no_se_pudo_leer_2')} detalle={ta('consumo.aparece_en_cuanto_el')} reintentar
           acciones={<BotonEnlace href="/admin/costos-facturacion" variante="ghost" tamano="sm">{ta('consumo.ver_cobro')}</BotonEnlace>}>
-          {r ? <BarList etiqueta={ta('consumo.gasto_por_modelo')} items={r.porModelo.slice(0, 8).map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: usd(m.costoUsd), nota: `${numero(m.n)} llamadas` }))} formato={usd} /> : null}
+          {r ? <BarList etiqueta={ta('consumo.gasto_por_modelo')} items={r.porModelo.slice(0, 8).map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: usd(m.costoUsd), nota: ta('neg5.cn_llamadas', { n: numero(m.n) }) }))} formato={usd} /> : null}
         </Tarjeta>
         <Tarjeta titulo={ta('consumo.por_fase')} estado={!r ? 'error' : r.porFase.length === 0 ? 'vacio' : 'ok'} mensaje={r ? ta('consumo.sin_llamadas_registradas') : ta('consumo.no_se_pudo_leer_2')} detalle={ta('consumo.muestra_en_que_trabajo')} reintentar>
-          {r ? <BarList etiqueta={ta('consumo.gasto_por_fase')} items={r.porFase.slice(0, 8).map((f) => ({ clave: f.fase, etiqueta: faseRotulo(ta)[f.fase] ?? f.fase, valor: f.costoUsd, texto: usd(f.costoUsd), nota: `${numero(f.n)} llamadas` }))} formato={usd} /> : null}
+          {r ? <BarList etiqueta={ta('consumo.gasto_por_fase')} items={r.porFase.slice(0, 8).map((f) => ({ clave: f.fase, etiqueta: faseRotulo(ta)[f.fase] ?? f.fase, valor: f.costoUsd, texto: usd(f.costoUsd), nota: ta('neg5.cn_llamadas', { n: numero(f.n) }) }))} formato={usd} /> : null}
         </Tarjeta>
       </FilaTarjetas>
 
@@ -214,8 +215,7 @@ export default async function ConsumoPage() {
         {proposito ? (
           <>
             <p className="adm-din-nota">
-              Techo diario por flota: {usd(proposito.topeTenantDiaUsd)}. Reserva del camino interactivo (chofer y chats): {usd(proposito.reservaInteractivoUsd)} ({Math.round(proposito.fraccionReserva * 100)} %).
-              El trabajo de fondo (lectura de lote y agentes) solo llega a {usd(proposito.topeTenantDiaUsd - proposito.reservaInteractivoUsd)}.
+              {ta('neg5.cn_techo_diario', { tope: usd(proposito.topeTenantDiaUsd), reserva: usd(proposito.reservaInteractivoUsd), pct: Math.round(proposito.fraccionReserva * 100), fondo: usd(proposito.topeTenantDiaUsd - proposito.reservaInteractivoUsd) })}
             </p>
             <TablaBase
               etiqueta={ta('consumo.gasto_de_hoy_por')} idFila={(f: GastoProposito) => `${f.tenantId}-${f.proposito}`} tarjetaMovil
@@ -303,15 +303,13 @@ function AvisosDeTope({ avisos, encendidos, ta }: { avisos: FilaAlertaTope[] | n
   if (avisos === null) return <Tarjeta titulo={titulo} estado="error" mensaje={ta('consumo.no_se_pudieron_leer')} reintentar />;
   if (avisos.length === 0) {
     return (
-      <Tarjeta
-        titulo={titulo} estado="vacio" contenida mensaje={ta('consumo.ningun_aviso_registrado')}
-        detalle={encendidos ? ta('consumo.ninguna_flota_cruzo_el') : ta('consumo.los_avisos_estan_apagados')}
-        accionVacio={<BotonEnlace href="/admin/techo-ia" variante="secondary" tamano="sm">Ver techos</BotonEnlace>}
-      />
+      <Tarjeta titulo={titulo} contenida acciones={<BotonEnlace href="/admin/techo-ia" variante="secondary" tamano="sm">{ta('neg5.cn_ver_techos')}</BotonEnlace>}>
+        <NotaVacia tono={encendidos ? 'ok' : 'warn'} titulo={ta('consumo.ningun_aviso_registrado')}>{encendidos ? ta('consumo.ninguna_flota_cruzo_el') : ta('consumo.los_avisos_estan_apagados')}</NotaVacia>
+      </Tarjeta>
     );
   }
   return (
-    <Tarjeta titulo={titulo} acciones={<BotonEnlace href="/admin/techo-ia" variante="ghost" tamano="sm">Ver techos</BotonEnlace>}>
+    <Tarjeta titulo={titulo} acciones={<BotonEnlace href="/admin/techo-ia" variante="ghost" tamano="sm">{ta('neg5.cn_ver_techos')}</BotonEnlace>}>
       <TablaBase
         etiqueta={ta('consumo.avisos_de_tope_de')} idFila={(a) => `${a.tenantId}-${a.dia}-${a.nivel}`} tarjetaMovil
         filas={avisos}

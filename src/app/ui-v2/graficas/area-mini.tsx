@@ -7,6 +7,8 @@ import { cadaCuantas, compactEs, esConteoPequeno, indicesEtiquetados, marcasEje,
 import type { TipoDato } from './kind-badge';
 import { CintaLectura, LecturaPunto, TablaGrafica, useAncho } from './partes';
 import { resolverFormato, type FormatoGrafica } from './formatos';
+import { useT } from '@/lib/i18n/proveedor';
+import { ui_comun as uiEs } from '@/lib/i18n/es/ui_comun';
 
 const PAD_T = 20, PAD_R = 14;
 
@@ -25,6 +27,7 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato: for
   tipo?: TipoDato;
   unidad?: string;
 }) {
+  const { t: tu } = useT('ui_comun', uiEs);
   const formato = resolverFormato(formatoProp);
   const [ref, ancho] = useAncho<HTMLDivElement>();
   const [sel, setSel] = useState<number | null>(null);
@@ -97,7 +100,7 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato: for
       <div className="rv-gr-plot" ref={ref}>
         <CintaLectura>{lectura}</CintaLectura>
         <svg ref={plano} className="rv-area__svg" width={W} height={alto} viewBox={`0 0 ${W} ${alto}`} role="group" tabIndex={0}
-          aria-label={`${etiqueta}. Usa las flechas izquierda y derecha para recorrer los puntos.`}
+          aria-label={tu('graf.flechas', { etiqueta })}
           onKeyDown={alTeclear} onPointerMove={elegir} onPointerDown={elegir} onBlur={() => setSel(null)} onPointerLeave={(e) => { if (e.pointerType !== 'touch') setSel(null); }}>
           <defs>
             <linearGradient id={idg} x1="0" x2="0" y1="0" y2="1">

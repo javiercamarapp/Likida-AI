@@ -4,13 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { horaMx } from '@/lib/formato';
 import { PANTALLA_UI } from './etiquetas-copiloto';
 import { respuestaDeBloques, type PasoTraza, type Respuesta } from './respuestas';
-import { PERFIL_SUPERADMIN } from './perfiles';
+import { perfilSuperadmin } from './perfiles';
 import { cerrarPaso, leerRespuestaAgente } from './transporte';
 import type { Motor } from './motor';
 import type { Conversacion, Turno } from './use-analista';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { dashboard_b as dashboard_bEs } from '@/lib/i18n/es/dashboard_b';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ADAPTADOR SUPERADMIN del agente de conversación: el estado y el transporte del Copiloto del fundador (/api/admin/copiloto).
@@ -29,13 +30,14 @@ const nuevoId = () => `c-${Date.now().toString(36)}-${++contador}`;
 
 export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = true }: { endpoint?: string; listaAlMontar?: boolean } = {}): Motor {
   const { t: tx } = useT('resto', restoEs);
+  const { t: tb } = useT('dashboard_b', dashboard_bEs);
   const [historial, setHistorial] = useState<Turno[]>([]);
   const [ocupado, setOcupado] = useState(false);
   const [generando, setGenerando] = useState(false);
   const [conversacionId, setConversacionId] = useState<string | null>(null);
   const [convs, setConvs] = useState<Conversacion[] | 'error' | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [fasePensando, setFasePensando] = useState('Pensando…');
+  const [fasePensando, setFasePensando] = useState(tx('op.pensando'));
   const [pasosVivos, setPasosVivos] = useState<PasoTraza[]>([]);
   const enVuelo = useRef<AbortController | null>(null);
   const detenido = useRef(false);
@@ -76,7 +78,7 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
           pares.push({ id: nuevoId(), q: m.texto, r: { texto: '' }, nuevo: false });
         } else if (pares.length > 0) {
           const r = Array.isArray(m.bloques) && m.bloques.length > 0
-            ? respuestaDeBloques(m.bloques as Array<Record<string, unknown>>)
+            ? respuestaDeBloques(m.bloques as Array<Record<string, unknown>>, tb)
             : { texto: m.texto };
           pares[pares.length - 1].r = { ...r, archivada: true };
         }
@@ -124,7 +126,7 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
     detenido.current = false;
     setOcupado(true);
     setGenerando(true);
-    setFasePensando('Pensando…');
+    setFasePensando(tx('op.pensando'));
     setPasosVivos([]);
     const idTurno = reemplazar ?? nuevoId();
     const pendiente: Turno = { id: idTurno, q, r: { texto: tx('op.pensando'), pendiente: true }, nuevo: true };
@@ -134,7 +136,7 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
     const relojFases = setInterval(() => {
       ticks += 1;
       const t = ticks * 700;
-      const fase = [...PERFIL_SUPERADMIN.fases].reverse().find(([desde]) => t >= desde);
+      const fase = [...perfilSuperadmin(tx).fases].reverse().find(([desde]) => t >= desde);
       if (fase) setFasePensando(fase[1]);
     }, 700);
     const t0 = performance.now();
@@ -166,7 +168,7 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
       });
       let r: Respuesta;
       if (resp.ok && d && Array.isArray(d.bloques)) {
-        r = respuestaDeBloques(d.bloques as Array<Record<string, unknown>>);
+        r = respuestaDeBloques(d.bloques as Array<Record<string, unknown>>, tb);
         r.origen = 'copiloto';
         if (Array.isArray(d.toolsUsadas)) {
           const vistas = new Set<string>();

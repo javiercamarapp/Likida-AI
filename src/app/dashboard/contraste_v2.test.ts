@@ -144,25 +144,19 @@ describe.each(TEMAS)('tokens v2, modo %s: controles y marcas ≥ 3:1', (_nombre,
   });
 });
 
-describe('tokens v2: la paleta de datos y del cromo es monocroma', () => {
-  // Decisión del dueño (11-nov-2026): NEGRO, GRIS y BLANCO; sin azul, teal ni naranja en las series. Solo los semáforos y la señal llevan matiz.
+describe('tokens v2: paleta de marca de Likida en las series de datos', () => {
+  // Decisión del dueño (16-nov-2026): reemplaza la paleta monocroma del 11-nov. Las 8 series son COLOR (naranja ladrillo, marino, teal, ocre, violeta,
+  // verde, acero, pizarra) para poder identificarlas a golpe de vista; el contraste contra la tarjeta lo mide paleta_likida_contraste.test.ts.
   const matiz = (hex: string) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return Math.max(...c) - Math.min(...c); };
-  const FAMILIAS = ['chart', 'soft', 'ink', 'on'];
-  it.each(TEMAS)('modo %s: --chart/--soft/--ink/--on-N, --heat-N y el cromo activo son grises (diferencia entre canales ≤ 8)', (_n, t) => {
-    const nombres = [
-      ...FAMILIAS.flatMap((f) => [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `--${f}-${n}`)),
-      ...[0, 1, 2, 3, 4].map((n) => `--heat-${n}`),
-      '--chart-borde', '--kpi-filete', '--nav-activo-barra', '--seg-activo-bg', '--seg-activo-borde', '--seg-activo-fg', '--seg-activo-hover',
-      '--tabla-cab-bg', '--tabla-cab-ink', '--g1', '--g2', '--g3', '--g4', '--g5',
-    ];
-    for (const n of nombres) expect(matiz(resolver(t, n)), `${n} = ${resolver(t, n)} no es gris`).toBeLessThanOrEqual(8);
+  it.each(TEMAS)('modo %s: las 8 series son distintas entre sí y llevan color (no grises)', (_n, t) => {
+    const hex = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => resolver(t, `--chart-${n}`));
+    expect(new Set(hex).size).toBe(8);
+    // La serie 8 (pizarra) es la más tenue: basta con un matiz mínimo; las demás, claramente cromáticas.
+    for (const [i, h] of hex.entries()) expect(matiz(h), `--chart-${i + 1} = ${h} es gris`).toBeGreaterThanOrEqual(i === 7 ? 20 : 40);
   });
-  it('las 8 series claras y oscuras son distintas entre sí (ninguna repetida) y las vecinas difieren en luminosidad ≥1.25:1', () => {
-    for (const [, t] of TEMAS) {
-      const hex = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => resolver(t, `--chart-${n}`));
-      expect(new Set(hex).size).toBe(8);
-      for (let n = 0; n < 7; n++) expect(contraste(hex[n], hex[n + 1]), `${hex[n]} vs ${hex[n + 1]}`).toBeGreaterThanOrEqual(1.25);
-    }
+  it('el cromo (botón primario y barra del activo) vuelve a ser NEGRO/tinta en claro y claro en oscuro (16-nov: el color vive en datos y recuadros)', () => {
+    expect(resolver(TEMAS[0][1], '--btn-bg').toLowerCase()).toBe('#0e0e10');
+    for (const [, t] of TEMAS) expect(matiz(resolver(t, '--nav-activo-barra'))).toBeLessThanOrEqual(8);
   });
 });
 

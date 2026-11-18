@@ -1,6 +1,6 @@
 import {
-  LayoutGrid, Sparkles, Bot, BadgeCheck, Inbox, Globe2, Truck, Cpu, Receipt, TrendingUp,
-  Blocks, ShieldCheck, Users, HeartPulse, LifeBuoy, Code2, Bell, UserRound, Eye,
+  LayoutGrid, Sparkles, Bot, BadgeCheck, Inbox, Truck, Cpu, Receipt, TrendingUp,
+  Blocks, ShieldCheck, Users, HeartPulse, LifeBuoy, Code2, Bell, UserRound, Eye, Brain, Landmark, Handshake,
 } from 'lucide-react';
 
 /**
@@ -53,9 +53,10 @@ export const NEGOCIO: Item[] = [
     { href: '/admin/aprobaciones', nombre: 'Aprobaciones' },
     { href: '/admin/escalaciones', nombre: 'Escalaciones' },
   ] },
-  // Ventas: el Cerebro de ventas (el mapa de prospectos, que se conserva entero) y el equipo de vendedores. «Tu turno» ya no vive aquí.
-  { href: '/admin/mapa-prospectos', nombre: 'Ventas', Icono: Globe2, pestanas: [
-    { href: '/admin/mapa-prospectos', nombre: 'Cerebro de ventas' },
+  // Cerebro de ventas: entrada PROPIA y visible (15-nov-2026: Javier no lo encontraba dentro de «Ventas»). El mapa de prospectos se conserva
+  // entero; el equipo de vendedores es su segunda pestaña. «Tu turno» ya no vive aquí.
+  { href: '/admin/mapa-prospectos', nombre: 'Cerebro de ventas', Icono: Brain, pestanas: [
+    { href: '/admin/mapa-prospectos', nombre: 'Mapa' },
     { href: '/admin/vendedores', nombre: 'Vendedores' },
   ] },
   // Clientes: lista y ficha 360 (`/admin/flotas/[id]`); sin pestañas. «Nuevo acceso» pasó a Equipo.
@@ -89,6 +90,20 @@ export const CONTROL: Item[] = [
   ] },
 ];
 
+/** Back-office propio de Likida (15-nov-2026): el que Likida se aplica a sí misma (cierre, contabilidad, gastos, comisiones, contratos). Las
+ *  pestañas de una entrada son 6 o menos (guarda `rutas_agrupadas`); Contratistas va como entrada propia. */
+export const BACKOFFICE: Item[] = [
+  { href: '/admin/back-office', nombre: 'Back-office', Icono: Landmark, pestanas: [
+    { href: '/admin/back-office', nombre: 'Tablero' },
+    { href: '/admin/back-office/cierre', nombre: 'Cierre mensual' },
+    { href: '/admin/back-office/contabilidad', nombre: 'Contabilidad' },
+    { href: '/admin/back-office/gastos', nombre: 'Gastos' },
+    { href: '/admin/back-office/comisiones', nombre: 'Comisiones' },
+    { href: '/admin/back-office/contratos', nombre: 'Contratos' },
+  ] },
+  { href: '/admin/back-office/contratistas', nombre: 'Contratistas', Icono: Handshake },
+];
+
 export const SISTEMA: Item[] = [
   // Los correos de alerta aterrizan en `/admin/salud-sistema` (Estado): esa URL no cambia. `/admin/corridas/<id>` cuelga de Corridas por prefijo.
   { href: '/admin/salud-sistema', nombre: 'Salud', Icono: HeartPulse, pestanas: [
@@ -115,6 +130,7 @@ export const SECCIONES: Array<{ titulo: string; items: Item[] }> = [
   { titulo: 'Agentes', items: AGENTES },
   { titulo: 'Negocio', items: NEGOCIO },
   { titulo: 'Control', items: CONTROL },
+  { titulo: 'Back-office', items: BACKOFFICE },
   { titulo: 'Sistema', items: SISTEMA },
 ];
 
@@ -131,9 +147,16 @@ const coincide = (pathname: string, href: string): boolean => pathname === href 
 /** La entrada del sidebar a la que pertenece una ruta (por la ruta de la entrada o la de cualquiera de sus pestañas; las rutas con
  *  parámetro, p. ej. `/admin/flotas/<id>`, cuentan por prefijo). `null` si no es de ninguna (Inicio…); las de `FUERA_DEL_MENU` (Avisos, Mi perfil…) devuelven una entrada sin pestañas. */
 export function entradaDeRuta(pathname: string): Item | null {
+  // La entrada cuyo href (o el de una de sus pestañas) coincide con MÁS especificidad gana: `/admin/back-office/contratistas` es la entrada
+  // «Contratistas» y no la de «Back-office», que también la cubre por prefijo.
+  let mejor: Item | null = null;
+  let largo = -1;
   for (const it of ENTRADAS) {
-    if (coincide(pathname, it.href) || (it.pestanas ?? []).some((p) => coincide(pathname, p.href))) return it;
+    for (const h of [it.href, ...(it.pestanas ?? []).map((p) => p.href)]) {
+      if (coincide(pathname, h) && h.length > largo) { mejor = it; largo = h.length; }
+    }
   }
+  if (mejor) return mejor;
   // Las pantallas fuera del menú (Avisos, Mi perfil, Ver como…) también dan nombre a la cabecera; no son de ninguna sección ni llevan pestañas.
   const fuera = FUERA_DEL_MENU.find((f) => coincide(pathname, f.href));
   if (fuera) return { href: fuera.href, nombre: fuera.nombre, Icono: fuera.Icono };
@@ -158,6 +181,13 @@ export const ALIAS_BUSQUEDA: Readonly<Record<string, readonly string[]>> = {
   '/admin/mapa-prospectos': ['cerebro', 'prospectos', 'mapa'],
   '/admin/tu-turno': ['turno', 'pendientes'],
   '/admin/flotas': ['flotas', 'clientes', 'alta de flota'],
+  '/admin/back-office': ['back office', 'backoffice', 'administracion', 'finanzas'],
+  '/admin/back-office/cierre': ['cierre', 'cierre de mes', 'update a inversionistas', 'reporte mensual'],
+  '/admin/back-office/contabilidad': ['sat', 'diot', 'iva', 'impuestos', 'calendario fiscal', 'poliza', 'balanza'],
+  '/admin/back-office/gastos': ['proveedores', 'gastos de likida', 'comprobantes'],
+  '/admin/back-office/comisiones': ['comision', 'clawback', 'pago a vendedores', 'honorarios'],
+  '/admin/back-office/contratos': ['vencimientos', 'renovaciones', 'dominios', 'suscripciones', 'legal'],
+  '/admin/back-office/contratistas': ['nomina', 'honorarios', 'contratistas'],
 };
 
 /** Una ruta de la lista plana: lo que busca ⌘K. `alias` = otras palabras que la encuentran. */

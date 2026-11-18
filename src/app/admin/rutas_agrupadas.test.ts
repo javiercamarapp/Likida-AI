@@ -2,12 +2,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { COPILOTO, AGENTES, NEGOCIO, CONTROL, SISTEMA, SECCIONES, FUERA_DEL_MENU, TODAS_LAS_RUTAS, entradaDeRuta, pestanaActiva, coincideBusqueda, planoBusqueda } from './rutas';
+import { COPILOTO, AGENTES, NEGOCIO, CONTROL, BACKOFFICE, SISTEMA, SECCIONES, FUERA_DEL_MENU, TODAS_LAS_RUTAS, entradaDeRuta, pestanaActiva, coincideBusqueda, planoBusqueda } from './rutas';
 import { REDIRECCIONES_308 } from './guardas/redirecciones_308';
 import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 
-// El menú de /admin pasó de 43 a 16 entradas SIN perder pantallas: cada página sigue siendo una ruta propia, agrupada como pestaña.
-const ENTRADAS = [COPILOTO, ...AGENTES, ...NEGOCIO, ...CONTROL, ...SISTEMA];
+// El menú de /admin pasó de 43 a 16 entradas SIN perder pantallas: cada página sigue siendo una ruta propia, agrupada como pestaña. El 15-nov-2026
+// se sumó la sección «Back-office» (2 entradas: Back-office con 6 pestañas y Contratistas).
+const ENTRADAS = [COPILOTO, ...AGENTES, ...NEGOCIO, ...CONTROL, ...BACKOFFICE, ...SISTEMA];
 const paginaExiste = (href: string) => existsSync(join(__dirname, href.replace('/admin', '') || '', 'page.tsx')) || href === '/admin';
 
 describe('menú de /admin agrupado en pestañas', () => {
@@ -20,7 +21,7 @@ describe('menú de /admin agrupado en pestañas', () => {
     expect(entradaDeRuta('/admin/copiloto')?.nombre).toBe('Copiloto');
   });
 
-  it('tiene 15 entradas más el Resumen (16 en el sidebar; antes 43)', () => { expect(ENTRADAS).toHaveLength(15); });
+  it('tiene 17 entradas más el Resumen (18 en el sidebar; antes 43)', () => { expect(ENTRADAS).toHaveLength(17); });
 
   it('conserva lo que el dueño pidió que se quede: Copiloto, Cerebro de ventas y los paneles de cada agente', () => {
     const todas = TODAS_LAS_RUTAS.map((r) => r.href);
@@ -34,21 +35,23 @@ describe('menú de /admin agrupado en pestañas', () => {
     expect(rotas).toEqual([]);
   });
 
-  it('el árbol final 3.1: cuatro secciones y, por entrada, las pestañas que fijó el plan maestro', () => {
-    expect(SECCIONES.map((s) => s.titulo)).toEqual(['Agentes', 'Negocio', 'Control', 'Sistema']);
+  it('el árbol final 3.1 más el Back-office: cinco secciones y, por entrada, sus pestañas', () => {
+    expect(SECCIONES.map((s) => s.titulo)).toEqual(['Agentes', 'Negocio', 'Control', 'Back-office', 'Sistema']);
     const mapa = Object.fromEntries(ENTRADAS.map((e) => [e.nombre, { href: e.href, pestanas: (e.pestanas ?? []).map((p) => p.nombre) }]));
     expect(mapa).toEqual({
       Copiloto: { href: '/admin/copiloto', pestanas: [] },
       Agentes: { href: '/admin/agentes', pestanas: ['Panel', 'OCR', 'Cuadre', 'WhatsApp', 'Conversaciones', 'Modelos'] },
       Calidad: { href: '/admin/evals', pestanas: ['Exámenes', 'Pruebas reales', 'Resumen'] },
       Bandeja: { href: '/admin/tu-turno', pestanas: ['Tu turno', 'Aprobaciones', 'Escalaciones'] },
-      Ventas: { href: '/admin/mapa-prospectos', pestanas: ['Cerebro de ventas', 'Vendedores'] },
+      'Cerebro de ventas': { href: '/admin/mapa-prospectos', pestanas: ['Mapa', 'Vendedores'] },
       Clientes: { href: '/admin/flotas', pestanas: [] },
       'Consumo de IA': { href: '/admin/consumo', pestanas: ['Consumo', 'Techos'] },
       Facturación: { href: '/admin/cobranza', pestanas: ['Cobranza', 'Planes y cobro', 'Facturas'] },
       Crecimiento: { href: '/admin/crecimiento', pestanas: ['Adquisición', 'Estudio'] },
       'Seguridad y datos': { href: '/admin/compliance', pestanas: ['Compliance y datos', 'Trust & Safety', 'Clientes MCP', 'Bitácora'] },
       Equipo: { href: '/admin/equipo', pestanas: ['Personas', 'Nuevo acceso'] },
+      'Back-office': { href: '/admin/back-office', pestanas: ['Tablero', 'Cierre mensual', 'Contabilidad', 'Gastos', 'Comisiones', 'Contratos'] },
+      Contratistas: { href: '/admin/back-office/contratistas', pestanas: [] },
       Salud: { href: '/admin/salud-sistema', pestanas: ['Estado', 'Relojes', 'Observabilidad', 'Corridas', 'Capacidad'] },
       Soporte: { href: '/admin/soporte', pestanas: [] },
       Integraciones: { href: '/admin/integraciones', pestanas: ['Integraciones', 'WhatsApp'] },
@@ -75,11 +78,24 @@ describe('menú de /admin agrupado en pestañas', () => {
     expect(pestanaActiva(e!, '/admin/corridas/abc-123')?.nombre).toBe('Corridas');
   });
 
-  it('Equipo agrupa Personas y Nuevo acceso; Bandeja y Ventas abren en su primera pestaña', () => {
+  it('Equipo agrupa Personas y Nuevo acceso; Bandeja y Cerebro de ventas abren en su primera pestaña', () => {
     expect(entradaDeRuta('/admin/usuarios/nuevo')?.nombre).toBe('Equipo');
     expect(entradaDeRuta('/admin/tu-turno')?.nombre).toBe('Bandeja');
     expect(entradaDeRuta('/admin/escalaciones')?.nombre).toBe('Bandeja');
-    expect(entradaDeRuta('/admin/mapa-prospectos/xyz')?.nombre).toBe('Ventas');
+    expect(entradaDeRuta('/admin/mapa-prospectos/xyz')?.nombre).toBe('Cerebro de ventas');
+  });
+
+  it('Back-office: cada pestaña pertenece a su entrada, la entidad cuelga de ella sin ser pestaña y Contratistas es entrada propia', () => {
+    const e = entradaDeRuta('/admin/back-office/cierre')!;
+    expect(e.nombre).toBe('Back-office');
+    expect(pestanaActiva(e, '/admin/back-office/cierre')?.nombre).toBe('Cierre mensual');
+    expect(pestanaActiva(e, '/admin/back-office')?.nombre).toBe('Tablero');
+    // /admin/back-office/entidad no es pestaña: cuelga de la entrada por prefijo y, por prefijo también, la barra marca «Tablero».
+    expect(entradaDeRuta('/admin/back-office/entidad')?.nombre).toBe('Back-office');
+    expect(pestanaActiva(entradaDeRuta('/admin/back-office/entidad')!, '/admin/back-office/entidad')?.nombre).toBe('Tablero');
+    // Contratistas no es pestaña de Back-office: es una entrada propia, sin pestañas.
+    expect(BACKOFFICE.map((i) => i.nombre)).toEqual(['Back-office', 'Contratistas']);
+    expect(BACKOFFICE[1].pestanas).toBeUndefined();
   });
 
   it('⌘K lista las tres pantallas fuera del menú y ningún stub 308', () => {
@@ -91,7 +107,7 @@ describe('menú de /admin agrupado en pestañas', () => {
 
   it('⌘K: cada pestaña se encuentra como «Entrada · Pestaña» y las llaves de la lista son únicas', () => {
     const nombres = TODAS_LAS_RUTAS.map((r) => r.nombre);
-    for (const n of ['Agentes · OCR', 'Salud · Corridas', 'Equipo · Nuevo acceso', 'Facturación · Planes y cobro', 'Facturación · Facturas', 'Consumo de IA · Techos']) expect(nombres).toContain(n);
+    for (const n of ['Agentes · OCR', 'Salud · Corridas', 'Equipo · Nuevo acceso', 'Facturación · Planes y cobro', 'Facturación · Facturas', 'Consumo de IA · Techos', 'Back-office · Cierre mensual', 'Back-office · Contabilidad']) expect(nombres).toContain(n);
     const hrefs = TODAS_LAS_RUTAS.map((r) => r.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
@@ -104,6 +120,14 @@ describe('menú de /admin agrupado en pestañas', () => {
     expect(busca('techo')).toContain('/admin/techo-ia');
     expect(busca('invitar')).toContain('/admin/usuarios/nuevo');
     expect(busca('traza')).toContain('/admin/corridas');
+  });
+  it('⌘K: los alias del Back-office encuentran su pantalla («cierre de mes», DIOT, clawback, vencimientos, nómina)', () => {
+    expect(busca('cierre de mes')).toContain('/admin/back-office/cierre');
+    expect(busca('diot')).toContain('/admin/back-office/contabilidad');
+    expect(busca('clawback')).toContain('/admin/back-office/comisiones');
+    expect(busca('vencimientos')).toContain('/admin/back-office/contratos');
+    expect(busca('nomina')).toContain('/admin/back-office/contratistas');
+    expect(busca('back office')).toContain('/admin/back-office');
   });
   it('⌘K: la primera pestaña se encuentra por su nombre aunque comparta dirección con su entrada, y no importan los acentos', () => {
     expect(busca('tu turno')).toContain('/admin/tu-turno');
@@ -126,7 +150,7 @@ describe('menú de /admin agrupado en pestañas', () => {
     expect(entradaDeRuta('/admin/agente-ocr')?.nombre).toBe('Agentes');
     expect(entradaDeRuta('/admin/qa/abc-123')?.nombre).toBe('Calidad');
     expect(entradaDeRuta('/admin/flotas/xyz')?.nombre).toBe('Clientes');
-    expect(entradaDeRuta('/admin/mapa-prospectos')?.nombre).toBe('Ventas');
+    expect(entradaDeRuta('/admin/mapa-prospectos')?.nombre).toBe('Cerebro de ventas');
     expect(entradaDeRuta('/admin')).toBeNull();
     // Las pantallas fuera del menú dan nombre a la cabecera (la miga ya no sale vacía en Avisos), pero no tienen pestañas ni sección.
     expect(entradaDeRuta('/admin/mi-perfil')?.nombre).toBe('Mi perfil');
@@ -152,15 +176,16 @@ describe('menú de /admin agrupado en pestañas', () => {
 // Auditoría 11-nov, D17: pestaña, sidebar, miga y h1 dicen lo mismo (en Rovaq siempre coinciden). Se lee el código de cada pantalla.
 describe('nombres unificados (pestaña del navegador = menú = h1)', () => {
   const fuente = (r: string) => readFileSync(join(__dirname, r, 'page.tsx'), 'utf8');
-  it('Compliance, Cobranza, Ventas y Dev usan el nombre de su entrada del menú', () => {
+  it('Compliance, Cobranza, Cerebro de ventas y Dev usan el nombre de su entrada del menú', () => {
     // Los títulos salen del diccionario (admin_sistema): la clave dice «Seguridad y datos» en es y se comprueba abajo.
     expect(fuente('compliance')).toContain("titulo={t('compliance.seguridad_y_datos')}");
     expect(fuente('compliance')).toContain("title: t('compliance.seguridad_y_datos')");
     expect(admin_sistemaEs['compliance.seguridad_y_datos']).toBe('Seguridad y datos');
     expect(fuente('cobranza')).toContain("title: t('cobranza.facturacion')");
-    expect(fuente('mapa-prospectos')).toContain("title: t('mapa_prospectos.ventas')");
-    expect(admin_sistemaEs['mapa_prospectos.ventas']).toBe('Ventas');
-    expect(fuente('dev')).toContain('titulo="Desarrollo"');
+    expect(fuente('mapa-prospectos')).toContain("title: t('mapa_prospectos.cerebro_de_ventas')");
+    expect(admin_sistemaEs['mapa_prospectos.cerebro_de_ventas']).toBe('Cerebro de ventas');
+    expect(fuente('dev')).toContain("titulo={t('dev.desarrollo')}");
+    expect(admin_sistemaEs['dev.desarrollo']).toBe('Desarrollo');
   });
   it('Avisos: el menú, la miga y la pantalla se llaman igual y la pantalla lleva rótulo de área', () => {
     expect(FUERA_DEL_MENU.find((f) => f.href === '/admin/notificaciones')?.nombre).toBe('Avisos');

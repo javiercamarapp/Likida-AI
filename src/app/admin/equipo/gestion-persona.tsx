@@ -1,6 +1,4 @@
-import { CampoSelect } from '../../ui-v2/componentes/campos';
-import { Tarjeta } from '../../ui-v2/componentes';
-import { FormaConAviso, type AccionDeForma } from '../ui/forma';
+import { CampoSelect, FormaConAviso, Tarjeta, type AccionDeForma } from '../../ui-v2/componentes';
 import { ROLES_INVITABLES } from '@/lib/auth/invitar';
 import { nombreDeRol } from '@/lib/auth/roles';
 import type { Persona } from '@/lib/admin/personas';
@@ -85,7 +83,7 @@ export function GestionPersona({ p, acciones, yo, bajaLikidaHabilitada, t = trAd
           </CampoSelect>
         </FormaConAviso>
       )}
-      <div>
+      <div className="fin16c-acciones">
         {p.activa && (
           <FormaConAviso accion={acciones.reenviarAcceso} boton="Reenviar acceso" enLinea>{oculto(p.id)}</FormaConAviso>
         )}

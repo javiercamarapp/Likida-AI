@@ -3,12 +3,14 @@ import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo, contarConversacionesActivas } from '@/lib/admin/negocio';
-import { Tarjeta, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { EstadoVacio, Tarjeta, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
 import { Columnas } from '@/app/ui-v2/graficas';
 import { numero as num, usd as dolares, fechaCorta } from '@/lib/formato';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { TablaModelosFase } from '../tarjeta-fase';
 import '../sistema.css';
+import '../compacto-lote-a.css';
+import { SaberesNotas } from '../saberes-notas';
 import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
@@ -44,7 +46,7 @@ export default async function AgenteWhatsappPage() {
         <Tarjeta key="serie" titulo={t('agente_fase.serie_costo_dia')} contenida>
           {r.porDia.length > 0
             ? <Columnas etiqueta={t('capacidad_forecast.costo_de_ia_por_dia')} datos={r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.costoUsd }))} formato="usd" />
-            : <p className="adm-sis-vacio-linea" role="status"><b>{t('model_ops.sin_actividad_de_ia')}</b> {t('agente_cuadre.el_costo_por_dia_no_se')}</p>}
+            : <EstadoVacio contenido titulo={t('model_ops.sin_actividad_de_ia')}>{t('agente_cuadre.el_costo_por_dia_no_se')}</EstadoVacio>}
         </Tarjeta>,
         <TablaModelosFase
           key="modelos"
@@ -53,17 +55,18 @@ export default async function AgenteWhatsappPage() {
           textos={{ modelo: t('agente_fase.col_modelo'), llamadas: t('agente_fase.col_llamadas'), costo: t('agente_fase.col_costo'), vacio: t('agente_fase.sin_modelos'), vacioDetalle: t('agente_fase.sin_modelos_detalle') }}
         />,
       ]}
-      saberes={{
-        seSabe: {
+    >
+      <SaberesNotas
+        seSabe={{
           titulo: t('saberes.se_sabe'),
           items: [
             t('agente_fase.se_gasto', { fase: 'WhatsApp', costo: dolares(whatsapp ? whatsapp.costoUsd : 0), n: num(whatsapp ? whatsapp.n : 0) }),
             ...(activas === null ? [] : [t('agente_whatsapp.se_conversaciones', { n: num(activas) })]),
           ],
-        },
-        noSeSabe: { titulo: t('saberes.no_se_sabe'), items: [t('agente_whatsapp.no_entrega')] },
-      }}
-    />
+        }}
+        noSeSabe={{ titulo: t('saberes.no_se_sabe'), items: [t('agente_whatsapp.no_entrega')] }}
+      />
+    </EsqueletoPanelCifras>
   );
 }
 

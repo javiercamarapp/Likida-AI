@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GUARDA «SIN AZUL DE INTERFAZ» (L9a, decisión de Javier 31-oct-2026: «lo azul, por la paleta negro/gris/blanco»).
+// GUARDA «SIN AZUL DE INTERFAZ GENÉRICO» (L9a, 31-oct-2026; REESCRITA el 16-nov-2026: se permite SOLO el azul marino de marca, ver AZULES_MARCA_PERMITIDOS).
 //
 // El cromo de v2 (todo `ui-v2` salvo las gráficas), `dashboard/shell`, /login y TODAS las páginas públicas no pueden tener azul:
 // ni clases de Tailwind blue/sky/indigo/cyan/violet/navy/teal, ni nombres CSS de color azul (`blue`, `navy`, `steelblue`…), ni los
@@ -58,10 +58,19 @@ function valores(l: string, css: boolean): string[] {
 }
 // Línea de la serie de datos (permitida): `--chart-1: …`, `--soft-3: …`, `--ink-5: …`, `--on-2: …`.
 const SERIE_DATOS = /--region-[a-z]+\s*:/; // las series --chart/--soft/--ink/--on-N ya NO están exentas (paleta monocroma, 11-nov-2026)
-// 11-nov-2026 (punto 10 del dueño): la excepción del azul de Rovaq QUEDA ANULADA. La lista permitida está vacía; esas familias de variables ahora son
-// grises y no admiten ni un solo tono con matiz azul.
-/** Valores exactos que la excepción admite (claro y oscuro); un tono nuevo obliga a tocar esta lista a propósito. */
-export const AZULES_ROVAQ_PERMITIDOS = new Set<string>();
+// 16-nov-2026: el dueño reemplazó la paleta negro/gris/blanco por la paleta de MARCA de Likida. El azul MARINO de marca (#2a3f5f; #9db8e0 en oscuro) y sus
+// tintes declarados en tokens.css (rampa --g1..g5, --soft-N/--ink-N de la serie 1 y 7, --infobg, --marca-hover/--marca-fg…) son legales en el cromo.
+// Cualquier OTRO azul («de interfaz genérico»: #3b82f6, #2563eb, #1d4ed8, #0b5fff, el azul de Rovaq, azul eléctrico…) sigue prohibido. Un tono nuevo
+// obliga a tocar esta lista a propósito.
+/** Hex (minúsculas, 6 dígitos) con matiz azul que la paleta de marca admite. */
+export const AZULES_MARCA_PERMITIDOS = new Set<string>([
+  '2a3f5f', '9db8e0', // marino de marca (claro / oscuro)
+  '1c2c45', '0e1a2e', '1b2b44', '17243a', '163f5f', // marino hondo: --marca-hover, --marca-fg oscuro, --ink-1, --g5, --ink-7
+  'eef2f7', 'dbe3ee', '7f93ae', 'e6eefa', // rampa --g1..g5 y --soft-1
+  'e8eef6', '1d2838', '263450', 'dbe6f7', // --infobg, --soft-1 oscuro, --ink-1 oscuro
+  '2b6f9e', '7ec0e8', 'd3e4f0', '16384f', 'c5e3f6', // serie 7 de datos y sus tintes
+  '64748b', '94a3b8', '334155', 'e5e9ee', '232a36', // serie 8 (pizarra) y sus tintes
+]);
 // Marca de terceros que no se puede recolorear (logotipo de Google).
 const MARCA_TERCEROS = /#4285F4/;
 
@@ -116,7 +125,7 @@ export function culpablesDe(f: string, fuente: string): string[] {
     for (const m of sinMarca.matchAll(/#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g)) {
       // En .tsx los comentarios citan incidencias («#124»): ahí solo se mira el hex de 6 u 8 dígitos.
       if (!css && m[1].length === 3) continue;
-      if (esHexAzul(m[1])) culpables.push(`${donde} ${m[0]} tiene matiz azul`);
+      if (esHexAzul(m[1]) && !AZULES_MARCA_PERMITIDOS.has(m[1].slice(0, 6).toLowerCase())) culpables.push(`${donde} ${m[0]} tiene matiz azul`);
     }
     for (const m of sinMarca.matchAll(/rgba?\(([^)]*)\)/gi)) if (esRgbAzul(m[1])) culpables.push(`${donde} ${m[0]} tiene matiz azul`);
     for (const m of sinMarca.matchAll(/hsla?\(([^)]*)\)/gi)) if (esHslAzul(m[1])) culpables.push(`${donde} ${m[0]} tiene matiz azul`);
@@ -145,13 +154,21 @@ describe('sin azul de interfaz en el cromo v2, /login y las páginas públicas',
     });
   }
 
-  it('el azul de Rovaq está ANULADO: ni --seg-activo-*, ni --accion-cajon-*, ni --tabla-cab-* admiten un tono azul, y la serie de datos es gris', () => {
+  it('solo el azul de MARCA (lista blanca) es legal: tokens.css pasa limpio y cualquier otro azul (Rovaq, #3b82f6, #2563eb, #1d4ed8, eléctrico) sigue siendo culpable', () => {
     const tokens = readFileSync(join(RAIZ, 'ui-v2/tokens.css'), 'utf8');
     expect(culpablesDe('ui-v2/tokens.css', tokens)).toEqual([]);
+    // El marino de marca y su variante oscura SÍ pasan, en tokens y en cualquier otro archivo del cromo.
+    for (const ok of ['#2a3f5f', '#9db8e0', '#2A3F5F']) expect(culpablesDe('ui-v2/componentes.css', `  --x: ${ok};`), ok).toEqual([]);
+    // Los azules «de interfaz genérico» y el azul de Rovaq son culpables en cualquier archivo, también con el nombre de un token de marca.
+    for (const mal of ['#3b82f6', '#2563eb', '#1d4ed8', '#0b5fff', '#2f6bd8', '#0057ff']) {
+      expect(culpablesDe('ui-v2/componentes.css', `  --marca: ${mal};`).length, mal).toBeGreaterThan(0);
+      expect(culpablesDe('ui-v2/tokens.css', `  --btn-bg: ${mal};`).length, mal).toBeGreaterThan(0);
+    }
+    expect(culpablesDe('ui-v2/componentes.css', '.a { background: rgb(37 99 235); }').length).toBeGreaterThan(0);
     // La misma línea en cualquier otro archivo del cromo SÍ es culpable.
     expect(culpablesDe('ui-v2/componentes.css', '  --seg-activo-fg: #1f4fb0;').length).toBeGreaterThan(0);
     expect(culpablesDe('ui-v2/tokens.css', '  --tabla-cab-ink: #145966;').length).toBeGreaterThan(0);
-    // Las series de datos (--chart/--soft/--ink/--on-N) ya no están exentas por ser «datos»: un matiz azul en ellas también es culpable.
+    // Las series de datos (--chart/--soft/--ink/--on-N) no están exentas por ser «datos»: un matiz azul fuera de la lista blanca también es culpable.
     expect(culpablesDe('ui-v2/tokens.css', '  --chart-1: #2f6bd8;').length).toBeGreaterThan(0);
     expect(culpablesDe('ui-v2/tokens.css', '  --soft-1: #b0ccf8;').length).toBeGreaterThan(0);
     // En tokens.css, otra variable con el mismo azul o un tono nuevo en la familia permitida también lo son.

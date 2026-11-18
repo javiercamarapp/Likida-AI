@@ -1,0 +1,3 @@
+/* Auditoría visual 16-nov · lote A (sistema y agentes): las tarjetas de una fila se acomodan según el espacio. El vacío, la tarjeta y su
+   entrada son las de ui-v2 (sin estilos propios de /admin). */
+[data-ui="v2"] .adm-fila .rv-fila-tarjetas { align-items: start; }

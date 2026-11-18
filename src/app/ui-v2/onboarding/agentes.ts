@@ -4,6 +4,9 @@ import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { ANCLA_TITULO } from './pantallas';
 import { anclaNav, slugDe } from './anclas';
 import type { Ilu } from './tipos';
+import type { Idioma } from '@/lib/i18n/idioma';
+import { ctxOnb } from './idioma';
+import { AGENTES_EN } from './en/agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UN RECORRIDO CORTO POR CADA UNO DE LOS CINCO AGENTES (perfil `cinco_agentes`): qué hace, qué decide el gerente y qué no hace
@@ -45,7 +48,10 @@ export const AGENTES: readonly AgenteOnb[] = [
 
 export const idRecorridoAgente = (id: string) => `agente.${id}`;
 
-export function construirRecorridoAgente(agente: AgenteOnb, rol: string, perfil: PerfilTenant | null | undefined): Recorrido | null {
+export function construirRecorridoAgente(agente0: AgenteOnb, rol: string, perfil: PerfilTenant | null | undefined, idioma: Idioma = 'es'): Recorrido | null {
+  const cx = ctxOnb(idioma);
+  const en = idioma === 'en' ? AGENTES_EN[agente0.id] : undefined;
+  const agente: AgenteOnb = { ...agente0, nombre: cx.nav(agente0.nombre), ...(en ?? {}) };
   // Nómina solo ve conteos: no decide nada en los agentes, así que no recibe su recorrido.
   if (perfil !== 'cinco_agentes' || rol === 'nomina') return null;
   const menu = menuPorPerfil(rol, perfil);
@@ -53,13 +59,13 @@ export function construirRecorridoAgente(agente: AgenteOnb, rol: string, perfil:
   const slug = slugDe(agente.href);
   const base = { pantalla: agente.href, nombrePantalla: agente.nombre, ilu: agente.ilu, grupo: 0 };
   const pasos: PasoTour[] = [
-    { ...base, tipo: 'ir', id: `${slug}.ir`, ancla: anclaNav(agente.href), lado: 'derecha', titulo: `Abre ${agente.nombre}`,
-      texto: `Haz clic en «${agente.nombre}» en el menú. Si prefieres, pulsa Llévame.`, avance: { tipo: 'accion', evento: 'click' },
-      accion: { verbo: 'Aprieta', objetivo: agente.nombre } },
-    { ...base, tipo: 'info', id: `${slug}.hace`, ruta: agente.href, ancla: ANCLA_TITULO, lado: 'abajo', titulo: 'Qué hace', texto: agente.hace },
-    { ...base, tipo: 'info', id: `${slug}.decide`, ruta: agente.href, ancla: 'pantalla.primer-bloque', lado: 'abajo', titulo: 'Qué decides tú', texto: agente.decide },
-    { ...base, tipo: 'info', id: `${slug}.limite`, ruta: agente.href, ancla: ANCLA_TITULO, lado: 'abajo', titulo: 'Qué no hace', texto: agente.limite },
-    { tipo: 'cierre', ilu: 'cierre', id: 'cierre', titulo: `Eso es ${agente.nombre}`, texto: 'Repite este recorrido desde la Guía. Los demás agentes tienen el suyo.' },
+    { ...base, tipo: 'ir', id: `${slug}.ir`, ancla: anclaNav(agente.href), lado: 'derecha', titulo: cx.t('agente.ir.titulo', { nombre: agente.nombre }),
+      texto: cx.t('agente.ir.texto', { nombre: agente.nombre }), avance: { tipo: 'accion', evento: 'click' },
+      accion: { verbo: cx.t('tour.ir.verbo'), objetivo: agente.nombre } },
+    { ...base, tipo: 'info', id: `${slug}.hace`, ruta: agente.href, ancla: ANCLA_TITULO, lado: 'abajo', titulo: cx.t('agente.hace.titulo'), texto: agente.hace },
+    { ...base, tipo: 'info', id: `${slug}.decide`, ruta: agente.href, ancla: 'pantalla.primer-bloque', lado: 'abajo', titulo: cx.t('agente.decide.titulo'), texto: agente.decide },
+    { ...base, tipo: 'info', id: `${slug}.limite`, ruta: agente.href, ancla: ANCLA_TITULO, lado: 'abajo', titulo: cx.t('agente.limite.titulo'), texto: agente.limite },
+    { tipo: 'cierre', ilu: 'cierre', id: 'cierre', titulo: cx.t('agente.cierre.titulo', { nombre: agente.nombre }), texto: cx.t('agente.cierre.texto') },
   ];
-  return { id: idRecorridoAgente(agente.id), version: 1, titulo: `Agente: ${agente.nombre}`, pasos, pista: 'agente', modo: 'completo' };
+  return { id: idRecorridoAgente(agente.id), version: 1, titulo: cx.t('agente.titulo', { nombre: agente.nombre }), pasos, pista: 'agente', modo: 'completo' };
 }

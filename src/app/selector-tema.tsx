@@ -2,6 +2,8 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { Sun, Monitor, Moon } from 'lucide-react';
+import { useT } from '@/lib/i18n/proveedor';
+import { ui_comun as uiEs } from '@/lib/i18n/es/ui_comun';
 
 const LLAVE = 'likida-tema';
 
@@ -67,12 +69,14 @@ export function useTema(): { tema: Tema; elegir: (nuevo: Tema) => void } {
  */
 export function SelectorTema() {
   const { tema, elegir } = useTema();
+  const { t } = useT('ui_comun', uiEs);
 
   return (
-    <div role="radiogroup" aria-label="Tema de la interfaz"
+    <div role="radiogroup" aria-label={t('tema.etiqueta')}
       className="inline-flex items-center gap-0.5 p-0.5 rounded-full hairline"
       style={{ background: 'var(--canvas)' }}>
-      {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => {
+      {OPCIONES_TEMA.map(({ valor, Icono }) => {
+        const rotulo = t(`tema.${valor === 'claro' ? 'claro' : valor === 'sistema' ? 'sistema' : 'oscuro'}`);
         const activo = tema === valor;
         return (
           <button key={valor} type="button" role="radio" aria-checked={activo}

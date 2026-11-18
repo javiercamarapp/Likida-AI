@@ -5,7 +5,6 @@ import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { etiquetaNav } from '@/lib/i18n/nav';
 import { useT } from '@/lib/i18n/proveedor';
 import MenuGuia from './menu-guia';
-import BotonBuscar from './boton-buscar';
 import { useMenuV2 } from './navegacion-v2';
 import { hrefActivo } from './menu-por-perfil';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
@@ -35,7 +34,6 @@ export default function CabeceraEscritorio({ rol, perfil }: { rol: string; perfi
         <MenuGuia rol={rol} perfil={perfil} alineacion="inicio" />
       </div>
       <div className="rv-cab-esc__der">
-        <BotonBuscar />
       </div>
     </header>
   );

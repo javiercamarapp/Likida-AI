@@ -2,6 +2,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
+// Estos componentes se llaman como FUNCIONES (sin montarlos), así que el hook de idioma no puede ser el real: se sustituye por un traductor
+// en español con el mismo diccionario base, que es lo que dan sin proveedor.
+vi.mock('@/lib/i18n/proveedor', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/i18n/proveedor')>();
+  const { crearTraductor } = await import('@/lib/i18n/traducir');
+  return { ...real, useT: (_ns: string, base: never) => crearTraductor('es', base, base), useIdioma: () => 'es' as const };
+});
+
 import { InvitacionRecorrido } from './invitacion';
 import { PistaContextual } from './pista';
 import {

@@ -19,6 +19,7 @@ import '../ui-v2/tokens.css';
 import '../ui-v2/fonts.css';
 import '../ui-v2/shell.css';
 import './admin-shell.css';
+import './fin16c.css';
 import '../ui-v2/pie-sidebar.css';
 import '../ui-v2/componentes.css';
 import '../ui-v2/overlay.css';
@@ -70,7 +71,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es. Solo viajan al navegador los namespaces de /admin que usan
   // componentes de cliente (`useT`); los de servidor leen el suyo con `getT` y no mandan nada.
-  const idiomaDatos = await datosParaProveedor(['shell', 'avisos', 'admin_inicio', 'admin_agentes', 'admin_sistema']);
+  const idiomaDatos = await datosParaProveedor(['shell', 'avisos', 'errores', 'graficas', 'admin_inicio', 'admin_agentes', 'admin_sistema', 'admin_dinero', 'admin_flotas', 'admin_backoffice', 'admin_resto', 'onboarding', 'ui_comun', 'resto']);
 
   return (
     <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>

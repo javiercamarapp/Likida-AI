@@ -2,6 +2,8 @@ import { Lock, MessageSquare } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
 import { Icono } from '@/app/ui-v2/componentes/icono';
 import type { MensajeHilo } from '@/lib/likida/soporte';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL HILO DE UN TICKET, pintado igual en los dos paneles.
@@ -23,7 +25,9 @@ import type { MensajeHilo } from '@/lib/likida/soporte';
 export function HiloSoporte({
   mensajes,
   vacio,
+  t = trAdminInicioEs,
 }: {
+  t?: TrDe<'admin_inicio'>;
   mensajes: MensajeHilo[];
   /** Qué decir cuando el hilo no tiene un solo mensaje. Lo escribe cada panel:
    *  para el cliente es "todavía no te han contestado"; para el equipo es
@@ -56,12 +60,12 @@ export function HiloSoporte({
             <span className="font-medium text-[var(--ink)]">
               {m.autorNombre ?? '—'}
             </span>
-            <span>{m.deLikida ? 'Likida' : 'la flota'}</span>
+            <span>{m.deLikida ? 'Likida' : t('raiz7.hilo_la_flota')}</span>
             <span>·</span>
             <span className="tabular">{fechaHoraMx(m.creadoEn)}</span>
             {m.interna && (
               <span className="font-medium text-[var(--warn)]">
-                Nota interna — el cliente NO la ve
+                {t('raiz7.hilo_nota_interna')}
               </span>
             )}
           </div>

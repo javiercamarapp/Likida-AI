@@ -111,7 +111,7 @@ export default async function PaginaFacturacion({
 
   async function guardarFactura(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('facturacion.page.tuRolNoPuede') };
@@ -138,13 +138,13 @@ export default async function PaginaFacturacion({
           : tr('facturacion.page.borradorRegistradoPorNo', { v: mxn(valores.total) }),
       };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'registrar la factura') };
+      return { ok: false, error: mensajeParaPantalla(e, 'registrar la factura', idioma) };
     }
   }
 
   async function guardarPago(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('facturacion.page.tuRolNoPuede2') };
@@ -160,13 +160,13 @@ export default async function PaginaFacturacion({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('facturacion.page.pagoRegistrado', { monto: mxn(valores.monto) }) };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'registrar el pago') };
+      return { ok: false, error: mensajeParaPantalla(e, 'registrar el pago', idioma) };
     }
   }
 
   async function sellarEmitida(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('facturacion.page.tuRolNoPuede3') };
@@ -184,13 +184,13 @@ export default async function PaginaFacturacion({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('facturacion.page.laFacturaQuedoMarcada') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'marcar la factura como emitida') };
+      return { ok: false, error: mensajeParaPantalla(e, 'marcar la factura como emitida', idioma) };
     }
   }
 
   async function cancelar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('facturacion.page.tuRolNoPuede4') };
@@ -199,7 +199,7 @@ export default async function PaginaFacturacion({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('facturacion.page.facturaCanceladaSusViajes') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'cancelar la factura') };
+      return { ok: false, error: mensajeParaPantalla(e, 'cancelar la factura', idioma) };
     }
   }
 
@@ -213,7 +213,7 @@ export default async function PaginaFacturacion({
   };
 
   const seccion: SeccionFacturacion = (SECCIONES_FACTURACION as readonly string[]).includes(sp.seccion ?? '') ? (sp.seccion as SeccionFacturacion) : 'cartera';
-  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
+  const idiomaDatos = await datosParaProveedor(['shell', 'dinero', 'dashboard_a']);
   return (
     <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
     <>

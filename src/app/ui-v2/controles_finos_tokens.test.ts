@@ -26,8 +26,8 @@ describe('controles finos · alturas y forma', () => {
     expect(valor('--btn-h-movil')).toBe('var(--ctl-h-movil)');
     expect(valor('--toque')).toBe('44px');
   });
-  it('--item-h sigue literal en 32 px (shell_css.test lo cruza con ALTO_ITEM_PX)', () => {
-    expect(valor('--item-h')).toBe('32px');
+  it('--item-h sigue literal en 38 px (shell_css.test lo cruza con ALTO_ITEM_PX)', () => {
+    expect(valor('--item-h')).toBe('38px');
   });
   it('radios por TIPO de control: 8 control, 12 tarjeta, 999 píldora, 8 tooltip', () => {
     expect(valor('--r-control')).toBe('8px');
@@ -107,7 +107,7 @@ describe('controles finos · tipografía, iconos y marco', () => {
     expect(valor('--sb-w')).toBe('232px');
     expect(valor('--rail-w')).toBe('72px');
   });
-  it('navegación: activo = tinta al 7 %, peso 500 y UN token para la barra (NEGRA en claro, blanca en oscuro; punto 10 del dueño)', () => {
+  it('navegación: activo = tinta al 7 %, peso 500 y UN token para la barra (NEGRA en claro, clara en oscuro; el cromo vuelve a negro el 16-nov)', () => {
     expect(valor('--nav-activo-bg')).toBe('color-mix(in srgb, var(--ink) 7%, transparent)');
     expect(valor('--nav-activo-fg')).toBe('var(--ink)');
     expect(valor('--nav-activo-peso')).toBe('500');

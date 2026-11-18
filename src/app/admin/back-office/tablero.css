@@ -1,0 +1,55 @@
+/* Back-office (lote A): tablero, cierre mensual y entidad. Archivo propio: solo tokens del sistema, sin tamaños fuera de la escala
+   y todo bajo [data-ui="v2"]. La rejilla de áreas y las filas de métricas no dejan huecos: todas las tarjetas miden lo mismo. */
+
+/* Ocho tarjetas de área: se reparten en columnas de ≥248 px; cada una llena su celda y el pie (enlaces) queda abajo. */
+[data-ui="v2"] .bo-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: var(--ui-rhythm, 12px); min-width: 0; }
+[data-ui="v2"] .bo-areas > .rv-tarjeta { height: 100%; }
+[data-ui="v2"] .bo-areas .rv-tarjeta__cuerpo { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
+
+/* Dos datos por área: rótulo a la izquierda, cifra a la derecha, filete fino entre filas. */
+[data-ui="v2"] .bo-par { margin: 0; display: grid; gap: 6px; min-width: 0; }
+[data-ui="v2"] .bo-par > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); min-width: 0; }
+[data-ui="v2"] .bo-par > div:last-child { padding-bottom: 0; border-bottom: 0; }
+[data-ui="v2"] .bo-par dt { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); }
+[data-ui="v2"] .bo-par dd { margin: 0; font-size: var(--t-body, 13px); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); overflow-wrap: anywhere; }
+[data-ui="v2"] .bo-par dd[data-nd] { font-weight: 400; color: var(--muted); font-style: italic; }
+[data-ui="v2"] .bo-enlaces { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Métricas del paquete: cada fila trae rótulo, valor, una pista (Bullet) y su nota; la pista ocupa su propia línea si no cabe. */
+[data-ui="v2"] .bo-metricas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0; }
+[data-ui="v2"] .bo-metrica { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 4px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line); }
+[data-ui="v2"] .bo-metrica:first-child { border-top: 0; padding-top: 0; }
+[data-ui="v2"] .bo-metrica:last-child { padding-bottom: 0; }
+[data-ui="v2"] .bo-metrica__rotulo { font-size: var(--t-body, 13px); font-weight: 500; color: var(--ink); }
+[data-ui="v2"] .bo-metrica__valor { font-size: var(--t-body, 13px); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+[data-ui="v2"] .bo-metrica__viz { grid-column: 1 / -1; min-width: 0; }
+[data-ui="v2"] .bo-metrica__nota { grid-column: 1 / -1; font-size: var(--t-small, 12px); line-height: 1.4; color: var(--muted); }
+
+/* Cierre mensual: filas de comprobación y bloque del update a inversionistas. */
+[data-ui="v2"] .bo-diferencia { font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .bo-diferencia[data-tono="bad"] { color: var(--bad); font-weight: 600; }
+[data-ui="v2"] .bo-md { margin: 0; padding: 10px 12px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--t-body, 13px); line-height: 1.5; background: var(--ui-sunken); border: 1px solid var(--line2); border-radius: var(--r-control); }
+[data-ui="v2"] .bo-acciones { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+[data-ui="v2"] .bo-acciones .adm-din-forma { max-width: none; }
+[data-ui="v2"] .bo-fila-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+[data-ui="v2"] .bo-fila-acciones > * { min-width: 0; }
+
+/* Montos: una cifra nunca se parte en dos líneas y las columnas de dinero se alinean a la derecha con cifras tabulares. */
+[data-ui="v2"] .bo-monto { display: inline-block; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+/* Tabla de comprobaciones del cierre: el texto de las filas no roza el borde de la tarjeta. */
+[data-ui="v2"] .bo-tabla-cierre th, [data-ui="v2"] .bo-tabla-cierre td { padding-inline: 12px; }
+[data-ui="v2"] .bo-tabla-cierre .adm-din-sub { display: block; padding-bottom: 2px; }
+
+/* Lote B (16-nov): entrada escalonada de las ocho áreas y de las filas de métricas (120-220 ms, solo transform y opacity, solo con movimiento
+   permitido) y un hover/press sobrio en la tarjeta de área. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes bo-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  [data-ui="v2"] .bo-areas > .rv-tarjeta, [data-ui="v2"] .bo-metricas > .bo-metrica { animation: bo-entra 180ms ease-out both; }
+  [data-ui="v2"] .bo-areas > :nth-child(2), [data-ui="v2"] .bo-metricas > :nth-child(2) { animation-delay: 30ms; }
+  [data-ui="v2"] .bo-areas > :nth-child(3), [data-ui="v2"] .bo-metricas > :nth-child(3) { animation-delay: 60ms; }
+  [data-ui="v2"] .bo-areas > :nth-child(4), [data-ui="v2"] .bo-metricas > :nth-child(4) { animation-delay: 90ms; }
+  [data-ui="v2"] .bo-areas > :nth-child(n+5) { animation-delay: 120ms; }
+  [data-ui="v2"] .bo-areas > .rv-tarjeta { transition: transform 120ms ease-out; }
+  [data-ui="v2"] .bo-areas > .rv-tarjeta:hover { transform: translateY(-1px); }
+  [data-ui="v2"] .bo-areas > .rv-tarjeta:active { transform: translateY(0); }
+}

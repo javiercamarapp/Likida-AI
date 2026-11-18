@@ -8,6 +8,10 @@ import { type Item, AUTOMATIZACIONES, OPERACION, DINERO_FISCAL, SISTEMA, ABAJO }
 import { puedeVerRuta, moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { SelectorTema } from '../selector-tema';
 import { WidgetUso } from '../admin/ui/kit';
+import { useT } from '@/lib/i18n/proveedor';
+import { etiquetaNav } from '@/lib/i18n/nav';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { dashboard_a as dashboard_aEs } from '@/lib/i18n/es/dashboard_a';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors sb-centrable';
 
@@ -32,24 +36,27 @@ function idSeccion(titulo: string): string {
 
 function Fila({ item, sufijo, pathname, perfil }: { item: Item; sufijo: string; pathname: string; perfil?: PerfilTenant | null }) {
   // «Próximamente» (fase 1 del perfil): el módulo se ve en el menú pero su link va a la pantalla única de anuncio, no a la función.
+  const tr = useT('shell', shellEs);
+  const { t } = useT('dashboard_a', dashboard_aEs);
+  const nombre = etiquetaNav(tr, item.nombre);
   const modulo = perfil ? moduloProximamenteDeRuta(perfil, item.href) : null;
   const activo = modulo ? false : pathname === item.href;
   const destino = modulo ? rutaProximamente(modulo) : item.href;
   return (
-    <Link href={`${destino}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={modulo ? `${item.nombre} (Próximamente)` : item.nombre}
-      aria-label={modulo ? `${item.nombre}, próximamente` : item.nombre}>
-      <item.Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{item.nombre}</span>
+    <Link href={`${destino}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={modulo ? t('sbn.tituloProx', { nombre }) : nombre}
+      aria-label={modulo ? t('sbn.ariaProx', { nombre }) : nombre}>
+      <item.Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{nombre}</span>
       {modulo && (
         <span className="sb-texto ml-auto shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
-          Próximamente
+          {t('sbn.proximamente')}
         </span>
       )}
     </Link>
   );
 }
 
-function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir, perfil }: {
-  titulo: string; items: Item[]; sufijo: string; pathname: string;
+function Seccion({ titulo, rotulo, items, sufijo, pathname, abierta, onAbrir, perfil }: {
+  titulo: string; rotulo: string; items: Item[]; sufijo: string; pathname: string;
   abierta: string | null; onAbrir: (titulo: string) => void; perfil?: PerfilTenant | null;
 }) {
   // ACORDEÓN (17-ago, misma regla que /admin): UNA sección abierta a la vez,
@@ -66,7 +73,7 @@ function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir, perfil }: 
         aria-controls={`${idSeccion(titulo)}-items`}
         className="w-full flex items-center justify-between px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide sb-texto transition-opacity hover:opacity-70"
         style={{ color: 'var(--muted)' }}>
-        {titulo}
+        {rotulo}
         {plegada
           ? <ChevronRight width={13} height={13} strokeWidth={2} />
           : <ChevronDown width={13} height={13} strokeWidth={2} />}
@@ -119,12 +126,19 @@ const TITULOS_DASHBOARD: Array<[string, Item[]]> = [
   ['Automatizaciones', AUTOMATIZACIONES], ['Sistema', SISTEMA],
 ];
 
+const CLAVE_SECCION = {
+  'Operación': 'sbn.seccion.operacion', 'Dinero y fiscal': 'sbn.seccion.dineroFiscal',
+  'Automatizaciones': 'sbn.seccion.automatizaciones', 'Sistema': 'sbn.seccion.sistema',
+} as const;
+
 export default function SidebarNav({ rol, perfil }: {
   rol: string;
   /** Perfil de la flota (0770): recorta el menú a la lista cerrada del perfil. Sin perfil, el menú de siempre. */
   perfil?: PerfilTenant | null;
 }) {
   const pathname = usePathname();
+  const { t } = useT('dashboard_a', dashboard_aEs);
+  const tr = useT('shell', shellEs);
   const { sufijo, rolMenu } = useSufijoYRol(rol);
   const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rolMenu, it.href, perfil));
   // El acordeón (17-ago): default OPERACIÓN (el trabajo del cliente), o la
@@ -153,21 +167,21 @@ export default function SidebarNav({ rol, perfil }: {
     <>
       {hrefResumen && (
         <div>
-          <Link href={`${hrefResumen}${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)} title="Resumen" aria-label="Resumen">
-            <LayoutGrid {...estiloIcono(resumenActivo)} /> <span className="sb-texto truncate">Resumen</span>
+          <Link href={`${hrefResumen}${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)} title={etiquetaNav(tr, 'Resumen')} aria-label={etiquetaNav(tr, 'Resumen')}>
+            <LayoutGrid {...estiloIcono(resumenActivo)} /> <span className="sb-texto truncate">{etiquetaNav(tr, 'Resumen')}</span>
           </Link>
           {/* El chat a PRIMER NIVEL (17-ago-2026): es el mismo cerebro que
               atiende por WhatsApp — el panel es el espejo del canal, y la
               segunda casa del cliente es preguntar, no navegar menús. */}
           {puedeVerRuta(rolMenu, '/dashboard/chat', perfil) && (
-            <Link href={`/dashboard/chat${sufijo}`} className={claseItem(pathname === '/dashboard/chat')} style={estiloItem(pathname === '/dashboard/chat')} title="Pregunta a tus datos" aria-label="Pregunta a tus datos">
-              <MessageCircle {...estiloIcono(pathname === '/dashboard/chat')} /> <span className="sb-texto truncate">Pregunta a tus datos</span>
+            <Link href={`/dashboard/chat${sufijo}`} className={claseItem(pathname === '/dashboard/chat')} style={estiloItem(pathname === '/dashboard/chat')} title={etiquetaNav(tr, 'Pregunta a tus datos')} aria-label={etiquetaNav(tr, 'Pregunta a tus datos')}>
+              <MessageCircle {...estiloIcono(pathname === '/dashboard/chat')} /> <span className="sb-texto truncate">{etiquetaNav(tr, 'Pregunta a tus datos')}</span>
             </Link>
           )}
         </div>
       )}
       {TITULOS_DASHBOARD.map(([titulo, items]) => (
-        <Seccion key={titulo} titulo={titulo} items={visibles(items)} sufijo={sufijo}
+        <Seccion key={titulo} titulo={titulo} rotulo={t(CLAVE_SECCION[titulo as keyof typeof CLAVE_SECCION])} items={visibles(items)} sufijo={sufijo}
           pathname={pathname} abierta={abierta} onAbrir={alternar} perfil={perfil} />
       ))}
     </>
@@ -190,6 +204,8 @@ export function SidebarAbajo({ rol, usoIa, perfil }: {
   usoIa?: { pct: number } | null;
 }) {
   const pathname = usePathname();
+  const { t } = useT('dashboard_a', dashboard_aEs);
+  const tr = useT('shell', shellEs);
   const { sufijo, rolMenu } = useSufijoYRol(rol);
   const items = ABAJO.filter((it) => puedeVerRuta(rolMenu, it.href, perfil));
   if (items.length === 0) return null;
@@ -199,19 +215,19 @@ export function SidebarAbajo({ rol, usoIa, perfil }: {
     <>
       {usoIa !== undefined && !perfil && (
         <WidgetUso
-          etiqueta="Análisis con IA · hoy"
+          etiqueta={t('sbn.usoIa')}
           valor={usoIa ? `${usoIa.pct}%` : null}
-          detalle={usoIa ? 'del análisis incluido hoy — se renueva a medianoche' : undefined}
+          detalle={usoIa ? t('sbn.usoIaDetalle') : undefined}
           tope={usoIa ? { usado: usoIa.pct, limite: 100 } : null}
-          href={`/dashboard/chat${sufijo}`} hrefTexto="Preguntar a tus datos"
+          href={`/dashboard/chat${sufijo}`} hrefTexto={t('sbn.preguntar')}
         />
       )}
       {ayuda && (
-        <Link href={`${ayuda.href}${sufijo}`} title={ayuda.nombre}
+        <Link href={`${ayuda.href}${sufijo}`} title={etiquetaNav(tr, ayuda.nombre)}
           className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-full text-[12px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
           style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
           <ayuda.Icono width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          <span className="sb-texto truncate">{ayuda.nombre}</span>
+          <span className="sb-texto truncate">{etiquetaNav(tr, ayuda.nombre)}</span>
         </Link>
       )}
       {filas.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} perfil={perfil} />)}

@@ -1,23 +1,23 @@
 /* Piezas mínimas de las pantallas de dinero de /admin (Consumo, Planes y cobro, Facturas, Cobranza, Crecimiento, Estudio).
    Archivo propio, como pide el plan: nada de editar componentes.css ni paginas.css. Solo tokens definidos, sin movimiento. */
-[data-ui="v2"] .adm-din-nota { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+[data-ui="v2"] .adm-din-nota { margin: 0 0 8px; font-size: var(--t-small); line-height: 1.5; color: var(--muted); }
 [data-ui="v2"] .adm-din-nota:last-child { margin-bottom: 0; }
 [data-ui="v2"] .adm-din-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-[data-ui="v2"] .adm-din-lista > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+[data-ui="v2"] .adm-din-lista > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: var(--t-body); }
 [data-ui="v2"] .adm-din-lista > li:first-child { border-top: 0; padding-top: 0; }
 [data-ui="v2"] .adm-din-lista > li > span { color: var(--muted); }
 [data-ui="v2"] .adm-din-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 [data-ui="v2"] .adm-din-forma { display: flex; flex-direction: column; gap: 12px; max-width: 520px; }
-[data-ui="v2"] .adm-din-rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-[data-ui="v2"] .adm-din-plan { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-[data-ui="v2"] .adm-din-plan__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
-[data-ui="v2"] .adm-din-plan__precio { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-[data-ui="v2"] .adm-din-plan__precio small { font-size: 12px; font-weight: 400; color: var(--muted); }
-[data-ui="v2"] .adm-din-sub { display: block; font-size: 11px; color: var(--muted); }
-[data-ui="v2"] .adm-din-pre { margin: 8px 0; padding: 8px 12px; max-height: 256px; overflow-y: auto; white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.5; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
-[data-ui="v2"] .adm-din-bloque { margin: 8px 0; padding: 8px 12px; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
-[data-ui="v2"] .adm-din-bloque > b { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-[data-ui="v2"] .adm-din-bloque > p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+[data-ui="v2"] .adm-din-rejilla { display: grid; align-items: start; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--ui-rhythm, 12px); }
+[data-ui="v2"] .adm-din-plan { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line2); border-radius: 12px; background: var(--ui-surface); }
+[data-ui="v2"] .adm-din-plan__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--t-body); font-weight: 600; }
+[data-ui="v2"] .adm-din-plan__precio { font-size: var(--t-page); font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .adm-din-plan__precio small { font-size: var(--t-small); font-weight: 400; color: var(--muted); }
+[data-ui="v2"] .adm-din-sub { display: block; font-size: var(--t-micro); color: var(--muted); }
+[data-ui="v2"] .adm-din-pre { margin: 8px 0; padding: 8px 12px; max-height: 256px; overflow-y: auto; white-space: pre-wrap; font: inherit; font-size: var(--t-body); line-height: 1.5; background: var(--ui-sunken); border: 1px solid var(--line2); border-radius: 8px; }
+[data-ui="v2"] .adm-din-bloque { margin: 8px 0; padding: 8px 12px; background: var(--ui-sunken); border: 1px solid var(--line2); border-radius: 8px; }
+[data-ui="v2"] .adm-din-bloque > b { display: block; font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+[data-ui="v2"] .adm-din-bloque > p { margin: 4px 0 0; font-size: var(--t-body); line-height: 1.5; white-space: pre-wrap; }
 [data-ui="v2"] .adm-din-video { width: 100%; max-height: 160px; border-radius: 8px; }
 [data-ui="v2"] .adm-din-miniatura { display: block; width: 100%; height: 80px; object-fit: cover; border-radius: 8px; }
 
@@ -27,7 +27,7 @@
 [data-ui="v2"] .adm-flota-gasto progress::-webkit-progress-bar { background: var(--line); }
 [data-ui="v2"] .adm-flota-gasto progress::-webkit-progress-value { background: var(--ink); }
 [data-ui="v2"] .adm-flota-gasto progress[data-alto]::-webkit-progress-value { background: var(--bad); }
-[data-ui="v2"] .adm-flota-acciones { display: inline-flex; gap: 4px; justify-content: flex-end; }
+[data-ui="v2"] .adm-flota-acciones { display: inline-flex; justify-content: flex-end; }
 [data-ui="v2"] .adm-flota-paneles { display: flex; flex-wrap: wrap; gap: 8px; }
 [data-ui="v2"] .adm-flota-alta { scroll-margin-top: 72px; }
 /* Crear organización (Rovaq P2, captura P2-organizaciones-crear): el panel va a TODO el ancho y el formulario, en una columna de 520 px adentro. */
@@ -36,11 +36,6 @@
 
 /* La tarjeta de una fila de gráficas llena su celda: dos tarjetas de la misma fila miden lo mismo (Rovaq), sin hueco bajo la más baja. */
 [data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta { height: 100%; }
-
-/* Vacío uniforme de la sección de dinero (Rovaq `ac-vacio`): 1 px punteado #e6e6e8, radio 8, relleno 20×14, SIEMPRE dentro de su tarjeta. Hoy la pieza
-   compartida lo pinta con borde solo en la variante `contenido`; mientras no se unifique allí (pedido_compartido: componentes.css `.rv-vacio`),
-   esta regla evita los dos vacíos distintos en la misma página (p. ej. «Facturado por mes» sin borde y «Por cobrar» punteado). */
-[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
 
 /* Formulario a todo el ancho de su tarjeta (Rovaq: filas rótulo-control, nunca una columna de 340 px con la otra mitad vacía):
    los campos se reparten en columnas de ≥220 px; avisos y botón ocupan la fila completa. */
@@ -70,9 +65,12 @@
 [data-ui="v2"] .adm-din-forma--ancha .rv-campo--casilla { max-width: none; }
 [data-ui="v2"] .adm-din-forma--ancha .rv-campo--casilla :is(.rv-ayuda, .rv-campo__ayuda, small) { max-width: 72ch; }
 
-/* Vacío de una línea (Rovaq ac-vacio): caja punteada, radio 8, relleno 20×14; la tarjeta ya no se estira a la altura de su vecina. */
-[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }
 
 /* Ronda 8: periodo (segmentado) y filtros del cajón en UNA sola fila con gap 8, como el FilterBar de Rovaq. */
 [data-ui="v2"] .adm-filtros-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 [data-ui="v2"] .adm-filtros-fila > * { margin: 0; }
+/* Cobranza: un solo chip de toque por fila, con aire en la celda y botón en una línea. */
+[data-ui="v2"] .adm-cob-toques { flex-direction: column; align-items: flex-start; gap: 4px; padding-block: 4px; }
+[data-ui="v2"] .adm-cob-vr { white-space: nowrap; }
+/* pul9: aire entre una forma ancha y lo que va debajo (el vacío punteado de la lista). */
+[data-ui="v2"] .adm-din-forma--ancha { margin-bottom: 12px; }

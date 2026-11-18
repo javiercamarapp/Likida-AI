@@ -51,5 +51,6 @@ export default async function PaginaRentabilidad({
   ]);
 
   const { t: tr } = await getT('dinero');
-  return <VistaRentabilidad tr={tr} rentabilidad={rentabilidad} cobranza={cobranza} sufijo={sufijoTenant(sp)} periodo={periodo} />;
+  const { t: ta } = await getT('dashboard_a');
+  return <VistaRentabilidad tr={tr} ta={ta} rentabilidad={rentabilidad} cobranza={cobranza} sufijo={sufijoTenant(sp)} periodo={periodo} />;
 }

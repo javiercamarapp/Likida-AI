@@ -1,5 +1,6 @@
 import { Calculator, Check, Link2, Minus, TrendingUp } from 'lucide-react';
 import { cx } from '../componentes/clases';
+import { idiomaUi } from '../componentes/texto-ui';
 
 // Modelo epistémico del dato (PLAN §2.4; regla del repo: nunca inventar una cifra).
 // Icono + patrón de borde + texto: JAMÁS solo color.
@@ -17,11 +18,19 @@ export const ROTULO_DATO: Record<TipoDato, { texto: string; ayuda: string }> = {
   inferido: { texto: 'Inferido', ayuda: 'Deducido de otros datos; no se midió directo.' },
   sin_dato: { texto: 'Sin dato', ayuda: 'Todavía no hay dato. No es cero.' },
 };
+/** Rótulos en inglés (US) del sello; el español es el de `ROTULO_DATO`. */
+export const ROTULO_DATO_EN: Record<TipoDato, { texto: string; ayuda: string }> = {
+  observado: { texto: 'Observed', ayuda: 'Recorded at the source.' },
+  calculado: { texto: 'Calculated', ayuda: 'Result of a formula over data recorded at the source.' },
+  estimado: { texto: 'Estimated', ayuda: 'Calculated with an assumption that is shown openly.' },
+  inferido: { texto: 'Inferred', ayuda: 'Deduced from other data; not measured directly.' },
+  sin_dato: { texto: 'No data', ayuda: 'There is no data yet. It is not zero.' },
+};
 const ICONO = { observado: Check, calculado: Calculator, estimado: TrendingUp, inferido: Link2, sin_dato: Minus } as const;
 
-export function KindBadge({ tipo, className }: { tipo: TipoDato; className?: string }) {
+export function KindBadge({ tipo, className, idioma }: { tipo: TipoDato; className?: string; idioma?: 'es' | 'en' }) {
   const Icono = ICONO[tipo];
-  const r = ROTULO_DATO[tipo];
+  const r = (idiomaUi(idioma) === 'en' ? ROTULO_DATO_EN : ROTULO_DATO)[tipo];
   return (
     <span className={cx('rv-kind', className)} data-tipo={tipo} title={r.ayuda}>
       {tipo === 'observado' ? <i className="rv-kind__punto" aria-hidden="true" /> : <Icono width={12} height={12} strokeWidth={2.2} aria-hidden="true" />}

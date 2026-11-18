@@ -4,6 +4,8 @@ import { useActionState, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
 import { Aviso, Boton, CampoTexto, Icono, StatusChip } from '../../ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_dinero } from '@/lib/i18n/es/admin_dinero';
 // Del módulo PURO (`piezas.ts`), no de `estudio.ts` — ese último importa `supabaseAdmin` y, con él, built-ins de Node que el bundle del
 // navegador no puede resolver (ver la cabecera de `piezas.ts`).
 import { partirCopyPorCanal, type PiezaEstudio } from '@/lib/likida/marketing/piezas';
@@ -11,14 +13,14 @@ import { partirCopyPorCanal, type PiezaEstudio } from '@/lib/likida/marketing/pi
 export type ResultadoPublicar = { ok?: string; error?: string } | null;
 export type AccionPublicar = (previo: ResultadoPublicar, fd: FormData) => Promise<ResultadoPublicar>;
 
-const ETIQUETA_TIPO: Record<string, string> = {
-  guion_video: 'Guion de video',
-  carrusel_noticias: 'Carrusel del mercado',
-  promo_diaria: 'Promo del día',
-  encargo_visual: 'Encargo visual',
-  encargo_video_demo: 'Encargo de video demo',
-  encargo_video_marketing: 'Encargo de reel',
-};
+const CLAVE_TIPO = {
+  guion_video: 'neg5.mk_t_guion',
+  carrusel_noticias: 'neg5.mk_t_carrusel',
+  promo_diaria: 'neg5.mk_t_promo',
+  encargo_visual: 'neg5.mk_t_encargo_visual',
+  encargo_video_demo: 'neg5.mk_t_encargo_demo',
+  encargo_video_marketing: 'neg5.mk_t_encargo_reel',
+} as const;
 
 /**
  * UNA pieza del estudio como tarjeta: el copy por canal cuando el agente lo marcó así (`promos_diarias`), el cuerpo completo cuando no (un
@@ -30,6 +32,7 @@ export function TarjetaPieza({ pieza, publicar, rechazar }: {
   publicar: AccionPublicar;
   rechazar: AccionPublicar;
 }) {
+  const { t } = useT('admin_dinero', admin_dinero);
   const [estado, enviar, pendiente] = useActionState<ResultadoPublicar, FormData>(
     async (previo, fd) => (String(fd.get('operacion')) === 'rechazar' ? rechazar(previo, fd) : publicar(previo, fd)),
     null,
@@ -43,7 +46,7 @@ export function TarjetaPieza({ pieza, publicar, rechazar }: {
     <div className="adm-din-plan">
       <div className="adm-din-plan__cab">
         <span>{pieza.titulo}</span>
-        <StatusChip tono="neutral">{ETIQUETA_TIPO[pieza.tipo] ?? pieza.tipo}</StatusChip>
+        <StatusChip tono="neutral">{pieza.tipo in CLAVE_TIPO ? t(CLAVE_TIPO[pieza.tipo as keyof typeof CLAVE_TIPO]) : pieza.tipo}</StatusChip>
       </div>
       <span className="adm-din-sub">{pieza.agente} · {fechaHoraMx(pieza.creadoEn)}</span>
 
@@ -62,23 +65,23 @@ export function TarjetaPieza({ pieza, publicar, rechazar }: {
 
       <form action={enviar} className="adm-din-forma">
         <input type="hidden" name="pieza" value={pieza.id} />
-        {rechazando ? <CampoTexto etiqueta="Motivo del rechazo" name="motivo" placeholder="Motivo del rechazo (obligatorio)" obligatorio /> : null}
+        {rechazando ? <CampoTexto etiqueta={t('neg5.mk_motivo_etq')} name="motivo" placeholder={t('neg5.mk_motivo_ph')} obligatorio /> : null}
         <div className="adm-din-acciones">
           {!rechazando ? (
-            <Boton type="submit" name="operacion" value="publicar" variante="primary" tamano="sm" disabled={pendiente} icono={<Icono icono={Check} tam={14} />}>Publicar</Boton>
+            <Boton type="submit" name="operacion" value="publicar" variante="primary" tamano="sm" disabled={pendiente} icono={<Icono icono={Check} tam={14} />}>{t('neg5.mk_publicar')}</Boton>
           ) : null}
           {rechazando ? (
             <>
-              <Boton type="submit" name="operacion" value="rechazar" variante="danger" tamano="sm" disabled={pendiente} icono={<Icono icono={X} tam={14} />}>Rechazar</Boton>
-              <Boton variante="secondary" tamano="sm" onClick={() => setRechazando(false)}>Cancelar</Boton>
+              <Boton type="submit" name="operacion" value="rechazar" variante="danger" tamano="sm" disabled={pendiente} icono={<Icono icono={X} tam={14} />}>{t('neg5.mk_rechazar')}</Boton>
+              <Boton variante="secondary" tamano="sm" onClick={() => setRechazando(false)}>{t('neg5.mk_cancelar')}</Boton>
             </>
           ) : (
-            <Boton variante="secondary" tamano="sm" onClick={() => setRechazando(true)} icono={<Icono icono={X} tam={14} />}>Rechazar…</Boton>
+            <Boton variante="secondary" tamano="sm" onClick={() => setRechazando(true)} icono={<Icono icono={X} tam={14} />}>{t('neg5.mk_rechazar_puntos')}</Boton>
           )}
         </div>
       </form>
       <p className="adm-din-nota">
-        Publicar aquí es tu aprobación en la bandeja; postearlo en el canal sigue siendo tu tap fuera de Likida: no hay integración de redes sociales todavía.
+        {t('neg5.mk_nota_publicar')}
       </p>
     </div>
   );

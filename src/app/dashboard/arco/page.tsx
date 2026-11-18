@@ -1,5 +1,6 @@
 import { getT } from '@/lib/i18n/servidor';
 import { type Tr } from '@/lib/i18n/dinero_tr';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -28,8 +29,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const dynamic = 'force-dynamic';
 
-const etiquetaTipo = (tr: Tr): Record<string, string> => ({
-  acceso: 'Acceso', rectificacion: tr('arco.page.rectificacion'), cancelacion: tr('arco.page.cancelacion'), oposicion: tr('arco.page.oposicion'),
+const etiquetaTipo = (tr: Tr, ta: TrDe<'dashboard_a'>): Record<string, string> => ({
+  acceso: ta('arco.acceso'), rectificacion: tr('arco.page.rectificacion'), cancelacion: tr('arco.page.cancelacion'), oposicion: tr('arco.page.oposicion'),
 });
 const estadoArco = (tr: Tr): Record<string, { rotulo: string; tono: TonoEstado }> => ({
   resuelta: { rotulo: tr('arco.page.resuelta'), tono: 'ok' },
@@ -71,6 +72,7 @@ function puedeResponderArco(rol: string): boolean {
  */
 export default async function ArcoPage({ searchParams }: { searchParams: Promise<Params> }) {
   const { t: tr } = await getT('dinero');
+  const { t: ta } = await getT('dashboard_a');
   const sp = await searchParams;
   const { tenantId } = await resolverTenantEfectivo(RUTA, sp);
   // AUDITORÍA 16, ALTO (arquitectura): `Date.now()` en el render rompe la
@@ -85,7 +87,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
 
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     // AUDITORÍA 16, MEDIO: el superadmin que previsualiza una flota real
     // (?tenant=t-otra) no podía resolver — el action usaba el tenant de sesión.
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
@@ -106,7 +108,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         ? { ok: tr('arco.page.solicitudResueltaYLa') }
         : { ok: tr('arco.page.solicitudResueltaLaRespuesta', { v: r.error ? ` (${r.error})` : '' }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'resolver la solicitud') };
+      return { error: mensajeParaPantalla(e, 'resolver la solicitud', idioma) };
     }
   }
 
@@ -118,7 +120,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   // humano firma (aprieta el botón); el sistema ejecuta — en ese orden.
   async function accionEjecutarCancelacion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeResponderArco(s.rol)) return { error: noAutorizado(tr) };
     let tenantEfectivo = s.tenantId;
@@ -144,7 +146,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         ? { ok: tr('arco.page.seConfirmoPorWhatsapp', { ALCANCE_CANCELACION: alcanceCancelacion(tr), aviso }) }
         : { ok: tr('arco.page.laConfirmacionNoSalio', { ALCANCE_CANCELACION: alcanceCancelacion(tr), v: r.errorAviso ? ` (${r.errorAviso})` : '', aviso }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'ejecutar la cancelación') };
+      return { error: mensajeParaPantalla(e, 'ejecutar la cancelación', idioma) };
     }
   }
 
@@ -159,7 +161,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   // Primero se registra la constancia, después la persona contesta al titular.
   async function accionRegistrarOposicion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeResponderArco(s.rol)) return { error: noAutorizado(tr) };
     let tenantEfectivo = s.tenantId;
@@ -177,7 +179,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         ok: tr('arco.page.oposicionRegistrada'),
       };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'registrar la oposición') };
+      return { error: mensajeParaPantalla(e, 'registrar la oposición', idioma) };
     }
   }
 
@@ -244,7 +246,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
               return (
                 <li key={s.id} className="rv-arco__item">
                   <div className="rv-arco__cabeza">
-                    <strong>{etiquetaTipo(tr)[s.tipo] ?? s.tipo}</strong>
+                    <strong>{etiquetaTipo(tr, ta)[s.tipo] ?? s.tipo}</strong>
                     <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>
                     {!cerrada && yaVencio(s.venceEn, hoy) && <StatusChip tono="bad">{tr('arco.page.vencida')}</StatusChip>}
                   </div>
@@ -285,7 +287,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
                           </p>
                         </>
                       )}
-                      <FormaConAviso accion={accionResponder} boton="Responder" columnas="md:grid-cols-1">
+                      <FormaConAviso accion={accionResponder} boton={ta('arco.responder')} columnas="md:grid-cols-1">
                         <input type="hidden" name="solicitudId" value={s.id} />
                         <CampoTexto name="resolucion" etiqueta={tr('arco.page.respuestaAlTitular')} etiquetaOculta placeholder={tr('arco.page.queSeResolvioY')} />
                       </FormaConAviso>

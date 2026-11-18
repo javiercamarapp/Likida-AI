@@ -30,7 +30,7 @@ export default async function PaginaMapaProspectos() {
   }
   return (
     <EsqueletoPanelCifras
-      titulo={t('mapa_prospectos.ventas')} apoyo={t('mapa_prospectos.tu_cartera_de_prospectos_en_un')} variante="8-4"
+      titulo={t('mapa_prospectos.cerebro_de_ventas')} apoyo={t('mapa_prospectos.tu_cartera_de_prospectos_en_un')} variante="8-4"
       avisos={resumen === null ? (
         <AvisoCompacto
           tono="error"
@@ -46,5 +46,5 @@ export default async function PaginaMapaProspectos() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('admin_sistema');
-  return { title: t('mapa_prospectos.ventas') };
+  return { title: t('mapa_prospectos.cerebro_de_ventas') };
 }

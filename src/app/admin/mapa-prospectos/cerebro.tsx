@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
-  Download, Flame, Mail, Maximize2, Minimize2, Minus, Navigation, Phone, Plus, RefreshCw, SlidersHorizontal, Sparkles, Undo2, User, UserCheck, X,
+  Check, Clock, Download, Flame, Mail, Maximize2, Minimize2, Minus, Navigation, Phone, Plus, RefreshCw, SlidersHorizontal, Snowflake, Sparkles, Undo2, User, UserCheck, X,
 } from 'lucide-react';
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
@@ -31,6 +31,10 @@ import { ahoraMs } from '@/lib/saludo';
 import { useT } from '@/lib/i18n/proveedor';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
+import {
+  GRUPOS_ETAPA, NIVELES_URGENCIA, descripcionNivel, grupoDeEtapa, inicialesDe, nivelUrgencia, rotuloGrupo, rotuloNivel, tonoDe,
+  type GrupoEtapa, type ModoColor, type NivelUrgencia,
+} from './color';
 import {
   Boton, Campo, CampoSelect, EsqTarjetaV2, Fieldset, Disclosure, Drawer, FilaTarjetas, FiltroChip, Icono, SegmentedControl, Tarjeta, TablaBase, Tooltip, clasesBoton, cx,
 } from '../../ui-v2/componentes';
@@ -56,21 +60,72 @@ const ORDEN_EMBUDO = [
   'negociacion', 'proposal', 'pilot', 'demo', 'appointment', 'rescheduled',
   'no-show', 'cancelled', 'contactado', 'nuevo', 'won', 'cerrado', 'perdido',
 ] as const;
-/** Las 13 etapas, en 5 FAMILIAS que se distinguen por la forma de la luz (llena, anillo, discontinua), no solo por el tono: dos grises casi iguales
- *  no se separan a ojo, un círculo lleno y un anillo sí. La etapa exacta de cada prospecto sigue en su tarjeta y en «El embudo, en luces». */
-const FAMILIAS = ['cierre', 'avanzado', 'contacto', 'nuevo', 'caida'] as const;
-type Familia = (typeof FAMILIAS)[number];
-const FAMILIA_DE: Record<string, Familia> = {
-  won: 'cierre', cerrado: 'cierre',
-  negociacion: 'avanzado', proposal: 'avanzado', pilot: 'avanzado', demo: 'avanzado',
-  appointment: 'contacto', rescheduled: 'contacto', contactado: 'contacto',
-  nuevo: 'nuevo',
-  'no-show': 'caida', cancelled: 'caida', perdido: 'caida', lost: 'caida',
-};
-const familiaDe = (estado: string): Familia => FAMILIA_DE[estado] ?? 'nuevo';
-const rotuloFamilia = (f: Familia, tx: TSistema): string => (
-  f === 'cierre' ? tx('a1r4.familia_cierre') : f === 'avanzado' ? tx('a1r4.familia_avanzado') : f === 'contacto' ? tx('a1r4.familia_contacto')
-    : f === 'caida' ? tx('a1r4.familia_caida') : tx('a1r4.familia_nuevo'));
+const ICONO_NIVEL = { urgente: Flame, atencion: Clock, aldia: Check, frio: Snowflake } as const;
+
+/** Cuántas luces urgentes llevan el anillo que se expande: son decoración viva y cada una es un nodo SVG más; las demás solo laten. */
+const TOPE_ONDAS = 60;
+
+/** El monograma de la empresa: iniciales sobre un tono categórico determinista (el color sale de `data-tono` en cerebro.css). */
+export function Monograma({ nombre }: { nombre: string }) {
+  return <span className="cer-mono" data-tono={tonoDe(nombre)} aria-hidden="true">{inicialesDe(nombre)}</span>;
+}
+
+/** El nivel de urgencia con icono y texto: el color nunca va solo. */
+export function ChipUrgencia({ nivel, tx }: { nivel: NivelUrgencia; tx: TSistema }) {
+  return <span className="cer-urg" data-urgencia={nivel}><Icono icono={ICONO_NIVEL[nivel]} tam={14} />{rotuloNivel(nivel, tx)}</span>;
+}
+
+/** Una cifra que llega contando: arranca cerca de su valor (nunca en 0 falso) y sube en 700 ms. Con movimiento reducido, el valor final al instante. */
+function useCuenta(valor: number, reducido: boolean): number {
+  const [v, setV] = useState(valor);
+  const actual = useRef(valor);
+  useEffect(() => {
+    if (reducido || valor <= 1) { actual.current = valor; return; }
+    const desde = actual.current === valor ? Math.round(valor * 0.55) : actual.current;
+    const t0 = performance.now();
+    let id = 0;
+    const paso = (ahora: number) => {
+      const f = Math.min(1, (ahora - t0) / 700);
+      const e = 1 - (1 - f) ** 3;
+      actual.current = Math.round(desde + (valor - desde) * e);
+      setV(actual.current);
+      if (f < 1) id = requestAnimationFrame(paso);
+    };
+    id = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(id);
+  }, [valor, reducido]);
+  return reducido || valor <= 1 ? valor : v;
+}
+function Cuenta({ valor, idioma, reducido }: { valor: number; idioma: Parameters<typeof numero>[1]; reducido: boolean }) {
+  return <>{numero(useCuenta(valor, reducido), idioma)}</>;
+}
+
+/** La leyenda de color, con el modo que está activo: cada fila lleva muestra, texto y (en la versión ancha) su conteo real. */
+export function LeyendaColor({ modo, tx, idioma, conteos, compacta }: {
+  modo: ModoColor; tx: TSistema; idioma: Parameters<typeof numero>[1]; compacta?: boolean;
+  conteos: { nivel: ReadonlyMap<NivelUrgencia, number>; grupo: ReadonlyMap<GrupoEtapa, number> } | null;
+}) {
+  const etiqueta = modo === 'urgencia' ? tx('cer16.leyenda_urgencia') : tx('cer16.leyenda_etapa');
+  return (
+    <ul className={cx('cer-leyenda-color', compacta && 'cer-leyenda-color--compacta')} aria-label={etiqueta} data-modo={modo}>
+      {modo === 'urgencia'
+        ? NIVELES_URGENCIA.map((n) => (
+          <li key={n} title={descripcionNivel(n, tx)}>
+            <i className="cer-punto cer-punto--urg" data-urgencia={n} aria-hidden="true" />
+            <span>{rotuloNivel(n, tx)}</span>
+            {conteos && !compacta ? <b>{numero(conteos.nivel.get(n) ?? 0, idioma)}</b> : null}
+          </li>
+        ))
+        : GRUPOS_ETAPA.map((g) => (
+          <li key={g} title={rotuloGrupo(g, tx)}>
+            <i className="cer-punto cer-punto--grupo" data-grupo={g} aria-hidden="true" />
+            <span>{rotuloGrupo(g, tx)}</span>
+            {conteos && !compacta ? <b>{numero(conteos.grupo.get(g) ?? 0, idioma)}</b> : null}
+          </li>
+        ))}
+    </ul>
+  );
+}
 
 /** `lost` y `perdido` son el MISMO estado en dos vocabularios (migración del embudo): se rotulan igual, así que en la leyenda, el embudo y los
  *  filtros salen como UNA etapa («Perdido») que suma las dos. */
@@ -160,14 +215,21 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
   // el texto equivocado, firmado por Javier, y eso no se deshace.
   const esperando = esperandoTextos(p, t);
   const BTN = clasesBoton('secondary', 'sm');
+  const etapa = p.estado in COLOR_EMBUDO ? p.estado : 'nuevo';
+  const nivel = nivelUrgencia(p);
   return (
-    <article className={cx('cer-prospecto', plana && 'cer-prospecto--plana')} data-nuevo={nuevo || undefined}>
+    <article className={cx('cer-prospecto', plana && 'cer-prospecto--plana')} data-nuevo={nuevo || undefined} data-urgencia={nivel} data-etapa={etapa}
+      aria-label={tx('cer16.tarjeta_aria', { empresa: p.empresa, etapa: nombreEtapaTr(etapa, tx), urgencia: rotuloNivel(nivel, tx) })}>
       <div className="cer-prospecto__cab">
-        <i className="cer-punto" data-etapa={p.estado in COLOR_EMBUDO ? p.estado : 'nuevo'} aria-hidden="true" />
-        <div className="min-w-0">
+        <Monograma nombre={p.empresa} />
+        <div className="cer-prospecto__titulo">
           <Link href={`/admin/mapa-prospectos/${p.id}`} className="cer-prospecto__nombre">{p.empresa}</Link>
+          <p className="cer-prospecto__estado">
+            <span className="cer-etapa"><i className="cer-punto" data-etapa={etapa} aria-hidden="true" />{nombreEtapaTr(etapa, tx)}</span>
+            <ChipUrgencia nivel={nivel} tx={tx} />
+          </p>
           <p className="cer-prospecto__meta">
-            {nombreEtapaTr(p.estado in COLOR_EMBUDO ? p.estado : 'nuevo', tx)} · {nombreGiroTr(p.giro, tx)}
+            {nombreGiroTr(p.giro, tx)}
             {p.numUnidades !== null ? ` · ${tx('mapa_prospectos_cerebro.n_unidades', { n: numero(p.numUnidades, idioma) })}` : p.tamano ? ` · ${tx('mapa_prospectos_cerebro.n_pers', { n: p.tamano })}` : ''}
             {p.ciudad ? ` · ${p.ciudad}` : ''}{' '}{tx('mapa_prospectos_cerebro.datos', { completitud: p.completitud })}</p>
         </div>
@@ -257,6 +319,8 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
     () => ESTADOS_GEO.find((e) => e.nombre === estadoInicial) ?? null,
   );
   const [hover, setHover] = useState<string | null>(null);
+  /** «Colorear por»: lo que pintan las luces y el mapa de color. Por omisión, urgencia (lo que pide acción hoy). */
+  const [modo, setModo] = useState<ModoColor>('urgencia');
   const [calles, setCalles] = useState(false);
   const conocidos = useRef<Set<string>>(new Set(prospectos.map((p) => p.id)));
   const [recientes, setRecientes] = useState<Set<string>>(new Set());
@@ -679,7 +743,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
   const ranking = useMemo(() => [...nPorEstado.entries()]
     .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], 'es'))
     .map(([nombre, n]) => ({ nombre, n, paso: pasoDeRampa(n, maxEstado) })), [nPorEstado, maxEstado]);
-  const limites = useMemo(() => limitesRampa(maxEstado), [maxEstado]);
+  const limitesTotal = useMemo(() => limitesRampa(maxEstado), [maxEstado]);
   /** El detalle del estado elegido para el panel lateral: del resumen (instantáneo) y, cuando llegó, de la cartera filtrada. */
   const detalleSeleccion = seleccion
     ? (listo
@@ -718,17 +782,56 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
     const r = resumen?.porEntidad[nombre];
     return { nombre, n, tel: r?.conTelefono ?? null, dec: r?.conDecisor ?? null };
   }), [ranking, listo, porEstado, resumen]);
-  const porFamilia = useMemo(() => {
-    const m = new Map<Familia, number>(FAMILIAS.map((f) => [f, 0]));
-    for (const [e, n] of porEtapa) m.set(familiaDe(e), (m.get(familiaDe(e)) ?? 0) + n);
+  const porGrupo = useMemo(() => {
+    const m = new Map<GrupoEtapa, number>(GRUPOS_ETAPA.map((g) => [g, 0]));
+    for (const [e, n] of porEtapa) m.set(grupoDeEtapa(e), (m.get(grupoDeEtapa(e)) ?? 0) + n);
     return m;
   }, [porEtapa]);
+  const porNivel = useMemo(() => {
+    const m = new Map<NivelUrgencia, number>(NIVELES_URGENCIA.map((n) => [n, 0]));
+    for (const p of filtrados) { const n = nivelUrgencia(p); m.set(n, (m.get(n) ?? 0) + 1); }
+    return m;
+  }, [filtrados]);
+  /** Urgentes por estado (solo lo sabe el detalle: sale de las notas) y la etapa predominante de cada uno (el resumen del servidor basta). */
+  const urgentesPorEstado = useMemo(() => {
+    const m = new Map<string, number>();
+    if (listo) for (const [k, l] of porEstado) m.set(k, l.filter((p) => nivelUrgencia(p) === 'urgente').length);
+    return m;
+  }, [listo, porEstado]);
+  const maxUrgentes = useMemo(() => Math.max(1, ...urgentesPorEstado.values()), [urgentesPorEstado]);
+  const limitesUrgentes = useMemo(() => limitesRampa(maxUrgentes), [maxUrgentes]);
+  const grupoDominante = useMemo(() => {
+    const cuentas = new Map<string, Map<GrupoEtapa, number>>();
+    const sumar = (estado: string, e: string, n: number) => {
+      const g = cuentas.get(estado) ?? new Map<GrupoEtapa, number>();
+      g.set(grupoDeEtapa(e), (g.get(grupoDeEtapa(e)) ?? 0) + n);
+      cuentas.set(estado, g);
+    };
+    if (listo) { for (const [k, l] of porEstado) for (const p of l) sumar(k, p.estado, 1); }
+    else if (resumen) { for (const [k, e] of Object.entries(resumen.porEntidad)) for (const [et, n] of Object.entries(e.porEtapa)) sumar(k, et, n); }
+    const m = new Map<string, GrupoEtapa>();
+    for (const [k, g] of cuentas) {
+      let mejor: GrupoEtapa = 'inicio';
+      let n = -1;
+      for (const grupo of GRUPOS_ETAPA) { const v = g.get(grupo) ?? 0; if (v > n) { n = v; mejor = grupo; } }
+      m.set(k, mejor);
+    }
+    return m;
+  }, [listo, porEstado, resumen]);
+  /** El mapa de color solo cuenta urgentes cuando el detalle ya llegó y se colorea por urgencia; si no, es la densidad de la cartera. */
+  const mapaPorUrgentes = modo === 'urgencia' && listo;
+  /** Las luces urgentes con anillo que se expande (las primeras; el resto solo late). */
+  const conOnda = useMemo(() => {
+    const ids = new Set<string>();
+    for (const { p } of pines) { if (ids.size >= TOPE_ONDAS) break; if (nivelUrgencia(p) === 'urgente') ids.add(p.id); }
+    return ids;
+  }, [pines]);
   const elegirEstado = (destino: EstadoGeo | null) => { setSeleccion(destino); volarA(destino); };
   const alPais = () => { setSeleccion(null); setCalles(false); volarA(null); };
   const enSeleccion = seleccion ? conCoords.filter((p) => p.entidad === seleccion.nombre).length : conCoords.length;
 
   return (
-    <div className="cer-raiz">
+    <div className="cer-raiz" data-colorear={modo}>
       <TiraCifras etiqueta={tx('mapa_prospectos_cerebro.cartera_filtrada')} items={observadas(uniformes([
         cifra(tx('mapa_prospectos_cerebro.prospectos'), totalCifra),
         cifra(tx('mapa_prospectos_cerebro.con_telefono'), conTelefono),
@@ -752,6 +855,14 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             : tx('mapa_prospectos_cerebro.rueda_para_acercar_arrastra_para_moverte')}
         </p>
         <div className="cer-barra__acciones">
+          <div className="cer-colorear">
+            <span className="cer-colorear__rotulo" aria-hidden="true">{tx('cer16.colorear_por')}</span>
+            <SegmentedControl etiqueta={tx('cer16.colorear_por')} tamano="sm" valor={modo} onChange={setModo}
+              opciones={[
+                { valor: 'urgencia', etiqueta: tx('cer16.colorear_urgencia') },
+                { valor: 'etapa', etiqueta: tx('cer16.colorear_etapa') },
+              ]} />
+          </div>
           {(camK > 1.02 || seleccion) && (
             <Tooltip texto={tx('mapa_prospectos_calles.volver_al_pais')}>
               <Boton tamano="sm" icono={<Icono icono={Undo2} />} onClick={alPais}>{tx('mapa_prospectos_cerebro.pais')}</Boton>
@@ -769,7 +880,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
       </header>
 
       <div className="cer-cuerpo">
-      <section ref={zonaRef} className="cer-zona" aria-label={tx('mapa_prospectos_cerebro.mapa_de_la_cartera')}>
+      <section ref={zonaRef} className="cer-zona" data-cargando={(!listo && !errorCarga) || undefined} aria-label={tx('mapa_prospectos_cerebro.mapa_de_la_cartera')}>
         {/* El ala izquierda: solo en pantallas anchas (1900 px o más); el embudo y los más cerrables VIVEN junto al país, sin taparlo. */}
         <aside className="cer-ala" aria-label={tx('mapa_prospectos_cerebro.embudo_y_mas_cerrables')}>
           <div className="cer-ala__bloque">
@@ -786,9 +897,13 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             <h3 className="cer-ala__titulo">{tx('mapa_prospectos_cerebro.mas_cerrables')}</h3>
             {!listo && <p className="cer-ala__cerrable">{errorCarga ? tr.t('mapa.errorCarga') : tr.t('mapa.cargando')}</p>}
             {ordenados.slice(0, 7).map((p) => (
-              <div key={p.id} className="cer-ala__cerrable">
-                <p>{p.empresa}</p>
-                <p>{p.entidad ?? tx('mapa_prospectos_cerebro.sin_plaza')}{' '}{tx('mapa_prospectos_cerebro.cierre_urgencia', { cierre: p.cierre, urgencia: p.urgencia })}</p>
+              <div key={p.id} className="cer-ala__cerrable" data-urgencia={nivelUrgencia(p)}>
+                <Monograma nombre={p.empresa} />
+                <div className="cer-ala__txt">
+                  <p>{p.empresa}</p>
+                  <p>{p.entidad ?? tx('mapa_prospectos_cerebro.sin_plaza')}{' '}{tx('mapa_prospectos_cerebro.cierre_urgencia', { cierre: p.cierre, urgencia: p.urgencia })}</p>
+                </div>
+                <ChipUrgencia nivel={nivelUrgencia(p)} tx={tx} />
               </div>
             ))}
           </div>
@@ -823,7 +938,8 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
               const activo = seleccion?.id === e.id;
               return (
                 <path key={e.id} d={e.path} className="cer-estado"
-                  data-paso={pasoDeRampa(nEstado, maxEstado)}
+                  data-paso={mapaPorUrgentes ? pasoDeRampa(urgentesPorEstado.get(e.nombre) ?? 0, maxUrgentes) : pasoDeRampa(nEstado, maxEstado)}
+                  data-matiz={mapaPorUrgentes ? 'urgente' : modo === 'etapa' && nEstado > 0 ? grupoDominante.get(e.nombre) : undefined}
                   data-activo={activo || undefined}
                   data-sobre={(hover === e.id && !activo) || undefined}
                   data-apagado={(seleccion !== null && !activo) || undefined}
@@ -839,20 +955,26 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
                 />
               );
             })}
-            {/* Las luces: cada prospecto con coordenadas reales */}
-            {pines.map(({ p, xy }) => (
-              <circle key={p.id} className="cer-pin" data-etapa={p.estado in COLOR_EMBUDO ? p.estado : 'nuevo'} data-familia={familiaDe(p.estado)}
-                data-urgente={p.urgencia >= 70 || undefined} data-nuevo={recientes.has(p.id) || undefined}
-                cx={xy.x} cy={xy.y} r={Math.max(0.5, Math.min(2.4, 2.4 / camK))}
-                strokeWidth={Math.max(0.1, 0.4 / camK)} />
-            ))}
+            {/* Las luces: cada prospecto con coordenadas reales, con el color de su urgencia o de su etapa según «Colorear por» */}
+            {pines.map(({ p, xy }) => {
+              const nivel = nivelUrgencia(p);
+              return (
+                <g key={p.id}>
+                  {conOnda.has(p.id) && <circle className="cer-onda" cx={xy.x} cy={xy.y} r={Math.max(0.5, Math.min(2.4, 2.4 / camK))} strokeWidth={Math.max(0.1, 0.4 / camK)} />}
+                  <circle className="cer-pin" data-etapa={p.estado in COLOR_EMBUDO ? p.estado : 'nuevo'} data-grupo={grupoDeEtapa(p.estado)} data-urgencia={nivel}
+                    data-urgente={nivel === 'urgente' || undefined} data-nuevo={recientes.has(p.id) || undefined}
+                    cx={xy.x} cy={xy.y} r={Math.max(0.5, Math.min(2.4, 2.4 / camK))}
+                    strokeWidth={Math.max(0.1, 0.4 / camK)} />
+                </g>
+              );
+            })}
             {/* Rótulos: el código del estado y su cifra EXACTA (el color nunca es la única señal); solo donde caben al zoom actual. Van DESPUÉS de las luces y con halo, para que ningún punto se encime al texto. */}
             {ESTADOS_GEO.map((e) => {
               const nEstado = nPorEstado.get(e.nombre) ?? 0;
               if (nEstado === 0 || seleccion !== null || e.bw * camK < 44 || e.bh * camK < 28) return null;
               const tam = 11 / camK;
               return (
-                <text key={e.id} className="cer-rotulo" data-paso={pasoDeRampa(nEstado, maxEstado)} x={e.cx} y={e.cy} fontSize={tam} textAnchor="middle" strokeWidth={2.5 / camK} aria-hidden="true">
+                <text key={e.id} className="cer-rotulo" data-paso={mapaPorUrgentes ? pasoDeRampa(urgentesPorEstado.get(e.nombre) ?? 0, maxUrgentes) : pasoDeRampa(nEstado, maxEstado)} x={e.cx} y={e.cy} fontSize={tam} textAnchor="middle" strokeWidth={2.5 / camK} aria-hidden="true">
                   <tspan x={e.cx}>{e.id.slice(3)}</tspan>
                   {e.bh * camK >= 44 && <tspan x={e.cx} dy={tam * 1.2}>{numero(nEstado, idioma)}</tspan>}
                 </text>
@@ -860,6 +982,9 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             })}
           </g>
         </svg>
+
+        {/* La leyenda de color, siempre a la vista y compacta; la de abajo (ranking) trae los conteos. */}
+        <div className="cer-leyenda-mapa"><LeyendaColor modo={modo} tx={tx} idioma={idioma} conteos={null} compacta /></div>
 
         {/* Tooltip del hover a nivel país */}
         {hover && !seleccion && (() => {
@@ -897,10 +1022,17 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             </div>
             <div className="cer-lista">
               {!listo ? (
-                <p className="cer-aviso-lista" role="status">
-                  {errorCarga ? tr.t('mapa.errorCarga') : tr.t('mapa.cargandoEstado', { estado: seleccion.nombre })}
-                  {errorCarga && <> <Boton tamano="sm" onClick={() => void cargarDetalle()} disabled={cargando}>{tr.t('mapa.reintentar')}</Boton></>}
-                </p>
+                <>
+                  <p className="cer-aviso-lista" role="status">
+                    {errorCarga ? tr.t('mapa.errorCarga') : tr.t('mapa.cargandoEstado', { estado: seleccion.nombre })}
+                    {errorCarga && <> <Boton tamano="sm" onClick={() => void cargarDetalle()} disabled={cargando}>{tr.t('mapa.reintentar')}</Boton></>}
+                  </p>
+                  {!errorCarga && (
+                    <div className="cer-esq" aria-hidden="true">
+                      <span className="cer-esq__tarjeta" /><span className="cer-esq__tarjeta" /><span className="cer-esq__tarjeta" />
+                    </div>
+                  )}
+                </>
               ) : listaSeleccion.length === 0 ? (
                 <p className="cer-aviso-lista">{tx('mapa_prospectos_cerebro.el_censo_todavia_no_encuentra_a')}</p>
               ) : (
@@ -944,15 +1076,16 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
                       <svg className="cer-rank__pista" width="100%" height="6" aria-hidden="true">
                         <rect className="cer-rank__barra" x="0" y="0" height="6" rx="3" width={`${Math.max(2, (r.n / maxEstado) * 100).toFixed(2)}%`} />
                       </svg>
-                      <b>{numero(r.n, idioma)}</b>
+                      <b><Cuenta valor={r.n} idioma={idioma} reducido={reducido} /></b>
                     </Boton>
                   </li>
                 );
               })}
             </ol>
           )}
-          <ul className="cer-rampa" aria-label={tr.t('mapa.leyendaTitulo')}>
-            {limites.map((l) => (
+          <p className="cer-prospecto__tenue">{mapaPorUrgentes ? tx('cer16.rampa_urgentes') : modo === 'etapa' ? tx('cer16.rampa_etapa') : tx('cer16.rampa_total')}</p>
+          <ul className="cer-rampa" aria-label={tr.t('mapa.leyendaTitulo')} data-matiz={mapaPorUrgentes ? 'urgente' : undefined}>
+            {(mapaPorUrgentes ? limitesUrgentes : limitesTotal).map((l) => (
               <li key={l.paso} data-paso={l.paso}><i aria-hidden="true" />{l.desde === l.hasta ? numero(l.desde, idioma) : `${numero(l.desde, idioma)}–${numero(l.hasta, idioma)}`}</li>
             ))}
           </ul>
@@ -961,7 +1094,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
         {seleccion && detalleSeleccion && (
           <div className="cer-rank__bloque cer-rank__det">
             <h3 className="cer-ala__titulo">{seleccion.nombre}</h3>
-            <p className="cer-rank__cifra"><b>{numero(detalleSeleccion.n, idioma)}</b> {tr.t('mapa.prospectos')}</p>
+            <p className="cer-rank__cifra"><b><Cuenta valor={detalleSeleccion.n} idioma={idioma} reducido={reducido} /></b> {tr.t('mapa.prospectos')}</p>
             <p className="cer-prospecto__tenue">{tr.t('mapa.detalleContacto', { tel: numero(detalleSeleccion.tel, idioma), dec: numero(detalleSeleccion.dec, idioma) })}</p>
             {etapasSeleccion.map(([e, n]) => (
               <div key={e} className="cer-ala__fila">
@@ -974,12 +1107,9 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
         )}
         <div className="cer-rank__bloque">
           <h3 className="cer-ala__titulo">{tr.t('mapa.lucesTitulo')}</h3>
-          {/* Cinco familias con su forma (llena, anillo, discontinua) y su conteo real: se distinguen sin depender del tono. */}
-          <ul className="cer-familias" aria-label={tx('mapa_prospectos_cerebro.leyenda_del_embudo')}>
-            {FAMILIAS.map((f) => (
-              <li key={f}><i className="cer-punto" data-familia={f} aria-hidden="true" /><span>{rotuloFamilia(f, tx)}</span><b>{numero(porFamilia.get(f) ?? 0, idioma)}</b></li>
-            ))}
-          </ul>
+          {/* La leyenda de color con su conteo real: cada fila lleva muestra y texto (el color nunca es la única señal). */}
+          <LeyendaColor modo={modo} tx={tx} idioma={idioma} conteos={modo === 'urgencia' && !listo ? null : { nivel: porNivel, grupo: porGrupo }} />
+          {modo === 'urgencia' && !listo && <p className="cer-prospecto__tenue">{tr.t('mapa.cargando')}</p>}
         </div>
       </aside>
       </div>

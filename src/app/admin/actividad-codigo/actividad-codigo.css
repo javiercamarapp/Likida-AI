@@ -1,0 +1,7 @@
+/* Actividad de código: el mapa de puntitos (SVG) y la escala, sin utilidades de Tailwind ni estilos en línea. */
+[data-ui="v2"] .adm-codigo-rejilla { overflow-x: auto; padding-bottom: 4px; }
+[data-ui="v2"] .adm-codigo-svg { display: block; }
+[data-ui="v2"] .adm-codigo-dia { font-size: var(--t-micro); fill: var(--muted); }
+[data-ui="v2"] .adm-codigo-escala { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .adm-codigo-sha { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .adm-codigo-asunto { display: block; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

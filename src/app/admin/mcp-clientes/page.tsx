@@ -3,15 +3,18 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarClientesPendientes, type ClienteParaRevision } from '@/lib/mcp/oauth';
 import { logger } from '@/lib/logger';
 import { fechaHoraMx } from '@/lib/formato';
-import { Aviso, EstadoError, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, EstadoError, EstadoVacio, FormaConAviso, Tarjeta, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import { BarList } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
-import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { FormaRechazarCliente } from './forma-rechazar';
 import { decidirYAnotar } from './decidir';
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import '../sistema.css';
+import '../control.css';
 import { getT } from '@/lib/i18n/servidor';
 import './mcp-clientes.css';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +34,8 @@ export const dynamic = 'force-dynamic';
  */
 export default async function McpClientesPage() {
   const { t } = await getT('admin_sistema');
+  const { t: tc } = await getT('resto');
+  const { t: ti } = await getT('admin_inicio');
   await requireSuperadmin();
 
   async function accionAprobar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -55,14 +60,14 @@ export default async function McpClientesPage() {
       titulo={t('mcp_clientes.titulo')}
       apoyo={t('mcp_clientes.apoyo')}
       etiquetaCifras={t('mcp_clientes.cola')}
-      cifras={uniformes([
+      cifras={observadas(uniformes([
         pendientes === null
           ? { etiqueta: t('mcp_clientes.por_aprobar'), valor: null, estado: 'error' as const, mensaje: t('mcp_clientes.no_se_pudo_leer_corto') }
           : { etiqueta: t('mcp_clientes.por_aprobar'), valor: pendientes.length, formato: 'entero' as const, tono: pendientes.length > 0 ? 'warn' as const : undefined },
         totalTokens === null
           ? { etiqueta: t('mcp_clientes.accesos_vivos'), valor: null, estado: 'error' as const, mensaje: t('mcp_clientes.no_se_pudo_leer_corto') }
           : { etiqueta: t('mcp_clientes.accesos_vivos'), valor: totalTokens, formato: 'entero' as const, nota: t('mcp_clientes.accesos_nota') },
-      ])}
+      ]), ti('a1r4.observado'))}
       avisos={(
         <Aviso tono="info">
           {t('mcp_clientes.aviso')}
@@ -79,6 +84,12 @@ export default async function McpClientesPage() {
         </Tarjeta>
       ) : (
         <div className="rv-mcp-lista">
+          {pendientes.some((c) => (c.tokensVivos ?? 0) > 0) ? (
+            <Tarjeta titulo={tc('ctl.mcp_uso_titulo')}>
+              <BarList etiqueta={tc('ctl.mcp_uso_titulo')} matiz={1}
+                items={pendientes.map((c) => ({ clave: c.clientId, etiqueta: c.nombre ?? t('mcp_clientes.sin_nombre'), valor: c.tokensVivos ?? null }))} />
+            </Tarjeta>
+          ) : null}
           {pendientes.map((c) => (
             <Tarjeta key={c.clientId} titulo={c.nombre ?? t('mcp_clientes.sin_nombre')}>
               <div className="rv-mcp-cuerpo">
@@ -109,4 +120,7 @@ export default async function McpClientesPage() {
   );
 }
 
-export const metadata: Metadata = { title: 'Clientes MCP' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('ctl.mcp_meta') };
+}

@@ -8,10 +8,10 @@ import './resumen.css';
 const TONO = { pagina: 'bad', ticket: 'warn', ninguna: 'ok', sin_medir: 'muted' } as const;
 
 /** Presupuesto de error y quema por objetivo (F14-A). Sin denominador dice «sin medir» con su razón; nunca 0 ni verde de cortesía. */
-export function QuemaSlo({ evaluaciones, t }: { evaluaciones: EvaluacionQuema[] | null; t: Traductor<DiccionarioDe<'monitoreo'>>['t'] }) {
+export function QuemaSlo({ evaluaciones, t, sinTitulo }: { evaluaciones: EvaluacionQuema[] | null; sinTitulo?: boolean; t: Traductor<DiccionarioDe<'monitoreo'>>['t'] }) {
   return (
     <section aria-label={t('quema.titulo')}>
-      <h3 className="rv-recuadro-tit__texto">{t('quema.titulo')}</h3>
+      {sinTitulo ? null : <h3 className="rv-recuadro-tit__texto">{t('quema.titulo')}</h3>}
       {evaluaciones === null ? <p className="adm-res-pie">{t('quema.error')}</p> : (
         <ul className="adm-res-lista">
           {evaluaciones.map((e) => (

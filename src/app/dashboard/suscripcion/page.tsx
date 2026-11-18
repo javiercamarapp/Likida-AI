@@ -1,4 +1,4 @@
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 import { type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { appUrl } from '@/lib/env';
@@ -105,6 +105,7 @@ export default async function SuscripcionPage({
   searchParams: Promise<{ vista?: string; tenant?: string; ok?: string }>;
 }) {
   const { t: tr } = await getT('dinero');
+  const { t: tb } = await getT('dashboard_b');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/suscripcion', sp);
   const puedeContratar = puedeAdministrar(rol);
@@ -198,7 +199,7 @@ export default async function SuscripcionPage({
       destino = r2.urlFactura;
       huboCambioDePrice = r2.huboCambioDePrice;
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'cambiar de plan') };
+      return { error: mensajeParaPantalla(e, 'cambiar de plan', await idiomaActual()) };
     }
 
     revalidatePath('/dashboard/suscripcion');
@@ -240,7 +241,7 @@ export default async function SuscripcionPage({
         domicilioFiscal: String(fd.get('domicilioFiscal') ?? ''),
       });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar los datos fiscales') };
+      return { error: mensajeParaPantalla(e, 'guardar los datos fiscales', await idiomaActual()) };
     }
     revalidatePath('/dashboard/suscripcion');
     return { ok: tr('suscripcion.page.datosFiscalesGuardadosCon') };
@@ -258,7 +259,7 @@ export default async function SuscripcionPage({
       if (!s?.stripeCustomerId) return { error: tr('suscripcion.page.estaFlotaTodaviaNo') };
       destino = await crearPortal(s.stripeCustomerId, `${appUrl()}/dashboard/suscripcion`);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'abrir el portal de cobro') };
+      return { error: mensajeParaPantalla(e, 'abrir el portal de cobro', await idiomaActual()) };
     }
     redirect(destino);
   }
@@ -296,7 +297,7 @@ export default async function SuscripcionPage({
   const cifrasPlan: PropsCifra[] = [];
   if (!suscripcionCaida && suscripcion !== null) {
     cifrasPlan.push(
-      { etiqueta: 'Plan', valor: suscripcion.planNombre, nota: `Desde ${fechaMx(suscripcion.inicio)}` },
+      { etiqueta: 'Plan', valor: suscripcion.planNombre, nota: tb('su.desde', { fecha: fechaMx(suscripcion.inicio) }) },
       { etiqueta: tr('suscripcion.page.mensualidad'), valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? tr('suscripcion.page.sinPrecioConfigurado') : mxn(planActual.precioMensual) },
     );
   }
@@ -374,7 +375,7 @@ export default async function SuscripcionPage({
           </EstadoVacio>
         ) : (
           <div className="rv-sus__fiscales">
-          <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales" columnas="md:grid-cols-1">
+          <FormaConAviso accion={accionFiscales} boton={tb('su.guardar_fiscales')} columnas="md:grid-cols-1">
             <CampoTexto className="rv-fila-c" id="rfc" name="rfc" etiqueta="RFC" obligatorio defaultValue={fiscales?.rfc ?? ''}
               placeholder="TIN010101AB1" ayuda={tr('suscripcion.page.seValidaElDigito')} />
             <CampoTexto className="rv-fila-c" id="razonSocial" name="razonSocial" etiqueta={tr('suscripcion.page.razonSocial')} obligatorio
@@ -436,7 +437,7 @@ export default async function SuscripcionPage({
         )}
 
         {hayStripe && puedeContratar && suscripcion?.stripeCustomerId && (
-          <FormaConAviso accion={accionPortal} boton="Administrar cobro y tarjeta" columnas="md:grid-cols-1">
+          <FormaConAviso accion={accionPortal} boton={tb('su.administrar_cobro')} columnas="md:grid-cols-1">
             <p className="rv-sus__tenue">
               {tr('suscripcion.page.cambiarTarjetaVerRecibos')}
             </p>

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
-import { fechaHoraMx, numero, porcentaje, usd } from '@/lib/formato';
+import { Columnas } from '@/app/ui-v2/graficas';
+import { fechaCorta, fechaHoraMx, numero, porcentaje, usd } from '@/lib/formato';
 import {
   armarTuTurno, filasCalidad, semaforoSalud, TONO_ESTADO_REAL, MAX_TU_TURNO, type FilaCalidad,
 } from '@/lib/admin/centro-mando';
@@ -12,6 +13,7 @@ import { ahoraMs } from '@/lib/saludo';
 import { getT } from '@/lib/i18n/servidor';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { QuemaSlo } from './quema-slo';
+import { NotaVacia } from './nota-vacia';
 import { quema, calidadAgentes, costoIaMes, despliegues, entradaSemaforo, entradaTuTurno, parados, resumenNegocio, slos } from './resumen-lecturas';
 import './resumen.css';
 
@@ -20,12 +22,20 @@ import './resumen.css';
 // los demás. Una lectura caída se DICE («No disponible ahora. No es cero.»), jamás se pinta como 0 ni como «todo bien».
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Nombres de agente con clave en el diccionario de sistema; la tabla global `agentePorId` (español) no se toca.
+const CLAVE_NOMBRE_AGENTE = {
+  liquidacion: 'observabilidad_etiquetas.agente_de_liquidacion', facturas: 'observabilidad_etiquetas.agente_de_facturas',
+  cobranza: 'observabilidad_etiquetas.agente_de_cobranza', conductores: 'observabilidad_etiquetas.agente_de_conductores',
+  peajes: 'observabilidad_etiquetas.agente_de_peajes', proveedores: 'observabilidad_etiquetas.agente_de_proveedores',
+} as const;
+type ClaveNombreAgente = (typeof CLAVE_NOMBRE_AGENTE)[keyof typeof CLAVE_NOMBRE_AGENTE];
+
 const TONO_AVISO = { verde: 'ok', amarillo: 'warn', rojo: 'error' } as const;
 
 /** 1. ¿Estoy bien? Verde, amarillo o rojo, con la causa y a dónde ir. */
 export async function BloqueSemaforo() {
   const { t: ta } = await getT('admin_inicio');
-  const s = semaforoSalud(await entradaSemaforo());
+  const s = semaforoSalud(await entradaSemaforo(), ta);
   const guardia = s.guardiaHaceMin !== null ? ta('resumen_mando.guardia_hace_min', { guardiaHaceMin: numero(s.guardiaHaceMin) }) : ta('resumen_mando.guardia_sin_dato');
   if (s.causas.length === 0) {
     return (
@@ -57,12 +67,12 @@ export async function BloqueSemaforo() {
 /** 2. ¿Qué espera mi decisión? Máximo 5 filas, la más urgente arriba. */
 export async function BloqueTuTurno() {
   const { t: ta } = await getT('admin_inicio');
-  const t = armarTuTurno(await entradaTuTurno(), ahoraMs());
+  const t = armarTuTurno(await entradaTuTurno(), ahoraMs(), ta);
   if (t.filas.length === 0 && t.ciegas.length > 0) {
     return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} estado="error" mensaje={ta('resumen_mando.no_se_pudo_leer', { ciegas: t.ciegas.join(', ') })} reintentar />;
   }
   if (t.filas.length === 0) {
-    return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} estado="vacio" mensaje={ta('resumen_mando.nada_espera_tu_decision')} detalle={ta('resumen_mando.cuando_algo_necesite_tu')} />;
+    return <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} contenida elevar entra="tarjeta"><NotaVacia tono="ok" titulo={ta('resumen_mando.nada_espera_tu_decision')}>{ta('resumen_mando.cuando_algo_necesite_tu')}</NotaVacia></Tarjeta>;
   }
   return (
     <Tarjeta titulo={ta('resumen_mando.requieren_atencion')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/tu-turno">{ta('a1r4.ver_todas')}</BotonEnlace>}>
@@ -93,6 +103,9 @@ export async function BloqueCaja() {
   return (
     <Tarjeta titulo={ta('resumen_mando.costos')} elevar entra="tarjeta">
       <p className="adm-eyebrow">{ta('a1r4.eb_dinero')}</p>
+      {r !== null && r.porDia.length > 1
+        ? <div className="adm-res-grafica"><Columnas datos={r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.costoUsd }))} etiqueta={ta('consola.gasto_de_ia_por')} formato="usd" matiz={2} alto={132} /><ul className="aud16b-leyenda"><li><i data-m="2" aria-hidden="true" />{ta('consola.gasto_de_ia_por')}</li></ul></div>
+        : <NotaVacia titulo={ta('consola.sin_historial_suficiente')}>{ta('consola.se_dibuja_cuando_haya')}</NotaVacia>}
       <dl className="adm-res-pares">
         <dt>{mes ? ta('resumen_mando.gasto_de_ia_en', { etiquetaMes: mes.etiquetaMes }) : ta('resumen_mando.gasto_de_ia_del')}</dt>
         <dd>{mes ? usd(mes.mesUsd) : '—'}</dd>
@@ -121,7 +134,7 @@ const columnasCalidad = (ta: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES):
   { id: 'nivel', titulo: ta('resumen_mando.autonomia'), celda: (f) => <span title={nombreNivelTr(f.nivel, ts)}>{f.nivel} · {nombreNivelTr(f.nivel, ts)}</span> },
   { id: 'estado', titulo: ta('resumen_mando.estado_real'), celda: (f) => <StatusChip tono={TONO_ESTADO_REAL[f.estado]}>{rotuloEstadoRealTr(f.estado, ts)}</StatusChip> },
   { id: 'revision', titulo: ta('resumen_mando.revision_humana'), alinear: 'der', celda: (f) => pctRevision(f.revisionHumana, ta) },
-  { id: 'p95', titulo: 'p95 de corrida', alinear: 'der', celda: (f) => msP95(f.p95Ms, ta) },
+  { id: 'p95', titulo: ta('resumen_mando.p95_corrida'), alinear: 'der', celda: (f) => msP95(f.p95Ms, ta) },
   { id: 'corridas', titulo: ta('resumen_mando.corridas_30_d'), alinear: 'der', celda: (f) => (f.corridas === null ? ta('resumen.sin_dato') : numero(f.corridas)) },
 ];
 
@@ -130,7 +143,7 @@ export async function BloqueCalidad({ semaforo }: { semaforo?: ReactNode } = {})
   const { t: ta } = await getT('admin_inicio');
   const { t: tSis } = await getT('admin_sistema');
   const [cal, p] = await Promise.all([calidadAgentes(), parados()]);
-  const filas = filasCalidad(cal ? cal.agentes : null, p ? p.parados : null, (id) => agentePorId(id)?.nombre ?? null);
+  const filas = filasCalidad(cal ? cal.agentes : null, p ? p.parados : null, (id) => { if (id === 'soporte_whatsapp') return ta('pul9.agente_soporte_whatsapp'); const k = (CLAVE_NOMBRE_AGENTE as Readonly<Record<string, ClaveNombreAgente | undefined>>)[id]; return k ? tSis(k) : agentePorId(id)?.nombre ?? null; });
   const ilegible = cal === null && p === null;
   // 49 agentes «sin medir» no son una tabla: la consola enseña los primeros (los problemas van primero en `filasCalidad`) y manda al resto.
   const MAX_FILAS = 8;
@@ -143,14 +156,14 @@ export async function BloqueCalidad({ semaforo }: { semaforo?: ReactNode } = {})
     >
       <p className="adm-eyebrow">{ta('a1r4.eb_calidad')}</p>
       {semaforo}
-      {cal && cal.errores.length > 0 ? <AvisoCompacto tono="warn" resumen="Alguna fuente de calidad no se pudo leer: sus columnas dicen «sin dato», no cero." /> : null}
+      {cal && cal.errores.length > 0 ? <AvisoCompacto tono="warn" resumen={ta('resumen_mando.fuente_calidad_no_leida')} /> : null}
       <TablaBase
         etiqueta={ta('resumen_mando.calidad_de_los_agentes')}
         columnas={columnasCalidad(ta, tSis)}
         filas={visibles}
         idFila={(f) => f.agente}
         estado={ilegible ? 'error' : 'ok'}
-        mensajeError="No disponible ahora. No es cero."
+        mensajeError={ta('resumen_mando.no_disponible_ahora_no')}
         vacio={{ titulo: ta('resumen_mando.sin_agentes_medidos'), texto: ta('resumen_mando.aparecen_aqui_cuando_corren') }}
         tarjetaMovil
       />
@@ -164,7 +177,7 @@ export async function BloquePlataforma() {
   const { t: ta } = await getT('admin_inicio');
   const [s, d, q, { t: tMon }] = await Promise.all([slos(), despliegues(), quema(), getT('monitoreo')]);
   return (
-    <Disclosure titulo={ta('resumen_mando.trazabilidad')} resumen={d.estado === 'ok' ? ta('resumen_mando.despliegues_en_30_dias', { length: d.anotaciones.length }) : ta('resumen_mando.despliegues_sin_medir')}>
+    <Disclosure titulo={ta('resumen_mando.trazabilidad')} resumen={d.estado === 'ok' ? ta(d.anotaciones.length === 1 ? 'pul8.desp_uno' : 'pul8.desp_otros', { length: d.anotaciones.length }) : ta('resumen_mando.despliegues_sin_medir')}>
       <h3 className="rv-recuadro-tit__texto">{ta('resumen_mando.objetivos_de_servicio')}</h3>
       {s === null ? <p className="adm-res-pie">{ta('resumen_mando.no_disponible_ahora_no')}</p> : (
         <ul className="adm-res-lista">
@@ -172,7 +185,7 @@ export async function BloquePlataforma() {
             <li key={x.clave} className="adm-res-fila">
               <div className="adm-res-fila__texto">
                 <span className="adm-res-fila__titulo">{x.nombre}</span>
-                <span className="adm-res-fila__detalle">Objetivo {x.objetivo} · {x.medido} · {x.ventana}</span>
+                <span className="adm-res-fila__detalle">{ta('resumen_mando.objetivo_detalle', { objetivo: x.objetivo, medido: x.medido, ventana: x.ventana })}</span>
               </div>
               <StatusChip tono={x.cumple === null ? 'muted' : x.cumple ? 'ok' : 'bad'}>{x.cumple === null ? ta('resumen_mando.sin_muestra') : x.cumple ? ta('resumen_mando.cumple') : ta('resumen_mando.no_cumple')}</StatusChip>
             </li>
@@ -194,7 +207,7 @@ export async function BloquePlataforma() {
         </ul>
       ) : null}
       <p className="adm-res-pie">{d.nota}</p>
-      <p className="adm-res-pie"><Link href="/admin/salud-sistema">{ta('resumen_mando.salud_del_sistema')}</Link> · <Link href="/admin/crons">Relojes</Link></p>
+      <p className="adm-res-pie"><Link href="/admin/salud-sistema">{ta('resumen_mando.salud_del_sistema')}</Link> · <Link href="/admin/crons">{ta('resumen_mando.relojes')}</Link></p>
     </Disclosure>
   );
 }

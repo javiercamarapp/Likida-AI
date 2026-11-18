@@ -1,82 +1,37 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   /admin · MARCO SOBRE EL SISTEMA (7-nov-2026, ronda R8)
+   /admin · MARCO SOBRE EL SISTEMA (16-nov-2026: igualado al dashboard)
 
-   El sidebar y el marco de /admin usan las MISMAS clases del dashboard (`.rv-sb`, `.rv-item`, `.rv-grupo`, `.rv-col`,
-   `.rv-contenido` de ui-v2/shell.css), con el mismo ancho (232, riel de 72), hover/activo y animación de entrada.
-   Este archivo solo trae lo que /admin necesita y shell.css no da: (1) el hueco de 16 px para el panel del Copiloto,
-   que cancela su margen con un -16 (gap del marco), (2) el contenido sin padding propio (cada página dibuja su lienzo),
-   (3) el tratamiento móvil bajo 768 px (cabecera, barra inferior y hoja «Más» del dashboard), y (4) lo que se
-   oculta en el riel. NO se edita shell.css (lo cambia otra fase).
+   /admin usa EXACTAMENTE las clases y medidas del dashboard (`.rv-app`, `.rv-fila`, `.rv-sb`, `.rv-item`, `.rv-grupo`, `.rv-col`, `.rv-contenido`,
+   `.rv-cab-esc`, `.rv-cab-movil`, `.rv-nav-inf` de ui-v2/shell.css; el pie de ui-v2/pie-sidebar.css): ancho, márgenes, padding del contenido
+   (24/24/28 en escritorio; el de móvil lo pone `.rv-marco`), hover/activo, foco, animaciones y móvil vienen de ahí. Este archivo solo trae lo que
+   /admin necesita de verdad y shell.css no da: (1) el panel del Copiloto dentro de la fila y (2) el riel con UNA sección abierta a la vez
+   (43 páginas no caben en 72 px). Todo lo demás que había aquí (padding 0 del contenido, `.card`, `.etiqueta-mono`, `main.h-full`,
+   `.adm-solo-ancho`, pestañas de respaldo, fundido del árbol) se borró: ninguna pantalla lo usa ya.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-[data-ui="v2"] .adm-fila { gap: 16px; }
-[data-ui="v2"] .adm-fila .rv-sb { margin-right: 0; }
-/* Sin padding SOLO para las pantallas que aún dibujan su propio lienzo; las que ya vienen en `MarcoPagina` (`.rv-marco`) conservan el
-   relleno del shell. La compatibilidad se retira cuando la última pantalla migre. */
-/* El chat del Copiloto (`.rv-chat-pagina`) trae su propio relleno (chat.css): sin esta salvedad se lo quitábamos y «Historial» quedaba pegado al borde. */
-[data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-top: 0; padding-left: 0; padding-right: 0; }
-@media (min-width: 768px) { [data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-bottom: 0; } }
+/* El hueco sidebar↔contenido lo da SOLO el margen derecho del sidebar (16 px, shell.css) y el `gap` de la fila es 0 (igual que el dashboard).
+   Especificidad (0,3,0): no depende del orden de las hojas. El panel del Copiloto (cerrado = ancho 0) no suma hueco; abierto, separa 16 px. */
+[data-ui="v2"] .adm-fila.rv-fila { gap: 0; }
+[data-ui="v2"] .adm-fila > .rv-copiloto-panel { margin-left: 0; }
+[data-ui="v2"] .adm-fila > .rv-copiloto-panel[data-abierto="true"] { margin-left: 16px; }
 
-/* La caja de lo que solo cabe con el sidebar ancho (selector de tema, widget de uso). */
-[data-ui="v2"] .adm-solo-ancho { min-width: 0; }
-
-@media (min-width: 1024px) {
-  [data-ui="v2"] .rv-sb[data-riel] .adm-solo-ancho { display: none; }
-}
-@media (min-width: 768px) and (max-width: 1023.98px) {
-  [data-ui="v2"] .rv-sb .adm-solo-ancho { display: none; }
-}
-
-/* Bajo 768 px: el MISMO tratamiento móvil del dashboard (cabecera `.rv-cab-movil`, barra inferior `.rv-nav-inf`, hoja «Más»; ver
-   `navegacion-movil-admin.tsx`). El aside no se ve (lo esconde shell.css), la fila no deja hueco entre columnas y la columna del contenido
-   es el documento que scrollea. El Copiloto (panel lateral de escritorio) no existe en móvil. */
+/* Bajo 768 px el Copiloto (panel lateral de escritorio) no existe. */
 @media (max-width: 767.98px) {
-  [data-ui="v2"] .adm-fila { gap: 0; }
   [data-ui="v2"] .adm-fila > aside[aria-label="Copiloto"] { display: none; }
-  /* Las pantallas sin `MarcoPagina` (padding 0) conservan el aire inferior que deja libre la barra flotante (64 + área segura + 24). */
-  [data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-bottom: calc(64px + max(10px, env(safe-area-inset-bottom)) + 24px); }
 }
-
-/* ── Páginas de /admin sobre el marco compartido `main.h-full > .hairline` (paginas-dominio.css ya quita la caja gris envolvente y
-   re-pinta el encabezado). Aquí solo se compacta el cuerpo para las variantes de padding que esa hoja no cubre. */
-[data-ui="v2"] main.h-full > .hairline.rounded-2xl > .px-5.flex-1 { padding: 16px 24px 24px; }
-[data-ui="v2"] main.h-full > .hairline.rounded-2xl > .px-5.flex-1 > .space-y-2\.5 > * + * { margin-top: 12px; }
-
-/* Etiquetas: Hanken en vez de IBM Plex Mono (ya no hay mono en las etiquetas del producto; la cifra tabular sigue siendo tabular). */
-[data-ui="v2"] .adm-fila .etiqueta-mono {
-  font-family: var(--font-sans-ui, inherit); font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
-}
-
-/* Tarjetas del kit anterior (`.card`): radio 12, sin sombra, borde del sistema, padding de 14 cuando solo traen `p-3`/`p-3.5` de Tailwind. */
-[data-ui="v2"] .adm-fila .card { border-radius: 12px; border-color: var(--ui-border); background: var(--ui-surface); box-shadow: none; }
-[data-ui="v2"] .adm-fila a.card:hover { background: var(--ui-soft); transform: none; box-shadow: none; }
-
 
 /* ── Riel del admin (72 px): UNA sección abierta a la vez; las demás se reducen a su icono ──
    El CSS compartido (shell.css) abre TODOS los grupos en el riel: con las 43 páginas del admin la lista se salía del alto, se cortaba
    a medias y se encimaba con el pie. Aquí (solo /admin, para no tocar el dashboard) el encabezado de cada sección vuelve como un
-   icono y solo la sección activa o elegida muestra sus páginas. La lista scrollea por dentro y se desvanece al fondo. */
-.rv-grupo__ico { display: none; }
+   icono y solo la sección activa o elegida muestra sus páginas. La lista scrollea por dentro con las sombras de scroll de shell.css. */
+[data-ui="v2"] .rv-grupo__ico { display: none; }
 @media (min-width: 1024px) {
   [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__h { display: block; }
-  [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--ui-border); }
   [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__tog {
-    width: calc(100% - 16px); height: 40px; margin: 0 8px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 10px;
+    width: calc(100% - 16px); height: 40px; margin: 0 8px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;
   }
   [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__tog .rv-grupo__ico { display: block; flex: none; }
   [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__tog[aria-expanded="true"] { background: var(--ui-hover, rgba(0, 0, 0, 0.05)); color: var(--ink); }
   [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__cuerpo { grid-template-rows: 0fr; visibility: hidden; }
   [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo[data-abierto] .rv-grupo__cuerpo { grid-template-rows: 1fr; visibility: visible; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-sb__nav {
-    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
-            mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
-  }
 }
-
-/* Barra de pestañas de respaldo (pantallas aún sin `MarcoPagina`; ver pestanas-admin.tsx): pegada al borde superior del contenido.
-   Con `MarcoPagina` en la página la pinta el propio marco bajo el encabezado y el respaldo se oculta (nunca dos barras). */
-[data-ui="v2"] .adm-pestanas { margin: 0 0 12px; }
-[data-ui="v2"] .adm-fila .rv-contenido:has(> .rv-marco) > .rv-pestanas-respaldo { display: none; }
-/* Bajo el encabezado del marco: la fila desplaza en horizontal por dentro (360 px con 6 pestañas) y nunca ensancha la página. */
-[data-ui="v2"] .rv-marco > .rv-marco__pestanas { min-width: 0; max-width: 100%; margin: -4px 0 4px; }
-[data-ui="v2"] .rv-pestanas-respaldo, [data-ui="v2"] .rv-marco__pestanas { min-width: 0; max-width: 100%; }

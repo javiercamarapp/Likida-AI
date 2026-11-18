@@ -48,7 +48,8 @@ import { INFO_AGENTES_CPV } from './info-textos/agentes_cpv';
 
 const PENDIENTE_FUENTE = PENDIENTE.PENDIENTE_FUENTE;
 
-export const INFO = {
+/** Entradas propias de este archivo (Resumen e Inicio); su traducción vive en `info-textos/en/catalogo.ts`. */
+export const INFO_CATALOGO = {
   'resumen.monto_comprobado': V(
     'Monto comprobado', 'Dinero de gastos de ruta con comprobante, en el periodo elegido.',
     'Suma del total comprobado de las liquidaciones creadas en el periodo. No cuenta las revisiones rechazadas.',
@@ -173,6 +174,10 @@ export const INFO = {
     'Muestra solo las pantallas que tu rol puede abrir.',
     'Permisos de tu rol.',
   ),
+} as const satisfies Record<string, InfoTexto>;
+
+export const INFO = {
+  ...INFO_CATALOGO,
   // Páginas migradas (L4): un archivo por grupo, claves `<pagina>.<recuadro>`.
   ...INFO_OPERACION,
   ...INFO_ADMIN,

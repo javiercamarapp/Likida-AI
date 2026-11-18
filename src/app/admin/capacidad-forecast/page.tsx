@@ -15,6 +15,7 @@ import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
 import '../resumen.css';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +88,7 @@ export default async function CapacidadForecastPage({ searchParams }: { searchPa
               ) : (
                 <EstadoVacio titulo={t('capacidad_forecast.sin_datos')} contenido>{t('capacidad_forecast.sin_historial_suficiente_todavia_para_una')}</EstadoVacio>
               )}
-              <p className="m-0 mt-3 text-xs text-muted">{t('capacidad_forecast.proyeccion_simple_costo_diario_promedio_30')}{proyeccion.diasVentana < 7 && t('capacidad_forecast.con_tan_poca_historia_esta_cifra')}
+              <p className="fin16c-nota fin16c-nota--sup">{t('capacidad_forecast.proyeccion_simple_costo_diario_promedio_30')}{proyeccion.diasVentana < 7 && t('capacidad_forecast.con_tan_poca_historia_esta_cifra')}
               </p>
             </>
           ) : null}
@@ -98,10 +99,10 @@ export default async function CapacidadForecastPage({ searchParams }: { searchPa
             muestra; los límites de proveedor son nominales y se dice. ── */}
       <Tarjeta titulo={t('capacidad_forecast.modelo_de_capacidad_escenarios_de_escala')}>
         {unidades === null ? (
-          <p className="m-0 text-[13px] text-muted">{t('capacidad_forecast.no_se_pudieron_leer_las_unidades')}</p>
+          <p className="fin16c-nota fin16c-nota--cuerpo">{t('capacidad_forecast.no_se_pudieron_leer_las_unidades')}</p>
         ) : (
           <>
-            <p className="m-0 mb-3 text-[13px] text-muted">
+            <p className="fin16c-nota fin16c-nota--cuerpo fin16c-nota--inf">
               {unidades.costoIaPorViaje !== null
                 ? <>{t('capacidad_forecast.costo_de_ia_medido_por_viaje', { usd: usd(unidades.costoIaPorViaje), numero: numero(unidades.muestraViajes, idioma) })}{unidades.muestraViajes < 30 ? t('capacidad_forecast.muestra_chica_apenas_indicativo') : ''}).</>
                 : <>{t('capacidad_forecast.sin_liquidaciones_en_30d_el_costo')}</>}
@@ -113,11 +114,11 @@ export default async function CapacidadForecastPage({ searchParams }: { searchPa
               idFila={(v) => String(v)}
               altoMaximo={false}
             />
-            <p className="m-0 mt-3 text-xs text-muted">{t('capacidad_forecast.supuestos_declarados_mensajes_y_comprobantes_por', { mensajesPorViaje: SUPUESTOS_CAPACIDAD.mensajesPorViaje, comprobantesPorViaje: SUPUESTOS_CAPACIDAD.comprobantesPorViaje, Math: Math.round(SUPUESTOS_CAPACIDAD.bytesPorComprobante / 1000), llamadasLlmPorViaje: SUPUESTOS_CAPACIDAD.llamadasLlmPorViaje, horasPicoDia: SUPUESTOS_CAPACIDAD.horasPicoDia })}</p>
-            <div className="mt-3 border-t border-[var(--line)] pt-3">
-              <p className="etiqueta-mono m-0 mb-1 text-[11px] uppercase text-muted">{t('capacidad_forecast.limites_nominales_del_proveedor_documentacion_no')}</p>
+            <p className="fin16c-nota fin16c-nota--sup">{t('capacidad_forecast.supuestos_declarados_mensajes_y_comprobantes_por', { mensajesPorViaje: SUPUESTOS_CAPACIDAD.mensajesPorViaje, comprobantesPorViaje: SUPUESTOS_CAPACIDAD.comprobantesPorViaje, Math: Math.round(SUPUESTOS_CAPACIDAD.bytesPorComprobante / 1000), llamadasLlmPorViaje: SUPUESTOS_CAPACIDAD.llamadasLlmPorViaje, horasPicoDia: SUPUESTOS_CAPACIDAD.horasPicoDia })}</p>
+            <div className="fin16c-limites">
+              <p className="fin16c-eyebrow">{t('capacidad_forecast.limites_nominales_del_proveedor_documentacion_no')}</p>
               {LIMITES_NOMINALES.map((l) => (
-                <p key={l.recurso} className="m-0 text-[12px] text-muted">· {l.recurso}: {l.limite} <span>({l.fuente})</span></p>
+                <p key={l.recurso} className="fin16c-nota">· {l.recurso}: {l.limite} <span>({l.fuente})</span></p>
               ))}
             </div>
           </>
@@ -138,7 +139,7 @@ function columnasEscenario(costoIaPorViaje: number | null, t: TSistema = T_SISTE
       id: 'costo', titulo: t('capacidad_forecast.costo_ia_dia'), alinear: 'der',
       celda: (v) => {
         const c = escenarioDe(v, costoIaPorViaje).costoIaDiaUsd;
-        return c === null ? <span className="text-muted">{t('capacidad_forecast.sin_base_medida')}</span> : usd(c);
+        return c === null ? <span className="fin16c-tenue">{t('capacidad_forecast.sin_base_medida')}</span> : usd(c);
       },
     },
     { id: 'storage', titulo: t('capacidad_forecast.storage_dia'), alinear: 'der', celda: (v) => `${numero(escenarioDe(v, costoIaPorViaje).storageDiaMb, idioma)} MB` },

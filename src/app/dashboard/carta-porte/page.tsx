@@ -1,4 +1,4 @@
-import { getT } from '@/lib/i18n/servidor';
+import { getT, idiomaActual } from '@/lib/i18n/servidor';
 import { datosParaProveedor } from '@/lib/i18n/servidor';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { redirect } from 'next/navigation';
@@ -66,7 +66,7 @@ export default async function PaginaCartaPorte({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('cartaPorte.page.declaracionGuardadaElSemafor') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar la declaración') };
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar la declaración', await idiomaActual()) };
     }
   }
 
@@ -88,7 +88,7 @@ export default async function PaginaCartaPorte({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('cartaPorte.page.mercanciaAgregadaElChecklist') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'agregar la mercancía') };
+      return { ok: false, error: mensajeParaPantalla(e, 'agregar la mercancía', await idiomaActual()) };
     }
   }
 
@@ -102,7 +102,7 @@ export default async function PaginaCartaPorte({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('cartaPorte.page.renglonQuitado') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'quitar la mercancía') };
+      return { ok: false, error: mensajeParaPantalla(e, 'quitar la mercancía', await idiomaActual()) };
     }
   }
 
@@ -124,7 +124,7 @@ export default async function PaginaCartaPorte({
       revalidatePath(RUTA);
       return { ok: true, mensaje: tr('cartaPorte.page.datosDelClienteGuardados') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar los datos del cliente') };
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar los datos del cliente', await idiomaActual()) };
     }
   }
 

@@ -1,9 +1,12 @@
 'use client';
 
 import { useActionState } from 'react';
-import { Aviso, type AccionDeForma } from '../ui/forma';
-import { BotonConfirmar } from '../ui/confirmar';
-import { clasesBoton } from '@/app/ui-v2/componentes';
+import { BotonConfirmar, clasesBoton, type AccionDeForma } from '@/app/ui-v2/componentes';
+import { Aviso } from '@/app/ui-v2/componentes/forma';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto } from '@/lib/i18n/es/resto';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import '../control.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «RECHAZAR» un cliente MCP pendiente — auditoría adversarial, DOS HALLAZGOS
@@ -26,12 +29,9 @@ import { clasesBoton } from '@/app/ui-v2/componentes';
 // singular/plural y su caso cero — nunca «todos» sin cifra.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function descripcionTokens(tokensVivos: number): string {
-  if (tokensVivos === 0) return 'Este cliente no tiene ningún token OAuth vivo en este momento.';
-  const sujeto = tokensVivos === 1
-    ? 'el único token OAuth vivo (acceso o refresco)'
-    : `los ${tokensVivos} tokens OAuth vivos (acceso y refresco)`;
-  return `Revoca en el acto ${sujeto} de este cliente MCP.`;
+function descripcionTokens(tokensVivos: number, t: TrDe<'resto'>): string {
+  if (tokensVivos === 0) return t('ctl.mcp_tokens_cero');
+  return tokensVivos === 1 ? t('ctl.mcp_tokens_uno') : t('ctl.mcp_tokens_varios', { n: tokensVivos });
 }
 
 export function FormaRechazarCliente({ accion, clientId, nombre, tokensVivos }: {
@@ -44,15 +44,16 @@ export function FormaRechazarCliente({ accion, clientId, nombre, tokensVivos }: 
   tokensVivos: number;
 }) {
   const [estado, despachar] = useActionState(accion, null);
+  const { t } = useT('resto', resto);
   return (
-    <form action={despachar} className="flex flex-col gap-3">
+    <form action={despachar} className="adm-ctl-forma">
       <input type="hidden" name="cliente" value={clientId} />
       <Aviso estado={estado} />
       <div>
         <BotonConfirmar
-          etiqueta="Rechazar" tono="peligro" etiquetaConfirmar="Sí, rechazar y revocar"
-          titulo={`Rechazar a ${nombre}`}
-          descripcion={`${descripcionTokens(tokensVivos)} Es irreversible, y el efecto puede alcanzar a cualquier flota que ya le haya dado consentimiento.`}
+          etiqueta={t('ctl.mcp_rechazar')} tono="peligro" etiquetaConfirmar={t('ctl.mcp_rechazar_confirmar')}
+          titulo={t('ctl.mcp_rechazar_titulo', { nombre })}
+          descripcion={`${descripcionTokens(tokensVivos, t)} ${t('ctl.mcp_irreversible')}`}
           className={clasesBoton('danger', 'sm')}
         />
       </div>

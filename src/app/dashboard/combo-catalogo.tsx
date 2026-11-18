@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { OpcionCatalogo, TipoCatalogo } from '@/lib/likida/repo';
-import { numero } from '@/lib/formato';
+import { useFormato, useT } from '@/lib/i18n/proveedor';
+import { dashboard_a as dashboard_aEs } from '@/lib/i18n/es/dashboard_a';
 import { coincidencias } from '@/lib/likida/catalogo_etiquetas';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -71,6 +72,8 @@ export function ComboCatalogo({
   enBarra?: boolean;
 }) {
   const listaId = useId();
+  const { t } = useT('dashboard_a', dashboard_aEs);
+  const { numero } = useFormato();
   const [texto, setTexto] = useState(textoInicial);
   const [id, setId] = useState<string | null>(valorInicial);
   const [opciones, setOpciones] = useState<OpcionCatalogo[]>([]);
@@ -147,17 +150,17 @@ export function ComboCatalogo({
       </datalist>
       {fallo ? (
         <p className={enBarra ? 'rv-sr' : 'mt-1 text-[11px] text-[var(--bad)]'} role={enBarra ? 'status' : undefined}>
-          No se pudo buscar en el catálogo — vuelve a escribir en un momento.
+          {t('cmb.fallo')}
         </p>
       ) : sinResolver ? (
         <p className={enBarra ? 'rv-sr' : 'mt-1 text-[11px] text-[var(--warn)]'} role={enBarra ? 'status' : undefined}>
           {ambiguo
-            ? 'Hay varios con ese nombre: elige uno de la lista, con su teléfono o número.'
-            : 'Elige uno de la lista: se guarda el registro, no el texto.'}
+            ? t('cmb.ambiguo')
+            : t('cmb.elige')}
         </p>
       ) : total !== null && total > opciones.length && opciones.length > 0 ? (
         <p className={enBarra ? 'rv-sr' : 'mt-1 text-[11px] text-[var(--faint)]'}>
-          {numero(opciones.length)} sugerencia{opciones.length === 1 ? '' : 's'} de {numero(total)} — escribe para acotar.
+          {t(opciones.length === 1 ? 'cmb.sugerencias.uno' : 'cmb.sugerencias.otros', { n: numero(opciones.length), total: numero(total) })}
         </p>
       ) : null}
     </div>

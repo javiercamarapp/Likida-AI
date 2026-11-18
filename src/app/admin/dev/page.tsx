@@ -8,13 +8,20 @@ import { getEventosSeguridad, type FilaSeguridad } from '@/lib/seguridad/eventos
 import { getSLOs, type Slo } from '@/lib/admin/slo';
 import { fechaHoraMx } from '@/lib/formato';
 import { AvisoGitHub } from '../ui/aviso-github';
-import { StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
+import { FilaTarjetas, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
+import { BarList } from '../../ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
+import '../resumen.css';
+import './mapa-actividad.css';
 import { SelectorVista } from '../selector-vista';
+import { NotaVacia } from '../nota-vacia';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
 import type { Idioma } from '@/lib/i18n/idioma';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,31 +31,31 @@ const REPO_URL = 'https://github.com/javiercamarapp/likida.ai';
 
 const columnasSlo = (t: TSistema = T_SISTEMA_ES): ColumnaBase<Slo>[] => ([
   { id: 'nombre', titulo: t('dev.objetivo'), principal: true, celda: (s) => s.nombre },
-  { id: 'objetivo', titulo: t('dev.objetivo_declarado'), celda: (s) => <span className="text-muted">{t('dev.obj', { objetivo: s.objetivo })}</span> },
+  { id: 'objetivo', titulo: t('dev.objetivo_declarado'), celda: (s) => <span className="adm-dev-nota">{t('dev.obj', { objetivo: s.objetivo })}</span> },
   {
     // cumple=null jamás se pinta verde: sin muestra o sin lectura es «sin medir», con su propio tono.
     id: 'medido', titulo: t('dev.medido'), alinear: 'der',
     celda: (s) => (
       <StatusChip tono={s.cumple === true ? 'ok' : s.cumple === false ? 'bad' : 'muted'}>
-        <span className="tabular">{s.medido}</span>
+        <span className="adm-dev-num">{s.medido}</span>
       </StatusChip>
     ),
   },
-  { id: 'ventana', titulo: t('dev.ventana'), celda: (s) => <span className="etiqueta-mono text-[11px] uppercase text-muted">{s.ventana}</span> },
+  { id: 'ventana', titulo: t('dev.ventana'), celda: (s) => <span className="adm-dev-etq">{s.ventana}</span> },
 ]);
 
 const columnasSeguridad = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<FilaSeguridad>[] => ([
   {
     id: 'tipo', titulo: t('dev.evento'), principal: true,
     celda: (e) => (
-      <>
+      <span className="adm-dev-evento">
         <StatusChip tono={e.severidad === 'alta' ? 'bad' : e.severidad === 'media' ? 'warn' : 'neutral'}>{e.tipo.replace(/_/g, ' ')}</StatusChip>
-        <span className="ml-2 text-muted">· {e.origen}</span>
-        {e.actor && <span className="ml-2 text-muted">· {e.actor}</span>}
-      </>
+        <span className="adm-dev-item__meta">· {e.origen}</span>
+        {e.actor && <span className="adm-dev-item__meta">· {e.actor}</span>}
+      </span>
     ),
   },
-  { id: 'cuando', titulo: t('dev.fecha'), alinear: 'der', celda: (e) => <span className="tabular text-muted">{fechaHoraMx(e.creadoEn, idioma)}</span> },
+  { id: 'cuando', titulo: t('dev.fecha'), alinear: 'der', celda: (e) => <span className="adm-dev-item__meta">{fechaHoraMx(e.creadoEn, idioma)}</span> },
 ]);
 
 /**
@@ -63,6 +70,7 @@ const columnasSeguridad = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): Columna
  */
 export default async function DevPage() {
   const { t, idioma } = await getT('admin_sistema');
+  const { t: ti } = await getT('admin_inicio');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   // El selector de vistas necesita saber si HAY flotas (con cero, sus ligas
@@ -85,146 +93,170 @@ export default async function DevPage() {
   // afirmaba "No hay ninguna flota dada de alta" e invitaba a crear una que
   // quizá ya existe. `null` viaja como `null` y el selector lo dice.
   const tenants = conteoTenants.error ? null : conteoTenants.count ?? 0;
+  // Cifras (lecturas directas, sello «Observado»): cada una dice «sin dato» cuando su fuente no se pudo leer — jamás un cero inventado.
+  const semanas26 = mapa.estado === 'ok' ? mapa.semanas.slice(-26) : null;
+  const semanal = semanas26 ? semanas26.map((s) => s.dias.reduce((a, n) => a + n, 0)) : null;
+  const medidos = slos === null ? null : slos.filter((s) => s.cumple !== null);
+  const cumplidos = medidos === null ? null : medidos.filter((s) => s.cumple === true).length;
+  const ciOk = actividad.estado === 'ok' ? actividad.ci.filter((w) => w.conclusion === 'success').length : null;
+  const ciFalla = actividad.estado === 'ok' ? actividad.ci.filter((w) => w.conclusion === 'failure').length : null;
+  // Las cifras sin lectura NO repiten «No se pudo leer. No es cero.» cinco veces: quedan en «—» con su sello «Sin dato» y el motivo lo dice UNA vez el aviso de arriba (y cada bloque).
+  const cifras = observadas(uniformes([
+    semanal === null
+      ? { etiqueta: t('dev.kpi_pushes'), valor: null, estado: 'vacio' as const }
+      : { etiqueta: t('dev.kpi_pushes'), valor: semanal.reduce((a, n) => a + n, 0), formato: 'entero' as const, serie: semanal },
+    autores.estado === 'ok'
+      ? { etiqueta: t('dev.kpi_integrantes'), valor: autores.autores.length, formato: 'entero' as const }
+      : { etiqueta: t('dev.kpi_integrantes'), valor: null, estado: 'vacio' as const },
+    medidos === null || cumplidos === null
+      ? { etiqueta: t('dev.kpi_slos'), valor: null, estado: 'vacio' as const }
+      : medidos.length === 0
+        ? { etiqueta: t('dev.kpi_slos'), valor: null, estado: 'vacio' as const, mensaje: t('dev.kpi_sin_muestra') }
+        : { etiqueta: t('dev.kpi_slos'), valor: `${cumplidos}/${medidos.length}`, nota: t('dev.kpi_slos_nota'), tono: cumplidos < medidos.length ? 'bad' as const : undefined },
+    seguridad === null
+      ? { etiqueta: t('dev.kpi_eventos'), valor: null, estado: 'vacio' as const }
+      : { etiqueta: t('dev.kpi_eventos'), valor: seguridad.length, formato: 'entero' as const, nota: t('dev.kpi_eventos_nota'), tono: seguridad.some((e) => e.severidad === 'alta') ? 'bad' as const : undefined },
+    ciOk === null || ciFalla === null || actividad.estado !== 'ok'
+      ? { etiqueta: t('dev.kpi_ci'), valor: null, estado: 'vacio' as const }
+      : actividad.ci.length === 0
+        ? { etiqueta: t('dev.kpi_ci'), valor: null, estado: 'vacio' as const, mensaje: t('dev.kpi_sin_muestra') }
+        : { etiqueta: t('dev.kpi_ci'), valor: `${ciOk}/${actividad.ci.length}`, nota: t('dev.kpi_ci_nota'), tono: ciFalla > 0 ? 'bad' as const : undefined },
+  ]), t('a1r4.observado'));
+
   return (
     <EsqueletoTablaMaestra
-      titulo="Desarrollo"
+      titulo={t('dev.desarrollo')}
+      etiquetaCifras={t('dev.desarrollo')}
+      cifras={cifras}
       /* Falta de configuración (no corregible por código): UN aviso corto con la variable, no tres vacíos largos. */
       avisos={(mapa.estado === 'sin_token' || actividad.estado === 'sin_token')
-        ? <AvisoGitHub causa="sin_token" />
-        : (mapa.estado === 'error' || actividad.estado === 'error') ? <AvisoGitHub causa="error" /> : null}
+        ? <AvisoGitHub causa="sin_token" t={ti} />
+        : (mapa.estado === 'error' || actividad.estado === 'error') ? <AvisoGitHub causa="error" t={ti} /> : null}
     >
       {/* "Entrar a los otros paneles" — vivía en el Inicio; Javier lo mandó aquí el 17-ago: es herramienta de desarrollo, no de operación. */}
       <SelectorVista tenants={tenants} />
 
-      {/* ── El mapa de puntos: 26 semanas de pushes, un punto por día. La intensidad es commits/día; GitHub lo precalcula y a veces
-            contesta "generando" — se dice. Refresca en cada carga (force-dynamic). ── */}
-      <Tarjeta titulo={t('dev.mapa_de_actividad_pushes_por_dia')}>
-        {mapa.estado === 'sin_token' && (
-          <p className="m-0 text-xs text-muted">{t('dev.sin_el_acceso_a_github_no_hay_mapa')}</p>
-        )}
-        {mapa.estado === 'error' && (
-          <p className="m-0 text-xs text-muted">{t('dev.github_no_contesto_el_histograma_recarga')}</p>
-        )}
-        {mapa.estado === 'generando' && (
-          <p className="m-0 text-xs text-muted">{t('dev.github_esta_recalculando_el_histograma_tras')}</p>
-        )}
-        {mapa.estado === 'ok' && (
-          <div className="flex items-start gap-5">
-            <div className="min-w-0 flex-1">
-              <MapaActividad semanas={mapa.semanas.slice(-26)} total={mapa.total} />
-            </div>
-            {/* Por integrante (orden del 17-ago): quién empujó cuánto — 52 semanas de /stats/contributors, mismos tres estados
-                honestos que el histograma. */}
-            <div className="w-44 shrink-0">
-              <p className="etiqueta-mono m-0 mb-1.5 text-[11px] uppercase text-muted">{t('dev.por_integrante')}</p>
-              {autores.estado === 'ok' && autores.autores.map((a) => (
-                <div key={a.nombre} className="flex items-center justify-between py-0.5">
-                  <span className="truncate text-xs text-[var(--ink2)]">{a.nombre}</span>
-                  <span className="tabular text-xs font-medium">{a.pushes}</span>
-                </div>
-              ))}
-              {autores.estado === 'generando' && (
-                <p className="m-0 text-xs text-muted">{t('dev.github_lo_esta_recalculando')}</p>
-              )}
-              {(autores.estado === 'error' || autores.estado === 'sin_token') && (
-                <p className="m-0 text-xs text-muted">{t('dev.no_se_pudo_leer_no_es')}</p>
-              )}
-            </div>
-          </div>
-        )}
-      </Tarjeta>
+      {/* ── El mapa de puntos: 26 semanas de pushes, un punto por día (GitHub lo precalcula y a veces contesta "generando": se dice),
+            junto a quién empujó cuánto (52 semanas de /stats/contributors, mismos tres estados honestos). ── */}
+      <FilaTarjetas variante="8-4" className="adm-fila-pareja">
+        <Tarjeta titulo={t('dev.mapa_de_actividad_pushes_por_dia')}>
+          {mapa.estado === 'sin_token' && (
+            <NotaVacia tono="warn">{t('dev.sin_el_acceso_a_github_no_hay_mapa')}</NotaVacia>
+          )}
+          {mapa.estado === 'error' && (
+            <NotaVacia tono="warn">{t('dev.github_no_contesto_el_histograma_recarga')}</NotaVacia>
+          )}
+          {mapa.estado === 'generando' && (
+            <NotaVacia tono="info">{t('dev.github_esta_recalculando_el_histograma_tras')}</NotaVacia>
+          )}
+          {mapa.estado === 'ok' && <MapaActividad semanas={mapa.semanas.slice(-26)} total={mapa.total} />}
+        </Tarjeta>
+        <Tarjeta titulo={t('dev.por_integrante')}>
+          {autores.estado === 'ok' && (
+            <BarList
+              etiqueta={t('dev.por_integrante')}
+              items={autores.autores.map((a) => ({ clave: a.nombre, etiqueta: a.nombre, valor: a.pushes }))}
+            />
+          )}
+          {autores.estado === 'generando' && (
+            <NotaVacia tono="info">{t('dev.github_lo_esta_recalculando')}</NotaVacia>
+          )}
+          {(autores.estado === 'error' || autores.estado === 'sin_token') && (
+            <NotaVacia tono="warn">{t('dev.no_se_pudo_leer_no_es')}</NotaVacia>
+          )}
+        </Tarjeta>
+      </FilaTarjetas>
 
       {/* ── SLOs (fase 7): objetivos DECLARADOS contra datos reales. cumple=null jamás se pinta verde — sin muestra o sin lectura se
-            dice con esas palabras. ── */}
-      <Tarjeta titulo={t('dev.slos_objetivos_contra_lo_medido')}>
-        {slos === null && (
-          <p className="m-0 text-xs text-muted">{t('dev.no_se_pudieron_leer_los_slos')}</p>
-        )}
-        {slos !== null && (
-          <TablaBase
-            etiqueta={t('dev.slos_objetivos_contra_lo_medido')}
-            columnas={columnasSlo(t)}
-            filas={slos}
-            idFila={(s) => s.clave}
-            altoMaximo={false}
-            tarjetaMovil
-          />
-        )}
-      </Tarjeta>
-
-      {/* ── Trust & Safety (0133): lo que los detectores atraparon. Firma inválida, intents rechazados, cifras sin respaldo — la
-            memoria de seguridad consultable, no solo logs. ── */}
-      <Tarjeta titulo={t('dev.eventos_de_seguridad')}>
-        {seguridad === null && (
-          <p className="m-0 text-xs text-muted">{t('dev.no_se_pudieron_leer_que_no')}</p>
-        )}
-        {seguridad !== null && seguridad.length === 0 && (
-          <p className="m-0 text-xs text-muted">{t('dev.sin_eventos_registrados_eso_no_prueba')}</p>
-        )}
-        {seguridad !== null && seguridad.length > 0 && (
-          <TablaBase
-            etiqueta={t('dev.eventos_de_seguridad_recientes')}
-            columnas={columnasSeguridad(t, idioma)}
-            filas={seguridad}
-            idFila={(e) => String(e.id)}
-            altoMaximo={false}
-            densa
-            tarjetaMovil
-          />
-        )}
-      </Tarjeta>
+            dice con esas palabras. Junto a ellos, lo que los detectores de seguridad atraparon (0133): la memoria de seguridad. ── */}
+      <FilaTarjetas variante="6-6" className="adm-fila-pareja">
+        <Tarjeta titulo={t('dev.slos_objetivos_contra_lo_medido')}>
+          {slos === null && (
+            <NotaVacia tono="warn">{t('dev.no_se_pudieron_leer_los_slos')}</NotaVacia>
+          )}
+          {slos !== null && (
+            <TablaBase
+              etiqueta={t('dev.slos_objetivos_contra_lo_medido')}
+              columnas={columnasSlo(t)}
+              filas={slos}
+              idFila={(s) => s.clave}
+              altoMaximo={false}
+              densa
+              tarjetaMovil
+            />
+          )}
+        </Tarjeta>
+        <Tarjeta titulo={t('dev.eventos_de_seguridad')}>
+          {seguridad === null && (
+            <NotaVacia tono="warn">{t('dev.no_se_pudieron_leer_que_no')}</NotaVacia>
+          )}
+          {seguridad !== null && seguridad.length === 0 && (
+            <NotaVacia tono="muted">{t('dev.sin_eventos_registrados_eso_no_prueba')}</NotaVacia>
+          )}
+          {seguridad !== null && seguridad.length > 0 && (
+            <TablaBase
+              etiqueta={t('dev.eventos_de_seguridad_recientes')}
+              columnas={columnasSeguridad(t, idioma)}
+              filas={seguridad}
+              idFila={(e) => String(e.id)}
+              altoMaximo={false}
+              densa
+              tarjetaMovil
+            />
+          )}
+        </Tarjeta>
+      </FilaTarjetas>
 
       {/* ── Actividad en vivo (17-ago): commits y CI reales, cada carga. Tres estados honestos — sin llave / API caída / datos. ── */}
-      <Tarjeta titulo={t('dev.actividad_del_codigo_en_vivo')}>
-        {actividad.estado === 'sin_token' && (
-          <p className="m-0 text-xs text-muted">{t('dev.sin_el_acceso_a_github_esta_seccion')}</p>
-        )}
-        {actividad.estado === 'error' && (
-          <p className="m-0 text-xs text-muted">{t('dev.github_no_contesto_no_se_sabe')}</p>
-        )}
-        {actividad.estado === 'ok' && (
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div>
-              <p className="m-0 mb-1.5 text-xs font-medium text-muted">{t('dev.ultimos_commits')}</p>
-              <ul className="m-0 list-none space-y-1 p-0">
-                {actividad.commits.map((c) => (
-                  <li key={c.sha} className="flex items-center gap-2 text-xs">
-                    <code className="shrink-0 text-[11px] text-muted">{c.sha}</code>
-                    <a href={c.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{c.mensaje}</a>
-                    <span className="shrink-0 text-[11px] text-muted">{fechaHoraMx(c.fecha, idioma)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <p className="m-0 mb-1.5 text-xs font-medium text-muted">{t('dev.ci_ultimas_corridas')}</p>
-              <ul className="m-0 list-none space-y-1 p-0">
-                {actividad.ci.map((w, i) => (
-                  <li key={`${w.url}-${i}`} className="flex items-center gap-2 text-xs">
-                    <StatusChip tono={w.conclusion === 'success' ? 'ok' : w.conclusion === 'failure' ? 'bad' : 'neutral'}>
-                      {w.conclusion ?? w.estado}
-                    </StatusChip>
-                    <a href={w.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{w.nombre}</a>
-                    <span className="shrink-0 text-[11px] text-muted">{w.rama}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
-      </Tarjeta>
+      {actividad.estado === 'ok' ? (
+        <FilaTarjetas variante="6-6" className="adm-fila-pareja">
+          <Tarjeta titulo={t('dev.ultimos_commits')}>
+            <ul className="adm-dev-lista">
+              {actividad.commits.map((c) => (
+                <li key={c.sha} className="adm-dev-item">
+                  <code className="adm-dev-item__sha">{c.sha}</code>
+                  <a href={c.url} target="_blank" rel="noreferrer" className="adm-dev-item__texto">{c.mensaje}</a>
+                  <span className="adm-dev-item__meta">{fechaHoraMx(c.fecha, idioma)}</span>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+          <Tarjeta titulo={t('dev.ci_ultimas_corridas')}>
+            <ul className="adm-dev-lista">
+              {actividad.ci.map((w, i) => (
+                <li key={`${w.url}-${i}`} className="adm-dev-item">
+                  <StatusChip tono={w.conclusion === 'success' ? 'ok' : w.conclusion === 'failure' ? 'bad' : 'neutral'}>
+                    {w.conclusion ?? w.estado}
+                  </StatusChip>
+                  <a href={w.url} target="_blank" rel="noreferrer" className="adm-dev-item__texto">{w.nombre}</a>
+                  <span className="adm-dev-item__meta">{w.rama}</span>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        </FilaTarjetas>
+      ) : (
+        <Tarjeta titulo={t('dev.actividad_del_codigo_en_vivo')}>
+          {actividad.estado === 'sin_token' && (
+            <NotaVacia tono="warn">{t('dev.sin_el_acceso_a_github_esta_seccion')}</NotaVacia>
+          )}
+          {actividad.estado === 'error' && (
+            <NotaVacia tono="warn">{t('dev.github_no_contesto_no_se_sabe')}</NotaVacia>
+          )}
+        </Tarjeta>
+      )}
 
-      <Tarjeta titulo={t('dev.repositorio')}>
-        <a href={REPO_URL} target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">
-          <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
-          <span className="min-w-0">{rico(t('dev.e0_codigo_github_e0_e1_javiercamarapp'), { e0: (c) => <span className="block text-[13px] font-medium">{c}</span>, e1: (c) => <span className="block text-xs text-muted">{c}</span> })}</span>
-        </a>
-      </Tarjeta>
-
-      <Tarjeta titulo={t('dev.lo_que_falta')}>
-        <p className="m-0 text-xs text-muted">{t('dev.calendario_de_contribuciones_deploys_de_vercel')}</p>
-      </Tarjeta>
+      <FilaTarjetas variante="6-6" className="adm-fila-pareja">
+        <Tarjeta titulo={t('dev.repositorio')}>
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="adm-dev-repo">
+            <ExternalLink width={15} height={15} strokeWidth={1.75} aria-hidden="true" />
+            <span className="adm-dev-repo__texto">{rico(t('dev.e0_codigo_github_e0_e1_javiercamarapp'), { e0: (c) => <span className="adm-dev-repo__titulo">{c}</span>, e1: (c) => <span className="adm-dev-repo__detalle">{c}</span> })}</span>
+          </a>
+        </Tarjeta>
+        <Tarjeta titulo={t('dev.lo_que_falta')}>
+          <NotaVacia tono="muted">{t('dev.calendario_de_contribuciones_deploys_de_vercel')}</NotaVacia>
+        </Tarjeta>
+      </FilaTarjetas>
     </EsqueletoTablaMaestra>
   );
 }

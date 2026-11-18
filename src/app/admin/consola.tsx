@@ -1,13 +1,13 @@
 import { Suspense } from 'react';
-import { ShieldCheck } from 'lucide-react';
-import { EsqCifrasV2, EsqTarjetaV2, FilaTarjetas, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
-import { Columnas, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqCifrasV2, EsqTarjetaV2, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Columnas, DonaMini, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import { uniformes } from './cifras-uniformes';
 import { observadas } from './sello-observado';
+import { NotaVacia } from './nota-vacia';
 import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { saludoTr } from '@/lib/i18n/operacion_tr';
-import { fechaCorta, numero, usd } from '@/lib/formato';
+import { fechaCorta, numero, porcentaje, usd } from '@/lib/formato';
 import { BloqueCaja, BloqueCalidad, BloquePlataforma, BloqueSemaforo, BloqueTuTurno } from './resumen-mando';
 import { conteosPlataforma, costoIaMes, mrr as leerMrr, panorama, resumenNegocio, VENTANA_FACTURAS_DIAS } from './resumen-lecturas';
 import type { ResumenNegocio } from '@/lib/admin/negocio';
@@ -39,19 +39,25 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
           <BotonEnlace variante="primary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>
         </>
       )}
-      avisos={<p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={1.75} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>}
+      avisos={<Aviso tono="info">{t('consola.acceso_admin')}</Aviso>}
     >
       {/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas, luego los paneles con filas-tarjeta. */}
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
 
       {/* Un solo aviso FIJO arriba (el administrativo, en la cabecera). El semáforo de salud ya no es un segundo aviso entre las cifras
           y los paneles: vive dentro de «Operación», el panel que habla de la salud de los agentes. */}
-      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
-        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
-        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
-      </FilaTarjetas>
-
-      <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueSeries /></Suspense>
+      {/* Dos columnas apiladas (izquierda 2/3: atención y facturas; derecha 1/3: dinero y liquidaciones): antes eran dos filas 8/4 y la tarjeta
+          más corta de cada fila dejaba un hueco debajo. Así cada columna se llena de arriba abajo sin vacíos entre tarjetas. */}
+      <div className="adm-res-cols">
+        <div className="adm-res-col">
+          <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
+          <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueSeries cual="facturas" /></Suspense>
+        </div>
+        <div className="adm-res-col">
+          <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
+          <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueSeries cual="liquidaciones" /></Suspense>
+        </div>
+      </div>
 
       <Suspense fallback={<EsqTablaV2 />}><BloqueCalidad semaforo={<Suspense fallback={null}><BloqueSemaforo /></Suspense>} /></Suspense>
 
@@ -63,6 +69,14 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
 }
 
 const ERROR_CIFRA = { estado: 'error' as const, reintentar: true };
+
+/** Liquidaciones totales y las que están hoy en la bandeja «revisar» (misma lectura que usa el número norte; `null` = no se pudo leer). */
+async function liquidaciones() {
+  const [conteos, pan] = await Promise.all([conteosPlataforma(), panorama()]);
+  const total = conteos ? conteos.liquidaciones : null;
+  const enRevision = pan.bandeja ? pan.bandeja.conteos.liquidacionesRevisar : null;
+  return { total, enRevision, sinHumano: total === null || enRevision === null ? null : total - enRevision };
+}
 
 /** 3. El número norte: MRR contra la meta, % sin humano, flotas, viajes y facturas procesadas (total histórico). */
 async function BloqueNorte() {
@@ -92,19 +106,24 @@ async function BloqueNorte() {
         : {
           etiqueta: t('consola.liquidaciones_sin_humano_hoy'), valor: (liqSinHumano! / liqTotal) * 100, formato: 'porcentaje',
           nota: t('consola.de_fuera_de_la', { liqSinHumano: numero(liqSinHumano!), liqTotal: numero(liqTotal) }),
+          segmentos: [{ etiqueta: t('consola.seg_sin_humano'), valor: liqSinHumano }, { etiqueta: t('consola.seg_en_revision'), valor: liqEnRevision }],
         },
     r === null
       ? { etiqueta: t('consola.flotas'), valor: null, ...ERROR_CIFRA }
       : { etiqueta: r.tenants === 0 ? t('consola.flotas_ninguna_dada_de') : esSoloDemo ? t('consola.flota_solo_el_demo') : t('consola.flotas'), valor: r.tenants, formato: 'entero', nota: t('consola.flotas_nota'), href: '/admin/flotas' },
     r === null
       ? { etiqueta: t('consola.viajes_procesados'), valor: null, ...ERROR_CIFRA }
-      : { etiqueta: t('consola.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero', nota: liqTotal === null ? undefined : `${numero(liqTotal)} ${liqTotal === 1 ? t('consola.liquidacion_generada') : t('consola.liquidaciones_generadas')}` },
+      : {
+        etiqueta: t('consola.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero',
+        nota: liqTotal === null ? undefined : `${numero(liqTotal)} ${liqTotal === 1 ? t('consola.liquidacion_generada') : t('consola.liquidaciones_generadas')}`,
+        segmentos: liqTotal === null ? undefined : [{ etiqueta: t('consola.seg_con_liquidacion'), valor: Math.min(liqTotal, r.viajesProcesados) }, { etiqueta: t('consola.seg_sin_liquidacion'), valor: Math.max(0, r.viajesProcesados - liqTotal) }],
+      },
     r === null
       ? { etiqueta: t('consola.facturas_procesadas_historico'), valor: null, ...ERROR_CIFRA }
-      : { etiqueta: t('consola.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero', nota: t('consola.facturas_procesadas_nota') },
+      : { etiqueta: t('consola.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero', nota: t('consola.facturas_procesadas_nota'), serie: r.facturasPorDia.map((d) => d.n) },
     mes === null
       ? { etiqueta: t('consola.gasto_ia_mes'), valor: null, ...ERROR_CIFRA }
-      : { etiqueta: t('consola.gasto_ia_mes_de', { etiquetaMes: mes.etiquetaMes }), valor: mes.mesUsd, formato: 'usd', href: '/admin/consumo' },
+      : { etiqueta: t('consola.gasto_ia_mes_de', { etiquetaMes: mes.etiquetaMes }), valor: mes.mesUsd, formato: 'usd', href: '/admin/consumo', serie: r ? r.porDia.map((d) => d.costoUsd) : undefined },
   ];
   return (
     <>
@@ -112,36 +131,42 @@ async function BloqueNorte() {
       {esSoloDemo && (
         <Aviso tono="info">{t('consola.cifras_reales_no_de')}</Aviso>
       )}
-      <div className="rv-esq__cifras-sueltas adm-res-tiles" role="group" aria-label={t('consola.numero_norte')}>
-        {observadas(uniformes(cifras), t('a1r4.observado')).map((c) => <TiraCifras key={c.etiqueta} items={[c]} etiqueta={c.etiqueta} elevar entra="tarjeta" />)}
-      </div>
+      <TiraCifras items={observadas(uniformes(cifras), t('a1r4.observado'))} etiqueta={t('consola.numero_norte')} entra="seccion" />
     </>
   );
 }
 
-/** Gasto de IA por día y facturas por día (ventana fija de 30 días, y el rótulo lo dice). */
-async function BloqueSeries() {
+/** Facturas por día (ventana fija de 30 días, y el rótulo lo dice) junto a la dona de liquidaciones por estatus. El gasto de IA por día vive en «Dinero». */
+async function BloqueSeries({ cual }: { cual: 'facturas' | 'liquidaciones' }) {
   const { t } = await getT('admin_inicio');
-  const r = await resumenNegocio();
-  if (r === null) {
-    return (
-      <FilaTarjetas variante="6-6">
-        <Tarjeta titulo={t('consola.gasto_de_ia_por')} estado="error" reintentar />
-        <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} estado="error" reintentar />
-      </FilaTarjetas>
-    );
-  }
-  const costo = r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.costoUsd }));
-  const facturas = r.facturasPorDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.n }));
+  const [r, liq] = await Promise.all([resumenNegocio(), liquidaciones()]);
+  const titulo = t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS });
+  const facturas = r ? r.facturasPorDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.n })) : [];
   return (
-    <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
-      {r.porDia.length > 1
-        ? <Tarjeta titulo={t('consola.gasto_de_ia_por')} elevar entra="tarjeta"><Columnas datos={costo} etiqueta={t('consola.gasto_de_ia_por')} formato="usd" matiz={2} /></Tarjeta>
-        : <Tarjeta titulo={t('consola.gasto_de_ia_por')} elevar entra="tarjeta"><p className="adm-vacio-linea"><strong>{t('consola.sin_historial_suficiente')}</strong> {t('consola.se_dibuja_cuando_haya')}</p></Tarjeta>}
-      {r.facturasPorDia.some((d) => d.n > 0)
-        ? <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} elevar entra="tarjeta"><Columnas datos={facturas} etiqueta={t('consola.facturas_procesadas_por_dia_2')} formato="numero" matiz={1} /></Tarjeta>
-        : <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} elevar entra="tarjeta"><p className="adm-vacio-linea"><strong>{t('consola.sin_facturas_en_el')}</strong> {t('consola.cada_comprobante_que_pasa')}</p></Tarjeta>}
-    </FilaTarjetas>
+    <>
+      {cual === 'facturas' && (r === null
+        ? <Tarjeta titulo={titulo} estado="error" reintentar />
+        : r.facturasPorDia.some((d) => d.n > 0)
+          ? <Tarjeta titulo={titulo} elevar entra="tarjeta">
+              <Columnas datos={facturas} etiqueta={t('consola.facturas_procesadas_por_dia_2')} formato="numero" matiz={1} />
+              <ul className="aud16b-leyenda"><li><i data-m="1" aria-hidden="true" />{t('consola.facturas_procesadas_por_dia_2')}</li></ul>
+            </Tarjeta>
+          : <Tarjeta titulo={titulo} elevar entra="tarjeta"><NotaVacia titulo={t('consola.sin_facturas_en_el')}>{t('consola.cada_comprobante_que_pasa')}</NotaVacia></Tarjeta>)}
+      {cual === 'liquidaciones' && (liq.total === null || liq.enRevision === null
+        ? <Tarjeta titulo={t('consola.liquidaciones_estatus')} estado="error" reintentar />
+        : liq.total === 0
+          ? <Tarjeta titulo={t('consola.liquidaciones_estatus')} elevar entra="tarjeta"><NotaVacia titulo={t('consola.aun_no_hay_liquidaciones')} /></Tarjeta>
+          : (
+            <Tarjeta titulo={t('consola.liquidaciones_estatus')} elevar entra="tarjeta">
+              <DonaMini
+                etiqueta={t('consola.liquidaciones_estatus')}
+                gajos={[{ etiqueta: t('consola.seg_sin_humano'), valor: liq.sinHumano }, { etiqueta: t('consola.seg_en_revision'), valor: liq.enRevision }]}
+                centro={porcentaje(((liq.sinHumano ?? 0) / liq.total) * 100, 0)}
+                formato="numero"
+              />
+            </Tarjeta>
+          ))}
+    </>
   );
 }
 
@@ -160,7 +185,7 @@ const columnasFlotas = (t: TrDe<'admin_inicio'>): ColumnaBase<FilaFlota>[] => [
       <span className="adm-res-paneles">
         <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard?tenant=${f.id}&rol=flota_admin`} target="_blank">{t('consola.dueno')}</BotonEnlace>
         <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard?tenant=${f.id}&rol=encargado`} target="_blank">{t('consola.jefe_de_flota')}</BotonEnlace>
-        <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/contador?tenant=${f.id}&rol=contador`} target="_blank">Contador</BotonEnlace>
+        <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/contador?tenant=${f.id}&rol=contador`} target="_blank">{t('consola.contador')}</BotonEnlace>
       </span>
     ),
   },
@@ -199,7 +224,7 @@ async function BloqueFlotas() {
           filas={r ? r.flotas : []}
           idFila={(f) => f.id}
           estado={r === null ? 'error' : 'ok'}
-          mensajeError="No disponible ahora. No es cero."
+          mensajeError={t('resumen_mando.no_disponible_ahora_no')}
           vacio={{ titulo: t('consola.sin_flotas_dadas_de'), texto: t('consola.aparecen_aqui_cuando_se'), accion: <BotonEnlace tamano="sm" variante="secondary" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace> }}
           tarjetaMovil
         />

@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -9,10 +10,12 @@ import { logger } from '@/lib/logger';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { Aviso, Boton, Chip, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
+import { BarraApilada } from '@/app/ui-v2/graficas';
 import './evals.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,6 +98,7 @@ export default async function Evals({
   searchParams,
 }: { searchParams: Promise<{ error?: string }> }) {
   const { t, idioma } = await getT('admin_sistema');
+  const { t: ta } = await getT('admin_agentes');
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   const sp = await searchParams;
@@ -149,6 +153,13 @@ export default async function Evals({
 
   const sinLeer = secciones.filter((x) => x.estado === null).length;
   const sinReexaminar = secciones.filter((x) => x.estado?.driftDePrompt).length;
+  // Resultado por caso de la ÚLTIMA corrida de cada examen (lectura directa de eval_resultado). Un examen sin leer o sin corrida no suma ceros.
+  const cuenta = (casos: PorCaso[], v: string) => casos.filter((c) => c.veredicto === v).length;
+  const conCasos = secciones.filter((x) => x.estado !== null && x.porCaso.length > 0);
+  const todosCasos = conCasos.flatMap((x) => x.porCaso);
+  const casosPaso = cuenta(todosCasos, 'paso');
+  const casosFallo = cuenta(todosCasos, 'fallo');
+  const casosRevisar = cuenta(todosCasos, 'revisar');
 
   const columnasCaso = (ultimaId: string | undefined): ColumnaBase<PorCaso>[] => [
     {
@@ -189,16 +200,23 @@ export default async function Evals({
 
   return (
     <EsqueletoPanelCifras
-      area="Calidad"
-      titulo={t('qa_corrida_viva.calidad')}
+      titulo={t('evals.examenes')}
       apoyo={t('evals.examenes_el_estado_del_examen_de')}
       avisos={sp.error === 'marcar' ? <Aviso tono="error">{t('evals.no_se_pudo_registrar_el_veredicto')}</Aviso> : null}
       etiquetaCifras={t('evals.examenes')}
-      cifras={uniformes([
+      cifras={observadas(uniformes([
           { etiqueta: t('evals.agentes_examinados'), valor: agentesTr(t).length, estado: 'ok' },
           { etiqueta: t('evals.con_prompt_sin_re_examinar'), valor: sinLeer > 0 ? null : sinReexaminar, estado: sinLeer > 0 ? 'error' : 'ok', tono: sinReexaminar > 0 ? 'bad' : undefined, nota: t('evals.el_prompt_vivo_no_es_el') },
           { etiqueta: t('observabilidad.corridas_recientes'), valor: corridasError === null ? corridas.length : null, estado: corridasError === null ? 'ok' : 'error', nota: t('evals.las_ultimas_10_todos_los_agentes') },
-      ])}
+          todosCasos.length === 0
+            ? { etiqueta: ta('evals_panel.kpi_casos'), valor: null, estado: sinLeer > 0 ? 'error' as const : 'vacio' as const, mensaje: t('evals.sin_corrida_registrada') }
+            : {
+              etiqueta: ta('evals_panel.kpi_casos'), valor: todosCasos.length, formato: 'entero' as const,
+              tono: casosFallo > 0 ? 'bad' as const : undefined,
+              nota: ta('evals_panel.kpi_casos_nota', { paso: numero(casosPaso, idioma), fallo: numero(casosFallo, idioma), revisar: numero(casosRevisar, idioma) }),
+              segmentos: [{ etiqueta: ta('evals_panel.paso'), valor: casosPaso }, { etiqueta: ta('evals_panel.fallo'), valor: casosFallo }, { etiqueta: ta('evals_panel.revisar'), valor: casosRevisar }],
+            },
+      ]), ta('evals_panel.observado'))}
     >
       {secciones.map(({ agente, titulo, estado, porCaso }) => (
         <Tarjeta key={agente} titulo={titulo} estado={estado === null ? 'error' : 'ok'} mensaje={t('evals.no_se_pudo_leer_el_estado', { agente })} reintentar>
@@ -216,6 +234,18 @@ export default async function Evals({
 
               {/* La calificación desglosada que dejó el runner (trampas, inventos, falsa cautela), tal cual, buena o mala. */}
               {estado.ultima?.notas ? <p className="rv-evals__nota">{rico(t('evals.strong_calificacion_de_la_ultima_corrida'), { strong: (c) => <strong>{c}</strong> })}{' '}{estado.ultima.notas}</p> : null}
+
+              {porCaso.length > 0 ? (
+                <BarraApilada
+                  etiqueta={ta('evals_panel.barra', { agente })}
+                  formato={(v) => numero(v, idioma)}
+                  tramos={[
+                    { etiqueta: ta('evals_panel.paso'), valor: cuenta(porCaso, 'paso') },
+                    { etiqueta: ta('evals_panel.fallo'), valor: cuenta(porCaso, 'fallo') },
+                    { etiqueta: ta('evals_panel.revisar'), valor: cuenta(porCaso, 'revisar') },
+                  ]}
+                />
+              ) : null}
 
               <TablaBase
                 etiqueta={t('evals.ultima_corrida_del_caso_por_caso', { agente })}
@@ -246,5 +276,5 @@ export default async function Evals({
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('admin_sistema');
-  return { title: t('qa_corrida_viva.calidad') };
+  return { title: t('evals.examenes') };
 }

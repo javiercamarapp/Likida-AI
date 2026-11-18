@@ -38,7 +38,7 @@ describe('el marco del dashboard en inglés (i18n P1)', () => {
   it('traduce navegación, cabeceras, barra móvil, telón, pie y menú de cuenta, sin español suelto', () => {
     const h = marco(true);
     const visible = legible(h);
-    for (const t of ['Skip to content', 'Main navigation', 'Mobile navigation', 'Trips', 'Team', 'Overview', 'Operations', 'Money and tax', 'Loading', 'Likida, go to home', 'Notices', 'Collapse the menu', 'Search', 'Fleet owner']) {
+    for (const t of ['Skip to content', 'Main navigation', 'Mobile navigation', 'Trips', 'Team', 'Overview', 'Operations', 'Money and tax', 'Loading', 'Likida, go to home', 'Notices', 'Collapse the menu', 'Fleet owner']) {
       expect(visible, t).toContain(t);
     }
     expect(visible).not.toMatch(ESPANOL);
@@ -95,7 +95,7 @@ describe('el marco de /admin en inglés (i18n P1)', () => {
   it('traduce secciones, entradas, pie, cabecera y barra móvil', () => {
     const h = admin(true);
     const visible = legible(h);
-    for (const t of ['Console navigation', 'Business', 'System', 'Inbox', 'Customers', 'Sign out', 'View as', 'Customer dashboard', 'Superadmin', 'Mobile navigation', 'Search']) {
+    for (const t of ['Console navigation', 'Business', 'System', 'Inbox', 'Customers', 'Sign out', 'View as', 'Customer dashboard', 'Superadmin', 'Mobile navigation']) {
       expect(visible, t).toContain(t);
     }
     // (El panel del Copiloto es de otro paquete y sigue en español: por eso no se busca «Negocio» en todo el marco.)

@@ -1,0 +1,23 @@
+/* Auditoría visual 16-nov, lote B (superadmin): grupos de notas y colores con propósito. La nota en sí es el `Aviso` compartido de ui-v2
+   (ver nota-vacia.tsx); aquí no hay cajas ni movimiento propios. Solo tokens del sistema. */
+[data-ui="v2"] .aud16b-notas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 8px; align-items: start; min-width: 0; }
+
+/* Color con propósito en el Resumen y el back-office: el dinero que entra en --ok, lo vencido o por cobrar en --warn y el riesgo en
+   --bad; el rótulo siempre acompaña al color. */
+[data-ui="v2"] .aud16b-ok { color: var(--ok); font-weight: 600; }
+[data-ui="v2"] .aud16b-warn { color: var(--warn); font-weight: 600; }
+[data-ui="v2"] .aud16b-bad { color: var(--bad); font-weight: 600; }
+[data-ui="v2"] .adm-res-pares dd.aud16b-ok { color: var(--ok); }
+[data-ui="v2"] .adm-res-pares dd.aud16b-warn { color: var(--warn); }
+
+/* Leyenda visible bajo una gráfica: punto del color de la métrica + su nombre (el color nunca va solo). */
+[data-ui="v2"] .aud16b-leyenda { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 8px 0 0; padding: 0; list-style: none; font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .aud16b-leyenda li { display: inline-flex; align-items: center; gap: 6px; }
+[data-ui="v2"] .aud16b-leyenda i { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--aud-punto, var(--chart-1)); flex: none; }
+[data-ui="v2"] .aud16b-leyenda [data-m="1"] { --aud-punto: var(--chart-1); }
+[data-ui="v2"] .aud16b-leyenda [data-m="2"] { --aud-punto: var(--chart-2); }
+[data-ui="v2"] .aud16b-leyenda [data-m="3"] { --aud-punto: var(--chart-3); }
+[data-ui="v2"] .aud16b-leyenda [data-m="4"] { --aud-punto: var(--chart-4); }
+[data-ui="v2"] .aud16b-leyenda [data-m="ok"] { --aud-punto: var(--ok); }
+[data-ui="v2"] .aud16b-leyenda [data-m="warn"] { --aud-punto: var(--warn); }
+[data-ui="v2"] .aud16b-leyenda [data-m="bad"] { --aud-punto: var(--bad); }

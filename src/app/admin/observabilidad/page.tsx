@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '../sello-observado';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
@@ -8,18 +9,18 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { corridasRecientes, type CorridaCruzada } from '@/lib/admin/corridas-cruzadas';
 import { getLatencias, type LatenciasMedidas, type FilaLatencia, type FilaLatenciaIa } from '@/lib/admin/slo';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { BotonEnlace, Disclosure, EstadoError, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { BotonEnlace, Disclosure, EstadoError, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type ResultadoAccion, type TonoEstado } from '../../ui-v2/componentes';
 import { SeccionInterruptores, type InterruptorParaUi } from './interruptores-ui';
 import { etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
 import { nombreReloj as nombreRelojTr } from '../crons/estado-relojes';
 import { CRONS, type CronId } from '@/lib/admin/salud';
-import type { ResultadoAccion } from '../ui/forma';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { BarList } from '../../ui-v2/graficas';
 import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,12 +139,12 @@ export default async function ObservabilidadPage() {
       titulo={t('observabilidad.observabilidad')}
       apoyo={t('observabilidad.apagar_un_agente_en_segundos_ver')}
       etiquetaCifras={t('observabilidad.interruptores')}
-      cifras={uniformes([
+      cifras={observadas(uniformes([
         { etiqueta: t('observabilidad.kpi_apagados'), valor: apagados, formato: 'entero', estado: apagados === null ? 'error' : 'ok', reintentar: true, tono: apagados ? 'bad' : undefined, nota: interruptores === null ? undefined : t('observabilidad.kpi_de_interruptores', { n: interruptores.length }) },
         { etiqueta: t('observabilidad.kpi_corridas_fallo'), valor: conFallo, formato: 'entero', estado: conFallo === null ? 'error' : 'ok', reintentar: true, tono: conFallo ? 'bad' : undefined, nota: corridas === null ? undefined : t('observabilidad.kpi_de_corridas', { n: corridas.length }) },
         { etiqueta: t('observabilidad.kpi_p95'), valor: peor === null ? null : msLegible(peor.p95Ms), estado: rutas === null ? 'error' : peor === null ? 'vacio' : 'ok', reintentar: true, mensaje: rutas === null ? undefined : t('observabilidad.sin_muestras_todavia'), nota: peor?.nombre },
         { etiqueta: t('observabilidad.kpi_fallos_rutas', { dias }), valor: fallosRutas, formato: 'entero', estado: fallosRutas === null ? 'error' : 'ok', reintentar: true, tono: fallosRutas ? 'warn' : undefined },
-      ])}
+      ]), t('a1r4.observado'))}
       variante="6-6"
       graficas={[
         // Un solo bloque por dato: con el historial vacío o ilegible, «Corridas recientes» (abajo) ya lo dice; no se repite el mismo vacío en una gráfica.

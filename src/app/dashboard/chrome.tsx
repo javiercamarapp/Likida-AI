@@ -9,6 +9,8 @@ import { EnlaceCuenta } from './enlace-cuenta';
 import { ROL_BADGE, type RolAppUser } from '@/lib/auth/provisionar';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { ProveedorNotificaciones } from '../admin/ui/notificaciones';
+import { trDashboardAEs } from '@/lib/i18n/tr_dashboard_a';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 
 /**
  * El marco visual de /dashboard — fondo shader, sidebar glass con el logo,
@@ -29,7 +31,7 @@ import { ProveedorNotificaciones } from '../admin/ui/notificaciones';
  */
 
 export default function DashboardChrome({
-  nombre, rol, cerrarSesion, usoIa, perfil, children,
+  nombre, rol, cerrarSesion, usoIa, perfil, t = trDashboardAEs, children,
 }: {
   nombre: string | null;
   rol: string;
@@ -41,6 +43,8 @@ export default function DashboardChrome({
   usoIa?: { pct: number } | null;
   /** Perfil de la flota (0770), leído por layout.tsx. Recorta el menú; sin él, el de siempre. */
   perfil?: PerfilTenant | null;
+  /** Traductor de `dashboard_a` (lo arma el layout con `getT`); sin él, español (pruebas de render). */
+  t?: TrDe<'dashboard_a'>;
   children: React.ReactNode;
 }) {
   return (
@@ -54,7 +58,7 @@ export default function DashboardChrome({
       <a href="#contenido-principal"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:px-4 focus:py-2 focus:text-[13px] focus:font-medium"
         style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-        Saltar al contenido
+        {t('chr.saltar')}
       </a>
       <div className={MARCO_FILA}>
         <aside className={`${MARCO_SIDEBAR} sb-aside`}>
@@ -73,7 +77,7 @@ export default function DashboardChrome({
                 no hay badge. */}
           </div>
 
-          <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
+          <nav aria-label={t('chr.navPrincipal')} className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
             <SidebarNav rol={rol} perfil={perfil} />
           </nav>
 
@@ -108,13 +112,13 @@ export default function DashboardChrome({
                     `useSearchParams()` — `layout.tsx` no recibe `searchParams`,
                     limitación de Next.js documentada ahí mismo). */}
                 <EnlaceCuenta rol={rol} className="block text-[13px] font-medium hover:opacity-70 transition-opacity truncate leading-tight">
-                  {(nombre ?? '').trim() || 'Mi cuenta'}
+                  {(nombre ?? '').trim() || t('chr.miCuenta')}
                 </EnlaceCuenta>
                 <div className="text-[11px] truncate" style={{ color: 'var(--faint)' }}>{ROL_BADGE[rol as RolAppUser] ?? rol.toUpperCase()}</div>
               </div>
               {cerrarSesion && (
                 <form action={cerrarSesion} className="shrink-0">
-                  <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión"
+                  <button type="submit" title={t('chr.cerrarSesion')} aria-label={t('chr.cerrarSesion')}
                     className="rv-icono-boton"
                     style={{ color: 'var(--bad)' }}>
                     <LogOut width={14} height={14} strokeWidth={1.75} />

@@ -41,7 +41,7 @@
 }
 
 /* F26 ronda 4: el vacío dentro de una tarjeta va punteado (Rovaq `ac-vacio`: 1 px, radio 8, 20×14). */
-[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; align-items: baseline; gap: 2px 10px; max-height: none; text-align: left; border: 1px solid var(--line2, var(--line)); border-radius: 8px; padding: 8px 12px; background: var(--ui-sunken); }
 
 /* F26 ronda 5 · zona de soltar de Insumos (Rovaq): 1.5 px punteado, fondo hundido, radio 12, padding 20×16. */
 [data-ui="v2"] .rv-insumos-zona { gap: 6px; padding: 20px 16px; border: 1.5px dashed var(--line2); border-radius: 12px; background: var(--canvas); text-align: center; }
@@ -51,4 +51,36 @@
 @media (max-width: 819px) {
   [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn { position: relative; min-height: 36px; }
   [data-ui="v2"] .rv-seg.rv-seg .rv-seg__btn::after { content: ""; position: absolute; inset: -4px 0; }
+}
+
+/* Insumos de un agente (sin clases de utilidad a mano): pila de formularios, zona de soltar y lista de lo ya entregado. */
+[data-ui="v2"] .rv-insumos-pila { display: flex; flex-direction: column; gap: 12px; }
+[data-ui="v2"] .rv-insumos-ayuda { margin: 0 0 12px; font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .rv-insumos-zona { display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: border-color 150ms; }
+[data-ui="v2"] .rv-insumos-zona__icono { color: var(--muted); }
+[data-ui="v2"] .rv-insumos-zona__texto { margin: 0; padding: 0 16px; font-size: var(--t-body); text-align: center; }
+[data-ui="v2"] .rv-insumos-lista { margin: 0; padding: 0; list-style: none; }
+[data-ui="v2"] .rv-insumos-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line2, var(--line)); }
+[data-ui="v2"] .rv-insumos-item:first-child { padding-top: 0; border-top: 0; }
+[data-ui="v2"] .rv-insumos-item:last-child { padding-bottom: 0; }
+[data-ui="v2"] .rv-insumos-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+[data-ui="v2"] .rv-insumos-nombre { display: flex; align-items: center; gap: 8px; min-width: 0; }
+[data-ui="v2"] .rv-insumos-nombre__t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-body); font-weight: 500; }
+[data-ui="v2"] .rv-insumos-tipo { display: inline-flex; color: var(--muted); }
+[data-ui="v2"] .rv-insumos-ver { flex: none; font-size: var(--t-small); color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+[data-ui="v2"] .rv-insumos-meta { font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .rv-insumos-meta a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Auditoría 16-nov (lote A): catálogo completo sin paginar, resumen bajo la tabla en 2 columnas, entrada escalonada y hover de fila. */
+.rv-agente-resumen { align-items: start; margin-top: var(--ui-rhythm); }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes rv-agente-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  [data-ui="v2"] .rv-tl tbody tr:has(.rv-agente-sub) { animation: rv-agente-entra 160ms ease-out both; }
+  [data-ui="v2"] .rv-tl tbody tr:has(.rv-agente-sub):nth-child(n+2) { animation-delay: 12ms; }
+  [data-ui="v2"] .rv-tl tbody tr:has(.rv-agente-sub):nth-child(n+4) { animation-delay: 24ms; }
+  [data-ui="v2"] .rv-tl tbody tr:has(.rv-agente-sub):nth-child(n+8) { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-tl tbody tr:has(.rv-agente-sub):nth-child(n+14) { animation-delay: 60ms; }
+  .rv-agente-menu-btn.rv-btn { transition: transform 120ms ease-out; }
+  .rv-agente-menu-btn.rv-btn:hover { transform: translateY(-1px); }
+  .rv-agente-menu-btn.rv-btn:active { transform: scale(0.96); }
 }

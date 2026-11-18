@@ -5,6 +5,7 @@ import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
 import '../legal/publico-r2.css';
 import '../legal/flujo-publico.css';
+import { getT } from '@/lib/i18n/servidor';
 
 export const metadata = { title: 'Sin acceso — Likida' };
 
@@ -23,27 +24,28 @@ async function cerrarSesion() {
   redirect('/login');
 }
 
-export default function SinAcceso() {
+export default async function SinAcceso() {
+  const { t } = await getT('ui_comun');
   // Un correo de ayuda REAL o ninguno: no se inventa una dirección. Es público
   // (se pinta en el HTML), así que va en una variable `NEXT_PUBLIC_*`.
   const correoAyuda = envPuesta('NEXT_PUBLIC_SOPORTE_EMAIL') ? String(process.env.NEXT_PUBLIC_SOPORTE_EMAIL).trim() : null;
   return (
     <MarcoPublico
-      rotulo="Error 403"
-      titulo="Tu cuenta aún no tiene flota"
+      rotulo={t('sa.rotulo')}
+      titulo={t('sa.titulo')}
       ancho="estrecho"
-      apoyo="Iniciaste sesión, pero esta cuenta no está vinculada a ninguna flota en Likida."
+      apoyo={t('sa.apoyo')}
       acciones={
         <>
           <form action={cerrarSesion}>
-            <Boton type="submit" variante="primary">Cerrar sesión e ingresar con otra cuenta</Boton>
+            <Boton type="submit" variante="primary">{t('sa.cerrar')}</Boton>
           </form>
           {correoAyuda && (
             <a
-              href={`mailto:${correoAyuda}?subject=${encodeURIComponent('Mi cuenta no está vinculada a una flota')}`}
+              href={`mailto:${correoAyuda}?subject=${encodeURIComponent(t('sa.asunto'))}`}
               className="rv-pub__enlace"
             >
-              Escribir a ayuda: {correoAyuda}
+              {t('sa.escribir', { correo: correoAyuda })}
             </a>
           )}
         </>
@@ -51,11 +53,8 @@ export default function SinAcceso() {
     >
       <div className="rv-flujo" aria-hidden="true" />
       <div className="rv-pub__prosa rv-pub__sec">
-        <h2>Qué sabemos y qué puedes hacer</h2>
-        <p>
-          La sesión es válida, pero esta cuenta no está vinculada a ninguna flota de Likida. Pídele a tu administrador que
-          te dé de alta desde su panel (con el correo de esta sesión), o cierra sesión y entra con otra cuenta.
-        </p>
+        <h2>{t('sa.h2')}</h2>
+        <p>{t('sa.p')}</p>
       </div>
     </MarcoPublico>
   );

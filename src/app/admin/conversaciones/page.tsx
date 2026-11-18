@@ -10,16 +10,23 @@ import {
 import { MessageCircle, Search } from 'lucide-react';
 import { BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, Tarjeta } from '../../ui-v2/componentes';
 import { BarList, type PropsCifra } from '../../ui-v2/graficas';
+import { observadas } from '../sello-observado';
+import { uniformes } from '../cifras-uniformes';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
-import { FilaConversacion } from './hilo';
+import { FilaConversacion, type TextosFilaConversacion } from './hilo';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
 import '../resumen.css';
+import './conversaciones.css';
+import '../compacto-lote-a.css';
+import '../fin16c.css';
+import { NotaVacia } from '../nota-vacia';
 
 export const dynamic = 'force-dynamic';
 
 interface SearchParams { q?: string; p?: string }
 
-const TITULO_MENSAJES = 'Mensajes por conversación';
+type Tx = TrDe<'admin_agentes'>;
 
 /**
  * Conversaciones de WhatsApp — versión dedicada y de ancho completo de la
@@ -36,6 +43,8 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const { t: ts } = await getT('admin_sistema');
+  const { t } = await getT('admin_agentes');
+  const textos: TextosFilaConversacion = { nMensajes: t('conversaciones_pagina.n_mensajes'), sinMensajes: t('conversaciones_pagina.sin_mensajes') };
   const sp = await searchParams;
   // ADM-1: sin `?q=` se conserva la vista de siempre (las 20 más recientes,
   // con las tarjetas y el ranking). CON `?q=` se cambia a `buscarConversaciones`
@@ -48,16 +57,18 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   if (q) {
     const resultado = await buscarConversaciones({ q, pagina });
     return (
-      <PantallaConversaciones filtros={<CajaBusqueda q={q} />} apoyo={ts('conversaciones.apoyo')}>
-        <Tarjeta titulo={`"${q}" — ${resultado.total} conversación${resultado.total === 1 ? '' : 'es'}, página ${resultado.pagina} de ${resultado.paginas}`}>
+      <PantallaConversaciones titulo={t('conversaciones_pagina.titulo')} filtros={<CajaBusqueda q={q} t={t} />} apoyo={ts('conversaciones.apoyo')}>
+        <Tarjeta titulo={resultado.total === 1
+          ? t('conversaciones_pagina.busqueda_una', { q, pagina: resultado.pagina, paginas: resultado.paginas })
+          : t('conversaciones_pagina.busqueda_varias', { q, total: resultado.total, pagina: resultado.pagina, paginas: resultado.paginas })}>
           {resultado.filas.length === 0 ? (
-            <EstadoVacio titulo="Sin coincidencias" icono={Search} contenido>
-              Ningún teléfono contiene &quot;{q}&quot;.
+            <EstadoVacio titulo={t('conversaciones_pagina.sin_coincidencias')} icono={Search} contenido>
+              {t('conversaciones_pagina.ningun_telefono', { q })}
             </EstadoVacio>
           ) : (
-            <ListaConversaciones conversaciones={resultado.filas} />
+            <ListaConversaciones conversaciones={resultado.filas} t={t} textos={textos} />
           )}
-          <PaginadorConversaciones q={q} pagina={resultado.pagina} paginas={resultado.paginas} />
+          <PaginadorConversaciones q={q} pagina={resultado.pagina} paginas={resultado.paginas} t={t} />
         </Tarjeta>
       </PantallaConversaciones>
     );
@@ -71,56 +82,60 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
     getConversacionesActivas(), contarConversacionesActivas(),
   ]);
   const totalMensajes = conversaciones.reduce((s, c) => s + c.turns.length, 0);
+  // Quién escribe: lectura directa de los turnos de las conversaciones listadas (role user = chofer, el resto = bot).
+  const delChofer = conversaciones.reduce((s, c) => s + c.turns.filter((x) => x.role === 'user').length, 0);
   const recortado = total !== null && total > conversaciones.length;
 
   return (
     <PantallaConversaciones
-      filtros={<CajaBusqueda q="" />}
+      titulo={t('conversaciones_pagina.titulo')}
+      filtros={<CajaBusqueda q="" t={t} />}
       apoyo={ts('conversaciones.apoyo')}
-      etiquetaCifras="Conversaciones de WhatsApp"
-      cifras={[
+      etiquetaCifras={t('conversaciones_pagina.titulo')}
+      cifras={observadas(uniformes([
         {
-          etiqueta: 'Conversaciones activas', valor: total, formato: 'entero',
+          etiqueta: t('conversaciones_pagina.kpi_activas'), valor: total, formato: 'entero',
           estado: total === null ? 'vacio' : 'ok',
-          mensaje: 'No se pudo contar — esto no significa que no haya ninguna.',
+          mensaje: t('conversaciones_pagina.kpi_activas_error'),
         },
         { etiqueta: ts('conversaciones.mensajes_listados'), valor: totalMensajes, formato: 'entero', nota: conversaciones.length > 0 ? ts('conversaciones.listadas_n', { n: numero(conversaciones.length) }) : undefined },
-      ]}
+        totalMensajes === 0
+          ? { etiqueta: t('conversaciones_pagina.kpi_quien'), valor: null, estado: 'vacio' as const, mensaje: t('conversaciones_pagina.sin_activas') }
+          : {
+            etiqueta: t('conversaciones_pagina.kpi_quien'), valor: (delChofer / totalMensajes) * 100, formato: 'porcentaje' as const, nota: t('conversaciones_pagina.kpi_quien_nota'),
+            segmentos: [{ etiqueta: t('conversaciones_pagina.seg_choferes'), valor: delChofer }, { etiqueta: t('conversaciones_pagina.seg_bot'), valor: totalMensajes - delChofer }],
+          },
+      ]), t('conversaciones_pagina.observado'))}
     >
       {/* Mensajes por conversación (c.turns.length) es un conteo real que ya se calcula para el resumen de arriba, así que un
           ranking con HBars entre conversaciones es genuino — no una serie inventada. Solo con 2+ conversaciones: con 1 sola, un
           "ranking" de una barra no compara nada. */}
       {conversaciones.length > 1 && (
-        <Tarjeta titulo={TITULO_MENSAJES}>
-          <BarList etiqueta={TITULO_MENSAJES} items={conversaciones.map((c, i) => ({ clave: `${i}-${c.telefono}`, etiqueta: destinatarioEnmascarado(c.telefono), valor: c.turns.length }))} formato={(v) => numero(v)} />
+        <Tarjeta titulo={t('conversaciones_pagina.tit_mensajes')}>
+          <BarList etiqueta={t('conversaciones_pagina.tit_mensajes')} items={conversaciones.map((c, i) => ({ clave: `${i}-${c.telefono}`, etiqueta: destinatarioEnmascarado(c.telefono), valor: c.turns.length }))} formato={(v) => numero(v)} />
         </Tarjeta>
       )}
 
-      <Tarjeta titulo={recortado ? `Las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Todas las conversaciones'}>
+      <Tarjeta titulo={recortado ? t('conversaciones_pagina.recorte', { tope: TOPE_CONVERSACIONES, total: total ?? 0 }) : t('conversaciones_pagina.todas')}>
         {conversaciones.length === 0 ? (
-          <EstadoVacio titulo="Sin conversaciones activas" icono={MessageCircle} contenido>
+          <EstadoVacio titulo={t('conversaciones_pagina.sin_activas')} icono={MessageCircle} contenido>
             {ts('conversaciones.vacio_detalle')}
           </EstadoVacio>
         ) : (
-          <ListaConversaciones conversaciones={conversaciones} />
+          <ListaConversaciones conversaciones={conversaciones} t={t} textos={textos} />
         )}
       </Tarjeta>
 
-      {/* Lo que NO se sabe va en su caja punteada, DENTRO de una tarjeta y a la izquierda (Rovaq «Qué no se sabe»), no como un párrafo centrado suelto. */}
-      <Tarjeta titulo={ts('conversaciones.que_no_se_sabe')} className="adm-nosabe">
-        <p>
-          Todavía no hay colas por estado, búsqueda dentro de los mensajes ni traspaso a una persona: el bot sigue un flujo fijo (foto, lectura, confirmación y liquidación), no una charla abierta. Antes de construirlo hay que decidir si hace falta.
-        </p>
-        <p>
-          Volumen por canal y por hora: con una sola flota y pocos días de historia no dice nada real todavía.
-        </p>
-      </Tarjeta>
+      {/* Lo que NO se sabe va en una nota compacta con icono y sello (no en un recuadro alto). */}
+      <NotaVacia tono="warn" sello={ts('conversaciones.que_no_se_sabe')} className="fin16c-saber">
+        {t('conversaciones_pagina.no_se_sabe_1')} {t('conversaciones_pagina.no_se_sabe_2')}
+      </NotaVacia>
     </PantallaConversaciones>
   );
 }
 
-function PantallaConversaciones({ filtros, cifras, etiquetaCifras, apoyo, children }: { filtros: ReactNode; cifras?: PropsCifra[]; etiquetaCifras?: string; apoyo?: string; children: ReactNode }) {
-  return <EsqueletoTablaMaestra titulo="Conversaciones de WhatsApp" apoyo={apoyo} filtros={filtros} cifras={cifras} etiquetaCifras={etiquetaCifras}>{children}</EsqueletoTablaMaestra>;
+function PantallaConversaciones({ titulo, filtros, cifras, etiquetaCifras, apoyo, children }: { titulo: string; filtros: ReactNode; cifras?: PropsCifra[]; etiquetaCifras?: string; apoyo?: string; children: ReactNode }) {
+  return <EsqueletoTablaMaestra titulo={titulo} apoyo={apoyo} filtros={filtros} cifras={cifras} etiquetaCifras={etiquetaCifras}>{children}</EsqueletoTablaMaestra>;
 }
 
 /**
@@ -128,36 +143,39 @@ function PantallaConversaciones({ filtros, cifras, etiquetaCifras, apoyo, childr
  * `ConversacionesPage` con `buscarConversaciones` (ADM-1). El detalle de
  * cada fila enlaza a `/admin/conversaciones/[tenant]/[telefono]`.
  */
-function CajaBusqueda({ q }: { q: string }) {
+function CajaBusqueda({ q, t }: { q: string; t: Tx }) {
   return (
-    <BarraFiltros accion="/admin/conversaciones" enLinea buscar etiqueta="Buscar conversaciones" limpiarHref="/admin/conversaciones" nActivos={q ? 1 : 0}>
-      <FiltroBusqueda nombre="q" valor={q} placeholder="Buscar por teléfono…" etiqueta="Buscar por teléfono" maxLength={40} />
+    <BarraFiltros accion="/admin/conversaciones" enLinea buscar etiqueta={t('conversaciones_pagina.buscar_etq')} limpiarHref="/admin/conversaciones" nActivos={q ? 1 : 0}>
+      <FiltroBusqueda nombre="q" valor={q} placeholder={t('conversaciones_pagina.buscar_ph')} etiqueta={t('conversaciones_pagina.buscar_campo')} maxLength={40} />
     </BarraFiltros>
   );
 }
 
 /** La lista de conversaciones — cada fila enlaza al detalle cuando se conoce el tenant (siempre, salvo la fila rara sin `tenant_id`). */
-function ListaConversaciones({ conversaciones }: { conversaciones: ConversacionActiva[] }) {
+function ListaConversaciones({ conversaciones, t, textos }: { conversaciones: ConversacionActiva[]; t: Tx; textos: TextosFilaConversacion }) {
   return (
-    <div className="space-y-1.5">
-      {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} completo textoEnlace="Abrir en su propia página →" />)}
+    <div className="rv-conv-lista">
+      {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} completo textoEnlace={t('conversaciones_pagina.abrir')} textos={textos} />)}
     </div>
   );
 }
 
 /** Paginador de la búsqueda por teléfono — enlaces GET simples, `?q=&p=`. */
-function PaginadorConversaciones({ q, pagina, paginas }: { q: string; pagina: number; paginas: number }) {
+function PaginadorConversaciones({ q, pagina, paginas, t }: { q: string; pagina: number; paginas: number; t: Tx }) {
   if (paginas <= 1) return null;
   const href = (p: number) => `/admin/conversaciones?q=${encodeURIComponent(q)}&p=${p}`;
   return (
-    <div className="mt-3 flex items-center justify-between text-xs text-muted">
-      <span>Página {pagina} de {paginas}</span>
-      <div className="flex gap-2">
-        {pagina > 1 && <BotonEnlace href={href(pagina - 1)} variante="secondary" tamano="sm">Anterior</BotonEnlace>}
-        {pagina < paginas && <BotonEnlace href={href(pagina + 1)} variante="secondary" tamano="sm">Siguiente</BotonEnlace>}
+    <div className="rv-conv-pag">
+      <span>{t('conversaciones_pagina.pagina', { pagina, paginas })}</span>
+      <div className="rv-conv-pag__acciones">
+        {pagina > 1 && <BotonEnlace href={href(pagina - 1)} variante="secondary" tamano="sm">{t('conversaciones_pagina.anterior')}</BotonEnlace>}
+        {pagina < paginas && <BotonEnlace href={href(pagina + 1)} variante="secondary" tamano="sm">{t('conversaciones_pagina.siguiente')}</BotonEnlace>}
       </div>
     </div>
   );
 }
 
-export const metadata: Metadata = { title: 'Conversaciones' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_agentes');
+  return { title: t('conversaciones_pagina.metadata') };
+}

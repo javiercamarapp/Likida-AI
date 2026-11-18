@@ -5,6 +5,8 @@ import { Chip } from '../../componentes/chip';
 import { CheckDibujado } from './check-dibujado';
 import { Ilustracion } from './ilustraciones';
 import type { Instantanea } from './tipos';
+import { useT } from '@/lib/i18n/proveedor';
+import { onboarding as onbEs } from '@/lib/i18n/es/onboarding';
 
 // La tarjeta del recorrido (medidas y orden de la guía de Vexa): fija abajo a la derecha, 380 px, ilustración, dos contadores
 // (PASO n DE N y PANTALLA n DE N), barra de avance, título, cuerpo, nota, ruta de pantallas y tres botones. Presentacional y
@@ -30,20 +32,21 @@ export interface PropsGlobo {
 
 /** Lo que dice la tarjeta de un paso `hacer`/`practicar` según lo que mide el servidor. Texto + marca: nunca solo color. */
 export function EstadoDelPaso({ snap, onDeclarar }: { snap: Instantanea; onDeclarar?: () => void }) {
+  const { t } = useT('onboarding', onbEs);
   const paso = snap.paso;
   const e = snap.espera;
   if (!paso || (paso.tipo !== 'hacer' && paso.tipo !== 'practicar') || !e) return null;
   const hecho = e.estado === 'hecho';
   return (
     <div className="rv-onb__estado" role="status" data-estado={e.estado}>
-      {paso.tipo === 'practicar' ? <Chip>Datos de muestra</Chip> : null}
-      {e.estado === 'leyendo' ? <span>Comprobando…</span> : null}
-      {e.estado === 'esperando' ? <span>Esperando que lo hagas</span> : null}
-      {hecho ? <span className="rv-onb__hecho"><CheckDibujado tamano={16} /> Hecho{e.evidencia === 'confirmado' ? ', confirmado por ti' : ''}</span> : null}
-      {e.estado === 'ya_hecho' ? <span className="rv-onb__hecho"><CheckDibujado tamano={16} /> Ya lo tenías. Puedes continuar.</span> : null}
-      {e.estado === 'sin_dato' ? <span>No pude comprobarlo desde aquí.</span> : null}
+      {paso.tipo === 'practicar' ? <Chip>{t('ui.estado.muestra')}</Chip> : null}
+      {e.estado === 'leyendo' ? <span>{t('ui.estado.comprobando')}</span> : null}
+      {e.estado === 'esperando' ? <span>{t('ui.estado.esperando')}</span> : null}
+      {hecho ? <span className="rv-onb__hecho"><CheckDibujado tamano={16} /> {t(e.evidencia === 'confirmado' ? 'ui.estado.hecho_confirmado' : 'ui.estado.hecho')}</span> : null}
+      {e.estado === 'ya_hecho' ? <span className="rv-onb__hecho"><CheckDibujado tamano={16} /> {t('ui.estado.ya_hecho')}</span> : null}
+      {e.estado === 'sin_dato' ? <span>{t('ui.estado.sin_dato')}</span> : null}
       {e.declarable && !hecho && e.estado !== 'ya_hecho' && onDeclarar
-        ? <button type="button" className="rv-onb__enlace" onClick={onDeclarar}>Ya lo hice</button> : null}
+        ? <button type="button" className="rv-onb__enlace" onClick={onDeclarar}>{t('ui.estado.ya_lo_hice')}</button> : null}
     </div>
   );
 }
@@ -56,6 +59,7 @@ export function ventanaDeRuta(nombres: readonly string[], actual: number, tam = 
 }
 
 export function GloboTour({ snap, lado = 'der', centrada = false, refGlobo, onSiguiente, onAtras, onSaltar, onIrAlElemento, onDeclarar }: PropsGlobo) {
+  const { t } = useT('onboarding', onbEs);
   const paso = snap.paso;
   if (!paso) return null;
   const n = snap.pasoN ?? snap.indice + 1;
@@ -74,58 +78,58 @@ export function GloboTour({ snap, lado = 'der', centrada = false, refGlobo, onSi
       ref={refGlobo}
       className="rv-onb"
       role="region"
-      aria-label={`Recorrido guiado, paso ${n} de ${total}`}
+      aria-label={t('ui.globo.region', { n, total })}
       data-tipo={paso.tipo ?? 'info'}
       data-lado={lado}
       data-centrada={centrada || undefined}
       data-reducido={snap.reducirMovimiento || undefined}
       tabIndex={-1}
     >
-      <div className="rv-sr" aria-live="polite">{`Paso ${n} de ${total}: ${paso.titulo}`}</div>
+      <div className="rv-sr" aria-live="polite">{t('ui.globo.anuncio', { n, total, titulo: paso.titulo })}</div>
       <div className="rv-onb__marco" aria-hidden="true"><Ilustracion nombre={paso.ilu} /></div>
 
       <div className="rv-onb__cab">
-        <p className="rv-onb__contador">Paso {n} de {total}</p>
-        {!cierre && nombres.length > 0 ? <p className="rv-onb__contador">Pantalla {grupoN} de {nombres.length}</p> : null}
+        <p className="rv-onb__contador">{t('ui.globo.paso', { n, total })}</p>
+        {!cierre && nombres.length > 0 ? <p className="rv-onb__contador">{t('ui.globo.pantalla', { n: grupoN, total: nombres.length })}</p> : null}
       </div>
-      <progress className="rv-onb__avance" value={n} max={total} aria-label={`Avance del recorrido: paso ${n} de ${total}`} />
+      <progress className="rv-onb__avance" value={n} max={total} aria-label={t('ui.globo.avance', { n, total })} />
 
       <h2 className="rv-onb__titulo">{paso.titulo}</h2>
       <p className="rv-onb__texto">{paso.texto}</p>
 
       {paso.accion && !esIr ? (
         <p className="rv-onb__accion">
-          <span>{paso.accion.verbo} aquí</span>
+          <span>{t('ui.globo.aqui', { verbo: paso.accion.verbo })}</span>
           <MoveRight width={14} height={14} strokeWidth={2} aria-hidden="true" />
           <strong>{paso.accion.objetivo}</strong>
         </p>
       ) : null}
 
       <EstadoDelPaso snap={snap} onDeclarar={onDeclarar} />
-      {snap.navegando ? <p className="rv-onb__nota">Te llevo a la página de este paso…</p> : null}
+      {snap.navegando ? <p className="rv-onb__nota">{t('ui.globo.navegando')}</p> : null}
       {snap.anclaLista === false ? (
-        <p className="rv-onb__nota">No veo este elemento en la pantalla ahora; sigue la explicación de aquí.</p>
+        <p className="rv-onb__nota">{t('ui.globo.sin_ancla')}</p>
       ) : null}
       {accion && !esIr && snap.anclaLista ? (
         <p className="rv-onb__nota">
-          Avanzo solo cuando lo hagas, o aprieta «Siguiente».
-          {onIrAlElemento ? <> <button type="button" className="rv-onb__enlace" onClick={onIrAlElemento}>Ir al elemento</button></> : null}
+          {t('ui.globo.avanzo')}
+          {onIrAlElemento ? <> <button type="button" className="rv-onb__enlace" onClick={onIrAlElemento}>{t('ui.globo.ir_elemento')}</button></> : null}
         </p>
       ) : null}
 
       {ruta.length > 0 ? (
-        <ol className="rv-onb__ruta" aria-label="Pantallas del recorrido">
+        <ol className="rv-onb__ruta" aria-label={t('ui.globo.ruta')}>
           {ruta.map((r) => <li key={r.nombre} data-actual={r.actual || undefined} aria-current={r.actual ? 'step' : undefined}>{r.nombre}</li>)}
         </ol>
       ) : null}
 
       <div className="rv-onb__pie">
-        {!cierre ? <Boton variante="ghost" onClick={onSaltar}>Omitir recorrido</Boton> : <span />}
+        {!cierre ? <Boton variante="ghost" onClick={onSaltar}>{t('ui.globo.omitir_recorrido')}</Boton> : <span />}
         <div className="rv-onb__der">
-          {!snap.esPrimero ? <Boton variante="secondary" onClick={onAtras}>Anterior</Boton> : null}
+          {!snap.esPrimero ? <Boton variante="secondary" onClick={onAtras}>{t('ui.globo.anterior')}</Boton> : null}
           {cierre && paso.cta ? <BotonEnlace variante="secondary" href={paso.cta.ruta} onClick={onSiguiente}>{paso.cta.etiqueta}</BotonEnlace> : null}
           <Boton variante="primary" onClick={onSiguiente} data-onb-primario icono={snap.esUltimo ? undefined : <ArrowRight width={14} height={14} aria-hidden="true" />}>
-            {snap.esUltimo ? 'Terminar' : esIr ? 'Llévame' : pideHacer ? (cumplido ? 'Continuar' : 'Omitir este paso') : 'Siguiente'}
+            {t(snap.esUltimo ? 'ui.globo.terminar' : esIr ? 'ui.globo.llevame' : pideHacer ? (cumplido ? 'ui.globo.continuar' : 'ui.globo.omitir_paso') : 'ui.globo.siguiente')}
           </Boton>
         </div>
       </div>

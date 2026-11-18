@@ -28,6 +28,7 @@ import {
 } from './acciones';
 import './tablero.css';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { NotaVacia } from '../nota-vacia';
 
 const RUTA = '/admin/vendedores';
 
@@ -93,8 +94,8 @@ export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string |
 function BloqueComisiones({ tx = T_SISTEMA_ES }: { tx?: TSistema }) {
   const regla = reglaComision();
   return (
-    <Tarjeta titulo={tx('vendedores_consola_vendedores.comisiones_de_vendedores')} estado="vacio" contenida mensaje={tx('vendedores_consola_vendedores.falta_aun_no_hay_base_para')}
-      detalle={tx('vendedores_consola_vendedores.hace_falta_ligar_cada_prospecto_cerrado')}>
+    <Tarjeta titulo={tx('vendedores_consola_vendedores.comisiones_de_vendedores')} contenida>
+      <NotaVacia tono="warn" titulo={tx('vendedores_consola_vendedores.falta_aun_no_hay_base_para')}>{tx('vendedores_consola_vendedores.hace_falta_ligar_cada_prospecto_cerrado')}</NotaVacia>
       <p className="ven-regla"><span>{regla.primerMes}</span><span>{regla.recurrente}</span></p>
     </Tarjeta>
   );
@@ -161,7 +162,7 @@ async function BloqueEmbudo({ sp }: { sp: { vendedor?: string; q?: string } }) {
   if (prospectos === null) return <Tarjeta titulo={titulo} estado="error" mensaje={t('ventas.embudo.error')} reintentar elevar entra="tarjeta" />;
   if (!totales) return <Tarjeta titulo={titulo} estado="error" mensaje={t('ventas.embudo.error')} reintentar elevar entra="tarjeta" />;
   const { etapas, fuera, enRuta } = embudoDeVentas(totales);
-  if (enRuta === 0) return <Tarjeta titulo={titulo} estado="vacio" mensaje={t('ventas.embudo.vacio')} contenida elevar entra="tarjeta" />;
+  if (enRuta === 0) return <Tarjeta titulo={titulo} elevar entra="tarjeta" contenida><NotaVacia titulo={t('ventas.embudo.vacio')} /></Tarjeta>;
   // Embudo compacto (Rovaq «Análisis»): una fila por etapa con barra de 6 px, la cifra exacta y su parte de la primera etapa en píldora.
   const base = etapas.find((e) => e.valor !== null && e.valor > 0)?.valor ?? null;
   const items = etapas.map((e) => ({
@@ -170,7 +171,7 @@ async function BloqueEmbudo({ sp }: { sp: { vendedor?: string; q?: string } }) {
   }));
   return (
     <Tarjeta titulo={titulo} elevar entra="tarjeta">
-      <BarList items={items} etiqueta={t('ventas.embudo.etiqueta')} matiz={8} />
+      <BarList items={items} etiqueta={t('ventas.embudo.etiqueta')} matiz={1} />
       <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t('ventas.embudo.nota', { enRuta: numero(enRuta, idioma), fuera: numero(fuera, idioma) })}</p>
     </Tarjeta>
   );
@@ -256,8 +257,9 @@ async function BloqueDesempeno() {
   }
   if (vendedores.length === 0) {
     return (
-      <Tarjeta titulo={tx('vendedores_consola_vendedores.desempeno_por_vendedor')} estado="vacio" mensaje={tx('vendedores_consola_vendedores.sin_vendedores_todavia')}
-        detalle={tx('vendedores_consola_vendedores.invita_al_primero_mas_abajo_entra')} />
+      <Tarjeta titulo={tx('vendedores_consola_vendedores.desempeno_por_vendedor')} contenida>
+        <NotaVacia titulo={tx('vendedores_consola_vendedores.sin_vendedores_todavia')}>{tx('vendedores_consola_vendedores.invita_al_primero_mas_abajo_entra')}</NotaVacia>
+      </Tarjeta>
     );
   }
   const columnas: ColumnaBase<VendedorRow>[] = [

@@ -9,6 +9,28 @@
 .rv-act__dia:hover { transform: scale(1.25); }
 .rv-act__dia[data-activo] { outline: 1.5px solid var(--marca); outline-offset: 1px; }
 .rv-act__dia:has(:focus-visible) { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
-.rv-act__lectura { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.rv-act__lectura { margin: 6px 0 0; font-size: var(--t-small); color: var(--muted); }
 .rv-act__lectura b { color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { .rv-act__dia { transition: none; } .rv-act__dia:hover { transform: none; } }
+
+/* Pantalla Dev: listas densas de commits y CI, y el atajo al repositorio (sin utilidades de Tailwind). */
+[data-ui="v2"] .adm-dev-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-dev-item { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: var(--t-small); }
+[data-ui="v2"] .adm-dev-item:last-child { border-bottom: 0; }
+[data-ui="v2"] .adm-dev-item__sha { flex: none; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--t-micro); color: var(--muted); }
+[data-ui="v2"] .adm-dev-item__texto { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); text-decoration: none; }
+[data-ui="v2"] .adm-dev-item__texto:hover { text-decoration: underline; }
+[data-ui="v2"] .adm-dev-item__meta { flex: none; font-size: var(--t-micro); color: var(--muted); }
+[data-ui="v2"] .adm-dev-repo { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line2); border-radius: 8px; background: var(--ui-sunken); color: var(--ink); text-decoration: none; }
+[data-ui="v2"] .adm-dev-repo:hover { background: var(--ui-surface); border-color: var(--ui-focus); }
+[data-ui="v2"] .adm-dev-repo svg { flex: none; color: var(--muted); }
+[data-ui="v2"] .adm-dev-repo__texto { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+[data-ui="v2"] .adm-dev-repo__titulo { font-size: var(--t-body); font-weight: 500; }
+[data-ui="v2"] .adm-dev-repo__detalle { font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .adm-dev-nota { margin: 0; font-size: var(--t-small); line-height: 1.5; color: var(--muted); }
+[data-ui="v2"] .adm-dev-actividad { display: flex; align-items: flex-start; gap: 20px; }
+[data-ui="v2"] .adm-dev-actividad > :first-child { flex: 1 1 auto; min-width: 0; }
+[data-ui="v2"] .adm-dev-evento { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+@media (max-width: 767px) { [data-ui="v2"] .adm-dev-actividad { flex-direction: column; } }
+[data-ui="v2"] .adm-dev-num { font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .adm-dev-etq { font-size: var(--t-micro); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }

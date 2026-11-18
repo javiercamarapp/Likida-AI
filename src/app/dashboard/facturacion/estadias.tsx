@@ -126,6 +126,7 @@ export async function BloqueEstadias({
   sp: { tenant?: string; rol?: string; vista?: string };
 }) {
   const { t: tr } = await getT('dinero');
+  const { t: ta } = await getT('dashboard_a');
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) return null;
 
@@ -149,7 +150,7 @@ export async function BloqueEstadias({
 
   async function pactarFlota(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.estadias.tuRolNoPuede') };
@@ -159,7 +160,7 @@ export async function BloqueEstadias({
         tarifaHora: perilla(fd.get('tarifaHora')),
       }, s.userId);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'pactar la detención de flota') };
+      return { error: mensajeParaPantalla(e, 'pactar la detención de flota', idioma) };
     }
     revalidatePath(RUTA);
     return { ok: tr('facturacion.estadias.pactoDeFlotaGuardado') };
@@ -167,7 +168,7 @@ export async function BloqueEstadias({
 
   async function pactarCliente(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.estadias.tuRolNoPuede') };
@@ -179,7 +180,7 @@ export async function BloqueEstadias({
         tarifaHora: perilla(fd.get('tarifaHora')),
       }, s.userId);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'pactar la detención del cliente') };
+      return { error: mensajeParaPantalla(e, 'pactar la detención del cliente', idioma) };
     }
     // A37-S18-08: el pacto YA quedó escrito. El sitio se vincula en el mismo
     // envío (mismo gesto de configuración; '' = no tocar, 'ninguno' = desvincular),
@@ -190,7 +191,7 @@ export async function BloqueEstadias({
         await vincularSitioCliente(s.tenantId, clienteId, sitio === 'ninguno' ? null : sitio);
       } catch (e) {
         revalidatePath(RUTA);
-        const motivo = mensajeParaPantalla(e, 'vincular el sitio del cliente');
+        const motivo = mensajeParaPantalla(e, 'vincular el sitio del cliente', idioma);
         return { error: tr('facturacion.estadias.elPactoDelCliente', { motivo }) };
       }
     }
@@ -207,7 +208,7 @@ export async function BloqueEstadias({
         descripcion={<>
           {tr('facturacion.estadias.pactoDeFlotaAplica')}
           {panel.politicaFlota
-            ? ' ' + tr('facturacion.estadias.vigenteHLibresTarifa', { v: panel.politicaFlota.horasLibres ?? 'sin', v2: panel.politicaFlota.tarifaHora !== null ? mxn(panel.politicaFlota.tarifaHora) : tr('facturacion.estadias.sinPactar') })
+            ? ' ' + tr('facturacion.estadias.vigenteHLibresTarifa', { v: panel.politicaFlota.horasLibres ?? ta('est2.sin'), v2: panel.politicaFlota.tarifaHora !== null ? mxn(panel.politicaFlota.tarifaHora) : tr('facturacion.estadias.sinPactar') })
             : ' ' + tr('facturacion.estadias.sinPactoDeFlota')}
         </>}>
         <CampoTexto tipo="number" step="any" name="horasLibres" etiqueta={tr('facturacion.estadias.horasLibres')}

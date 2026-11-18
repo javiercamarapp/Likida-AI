@@ -1,4 +1,5 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
+import { observadas } from '@/app/admin/sello-observado';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -7,13 +8,16 @@ import { leerUltimasLecturas } from '@/lib/admin/qa-storage';
 import { agregar, agregarPorCampo, type Agregado, type AgregadoPorCampo } from '@/lib/admin/qa-verdad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { numero, usd, fechaCorta } from '@/lib/formato';
-import { Tarjeta, BotonEnlace } from '@/app/ui-v2/componentes';
+import { EstadoVacio, Tarjeta, BotonEnlace } from '@/app/ui-v2/componentes';
 import { Columnas } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { TablaModelosFase } from '../tarjeta-fase';
 import '../sistema.css';
 
 import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
+import '../compacto-lote-a.css';
+import { SaberesNotas } from '../saberes-notas';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -44,22 +48,22 @@ export default async function AgenteOcrPage() {
 
   return (
     <EsqueletoPanelCifras
-      area="Agentes"
+      area={t('agente_ocr.agentes')}
       titulo="OCR"
       apoyo={t('agente_ocr.ocr_la_lectura_de')}
       acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.medir_en_calidad')}</BotonEnlace>}
       etiquetaCifras="OCR"
-      cifras={uniformes([
+      cifras={observadas(uniformes([
           { etiqueta: t('agente_ocr.gastado_en_ocr'), valor: ocr ? ocr.costoUsd : 0, formato: 'usd', nota: t('agente_ocr.costo_medido_en_llm') },
           { etiqueta: t('agente_ocr.llamadas_de_ocr'), valor: ocr ? ocr.n : 0, formato: 'entero' },
           { etiqueta: t('agente_ocr.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero' },
           { etiqueta: t('agente_ocr.exactitud_global'), valor: precision === null ? null : precision.global.exactitud === null ? null : Math.round(precision.global.exactitud * 100), formato: 'porcentaje', estado: precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok', mensaje: precision === null ? undefined : t('agente_ocr.sin_medir_todavia'), nota: t('agente_ocr.contra_el_banco_de') },
-      ])}
+      ]), t('agentes_contenido.observado'))}
       graficas={[
         <Tarjeta key="serie" titulo={t('agente_ocr.serie_facturas')} contenida>
           {r.facturasPorDia.some((d) => d.n > 0)
             ? <Columnas etiqueta={t('agente_ocr.facturas_procesadas_por_dia')} datos={r.facturasPorDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.n }))} formato="numero" />
-            : <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.sin_facturas_en_7')}</b> {t('agente_ocr.aparecen_cuando_una_flota')}</p>}
+            : <EstadoVacio contenido titulo={t('agente_ocr.sin_facturas_en_7')}>{t('agente_ocr.aparecen_cuando_una_flota')}</EstadoVacio>}
         </Tarjeta>,
         <TablaModelosFase
           key="modelos"
@@ -68,31 +72,13 @@ export default async function AgenteOcrPage() {
           textos={{ modelo: ts('agente_fase.col_modelo'), llamadas: ts('agente_fase.col_llamadas'), costo: ts('agente_fase.col_costo'), vacio: t('agente_ocr.sin_modelos_tabla'), vacioDetalle: t('agente_ocr.no_modelo') }}
         />,
       ]}
-      saberes={{
-        seSabe: {
-          titulo: ts('saberes.se_sabe'),
-          items: [
-            t('agente_ocr.se_gasto', { costo: usd(ocr ? ocr.costoUsd : 0), n: numero(ocr ? ocr.n : 0) }),
-            t('agente_ocr.se_facturas', { n: numero(r.facturasTotal) }),
-            ...(precision !== null && precision.global.exactitud !== null ? [t('agente_ocr.se_exactitud', { pct: pct(precision.global.exactitud), campos: numero(precision.global.medidos), fotos: numero(precision.fotos) })] : []),
-          ],
-        },
-        noSeSabe: {
-          titulo: ts('saberes.no_se_sabe'),
-          items: [
-            t('agente_ocr.no_produccion'),
-            ...(precision === null || precision.global.exactitud === null ? [t('agente_ocr.no_sin_medir')] : []),
-            ...(!desgloseSeparable ? [t('agente_ocr.no_modelo')] : []),
-          ],
-        },
-      }}
     >
       <Tarjeta key="lee" titulo={t('agente_ocr.que_tan_bien_lee')}
         acciones={precision === null || precision.global.exactitud === null ? <BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.abrir_calidad')}</BotonEnlace> : undefined}>
         {precision === null ? (
-          <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.no_se_pudo_leer')}</b> {t('agente_ocr.sin_campos_medidos_no')}</p>
+          <EstadoVacio contenido titulo={t('agente_ocr.no_se_pudo_leer')}>{t('agente_ocr.sin_campos_medidos_no')}</EstadoVacio>
         ) : precision.global.exactitud === null ? (
-          <p className="adm-sis-vacio-linea" role="status"><b>{t('agente_ocr.el_ocr_todavia_no')}</b> {t('agente_ocr.sin_campos_medidos_no')}</p>
+          <EstadoVacio contenido titulo={t('agente_ocr.el_ocr_todavia_no')}>{t('agente_ocr.sin_campos_medidos_no')}</EstadoVacio>
         ) : (
           <>
             <p>
@@ -102,14 +88,32 @@ export default async function AgenteOcrPage() {
               <p>
                 {t('agente_ocr.lo_que_peor_se')}{' '}
                 {peores.map((c, i) => (
-                  <span key={c.clave}>{i > 0 && ' · '}<strong>{c.clave} {pct(c.exactitud)}</strong> ({numero(c.medidos)} {c.medidos === 1 ? t('agente_ocr.medicion') : 'mediciones'})</span>
+                  <span key={c.clave}>{i > 0 && ' · '}<strong>{c.clave} {pct(c.exactitud)}</strong> ({numero(c.medidos)} {c.medidos === 1 ? t('agente_ocr.medicion') : t('agente_ocr.mediciones')})</span>
                 ))}
               </p>
             ) : null}
-            <p>El detalle por foto y el botón para volver a medir viven en <Link href="/admin/qa">Calidad › Pruebas reales</Link>.</p>
+            <p>{rico(t('agente_ocr.detalle_calidad'), { enlace: (c) => <Link href="/admin/qa">{c}</Link> })}</p>
           </>
         )}
       </Tarjeta>
+      <SaberesNotas
+        seSabe={{
+          titulo: ts('saberes.se_sabe'),
+          items: [
+            t('agente_ocr.se_gasto', { costo: usd(ocr ? ocr.costoUsd : 0), n: numero(ocr ? ocr.n : 0) }),
+            t('agente_ocr.se_facturas', { n: numero(r.facturasTotal) }),
+            ...(precision !== null && precision.global.exactitud !== null ? [t('agente_ocr.se_exactitud', { pct: pct(precision.global.exactitud), campos: numero(precision.global.medidos), fotos: numero(precision.fotos) })] : []),
+          ],
+        }}
+        noSeSabe={{
+          titulo: ts('saberes.no_se_sabe'),
+          items: [
+            t('agente_ocr.no_produccion'),
+            ...(precision === null || precision.global.exactitud === null ? [t('agente_ocr.no_sin_medir')] : []),
+            ...(!desgloseSeparable ? [t('agente_ocr.no_modelo')] : []),
+          ],
+        }}
+      />
     </EsqueletoPanelCifras>
   );
 }

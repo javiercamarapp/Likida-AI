@@ -5,6 +5,8 @@ import { cx } from './clases';
 import { EstadoVacio } from './estado-vacio';
 import { EstadoError } from './estado-error';
 import { InfoTip } from './info-tip';
+import { idiomaUi, textoUi } from './texto-ui';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 export type EstadoTarjeta = 'ok' | 'vacio' | 'cargando' | 'error';
 
@@ -12,7 +14,9 @@ export type EstadoTarjeta = 'ok' | 'vacio' | 'cargando' | 'error';
  *  los MISMOS estados en todo el producto: vacío (título + una línea + UNA acción), cargando (esqueleto con la forma real, o los datos
  *  previos atenuados con `aria-busy` si no se da uno) y error blando («No disponible ahora. No es cero» + Reintentar).
  *  Una tarjeta nunca se pinta con una sola cifra suelta ni con vacío interior. */
-export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detalle, accionVacio, iconoVacio, contenida, formulario, esqueleto, onReintentar, reintentar, elevar, entra, children, className }: {
+export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detalle, accionVacio, iconoVacio, contenida, formulario, esqueleto, onReintentar, reintentar, elevar, entra, children, className, idioma }: {
+  /** Idioma de los textos por omisión (servidor sin proveedor); por omisión, es. */
+  idioma?: Idioma;
   titulo: string;
   /** Clave del catálogo de explicaciones: pone la ⓘ junto al título. */
   info?: InfoClave;
@@ -44,6 +48,8 @@ export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detall
   children?: ReactNode;
   className?: string;
 }) {
+  const idiomaEf = idiomaUi(idioma);
+  const t = textoUi(idiomaEf);
   return (
     <section className={cx('rv-tarjeta', className)} data-contenida={contenida || undefined} data-lift={elevar || undefined} data-entra={entra} aria-busy={estado === 'cargando' || undefined} data-estado={estado}>
       <header className="rv-tarjeta__cab">
@@ -52,8 +58,8 @@ export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detall
         {info ? <InfoTip clave={info} /> : null}
       </header>
       <div className="rv-tarjeta__cuerpo">
-        {estado === 'vacio' ? <EstadoVacio titulo={mensaje ?? 'Sin datos en el periodo'} accion={accionVacio} icono={iconoVacio} contenido={contenida}>{detalle}</EstadoVacio> : null}
-        {estado === 'error' ? <EstadoError onReintentar={onReintentar} reintentar={reintentar} compacto>{mensaje}</EstadoError> : null}
+        {estado === 'vacio' ? <EstadoVacio titulo={mensaje ?? t('comun.sin_datos_periodo')} accion={accionVacio} icono={iconoVacio} contenido={contenida}>{detalle}</EstadoVacio> : null}
+        {estado === 'error' ? <EstadoError onReintentar={onReintentar} reintentar={reintentar} compacto idioma={idiomaEf}>{mensaje}</EstadoError> : null}
         {estado === 'cargando' && esqueleto ? esqueleto : null}
         {estado === 'ok' || (estado === 'cargando' && !esqueleto) ? children : null}
         {formulario && (estado === 'ok' || estado === 'vacio') ? formulario : null}

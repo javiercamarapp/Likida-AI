@@ -10,6 +10,6 @@
 .rv-techo-forma .rv-campo { width: 112px; }
 .rv-techo-forma--cajon { display: block; }
 .rv-techo-forma--cajon .rv-campo { width: 100%; }
-.rv-techo-nota { margin: 0; font-size: 13px; color: var(--muted); }
+.rv-techo-nota { margin: 0; font-size: var(--t-body); color: var(--muted); }
 .rv-techo-tenue { color: var(--muted); }
-.rv-techo-como { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink); }
+.rv-techo-como { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--t-body); color: var(--ink); }

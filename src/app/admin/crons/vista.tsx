@@ -1,13 +1,16 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
 import { fechaHoraMx } from '@/lib/formato';
 import { CRONS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
-import { Aviso, Disclosure, EstadoError, StatusChip, type TonoEstado } from '../../ui-v2/componentes';
+import { Aviso, Disclosure, EstadoError, FilaTarjetas, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
+import { BarList, DonaMini } from '../../ui-v2/graficas';
+import { observadas } from '../sello-observado';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import {
   nombreReloj, oficioReloj, cadaCuanto, desdeHace, guiaDeArreglo, porQueNoCorrio, resumenDetalle, resumenRelojes,
 } from './estado-relojes';
 import '../sistema.css';
+import '../resumen.css';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
 import type { Idioma } from '@/lib/i18n/idioma';
@@ -74,6 +77,12 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
   const guias = lista.map((x) => guiaDeArreglo(x.cron, x.l, t)).filter((g) => g !== null);
   const nombres = (ids: CronId[]) => ids.map((c) => nombreReloj(t)[c]).join(', ');
   // Una columna que sale vacía («—» en todas las filas) no se pinta: no dice nada y estrecha las que sí.
+  // Edad del último latido como % de su propia cadencia (100 % = tocaba latir ya): lectura derivada de `cron_latido`, que solo guarda el
+  // último pulso — no hay historial de corridas que graficar. «Nunca latió» queda sin dato («—»), jamás como 0 %. Los 8 más viejos.
+  const edades = lista
+    .map((x) => ({ ...x, pct: x.l.haceMin === null ? null : Math.round(((x.l.haceMin * 60_000) / x.l.cadenciaMs) * 100) }))
+    .sort((a, b) => (b.pct ?? Infinity) - (a.pct ?? Infinity))
+    .slice(0, 8);
   const hayResultado = lista.some((x) => x.l.ultimoEstado !== null);
   const columnas = columnasTr(t, idioma).filter((c) => hayResultado || c.id !== 'resultado');
 
@@ -101,21 +110,48 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
       avisos={avisoGeneral}
       titulo={t('crons_vista.relojes')}
       apoyo={t('crons_vista.los_procesos_programados_del_sistema_cuando')}
-      cifras={latidos === null ? undefined : uniformes([
+      cifras={latidos === null ? undefined : observadas(uniformes([
         { etiqueta: t('crons_vista.kpi_total'), valor: CRONS.length, formato: 'entero' },
         { etiqueta: t('salud_sistema.relojes_a_tiempo'), valor: CRONS.length - malos.length, formato: 'entero', tono: malos.length > 0 ? 'bad' : parciales.length > 0 ? 'warn' : 'ok' },
         { etiqueta: t('crons_vista.kpi_sin_latir'), valor: sinLatir.length, formato: 'entero', tono: sinLatir.length > 0 ? 'bad' : undefined },
         { etiqueta: t('crons_vista.kpi_con_fallo'), valor: conFallo.length, formato: 'entero', tono: conFallo.length > 0 ? 'bad' : undefined },
         { etiqueta: t('crons_vista.kpi_parciales'), valor: parciales.length, formato: 'entero', tono: parciales.length > 0 ? 'warn' : undefined },
-      ])}
+      ]), t('a1r4.observado'))}
     >
       {latidos === null ? (
         <EstadoError reintentar>{t('crons_vista.no_se_pudo_leer_el_pulso')}</EstadoError>
       ) : (
         <>
+          <FilaTarjetas variante="6-6" className="adm-fila-pareja">
+            <Tarjeta titulo={t('crons_vista.grafica_pulso')}>
+              <DonaMini
+                etiqueta={t('crons_vista.grafica_pulso')}
+                centro={String(CRONS.length)}
+                formato="numero"
+                gajos={[
+                  { etiqueta: t('crons_vista.latiendo'), valor: lista.filter((x) => x.l.estado === 'ok').length },
+                  { etiqueta: t('crons_vista.no_late'), valor: lista.filter((x) => x.l.estado === 'vencido').length },
+                  { etiqueta: t('crons_vista.nunca_latio'), valor: lista.filter((x) => x.l.estado === 'sin_latido').length },
+                ]}
+              />
+            </Tarjeta>
+            <Tarjeta titulo={t('crons_vista.grafica_edad')}>
+              <BarList
+                etiqueta={t('crons_vista.grafica_edad')}
+                maximo={100}
+                items={edades.map((x) => ({
+                  clave: x.cron,
+                  etiqueta: nombreReloj(t)[x.cron],
+                  valor: x.pct,
+                  texto: x.pct === null ? undefined : t('crons_vista.pct_cadencia', { n: x.pct }),
+                  nota: desdeHace(x.l.haceMin, t),
+                }))}
+              />
+            </Tarjeta>
+          </FilaTarjetas>
+
           {guias.length > 0 ? (
-            <section className="adm-sis-bloque adm-sis-caja" aria-labelledby="que-falta">
-              <h2 className="adm-sis-titulo" id="que-falta">{t('crons_vista.que_falta_para_que_corran_completos')}</h2>
+            <Tarjeta titulo={t('crons_vista.que_falta_para_que_corran_completos')}>
               {guias.map((g) => (
                 <Aviso key={g.cron} tono="warn" titulo={nombreReloj(t)[g.cron]}>
                   {g.queFalta} {g.quien}
@@ -127,19 +163,15 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
                   </Disclosure>
                 </Aviso>
               ))}
-            </section>
+            </Tarjeta>
           ) : null}
 
-          <section className="adm-sis-bloque adm-sis-caja" aria-labelledby="relojes-uno-por-uno">
-            <div className="adm-sis-cab-caja">
-              <span className="adm-sis-eyebrow">{t('crons_vista.eyebrow_relojes')}</span>
-              <h2 className="adm-sis-titulo" id="relojes-uno-por-uno">{t('crons_vista.uno_por_uno')}</h2>
-            </div>
+          <Tarjeta titulo={t('crons_vista.uno_por_uno')}>
             <TablaLista<Fila>
               etiqueta={t('crons_vista.relojes_del_sistema_uno_por_uno')} columnas={columnas} filas={lista} idFila={(x) => x.cron} base="/admin/crons" params={{}}
             />
             <p className="adm-sis-nota">{t('crons_vista.el_pulso_lo_escribe_cada_reloj')}</p>
-          </section>
+          </Tarjeta>
         </>
       )}
     </EsqueletoTablaMaestra>

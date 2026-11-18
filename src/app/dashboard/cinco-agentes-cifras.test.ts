@@ -237,7 +237,7 @@ describe('fronteras del código', () => {
 
   it('el modelo no importa nada del servidor (ni base, ni perfil, ni reader)', () => {
     for (const ruta of importaciones(modelo)) {
-      expect(ruta).toMatch(/^@\/lib\/(likida\/peajes\/cierre_mensual|auth\/visibilidad|formato)$/);
+      expect(ruta).toMatch(/^@\/lib\/(likida\/peajes\/cierre_mensual|auth\/visibilidad|formato|i18n\/tr_tipos|i18n\/tr_dashboard_b)$/);
     }
   });
 

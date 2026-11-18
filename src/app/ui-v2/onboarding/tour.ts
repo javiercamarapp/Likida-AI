@@ -3,6 +3,8 @@ import { menuPorPerfil, hrefsConPestanas, hrefActivo, type MenuV2 } from '@/app/
 import { nombreDeRol } from '@/lib/auth/roles';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { ANCLA_TITULO, PANTALLAS } from './pantallas';
+import { ctxOnb, pantallaEn, type CtxOnb } from './idioma';
+import type { Idioma } from '@/lib/i18n/idioma';
 import { anclaNav, slugDe } from './anclas';
 import { pistaDeRol, rolTienePermiso } from './roles';
 import type { ClaveVariante, Modo, Pista, TextosPantalla } from './tipos';
@@ -54,8 +56,8 @@ function variante(rol: string, perfil: PerfilTenant | null | undefined): ClaveVa
 }
 
 /** Textos de una pantalla para un rol/perfil: el general, con la variante del rol o del perfil encima si la hay. */
-export function textosDe(href: string, rol: string, perfil?: PerfilTenant | null): { que: string; claveTitulo: string; claveTexto: string } {
-  const def = PANTALLAS[href];
+export function textosDe(href: string, rol: string, perfil?: PerfilTenant | null, idioma: Idioma = 'es'): { que: string; claveTitulo: string; claveTexto: string } {
+  const def = pantallaEn(href, idioma);
   let que = def.que, claveTitulo = def.clave.titulo, claveTexto = def.clave.texto;
   for (const k of variante(rol, perfil)) {
     const v = def.variantes?.[k];
@@ -67,8 +69,8 @@ export function textosDe(href: string, rol: string, perfil?: PerfilTenant | null
   return { que, claveTitulo, claveTexto };
 }
 
-export function accionDe(href: string, rol: string): TextosPantalla['accion'] | null {
-  const acc = PANTALLAS[href]?.accion;
+export function accionDe(href: string, rol: string, idioma: Idioma = 'es'): TextosPantalla['accion'] | null {
+  const acc = pantallaEn(href, idioma)?.accion;
   return acc && rolTienePermiso(rol, acc.permiso) ? acc : null;
 }
 
@@ -79,43 +81,41 @@ function entradaDe(menu: MenuV2, href: string) {
 }
 
 /** «Entrada · Pestaña» cuando la entrada agrupa varias pantallas; el nombre de la entrada si la pantalla es su única (o su misma) cara. */
-export function nombreDePantalla(menu: MenuV2, href: string): string {
+export function nombreDePantalla(menu: MenuV2, href: string, nav: (nombre: string) => string = (n) => n): string {
   const e = entradaDe(menu, href);
   if (!e) return href;
   const pestana = (e.pestanas ?? []).find((p) => p.href === href);
-  return pestana && (e.pestanas?.length ?? 0) > 1 && pestana.nombre !== e.nombre ? `${e.nombre} · ${pestana.nombre}` : e.nombre;
+  return pestana && (e.pestanas?.length ?? 0) > 1 && pestana.nombre !== e.nombre ? `${nav(e.nombre)} · ${nav(pestana.nombre)}` : nav(e.nombre);
 }
 
 /** El paso de cierre; ofrece pasar al asistente (Puesta en marcha / Arranque) si el rol lo ve. */
-function cierre(menu: MenuV2): PasoTour {
+function cierre(menu: MenuV2, cx: CtxOnb): PasoTour {
   const hrefs = hrefsConPestanas(menu);
   const asistente = hrefs.includes(HREF_ASISTENTE_PERFIL) ? HREF_ASISTENTE_PERFIL : hrefs.includes(HREF_ASISTENTE_FLOTA) ? HREF_ASISTENTE_FLOTA : null;
   return {
     id: 'cierre', tipo: 'cierre', ilu: 'cierre',
-    titulo: 'Listo. Aquí te dejo',
-    texto: asistente
-      ? 'Vuelve a la Guía cuando quieras: repite el recorrido o salta a una pantalla. Lo siguiente es tu lista de primeros pasos.'
-      : 'Vuelve a la Guía cuando quieras: repite el recorrido o salta a una pantalla. Si algo no queda claro, abre el Centro de ayuda.',
-    ...(asistente ? { cta: { etiqueta: asistente === HREF_ASISTENTE_PERFIL ? 'Ir a Puesta en marcha' : 'Ir a Arranque', ruta: asistente } } : {}),
+    titulo: cx.t('tour.cierre.titulo'),
+    texto: asistente ? cx.t('tour.cierre.texto_asistente') : cx.t('tour.cierre.texto_ayuda'),
+    ...(asistente ? { cta: { etiqueta: cx.t('tour.cierre.cta', { nombre: cx.t(asistente === HREF_ASISTENTE_PERFIL ? 'asistente.puesta' : 'asistente.arranque') }), ruta: asistente } } : {}),
   };
 }
 
 /** Los pasos de UNA pantalla (ir, que, clave, accion), con `previa` como ruta donde está el menú al llegar. */
-function pasosDePantalla(href: string, rol: string, perfil: PerfilTenant | null | undefined, menu: MenuV2, previa: string | undefined): Record<Clave, PasoTour | null> {
-  const t = textosDe(href, rol, perfil), def = PANTALLAS[href], slug = slugDe(href), nombre = nombreDePantalla(menu, href);
+function pasosDePantalla(href: string, rol: string, perfil: PerfilTenant | null | undefined, menu: MenuV2, previa: string | undefined, cx: CtxOnb): Record<Clave, PasoTour | null> {
+  const t = textosDe(href, rol, perfil, cx.idioma), def = pantallaEn(href, cx.idioma), slug = slugDe(href), nombre = nombreDePantalla(menu, href, cx.nav);
   // El menú pinta ENTRADAS: la ancla `nav-…` y el texto del clic son los de la entrada que contiene la pantalla (una pestaña no tiene ítem propio en el menú).
-  const entrada = entradaDe(menu, href), nombreMenu = entrada?.nombre ?? nombre;
+  const entrada = entradaDe(menu, href), nombreMenu = entrada ? cx.nav(entrada.nombre) : nombre;
   const base = { pantalla: href, nombrePantalla: nombre, ilu: def.ilu, tipo: 'info' as const };
-  const acc = accionDe(href, rol);
+  const acc = accionDe(href, rol, cx.idioma);
   return {
     ir: {
       ...base, tipo: 'ir', id: `${slug}.ir`, ruta: previa, ancla: anclaNav(entrada?.href ?? href), lado: 'derecha',
-      titulo: `Ve a ${nombre}`,
+      titulo: cx.t('tour.ir.titulo', { nombre }),
       texto: nombre === nombreMenu
-        ? `Haz clic en «${nombreMenu}» en el menú. Si prefieres, pulsa Llévame y lo hago por ti.`
-        : `Abre «${nombreMenu}» en el menú y elige la pestaña «${nombre.slice(nombreMenu.length + 3)}». Si prefieres, pulsa Llévame y lo hago por ti.`,
+        ? cx.t('tour.ir.texto', { menu: nombreMenu })
+        : cx.t('tour.ir.texto_pestana', { menu: nombreMenu, pestana: nombre.slice(nombreMenu.length + 3) }),
       avance: { tipo: 'accion', evento: 'click' },
-      accion: { verbo: 'Aprieta', objetivo: nombreMenu },
+      accion: { verbo: cx.t('tour.ir.verbo'), objetivo: nombreMenu },
     },
     que: { ...base, id: `${slug}.que`, ruta: href, ancla: ANCLA_TITULO, lado: 'abajo', titulo: nombre, texto: t.que },
     clave: { ...base, id: `${slug}.clave`, ruta: href, ancla: def.clave.ancla, lado: 'abajo', titulo: t.claveTitulo, texto: t.claveTexto },
@@ -127,7 +127,8 @@ function pasosDePantalla(href: string, rol: string, perfil: PerfilTenant | null 
 }
 
 /** Construye el recorrido de un rol/perfil. null = el rol no tiene recorrido (vendedor, rol desconocido) o su menú está vacío. */
-export function construirRecorrido(rol: string, perfil: PerfilTenant | null | undefined, modo: Modo = 'completo'): Recorrido | null {
+export function construirRecorrido(rol: string, perfil: PerfilTenant | null | undefined, modo: Modo = 'completo', idioma: Idioma = 'es'): Recorrido | null {
+  const cx = ctxOnb(idioma);
   const pista = pistaDeRol(rol);
   if (!pista) return null;
   const menu = menuPorPerfil(rol, perfil);
@@ -142,16 +143,17 @@ export function construirRecorrido(rol: string, perfil: PerfilTenant | null | un
   const pasos: PasoTour[] = [];
   let previa: string | undefined;
   lista.forEach(({ href, claves }, grupo) => {
-    const todos = pasosDePantalla(href, rol, perfil, menu, previa);
+    const todos = pasosDePantalla(href, rol, perfil, menu, previa, cx);
     for (const k of ['ir', 'que', 'clave', 'accion'] as const) {
       const paso = todos[k];
       if (paso && (!claves || claves.includes(k))) pasos.push({ ...paso, grupo });
     }
     previa = href;
   });
-  pasos.push(cierre(menu));
-  const nombre = pista === 'dueno' ? nombreDeRol('flota_admin') : nombreDeRol(rol);
-  return { id: `${pista}.${modo}`, version: 1, titulo: `Recorrido: ${nombre}`, pasos, pista, modo };
+  pasos.push(cierre(menu, cx));
+  const rolNombre = pista === 'dueno' ? 'flota_admin' : rol;
+  const nombre = cx.rol(rolNombre, nombreDeRol(rolNombre));
+  return { id: `${pista}.${modo}`, version: 1, titulo: cx.t('tour.titulo', { rol: nombre }), pasos, pista, modo };
 }
 
 export { contarPasos, pantallasDeRecorrido } from './recorrido-util';

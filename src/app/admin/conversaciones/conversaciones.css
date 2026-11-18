@@ -1,0 +1,17 @@
+/* Conversaciones de WhatsApp: hilo en burbujas, filas plegables, paginador y vacío. Variables del sistema, sin colores sueltos. */
+[data-ui="v2"] .rv-conv-lista { display: flex; flex-direction: column; gap: 6px; }
+[data-ui="v2"] .rv-conv-hilo { display: flex; flex-direction: column; gap: 8px; }
+[data-ui="v2"] .rv-conv-fila { display: flex; justify-content: flex-start; }
+[data-ui="v2"] .rv-conv-fila[data-rol="assistant"] { justify-content: flex-end; }
+[data-ui="v2"] .rv-conv-burbuja {
+  max-width: 80%; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 12px; padding: 8px 14px;
+  font-size: var(--t-body); line-height: 1.45; color: var(--ink); background: var(--ui-sunken); border: 1px solid var(--line2, var(--line));
+}
+[data-ui="v2"] .rv-conv-burbuja[data-rol="assistant"] { background: var(--marca, var(--ink)); color: var(--marca-fg, var(--surface)); border-color: transparent; }
+[data-ui="v2"] .rv-conv-tel { display: block; font-size: var(--t-body); font-weight: 500; }
+[data-ui="v2"] .rv-conv-flota { display: block; font-size: var(--t-small); font-weight: 400; color: var(--muted); }
+[data-ui="v2"] .rv-conv-abrir { display: inline-block; margin-top: 8px; font-size: var(--t-small); color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+[data-ui="v2"] .rv-conv-abrir:hover { color: var(--muted); }
+[data-ui="v2"] .rv-conv-sin { margin: 0; font-size: var(--t-body); color: var(--muted); }
+[data-ui="v2"] .rv-conv-pag { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .rv-conv-pag__acciones { display: flex; gap: 8px; }

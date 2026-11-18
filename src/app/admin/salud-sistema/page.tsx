@@ -29,6 +29,7 @@ import { TablaRenglones, type RenglonSistema } from '../renglon-sistema';
 import '../sistema.css';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
+import '../compacto-lote-a.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -319,7 +320,7 @@ export default async function SaludSistemaPage() {
         />
       </Tarjeta>
 
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="fin16c-arriba">
         <Tarjeta key="rutas" titulo={tx('salud_sistema.grafica_rutas')} contenida reintentar
           estado={latencias === null || latencias.rutas === null ? 'error' : p95Rutas.length === 0 ? 'vacio' : 'ok'}
           mensaje={latencias === null || latencias.rutas === null ? tx('observabilidad.no_se_pudo_leer_la_latencia') : tx('observabilidad.sin_muestras_todavia')}
@@ -335,20 +336,18 @@ export default async function SaludSistemaPage() {
       </FilaTarjetas>
 
       {slos !== null && incumplidos > 0 ? (
-        <section className="adm-sis-bloque adm-sis-caja" aria-labelledby="slo-incumplidos">
-          <h2 className="adm-sis-titulo" id="slo-incumplidos">{tx('salud_sistema.objetivos_que_no_se_cumplen')}</h2>
+        <Tarjeta titulo={tx('salud_sistema.objetivos_que_no_se_cumplen')}>
           <ul className="adm-sis-lista">
             {slos.filter((x) => x.cumple === false).map((x) => (
               <li key={x.clave}><span>{x.nombre}</span>{rico(tx('salud_sistema.e0_objetivo_e0', { medido: x.medido, objetivo: x.objetivo, ventana: x.ventana }), { e0: (c) => <span>{c}</span> })}</li>
             ))}
           </ul>
-        </section>
+        </Tarjeta>
       ) : null}
 
-      <FilaTarjetas variante="6-6">
-        <section className="adm-sis-bloque adm-sis-caja"><QuemaSlo evaluaciones={quemaSlo} t={tMon} /></section>
-        <section className="adm-sis-bloque adm-sis-caja" aria-labelledby="fuentes-sistema">
-          <h2 className="adm-sis-titulo" id="fuentes-sistema">{tf('admin.titulo')}</h2>
+      <FilaTarjetas variante="6-6" className="fin16c-arriba">
+        <Tarjeta titulo={tMon('quema.titulo')}><QuemaSlo evaluaciones={quemaSlo} t={tMon} sinTitulo /></Tarjeta>
+        <Tarjeta titulo={tf('admin.titulo')}>
           <p className="adm-sis-nota">{tf('admin.apoyo')}</p>
           <ListaFuentes
             etiqueta={tf('admin.titulo')}
@@ -356,7 +355,7 @@ export default async function SaludSistemaPage() {
             resumen={[tf('conexiones.resumen', { alDia: resumenFuentes.alDia, total: resumenFuentes.total })]}
             filas={filasDeEvaluaciones(evalsFuentes, tf, (e) => tf('admin.reloj', { cron: RELOJ_DE_FUENTE[e.id] }))}
           />
-        </section>
+        </Tarjeta>
       </FilaTarjetas>
 
       <Tarjeta

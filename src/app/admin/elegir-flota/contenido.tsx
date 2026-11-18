@@ -2,7 +2,9 @@ import { Building2, FlaskConical } from 'lucide-react';
 import { AvisoCompacto, BarraFiltros, Boton, BotonEnlace, EstadoError, FiltroBusqueda, Icono, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { NavegacionFilas } from './navegacion-teclado';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import '../resumen.css';
+import '../pulido-c.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL SELECTOR DE FLOTA — la pantalla que mató al tenant implícito.
@@ -24,7 +26,7 @@ export interface FlotaElegible {
 
 export function ElegirFlotaContenido({
   flotas, demoId, seleccionActual, next, error, errorLista, consulta = '',
-  accionElegir, accionQuitar,
+  accionElegir, accionQuitar, t = T_SISTEMA_ES,
 }: {
   /** Las flotas reales (la demo NO va aquí — tiene su tarjeta propia). */
   flotas: FlotaElegible[];
@@ -41,23 +43,25 @@ export function ElegirFlotaContenido({
   consulta?: string;
   accionElegir: (formData: FormData) => Promise<void>;
   accionQuitar: () => Promise<void>;
+  /** Traductor del namespace `admin_sistema` (la página lo pasa; sin él habla español). */
+  t?: TSistema;
 }) {
   const q = consulta.trim().toLowerCase();
   const visibles = q ? flotas.filter((f) => f.nombre.toLowerCase().includes(q) || f.id.toLowerCase().includes(q)) : flotas;
-  const demo: FilaFlota = { id: demoId, nombre: 'Flota Javier Prueba', esDemo: true };
+  const demo: FilaFlota = { id: demoId, nombre: t('elegir_flota.flota_demo'), esDemo: true };
   const filas: FilaFlota[] = [...visibles.map((f) => ({ ...f, esDemo: false })), ...(q && !demo.nombre.toLowerCase().includes(q) ? [] : [demo])];
 
   const columnas: ColumnaBase<FilaFlota>[] = [
     {
-      id: 'flota', titulo: 'Flota', principal: true,
+      id: 'flota', titulo: t('elegir_flota.col_flota'), principal: true,
       celda: (f) => (
         <span className="adm-res-fila" data-activa={seleccionActual === f.id ? '' : undefined}>
           <Icono icono={f.esDemo ? FlaskConical : Building2} />
           <span className="adm-res-fila__texto">
             <span className="adm-res-fila__titulo">{f.nombre}</span>
-            <span className="adm-flota-id">{f.esDemo ? 'Datos de demostración — no es un cliente' : f.id}</span>
+            <span className="adm-flota-id">{f.esDemo ? t('elegir_flota.demo_no_es_cliente') : f.id}</span>
           </span>
-          {seleccionActual === f.id ? <StatusChip tono="ok">Activa</StatusChip> : null}
+          {seleccionActual === f.id ? <StatusChip tono="ok">{t('elegir_flota.activa')}</StatusChip> : null}
         </span>
       ),
     },
@@ -69,7 +73,7 @@ export function ElegirFlotaContenido({
           <form action={accionElegir} className="adm-flota-form">
             <input type="hidden" name="flota" value={f.esDemo ? 'demo' : f.id} />
             <input type="hidden" name="next" value={next} />
-            <Boton type="submit" tamano="sm" variante={activa ? 'ghost' : 'secondary'}>{activa ? 'Volver a elegirla' : 'Elegir'}</Boton>
+            <Boton type="submit" tamano="sm" variante={activa ? 'ghost' : 'secondary'}>{activa ? t('elegir_flota.volver_a_elegirla') : t('elegir_flota.elegir')}</Boton>
           </form>
         );
       },
@@ -78,35 +82,35 @@ export function ElegirFlotaContenido({
 
   return (
     <EsqueletoTablaMaestra
-      area="Cuenta" titulo="Elegir flota"
-      apoyo="El panel del cliente apunta a UNA flota elegida; la selección dura una jornada y queda en la bitácora."
-      acciones={<BotonEnlace variante="ghost" href="/admin">Volver al Resumen</BotonEnlace>}
+      area={t('elegir_flota.area')} titulo={t('elegir_flota.titulo')}
+      apoyo={t('elegir_flota.apoyo')}
+      acciones={<BotonEnlace variante="ghost" href="/admin">{t('elegir_flota.volver_al_resumen')}</BotonEnlace>}
       filtros={(
         // Buscador de 32 px con la lupa DENTRO del campo (Rovaq): la barra de filtros GET conserva `next` y limpia con un enlace.
-        <BarraFiltros accion="/admin/elegir-flota" enLinea buscar etiqueta="Buscar flota" ocultos={{ next }} nActivos={consulta ? 1 : 0}
+        <BarraFiltros accion="/admin/elegir-flota" enLinea buscar etiqueta={t('elegir_flota.buscar_flota')} ocultos={{ next }} nActivos={consulta ? 1 : 0}
           limpiarHref={`/admin/elegir-flota?next=${encodeURIComponent(next)}`}>
-          <FiltroBusqueda nombre="q" valor={consulta} placeholder="Buscar flota…" etiqueta="Buscar flota" />
+          <FiltroBusqueda nombre="q" valor={consulta} placeholder={t('elegir_flota.buscar_flota_ph')} etiqueta={t('elegir_flota.buscar_flota')} />
         </BarraFiltros>
       )}
       avisos={error ? (
         <AvisoCompacto tono="error" resumen={error === 'firma'
-          ? 'No se pudo guardar la selección (falta la llave de firma en el ambiente) — revisa la configuración.'
-          : 'Esa flota no existe o no se pudo verificar — elige una de la lista.'} />
+          ? t('elegir_flota.error_firma')
+          : t('elegir_flota.error_flota')} />
       ) : null}
       pie={errorLista ? undefined : `${filas.length} de ${flotas.length + 1}`}
     >
       {errorLista ? (
-        <EstadoError reintentar>No se pudo leer la lista de flotas. La demostración sigue disponible.</EstadoError>
+        <EstadoError reintentar>{t('elegir_flota.error_lista')}</EstadoError>
       ) : null}
       <NavegacionFilas>
         <TablaBase
-          etiqueta="Flotas" columnas={columnas} filas={errorLista ? [demo] : filas} idFila={(f) => f.id} tarjetaMovil altoMaximo={false}
-          vacio={{ titulo: 'Sin flotas de clientes', texto: 'Aparecen aquí cuando se da de alta la primera flota.' }}
+          etiqueta={t('elegir_flota.flotas')} columnas={columnas} filas={errorLista ? [demo] : filas} idFila={(f) => f.id} tarjetaMovil altoMaximo={false}
+          vacio={{ titulo: t('elegir_flota.sin_flotas'), texto: t('elegir_flota.sin_flotas_texto') }}
         />
       </NavegacionFilas>
       {seleccionActual && (
         <form action={accionQuitar}>
-          <Boton type="submit" variante="secondary">Quitar la selección y volver al modo global</Boton>
+          <Boton type="submit" variante="secondary">{t('elegir_flota.quitar_seleccion')}</Boton>
         </form>
       )}
     </EsqueletoTablaMaestra>

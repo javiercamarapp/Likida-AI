@@ -108,6 +108,7 @@ Fuera de estos rangos, un hueco sobre 0949 es error. El siguiente rango libre em
 | `0975`-`0984` | F2: vigia, canal de correo y abiertos de la auditoria 39; 0983-0984 cedidos al onboarding (onboarding_estado, onboarding_evento) |
 | `0985`-`0989` | F5: cofre v2 |
 | `0990`-`0999` | F5: olas 12 a 14 |
+| `1008`-`1019` | Back-office de Likida (15-nov-2026): 1008 entidad y cierre mensual; 1009 gastos y proveedores; 1010 comisiones y pagos a vendedores; 1011 contratos y vencimientos; 1012 contratistas; 1013 calendario fiscal; 1014 libro contable (partida doble); 1015 tesorería; 1016-1019 reserva. Se aplican a mano, una por una, con respaldo y autorización; el código tolera su ausencia |
 
 F9 (enterprise, código): usa `0997` (bitácora de acceso del superadmin) y `0998` (constancia de exportación de flota); `0999` queda libre. Se aplican a mano, una por una, con respaldo.
 

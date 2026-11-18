@@ -173,6 +173,13 @@ const FUERA_DEL_PERFIL: Record<string, Clase> = {
   'admin/usuarios/acciones.ts': 'consola_superadmin',
   'admin/usuarios/nuevo/acciones.ts': 'consola_superadmin',
   'admin/vendedores/acciones.ts': 'consola_superadmin',
+  'admin/back-office/cierre/acciones.ts': 'consola_superadmin',
+  'admin/back-office/comisiones/acciones.ts': 'consola_superadmin',
+  'admin/back-office/contabilidad/acciones.ts': 'consola_superadmin',
+  'admin/back-office/contratistas/acciones.ts': 'consola_superadmin',
+  'admin/back-office/contratos/acciones.ts': 'consola_superadmin',
+  'admin/back-office/entidad/acciones.ts': 'consola_superadmin',
+  'admin/back-office/gastos/acciones.ts': 'consola_superadmin',
   'vendedor/panel-vendedor.tsx': 'zona_vendedor',
 };
 

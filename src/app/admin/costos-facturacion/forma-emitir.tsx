@@ -4,6 +4,8 @@ import { useActionState, useState } from 'react';
 import { Aviso, type AccionDeForma, type ResultadoAccion } from '../ui/forma';
 import { BotonConfirmar } from '../ui/confirmar';
 import { CampoSelect, clasesBoton } from '../../ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_dinero } from '@/lib/i18n/es/admin_dinero';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // "EMITIR MENSUALIDAD" — auditoría adversarial, HALLAZGO MEDIO: `accionEmitir`
@@ -37,14 +39,15 @@ export function FormaEmitirMensualidad({
   periodoIni: string;
   periodoFin: string;
 }) {
+  const { t } = useT('admin_dinero', admin_dinero);
   const [estado, despachar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   const [tenantId, setTenantId] = useState('');
   const flota = flotas.find((f) => f.id === tenantId);
 
   return (
     <form action={despachar} className="adm-din-forma">
-      <CampoSelect etiqueta="Flota" id="tenantId" name="tenantId" obligatorio value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-        <option value="">Elige…</option>
+      <CampoSelect etiqueta={t('costos_facturacion.flota')} id="tenantId" name="tenantId" obligatorio value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+        <option value="">{t('neg5.elige')}</option>
         {flotas.map((f) => (
           <option key={f.id} value={f.id}>{f.nombre}</option>
         ))}
@@ -52,16 +55,14 @@ export function FormaEmitirMensualidad({
       <Aviso estado={estado} />
       <div>
         <BotonConfirmar
-          etiqueta="Emitir"
+          etiqueta={t('neg5.cf_emitir')}
           tono="peligro"
           deshabilitado={!tenantId || pendiente}
-          etiquetaConfirmar="Sí, emitir mensualidad"
-          titulo="Emitir mensualidad"
+          etiquetaConfirmar={t('neg5.cf_si_emitir')}
+          titulo={t('neg5.cf_emitir_mensualidad')}
           descripcion={flota
-            ? `Se va a emitir la mensualidad del periodo ${periodoIni} — ${periodoFin} para ${flota.nombre}. Genera `
-              + 'un cobro real (hay un índice único por periodo en la base) y no hay botón para deshacerlo: una '
-              + 'flota equivocada se corrige a mano.'
-            : 'Elige una flota primero.'}
+            ? t('neg5.cf_desc_emitir', { ini: periodoIni, fin: periodoFin, flota: flota.nombre })
+            : t('neg5.cf_elige_primero')}
           className={clasesBoton('primary', 'md')}
         />
       </div>

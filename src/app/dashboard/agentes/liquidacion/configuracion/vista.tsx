@@ -9,6 +9,8 @@ import {
 } from '@/app/ui-v2/componentes';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { MarcoConfigAgente } from '@/app/dashboard/agentes/marco-config';
+import { trDashboardAEs } from '@/lib/i18n/tr_dashboard_a';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
 
 type Accion = (fd: FormData) => Promise<void>;
 export interface AccionesConfiguracion { guardar: Accion }
@@ -84,14 +86,14 @@ export type ResultadoFormulario = { ok: true; config: ConfigCorreo } | { ok: fal
  * Convierte lo que llega del formulario en una `ConfigCorreo` válida, o dice en lenguaje llano qué corregir.
  * Nada se activa por omisión: «activa» solo es true si la casilla viene marcada.
  */
-export function leerFormularioConfig(fd: FormData, tx: TAgentes = TR_ES.t): ResultadoFormulario {
+export function leerFormularioConfig(fd: FormData, tx: TAgentes = TR_ES.t, ta: TrDe<'dashboard_a'> = trDashboardAEs): ResultadoFormulario {
   const canal = String(fd.get('canal') ?? '');
   if (!canales(tx).some((c) => c.valor === canal)) return { ok: false, error: tx('rest.elige_como_se_entrega_el_desglose') };
 
   const correo = (campo: string, v: string): string | null => {
     const t = v.trim().toLowerCase();
     if (t === '') return null;
-    if (t.length > MAX_CORREO || !FORMA_CORREO.test(t)) throw new Error(`${campo}: el correo no tiene forma de correo (revisa que lleve @ y dominio).`);
+    if (t.length > MAX_CORREO || !FORMA_CORREO.test(t)) throw new Error(ta('lcf.correoInvalido', { campo }));
     return t;
   };
 
@@ -100,12 +102,12 @@ export function leerFormularioConfig(fd: FormData, tx: TAgentes = TR_ES.t): Resu
     if (remitente.length > MAX_ETIQUETA) return { ok: false, error: tx('rest.el_nombre_del_remitente_es_demasiado', { maxEtiqueta: MAX_ETIQUETA }) };
 
     const rhBruto = unicos(lineas(fd.get('rhCorreos'), /[\n,;]+/));
-    if (rhBruto.length > MAX_RH) return { ok: false, error: `Puedes poner hasta ${MAX_RH} correos de RH; pusiste ${rhBruto.length}.` };
-    const rhCorreos = rhBruto.map((c) => correo('Correo de RH', c)).filter((c): c is string => c !== null);
+    if (rhBruto.length > MAX_RH) return { ok: false, error: ta('lcf.maxRh', { max: MAX_RH, n: rhBruto.length }) };
+    const rhCorreos = rhBruto.map((c) => correo(ta('lcf.campoRh'), c)).filter((c): c is string => c !== null);
 
     const revisoresLeidos = leerRevisores(String(fd.get('revisores') ?? ''), tx);
     if (typeof revisoresLeidos === 'string') return { ok: false, error: revisoresLeidos };
-    if (revisoresLeidos.length > MAX_REVISORES) return { ok: false, error: `Puedes poner hasta ${MAX_REVISORES} revisores; pusiste ${revisoresLeidos.length}.` };
+    if (revisoresLeidos.length > MAX_REVISORES) return { ok: false, error: ta('lcf.maxRevisores', { max: MAX_REVISORES, n: revisoresLeidos.length }) };
     if (new Set(revisoresLeidos.map((r) => r.departamento)).size !== revisoresLeidos.length) return { ok: false, error: tx('rest.un_solo_revisor_por_departamento') };
     const primerMes = fd.get('primerMes') === 'on';
     const hastaTxt = String(fd.get('primerMesHasta') ?? '').trim();
@@ -160,8 +162,8 @@ export function leerFormularioConfig(fd: FormData, tx: TAgentes = TR_ES.t): Resu
         canal: canal as CanalEntrega,
         activa: fd.get('activa') === 'on',
         remitenteNombre: remitente || null,
-        responderA: correo('Responder a', String(fd.get('responderA') ?? '')),
-        remitenteCorreo: correo('Correo emisor', String(fd.get('remitenteCorreo') ?? '')),
+        responderA: correo(ta('lcf.campoResponder'), String(fd.get('responderA') ?? '')),
+        remitenteCorreo: correo(ta('lcf.campoEmisor'), String(fd.get('remitenteCorreo') ?? '')),
         revisores: revisoresLeidos,
         primerMesHasta,
         noEnviarAntes,
@@ -186,7 +188,7 @@ export function leerFormularioConfig(fd: FormData, tx: TAgentes = TR_ES.t): Resu
 
 // ── Vista ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, hayFila, disponible, puedeAdministrar, acciones, tr = TR_ES }: {
+export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, hayFila, disponible, puedeAdministrar, acciones, tr = TR_ES, ta = trDashboardAEs }: {
   sufijo: string; aviso: string | null; error: string | null;
   /** Lo guardado, o el defecto (WhatsApp, inactiva) cuando la flota no tiene fila. */
   config: ConfigCorreo;
@@ -194,6 +196,8 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
   /** false si la base no tiene las migraciones 0785-0787: la pantalla lo dice en vez de fingir un formulario que no guarda. */
   disponible: boolean;
   puedeAdministrar: boolean; acciones: AccionesConfiguracion; tr?: TrAgentes;
+  /** Traductor de `dashboard_a` (la página lo arma con `getT`); sin él, español. */
+  ta?: TrDe<'dashboard_a'>;
 }) {
   const { t: tx } = tr;
   const off = !puedeAdministrar || !disponible;
@@ -273,7 +277,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
 
         <Tarjeta titulo={tx('rest.4_que_retiene_el_envio')} info="liquidacion_config.retencion">
           <div className="rv-liq-dos">
-            <CampoTextarea etiqueta={tx('rest.conceptos_que_retienen_el_envio_uno')} name="conceptosProhibidos" rows={3} defaultValue={config.conceptosProhibidos.join('\n')} placeholder="(ninguno)" disabled={off}
+            <CampoTextarea etiqueta={tx('rest.conceptos_que_retienen_el_envio_uno')} name="conceptosProhibidos" rows={3} defaultValue={config.conceptosProhibidos.join('\n')} placeholder={ta('lcf.ninguno')} disabled={off}
               ayuda={tx('rest.si_un_desglose_trae_alguno_no')} />
             <CampoSelect etiqueta={tx('rest.neto_negativo')} name="netoNegativo" defaultValue={config.netoNegativo} disabled={off}>
               <option value="retener">{tx('rest.retener_el_envio')}</option>

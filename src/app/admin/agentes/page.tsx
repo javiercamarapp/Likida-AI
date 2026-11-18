@@ -78,6 +78,7 @@ async function accionPalanca(_previo: ResultadoAccion, fd: FormData): Promise<Re
  */
 async function accionConfig(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
   'use server';
+  const { t } = await getT('admin_agentes');
   const { userId } = await requireSuperadmin();
   const id = String(fd.get('id') ?? '');
   try {
@@ -89,9 +90,10 @@ async function accionConfig(_previo: ResultadoAccion, fd: FormData): Promise<Res
     }, String(fd.get('motivo') ?? ''), userId);
     revalidatePath('/admin/agentes');
     revalidatePath('/admin/observabilidad');
-    return { ok: `"${id}" quedó configurado (${Object.keys(r.cambios).length} cambio${Object.keys(r.cambios).length === 1 ? '' : 's'}, firmado en la bitácora).` };
+    const n = Object.keys(r.cambios).length;
+    return { ok: n === 1 ? t('agentes.configurado_uno', { id }) : t('agentes.configurado_varios', { id, n }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'configurar el agente') };
+    return { error: mensajeParaPantalla(e, t('agentes.configurar_el')) };
   }
 }
 

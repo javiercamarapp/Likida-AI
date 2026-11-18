@@ -20,6 +20,7 @@ import './embudo.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { trAdminDineroEs } from '@/lib/i18n/tr_admin';
+import { NotaVacia } from '../nota-vacia';
 // ═══════════════════════════════════════════════════════════════════════════
 // BLOQUES DE CRECIMIENTO (R9c): cada bloque es un componente de servidor async con su propia lectura, envuelto por `page.tsx` en su
 // propio <Suspense> con un esqueleto compacto: un bloque lento ya no bloquea la página. Las lecturas son las MISMAS de antes (ninguna
@@ -42,6 +43,7 @@ const cohortesAdmin = cache(() => getCohortesUso().catch(() => null));
 
 export async function BloqueIntro() {
   const { t: ta } = await getT('admin_dinero');
+  const { t: tf, tp } = await getT('admin_flotas');
   const r = await resumenNegocio();
   if (r === null) {
     return <Aviso tono="error" titulo={ta('crecimiento_bloques.no_se_pudo_leer')}>{ta('crecimiento_bloques.esto_no_significa_que')}</Aviso>;
@@ -50,21 +52,22 @@ export async function BloqueIntro() {
   const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
   const titulo = r.tenants === 0
     ? ta('crecimiento_bloques.sin_flotas_dadas_de')
-    : `Con ${r.tenants} flota${r.tenants === 1 ? '' : 's'} dada${r.tenants === 1 ? '' : 's'} de alta, todavía no hay "crecimiento" que medir`;
+    : tp('cf6.crec_titulo', r.tenants);
   const historial = r.tenants === 0
     ? ta('crecimiento_bloques.no_hay_ninguna_flota')
     : esSoloDemo ? ta('crecimiento_bloques.no_hay_historial_de') : ta('crecimiento_bloques.no_hay_historial_de_2');
   return (
     <AvisoCompacto
       tono="info"
-      resumen={<><strong>{titulo}.</strong> {historial}, y Likida no tiene instrumentación de producto: ningún conteo de usuarios activos ni embudo de registro.</>}
-      mas={ta('crecimiento_bloques.con_cualquier_tendencia_de', { tenants: r.tenants === 0 ? 'cero flotas' : `n=${r.tenants}` })}
+      resumen={<><strong>{titulo}.</strong> {historial}{tf('cf6.crec_sin_instrumentacion')}</>}
+      mas={ta('crecimiento_bloques.con_cualquier_tendencia_de', { tenants: r.tenants === 0 ? tf('cf6.crec_cero_flotas') : tf('cf6.crec_n_flotas', { n: r.tenants }) })}
     />
   );
 }
 
 export async function BloqueEmbudoAdquisicion() {
   const { t: ta } = await getT('admin_dinero');
+  const { t: tf } = await getT('admin_flotas');
   const prospectos = await prospectosPorEstado();
   // El embudo de ADQUISICIÓN — real desde la 0105. Los prospectos del censo por estado del kanban. Es pipeline de PROSPECTOS, no de usuarios:
   // la conversión que se muestra es cerrados/total, y con cero cerrados se dice "sin cierres todavía" — jamás un 0% con cara de medición.
@@ -72,7 +75,7 @@ export async function BloqueEmbudoAdquisicion() {
     return <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion')} estado="error" mensaje={ta('crecimiento_bloques.no_se_pudo_leer_2')} reintentar />;
   }
   if (prospectos.total === 0) {
-    return <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion')} estado="vacio" mensaje={ta('crecimiento_bloques.sin_prospectos_en_el')} detalle={ta('crecimiento_bloques.aparecen_cuando_el_cerebro')} contenida />;
+    return <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion')} contenida><NotaVacia titulo={ta('crecimiento_bloques.sin_prospectos_en_el')}>{ta('crecimiento_bloques.aparecen_cuando_el_cerebro')}</NotaVacia></Tarjeta>;
   }
   const { porEstado } = prospectos;
   // (16) Barras proporcionales y de color SOLO para las etapas con prospectos; las que valen 0 se dicen en UNA línea en vez de diez
@@ -83,14 +86,14 @@ export async function BloqueEmbudoAdquisicion() {
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion_prospectos', { total: numero(prospectos.total) })}>
       {/* Barra de 6 px, radio 999 y pista tenue (Rovaq `barlist`), con la cifra exacta a la derecha. */}
-      <BarList etiqueta={ta('crecimiento_bloques.prospectos_por_estado')} matiz={8} items={conGente.map((e) => ({ clave: e.clave, etiqueta: e.etiqueta, valor: e.valor, texto: numero(e.valor) }))} />
+      <BarList etiqueta={ta('crecimiento_bloques.prospectos_por_estado')} matiz={7} items={conGente.map((e) => ({ clave: e.clave, etiqueta: e.etiqueta, valor: e.valor, texto: numero(e.valor) }))} />
       {vacias.length > 0 && (
         <p className="adm-din-nota">{ta('crecimiento_bloques.sin_prospectos_todavia_en', { etapas: vacias.map((e) => e.etiqueta).join(', ') })}</p>
       )}
       <p className="adm-din-nota">
         {porEstado.won > 0 ? ta('crecimiento_bloques.conversion_a_cierre_de', { won: porEstado.won, total: numero(prospectos.total) }) : ta('crecimiento_bloques.sin_cierres_todavia_la')}
-        {porEstado.lost > 0 && ` ${numero(porEstado.lost)} perdidos.`}
-        {' '}El detalle por vendedor vive en <Link href="/admin/vendedores">Vendedores</Link>; lo que espera tu aprobación, en <Link href="/admin/aprobaciones">Aprobaciones</Link>.
+        {porEstado.lost > 0 && ` ${tf('cf6.crec_perdidos', { n: numero(porEstado.lost) })}`}
+        {' '}{tf('cf6.crec_detalle_a')}<Link href="/admin/vendedores">{tf('cf6.crec_vendedores')}</Link>{tf('cf6.crec_detalle_b')}<Link href="/admin/aprobaciones">{tf('cf6.crec_aprobaciones')}</Link>{tf('cf6.crec_punto')}
       </p>
     </Tarjeta>
   );
@@ -107,6 +110,7 @@ export async function BloqueAlertasAdquisicion() {
  *  jamás un $0 de encuadre. */
 export async function BloqueCostoLead() {
   const { t: ta } = await getT('admin_dinero');
+  const { t: tf } = await getT('admin_flotas');
   const adquisicion = await adquisicionAdmin();
   if (adquisicion === null) {
     return <Tarjeta titulo={ta('crecimiento_bloques.costo_por_lead_y')} estado="error" mensaje={ta('crecimiento_bloques.no_se_pudo_leer_3')} reintentar />;
@@ -123,7 +127,7 @@ export async function BloqueCostoLead() {
             id: 'costo', titulo: ta('crecimiento_bloques.costo_por_lead'), alinear: 'der',
             celda: (f) => (
               <>
-                {f.costo ? usd(f.costo.usd) : 'no disponible'}
+                {f.costo ? usd(f.costo.usd) : tf('cf6.crec_no_disponible')}
                 <span className="adm-din-sub">{f.costoNota}</span>
               </>
             ),
@@ -131,7 +135,7 @@ export async function BloqueCostoLead() {
         ]}
       />
       {adquisicion.sinFuenteDeDatos.length > 0 ? (
-        <p className="adm-din-nota">Alertas del plan sin fuente de datos todavía: {adquisicion.sinFuenteDeDatos.map((s) => `${s.alerta} (${s.falta})`).join(' · ')}.</p>
+        <p className="adm-din-nota">{tf('cf6.crec_alertas_sin_fuente', { lista: adquisicion.sinFuenteDeDatos.map((s) => `${s.alerta} (${s.falta})`).join(' · ') })}</p>
       ) : null}
     </Tarjeta>
   );
@@ -140,6 +144,7 @@ export async function BloqueCostoLead() {
 /** El control de campañas (0123, §4) — leer y pausar; jamás crear ni subir. */
 export async function BloqueCampanas() {
   const { t: ta } = await getT('admin_dinero');
+  const { t: tf } = await getT('admin_flotas');
   const [adquisicion, campanas] = await Promise.all([adquisicionAdmin(), campanasAdmin()]);
   const integracionAds = estadoIntegracionAds();
   return (
@@ -154,7 +159,7 @@ export async function BloqueCampanas() {
             refrescar={accionRefrescarGasto}
           />
           {campanas.total > campanas.campanas.length ? (
-            <Aviso tono="warn">Se muestran las {campanas.campanas.length} campañas más recientes de {campanas.total}. «Actualizar gasto desde Meta» sí cubre todas las de Meta.</Aviso>
+            <Aviso tono="warn">{tf('cf6.crec_se_muestran', { n: campanas.campanas.length, total: campanas.total })}</Aviso>
           ) : null}
         </>
       ) : null}
@@ -177,7 +182,7 @@ export async function BloqueActivacion() {
         <p className="adm-din-nota">{t('crecimiento.activacion.ceros')}</p>
       ) : (
         <BarList
-          etiqueta={ta('crecimiento_bloques.flotas_por_etapa_de')} matiz={8}
+          etiqueta={ta('crecimiento_bloques.flotas_por_etapa_de')} matiz={3}
           items={[
             { clave: 'altas', etiqueta: ta('crecimiento_bloques.flotas_dadas_de_alta'), valor: embudoActivacion.altas, texto: numero(embudoActivacion.altas) },
             ...[
@@ -202,6 +207,7 @@ export async function BloqueActivacion() {
 
 export async function BloqueCohortes() {
   const { t: ta } = await getT('admin_dinero');
+  const { t: tf } = await getT('admin_flotas');
   const cohortes = await cohortesAdmin();
   // Retención por COHORTES — producto_evento (0251). La regla de honestidad vive en construirCohortes(): un mes anterior al primer evento
   // registrado es «no medido» (null), jamás un 0% — pintarle churn a los meses pre-medición sería inventar.
@@ -221,7 +227,7 @@ export async function BloqueCohortes() {
               <span className="adm-din-acciones">
                 {f.celdas.map((c) => (
                   <StatusChip key={c.mes} tono={c.activas === null ? 'muted' : 'neutral'} title={c.mes}>
-                    {c.mes.slice(5)}{' · '}{c.activas === null ? 'no medido' : `${numero(c.activas)}/${numero(f.flotas)}`}{c.enCurso && c.activas !== null ? ' (en curso)' : ''}
+                    {c.mes.slice(5)}{' · '}{c.activas === null ? tf('cf6.crec_no_medido') : `${numero(c.activas)}/${numero(f.flotas)}`}{c.enCurso && c.activas !== null ? ` ${tf('cf6.crec_en_curso')}` : ''}
                   </StatusChip>
                 ))}
               </span>
@@ -269,6 +275,7 @@ export async function BloqueCifrasCrecimiento() {
 /** Gasto de IA por día = proxy de uso, rotulado así (jamás «crecimiento de usuarios»). */
 export async function BloqueUso() {
   const { t: ta } = await getT('admin_dinero');
+  const { t: tf } = await getT('admin_flotas');
   const r = await resumenNegocio();
   if (r === null) {
     return <Tarjeta titulo={ta('crecimiento_bloques.uso_de_la_plataforma')} estado="error" mensaje={ta('crecimiento_bloques.no_se_pudo_leer_5')} reintentar />;
@@ -276,16 +283,16 @@ export async function BloqueUso() {
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.uso_de_la_plataforma')} estado={r.porDia.length > 1 ? 'ok' : 'vacio'} mensaje={ta('crecimiento_bloques.sin_historial_suficiente')} detalle={ta('crecimiento_bloques.hacen_falta_al_menos')} contenida>
       <p className="adm-din-nota">{ta('crecimiento_bloques.no_es_una_metrica')}</p>
-      <Columnas etiqueta={ta('crecimiento_bloques.gasto_de_ia_por')} datos={r.porDia.map((d) => ({ etiqueta: d.dia.slice(5), largo: d.dia, valor: d.costoUsd }))} formato="usd" vacio="Sin gasto registrado" />
+      <Columnas etiqueta={ta('crecimiento_bloques.gasto_de_ia_por')} datos={r.porDia.map((d) => ({ etiqueta: d.dia.slice(5), largo: d.dia, valor: d.costoUsd }))} formato="usd" vacio={tf('cf6.crec_sin_gasto')} />
     </Tarjeta>
   );
 }
 
 export function BloqueComisiones({ ta = trAdminDineroEs }: { ta?: TrDe<'admin_dinero'> } = {}) {
   return (
-    <Tarjeta titulo={ta('crecimiento_bloques.comisiones_de_vendedores')} estado="vacio" mensaje={ta('crecimiento_bloques.falta_aun_no_hay')}
-      detalle={ta('crecimiento_bloques.el_esquema_solo_existe', { Math: Math.round(COMISION_PRIMER_MES * 100), Math2: Math.round(COMISION_RECURRENTE * 100) })}
-      contenida />
+    <Tarjeta titulo={ta('crecimiento_bloques.comisiones_de_vendedores')} contenida>
+      <NotaVacia tono="warn" titulo={ta('crecimiento_bloques.falta_aun_no_hay')}>{ta('crecimiento_bloques.el_esquema_solo_existe', { Math: Math.round(COMISION_PRIMER_MES * 100), Math2: Math.round(COMISION_RECURRENTE * 100) })}</NotaVacia>
+    </Tarjeta>
   );
 }
 

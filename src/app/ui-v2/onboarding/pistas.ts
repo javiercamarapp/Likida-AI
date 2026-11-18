@@ -26,8 +26,10 @@ export const PISTAS_CONTEXTUALES: Readonly<Record<string, PistaContextual>> = {
   '/dashboard/agentes/vigia/programa': pista('importar', '/dashboard/agentes/vigia', 'Programa de despacho', 'Sube el archivo del programa para que el agente avise a tus clientes.'),
   '/dashboard/agentes/vigia/importacion': pista('lista', '/dashboard/agentes/vigia', 'Estatus de importación', 'El estatus de cada viaje se deriva del archivo que subes. Si el archivo no lo dice, aquí tampoco.'),
   '/dashboard/agentes/vigia/sin-atender': pista('campana', '/dashboard/agentes/vigia', 'Conversaciones sin atender', 'Lo que tus clientes preguntaron y nadie contestó, según los chats exportados que subiste. No es en tiempo real.'),
+  '/dashboard/agentes/vigia/bandeja': pista('chat', '/dashboard/agentes/vigia', 'Bandeja de atención', 'Los chats de tus clientes por prioridad: quién los contesta, cuánto llevan sin respuesta y el hilo completo.'),
   '/dashboard/agentes/vigia/avisos': pista('campana', '/dashboard/agentes/vigia', 'Avisos de viaje', 'El agente arma los avisos para tus clientes. Confírmalos, edítalos o descártalos antes de que salgan.'),
   '/dashboard/agentes/conductores/sitios': pista('mapa', '/dashboard/agentes/conductores', 'Catálogo de sitios', 'Clientes, plantas y andenes con su centro y su radio. Ninguna coordenada se calcula ni se inventa.'),
+  '/dashboard/agentes/conductores/conversaciones': pista('chat', '/dashboard/agentes/conductores', 'Conversaciones con operadores', 'El chat con cada operador: aviso del viaje, respuestas con su hora, cómo se validó cada reporte contra la ubicación y quién atiende las escalaciones.'),
   '/dashboard/agentes/conductores/estadias': pista('linea', '/dashboard/agentes/conductores', 'Estadías en andén', 'El tiempo entre llegada y salida de cada carga o descarga, con la hora exacta del mensaje del chofer.'),
   '/dashboard/agentes/conductores/configuracion': pista('panel', '/dashboard/agentes/conductores', 'Configuración del agente', 'Cuándo y cuánto insiste el agente con tus choferes, en qué horario y a quién avisa si nadie contesta.'),
 };

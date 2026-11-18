@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { pasoExtraSuperadmin, AVISO_SIN_BITACORA } from '@/lib/admin/acciones_riesgo';
 import { gestionarSuscripcionDeFlota, OPERACIONES_PLAN, type OperacionPlan, type ResultadoGestionPlan } from '@/lib/saas/asignar-plan';
 import type { ResultadoAccion } from '../ui/forma';
@@ -43,6 +43,6 @@ export async function accionGestionarPlan(_previo: ResultadoAccion, fd: FormData
     if (!r.cambio) return { ok: t('flotas_acciones_plan.sin_cambios_la_suscripcion') };
     return { ok: frase(t)[operacion](r) + (r.bitacora ? '' : AVISO_SIN_BITACORA) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'mover el plan de la flota') };
+    return { error: await mensajeDeFalla(e, 'verbo.plan_mover_plan') };
   }
 }

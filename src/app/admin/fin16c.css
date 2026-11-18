@@ -1,0 +1,43 @@
+/* Cierre visual 16-nov (fin16c): superadmin premium y compacto en las pantallas de Control, Sistema y Agentes. Solo tokens del sistema
+   (sin hex, sin tamaños sueltos); las clases son nuevas (prefijo fin16c) para no chocar con las de otras hojas. Movimiento solo con
+   movimiento permitido y solo transform/opacity. */
+
+[data-ui="v2"] .fin16c-saberes { align-items: start; }
+
+/* Rejilla que reparte tarjetas bajas según el ancho y no las estira a la altura de la vecina (sin cajas altas casi vacías). */
+[data-ui="v2"] .fin16c-rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--ui-rhythm, 12px); align-items: start; min-width: 0; }
+[data-ui="v2"] .fin16c-rejilla > .rv-tarjeta { height: auto; min-width: 0; }
+
+/* Fila de datos clave compacta dentro de una tarjeta: pares rótulo/valor en varias columnas en vez de una lista alta. */
+[data-ui="v2"] .fin16c-pares { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px var(--ui-rhythm, 12px); margin: 0; padding: 0; list-style: none; }
+[data-ui="v2"] .fin16c-pares > li { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line2); border-radius: var(--r-control); background: var(--ui-sunken); font-size: var(--t-body); overflow-wrap: anywhere; }
+[data-ui="v2"] .fin16c-pares > li > span:first-child { font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+
+/* Etiqueta pequeña sobre un bloque (eyebrow) con el mismo tamaño en todas las pantallas. */
+[data-ui="v2"] .fin16c-eyebrow { margin: 0; font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+/* Chip neutro con contraste: superficie propia y borde visible (nunca gris sobre gris). */
+[data-ui="v2"] .fin16c-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border: 1px solid var(--line2); border-radius: var(--r-pill); background: var(--ui-surface); color: var(--ink); font-size: var(--t-small); font-weight: 500; }
+
+/* Una fila de tarjetas que se acomoda arriba: cada tarjeta mide lo suyo, sin hueco bajo la más corta. */
+[data-ui="v2"] .rv-fila-tarjetas.fin16c-arriba { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.fin16c-arriba > .rv-tarjeta { height: auto; }
+
+/* Acciones de una misma persona o fila: botones en una sola línea que envuelve, no apilados a lo alto. */
+[data-ui="v2"] .fin16c-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px var(--ui-rhythm, 12px); }
+[data-ui="v2"] .fin16c-acciones > form { margin: 0; }
+
+/* Estado neutro o apagado: superficie propia con borde visible (antes gris claro sobre gris claro). Los tonos con significado
+   (ok, aviso, mal, info) conservan su tinte semántico; el texto del chip siempre dice el estado. */
+[data-ui="v2"] .rv-estado:not([data-tono="ok"], [data-tono="warn"], [data-tono="bad"], [data-tono="info"]) { background: var(--ui-surface); box-shadow: inset 0 0 0 1px var(--line2); }
+
+/* Notas de pie y límites dentro de una tarjeta (antes utilidades sueltas). */
+[data-ui="v2"] .fin16c-nota { margin: 0; font-size: var(--t-small); line-height: 1.5; color: var(--muted); }
+[data-ui="v2"] .fin16c-nota--cuerpo { font-size: var(--t-body); }
+[data-ui="v2"] .fin16c-nota--sup { margin-top: 12px; }
+[data-ui="v2"] .fin16c-nota--inf { margin-bottom: 12px; }
+[data-ui="v2"] .fin16c-tenue { color: var(--muted); }
+[data-ui="v2"] .fin16c-limites { display: grid; gap: 4px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* Bloques que ya traen su propia clase de columna (adm-sis-bloque): al sumar la rejilla, las tarjetas se reparten según el ancho. */
+[data-ui="v2"] .adm-sis-bloque.fin16c-rejilla { display: grid; flex-direction: initial; gap: var(--ui-rhythm, 12px); }

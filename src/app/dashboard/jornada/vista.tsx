@@ -5,16 +5,16 @@ import Link from 'next/link';
 import { CalendarClock, Download } from 'lucide-react';
 import { fechaMx, numero, TZ_MX } from '@/lib/formato';
 import {
-  ROTULO_PROCEDENCIA, ALCANCE_PROCEDENCIA, aHoras, fraseDelHueco,
+  aHoras, fraseDelHueco,
   type JornadaCompuesta,
 } from '@/lib/likida/jornada/modelo';
 import {
-  ROTULO_VEREDICTO, LEYENDA_VEREDICTOS, type RiesgoDia, type PoliticaFlota,
+  LEYENDA_VEREDICTOS, type RiesgoDia, type PoliticaFlota,
 } from '@/lib/likida/jornada/riesgo';
 import { LEYENDA_NOM_087, LEYENDA_NO_ES_BITACORA_83 } from '@/lib/likida/jornada/topes';
 import type { SemanaEvaluada } from '@/lib/likida/jornada/semanas';
 import type { AlertaDeJornada } from '@/lib/likida/jornada/alerta_tope_datos';
-import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
+import { horasTexto } from '@/lib/likida/jornada/alerta_tope';
 import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
@@ -25,6 +25,10 @@ import {
 } from '@/app/ui-v2/componentes';
 import './jornada.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
+import { trBCompleto } from '@/lib/i18n/tr_dashboard_b';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { LOCALE_INTL, type Idioma } from '@/lib/i18n/idioma';
+import { rico } from '@/lib/i18n/rico';
 
 /**
  * LA PANTALLA DEL CONTRALOR — ver, corregir y cerrar el registro de jornada.
@@ -69,8 +73,13 @@ const TONO: Record<string, TonoEstado> = {
   sin_senal_de_exceso: 'ok',
 };
 
-function hora(iso: string): string {
-  return new Intl.DateTimeFormat('es-MX', {
+type TB = TrDe<'dashboard_b'>;
+const veredicto = (tb: TB, v: RiesgoDia['veredicto']): string => tb(`jv.veredicto.${v}` as 'jv.veredicto.exceso');
+const procedencia = (tb: TB, p: NonNullable<JornadaCompuesta['inicio']>['procedencia']): string => tb(`jv.procedencia.${p}` as 'jv.procedencia.gps');
+const alcance = (tb: TB, p: NonNullable<JornadaCompuesta['inicio']>['procedencia']): string => tb(`jv.alcance.${p}` as 'jv.alcance.gps');
+
+function hora(iso: string, idioma: Idioma = 'es'): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL[idioma], {
     timeZone: TZ_MX, hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(iso));
 }
@@ -115,6 +124,7 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
   guardarAlerta: AccionJornada;
 }) {
   const { t, idioma } = tr;
+  const tb = trBCompleto(idioma).t;
   const lista = filas ?? [];
 
   // ── LOS CONTADORES SON `null` CUANDO NO HAY QUÉ CONTAR ──────────────────
@@ -151,8 +161,8 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
       celda: (f) => <Link href={hrefJornada(f)} className="rv-jn__enlace">{f.dia}</Link>,
     },
     { id: 'operador', titulo: t('jor.col.operador'), celda: (f) => f.operadorNombre },
-    { id: 'inicio', titulo: t('jor.col.inicio'), celda: (f) => <Marca a={f.jornada.inicio} /> },
-    { id: 'fin', titulo: t('jor.col.fin'), celda: (f) => <Marca a={f.jornada.fin} /> },
+    { id: 'inicio', titulo: t('jor.col.inicio'), celda: (f) => <Marca a={f.jornada.inicio} tr={tr} /> },
+    { id: 'fin', titulo: t('jor.col.fin'), celda: (f) => <Marca a={f.jornada.fin} tr={tr} /> },
     {
       id: 'descanso', titulo: t('jor.col.descanso'),
       // `null` NO se pinta como 0: son dos afirmaciones distintas.
@@ -161,12 +171,12 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
         : `${f.jornada.minutosDescanso} min`),
     },
     { id: 'total', titulo: t('jor.col.total'), celda: (f) => <TotalDelDia f={f} tr={tr} /> },
-    { id: 'lectura', titulo: t('jor.col.lectura'), celda: (f) => <StatusChip tono={TONO[f.riesgo.veredicto] ?? 'warn'}>{ROTULO_VEREDICTO[f.riesgo.veredicto]}</StatusChip> },
+    { id: 'lectura', titulo: t('jor.col.lectura'), celda: (f) => <StatusChip tono={TONO[f.riesgo.veredicto] ?? 'warn'}>{veredicto(tb, f.riesgo.veredicto)}</StatusChip> },
     {
       id: 'estado', titulo: t('jor.col.estado'),
       celda: (f) => (
         <>
-          {f.estado === 'cerrado' ? `Cerrado · ${f.cerradoPorEmail ?? 'sin firma'}` : t('jor.abierto')}
+          {f.estado === 'cerrado' ? tb('jv.cerrado_por', { quien: f.cerradoPorEmail ?? tb('jv.sin_firma') }) : t('jor.abierto')}
           <span className="rv-jn__tenue">{f.conformeOperadorEn ? t('jor.conformidad.si') : t('jor.conformidad.no')}</span>
         </>
       ),
@@ -205,28 +215,28 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
         )
       )}
       cifras={cifrasUniformes(cifras)}
-      selloCifras={selloHoy('Registro de jornada')}
+      selloCifras={selloHoy(tb('jv.sello'), tb, idioma)}
       filtros={(
         // El filtro de fechas por GET: mueve TODO lo que hay debajo, incluida la liga de descarga. Un rótulo que dice «del X al Y»
         // tiene que ser cierto para las dos cosas.
         <BarraPeriodo etiqueta={t('jor.periodo.aria')}
           chips={[
             { id: 'rango', etiqueta: t('jor.periodo.del', { desde: fechaMx(desde, idioma), hasta: fechaMx(hasta, idioma) }) },
-            ...(operador ? [{ id: 'operador', etiqueta: operadores?.find((o) => o.id === operador)?.nombre ?? 'Operador elegido', hrefQuitar: hrefConParams('/dashboard/jornada', { ...ctxJornada, desde, hasta, operador }, { operador: null }) }] : []),
+            ...(operador ? [{ id: 'operador', etiqueta: operadores?.find((o) => o.id === operador)?.nombre ?? tb('jv.operador_elegido'), hrefQuitar: hrefConParams('/dashboard/jornada', { ...ctxJornada, desde, hasta, operador }, { operador: null }) }] : []),
           ]}
           cajon={{
             accion: '/dashboard/jornada', ocultos: Object.entries(ctxJornada), limpiarHref: hrefConParams('/dashboard/jornada', ctxJornada), nActivos: operador ? 1 : 0,
             resumen: t(operador ? 'jor.periodo.operador' : 'jor.periodo.del', { desde: fechaMx(desde, idioma), hasta: fechaMx(hasta, idioma) }),
             periodo: { desde, hasta },
             // FE-19: con cientos de choferes la ventana por omisión nace truncada casi siempre; sin este selector la única forma de ver a UN operador era teclear su id en la URL.
-            campos: operadores && operadores.length > 0 ? { items: [{ tipo: 'select', nombre: 'operador', etiqueta: t('jor.operador'), valor: operador ?? '', opciones: [{ valor: '', rotulo: 'Todos' }, ...operadores.map((o) => ({ valor: o.id, rotulo: o.nombre }))] }] } : undefined,
+            campos: operadores && operadores.length > 0 ? { items: [{ tipo: 'select', nombre: 'operador', etiqueta: t('jor.operador'), valor: operador ?? '', opciones: [{ valor: '', rotulo: tb('jv.todos') }, ...operadores.map((o) => ({ valor: o.id, rotulo: o.nombre }))] }] } : undefined,
           }} />
       )}
       avisos={(
         <>
           {/* QUÉ ES ESTE DOCUMENTO Y QUÉ NO ES. Va arriba, no en una nota al pie: una flota que crea que esto sustituye la bitácora de horas
               de servicio se lleva la multa del art. 83 con nuestro archivo en la mano. */}
-          <AvisoCompacto tono="warn" className="rv-aviso--linea" resumen={LEYENDA_NO_ES_BITACORA_83} etiquetaMas="Ver más: alcance legal"
+          <AvisoCompacto tono="warn" className="rv-aviso--linea" resumen={LEYENDA_NO_ES_BITACORA_83} etiquetaMas={tb('jv.ver_mas')}
             mas={(
               <>
                 <strong>{t('jor.nota.ley')}</strong> <InfoTip clave="jornada.alcance" />
@@ -236,7 +246,7 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
             )} />
           {operadores === null && (
             <p className="rv-jn__aviso">
-              No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.
+              {rico(tb('jv.catalogo_noleyo'), { code: (c) => <code>{c}</code> })}
             </p>
           )}
         </>
@@ -250,8 +260,8 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
           hrefCerrar={hrefCerrar}
           cifras={[
             { etiqueta: t('jor.col.dia'), valor: sel.dia },
-            { etiqueta: t('jor.col.estado'), valor: sel.estado === 'cerrado' ? 'Cerrado' : t('jor.abierto') },
-            { etiqueta: t('jor.col.lectura'), valor: ROTULO_VEREDICTO[sel.riesgo.veredicto] },
+            { etiqueta: t('jor.col.estado'), valor: sel.estado === 'cerrado' ? tb('jv.cerrado') : t('jor.abierto') },
+            { etiqueta: t('jor.col.lectura'), valor: veredicto(tb, sel.riesgo.veredicto) },
             { etiqueta: t('jor.col.descanso'), valor: sel.jornada.minutosDescanso === null ? t('jor.sindescanso') : `${sel.jornada.minutosDescanso} min` },
           ]}
         >
@@ -270,7 +280,7 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
       )}
 
       {motivoIlegible !== null ? (
-        <EstadoError reintentar>{`${motivoIlegible} No se enseña media lista: media lista se ve igual que la lista entera, solo más corta — y aquí eso sería afirmar que unos operadores no reportaron.`}</EstadoError>
+        <EstadoError reintentar>{tb('jv.ilegible', { motivo: motivoIlegible })}</EstadoError>
       ) : (
         // La tabla y su vacío viven en una tarjeta (a sangre), nunca sueltos sobre el lienzo.
         <TarjetaTabla titulo={t('jor.tabla.etiqueta')} contador={lista.length > 0 ? numero(lista.length, idioma) : undefined}>
@@ -318,6 +328,7 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
 /** Total del día con las horas extraordinarias del art. 61 SOLO cuando están medidas (> 0). */
 function TotalDelDia({ tr = TR_OPERACION_ES, f }: { tr?: TrOperacion; f: FilaJornada }) {
   const { t } = tr;
+  const tb = trBCompleto(tr.idioma).t;
   const j = f.jornada;
   const horas = aHoras(j.minutosEfectivos ?? j.minutosBrutos);
   const hueco = fraseDelHueco(j);
@@ -328,7 +339,7 @@ function TotalDelDia({ tr = TR_OPERACION_ES, f }: { tr?: TrOperacion; f: FilaJor
       {/* Las extraordinarias del art. 61 se calculaban y se tiraban: el dato que decide un pago al triple no llegaba a la pantalla.
           Solo se pinta MEDIDO (> 0): null es «no se pudo medir» y 0 es «sin tiempo extra», y ninguna de las dos amerita un renglón. */}
       {f.riesgo.horasExtraordinarias !== null && f.riesgo.horasExtraordinarias > 0 && (
-        <span className="rv-jn__extra">{f.riesgo.horasExtraordinarias} h extraordinarias (art. 61)</span>
+        <span className="rv-jn__extra">{tb('jv.extra', { h: f.riesgo.horasExtraordinarias })}</span>
       )}
     </>
   );
@@ -348,11 +359,12 @@ function TotalDelDia({ tr = TR_OPERACION_ES, f }: { tr?: TrOperacion; f: FilaJor
  */
 export function SeccionSemanas({ tr = TR_OPERACION_ES, semanas, truncada }: { tr?: TrOperacion; semanas: SemanaEvaluada[] | null; truncada: boolean }) {
   const { t } = tr;
+  const tb = trBCompleto(tr.idioma).t;
   const columnas: ColumnaBase<SemanaEvaluada>[] = [
     { id: 'operador', titulo: t('jor.sem.operador'), principal: true, celda: (s) => s.operadorNombre },
     { id: 'semana', titulo: t('jor.sem.semana'), celda: (s) => <>{s.desde} → {s.hasta}</> },
     { id: 'horas', titulo: t('jor.sem.horas'), celda: (s) => <HorasSemana s={s} tr={tr} /> },
-    { id: 'lectura', titulo: t('jor.sem.lectura'), celda: (s) => <StatusChip tono={TONO[s.riesgo.veredicto] ?? 'warn'}>{ROTULO_VEREDICTO[s.riesgo.veredicto]}</StatusChip> },
+    { id: 'lectura', titulo: t('jor.sem.lectura'), celda: (s) => <StatusChip tono={TONO[s.riesgo.veredicto] ?? 'warn'}>{veredicto(tb, s.riesgo.veredicto)}</StatusChip> },
     { id: 'que', titulo: t('jor.sem.queseve'), celda: (s) => <SenalesSemana s={s} tr={tr} /> },
   ];
   return (
@@ -424,12 +436,13 @@ function SenalesSemana({ tr = TR_OPERACION_ES, s }: { tr?: TrOperacion; s: Seman
 
 /** Una hora con su origen. NUNCA una hora sola: eso es lo que en un juicio no
  *  prueba nada. */
-function Marca({ a }: { a: JornadaCompuesta['inicio'] }) {
-  if (!a) return <span className="rv-jn__apagado">no lo tengo</span>;
+function Marca({ a, tr = TR_OPERACION_ES }: { a: JornadaCompuesta['inicio']; tr?: TrOperacion }) {
+  const tb = trBCompleto(tr.idioma).t;
+  if (!a) return <span className="rv-jn__apagado">{tb('jv.no_lo_tengo')}</span>;
   return (
-    <span title={ALCANCE_PROCEDENCIA[a.procedencia]}>
-      {hora(a.momento)}
-      <span className="rv-jn__tenue">{ROTULO_PROCEDENCIA[a.procedencia]}</span>
+    <span title={alcance(tb, a.procedencia)}>
+      {hora(a.momento, tr.idioma)}
+      <span className="rv-jn__tenue">{procedencia(tb, a.procedencia)}</span>
     </span>
   );
 }
@@ -442,6 +455,7 @@ function PoliticaSeccion({ tr = TR_OPERACION_ES,
   declararPolitica: AccionJornada;
 }) {
   const { t } = tr;
+  const tb = trBCompleto(tr.idioma).t;
   return (
     <Tarjeta titulo={t('jor.umbrales.titulo')} info="jornada.umbrales"
       // La configuración no vive abierta en la página: se edita en un cajón (Rovaq: filas de configuración en overlay, un primario por zona).
@@ -451,10 +465,7 @@ function PoliticaSeccion({ tr = TR_OPERACION_ES,
         </CajonAlta>
       ) : undefined}>
       <p className="rv-jn__nota">
-        Likida ya evalúa los topes de la ley (los artículos 61, 63, 68 y 69 de la LFT, y la tabla
-        de jornada semanal por año del decreto del 1 de mayo de 2026). Aquí van los tuyos, si tu
-        flota se fijó unos más estrictos por contrato colectivo, por póliza o por política interna.
-        Dejar un campo vacío significa <strong>no declarado</strong>, no cero.
+        {rico(tb('jv.umbrales_texto'), { strong: (c) => <strong>{c}</strong> })}
       </p>
       {politica === null && (
         <p className="rv-jn__nota">
@@ -497,23 +508,24 @@ export function AlertaTopeSeccion({ tr = TR_OPERACION_ES,
   guardarAlerta: AccionJornada;
 }) {
   const { t, idioma } = tr;
+  const tb = trBCompleto(idioma).t;
   const porJornada = new Map(filas.map((f) => [f.jornadaId, f]));
   const ordenadas = alertas === null ? [] : [...alertas].sort((a, b) => b.creadaEn.localeCompare(a.creadaEn));
   const columnas: ColumnaBase<AlertaDeJornada>[] = [
     {
       id: 'cuando', titulo: t('jor.al.cuando'), principal: true,
-      celda: (a) => new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(a.creadaEn)),
+      celda: (a) => new Intl.DateTimeFormat(LOCALE_INTL[idioma], { timeZone: TZ_MX, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(a.creadaEn)),
     },
     {
       id: 'operador', titulo: t('jor.al.operadordia'),
       celda: (a) => { const f = porJornada.get(a.jornadaId); return f ? `${f.operadorNombre} · ${f.dia}` : t('jor.al.fuera'); },
     },
-    { id: 'nivel', titulo: t('jor.al.nivel'), celda: (a) => <strong>{ROTULO_NIVEL[a.nivel]}</strong> },
+    { id: 'nivel', titulo: t('jor.al.nivel'), celda: (a) => <strong>{tb(`jv.nivel.${a.nivel}` as 'jv.nivel.aviso')}</strong> },
     {
       id: 'horas', titulo: t('jor.al.horas'),
       celda: (a) => (
         <>
-          {horasTexto(a.minutos, a.cotaInferior)} de {numero(a.topeMin / 60, idioma)} h
+          {horasTexto(a.minutos, false)}{a.cotaInferior ? tb('jv.al_menos') : ''} de {numero(a.topeMin / 60, idioma)} h
           <span className="rv-jn__tenue">{t('jor.fuente.segun', { fuente: rotulo(FUENTE_ALERTA, a.fuente, t) })}</span>
         </>
       ),
@@ -536,13 +548,13 @@ export function AlertaTopeSeccion({ tr = TR_OPERACION_ES,
         <Aviso tono="error">{t('jor.alerta.noleyo')}</Aviso>
       ) : config === null ? (
         <p className="rv-jn__nota">
-          Todavía no la has configurado: <strong>la alerta está apagada</strong> y nadie recibe avisos.
+          {rico(tb('jv.alerta_sin_config'), { strong: (c) => <strong>{c}</strong> })}
         </p>
       ) : (
         <p className="rv-jn__nota">
           <strong>{config.activa ? t('jor.alerta.encendida') : t('jor.alerta.apagada')}</strong>
-          {' · '}tope {config.topeHoras === null ? t('jor.alerta.ley') : `propio de ${numero(config.topeHoras, idioma)} h`}
-          {' · '}aviso al {config.umbralAvisoPct} %, crítico al {config.umbralCriticoPct} %
+          {' · '}{tb('jv.alerta_tope', { tope: config.topeHoras === null ? t('jor.alerta.ley') : tb('jv.alerta_tope_propio', { h: numero(config.topeHoras, idioma) }) })}
+          {' · '}{tb('jv.alerta_umbrales', { a: config.umbralAvisoPct, b: config.umbralCriticoPct })}
         </p>
       )}
 

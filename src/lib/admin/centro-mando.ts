@@ -2,6 +2,8 @@ import type { ItemClasificado } from './guardia';
 import type { AgenteParado } from './agentes-parados';
 import type { CalidadAgente } from './calidad-agentes';
 import { autonomiaDe, type Nivel } from '@/lib/likida/agentes/autonomia';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CENTRO DE MANDO DE /admin (F2, PLAN-MAESTRO §10.1) — la parte PURA.
@@ -50,61 +52,61 @@ export interface Semaforo {
   guardiaHaceMin: number | null;
 }
 
-const plural = (n: number, s: string, p: string) => `${n} ${n === 1 ? s : p}`;
+type Tr = TrDe<'admin_inicio'>;
 
 /**
  * Rojo: la base o la app no responden (lo que la guardia ya vio). Amarillo: alguna señal pide atención o hay una lectura ciega.
  * Verde solo si TODO se leyó y nada pide acción. S1 («el sistema miente») no se deriva de datos: lo reporta ALERTA_EMAIL y lo
  * clasifica una persona, y este semáforo no finge detectarlo.
  */
-export function semaforoSalud(e: EntradaSemaforo): Semaforo {
+export function semaforoSalud(e: EntradaSemaforo, t: Tr = trAdminInicioEs): Semaforo {
   const rojas: CausaSemaforo[] = [];
   const amarillas: CausaSemaforo[] = [];
   const ciegas: string[] = [];
 
-  if (e.guardia === null) ciegas.push('la guardia de producción');
+  if (e.guardia === null) ciegas.push(t('pul8.ciega_guardia'));
   else {
-    if (e.guardia.baseCaidaDesde) rojas.push({ texto: 'La base de datos no responde (lo vio la guardia).', href: '/admin/salud-sistema' });
-    if (e.guardia.appCaidaDesde) rojas.push({ texto: 'La aplicación no responde (lo vio la guardia).', href: '/admin/salud-sistema' });
-    if (e.guardia.juicio === 'sin_latido') amarillas.push({ texto: 'La guardia nunca ha latido: nadie vigila producción.', href: '/admin/crons' });
-    else if (e.guardia.juicio === 'vencido') amarillas.push({ texto: `La guardia dejó de latir (último latido hace ${e.guardia.haceMin ?? '?'} min).`, href: '/admin/crons' });
+    if (e.guardia.baseCaidaDesde) rojas.push({ texto: t('pul8.sem_base_caida'), href: '/admin/salud-sistema' });
+    if (e.guardia.appCaidaDesde) rojas.push({ texto: t('pul8.sem_app_caida'), href: '/admin/salud-sistema' });
+    if (e.guardia.juicio === 'sin_latido') amarillas.push({ texto: t('pul8.sem_guardia_nunca'), href: '/admin/crons' });
+    else if (e.guardia.juicio === 'vencido') amarillas.push({ texto: t('pul8.sem_guardia_vencida', { min: e.guardia.haceMin ?? '?' }), href: '/admin/crons' });
   }
 
-  if (e.bandeja === null) ciegas.push('la bandeja de escalaciones');
+  if (e.bandeja === null) ciegas.push(t('pul8.ciega_bandeja'));
   else {
-    if (e.bandeja.s2 > 0) amarillas.push({ texto: `${plural(e.bandeja.s2, 'incidente de severidad S2 vivo', 'incidentes de severidad S2 vivos')}.`, href: '/admin/escalaciones' });
-    if (e.bandeja.fuentesCiegas > 0) ciegas.push(plural(e.bandeja.fuentesCiegas, 'fuente de la bandeja', 'fuentes de la bandeja'));
+    if (e.bandeja.s2 > 0) amarillas.push({ texto: t(e.bandeja.s2 === 1 ? 'pul8.sem_s2_uno' : 'pul8.sem_s2_otros', { n: e.bandeja.s2 }), href: '/admin/escalaciones' });
+    if (e.bandeja.fuentesCiegas > 0) ciegas.push(t(e.bandeja.fuentesCiegas === 1 ? 'pul8.ciega_fuente_uno' : 'pul8.ciega_fuente_otros', { n: e.bandeja.fuentesCiegas }));
   }
 
-  if (e.extras === null) ciegas.push('los latidos de los crons');
+  if (e.extras === null) ciegas.push(t('pul8.ciega_crons'));
   else {
     for (const a of e.extras) {
       // «No se pudo leer el latido» es ceguera, no un pendiente.
-      if (a.id === 'crons_ilegibles') ciegas.push('los latidos de los crons');
+      if (a.id === 'crons_ilegibles') ciegas.push(t('pul8.ciega_crons'));
       else amarillas.push({ texto: a.texto, href: a.href });
     }
   }
 
-  if (e.slos === null) ciegas.push('los objetivos de servicio');
+  if (e.slos === null) ciegas.push(t('pul8.ciega_slos'));
   else {
     const rotos = e.slos.filter((s) => s.cumple === false);
-    if (rotos.length > 0) amarillas.push({ texto: `${plural(rotos.length, 'objetivo de servicio no se cumple', 'objetivos de servicio no se cumplen')}: ${rotos.map((s) => s.nombre).join(', ')}.`, href: '/admin/salud-sistema' });
+    if (rotos.length > 0) amarillas.push({ texto: t(rotos.length === 1 ? 'pul8.sem_slo_uno' : 'pul8.sem_slo_otros', { n: rotos.length, nombres: rotos.map((s) => s.nombre).join(', ') }), href: '/admin/salud-sistema' });
   }
 
-  if (e.frenadosPorBandeja === null) ciegas.push('los agentes frenados por la bandeja');
-  else if (e.frenadosPorBandeja > 0) amarillas.push({ texto: `${plural(e.frenadosPorBandeja, 'agente frenado', 'agentes frenados')} porque la bandeja de aprobación está sin atender.`, href: '/admin/aprobaciones' });
+  if (e.frenadosPorBandeja === null) ciegas.push(t('pul8.ciega_frenados_bandeja'));
+  else if (e.frenadosPorBandeja > 0) amarillas.push({ texto: t(e.frenadosPorBandeja === 1 ? 'pul8.sem_frenado_uno' : 'pul8.sem_frenado_otros', { n: e.frenadosPorBandeja }), href: '/admin/aprobaciones' });
 
   const ciegasUnicas = [...new Set(ciegas)];
   const guardiaHaceMin = e.guardia?.haceMin ?? null;
   if (rojas.length > 0) {
-    return { nivel: 'rojo', titulo: 'Hay una falla en producción', causas: [...rojas, ...amarillas], ciegas: ciegasUnicas, guardiaHaceMin };
+    return { nivel: 'rojo', titulo: t('pul8.sem_falla'), causas: [...rojas, ...amarillas], ciegas: ciegasUnicas, guardiaHaceMin };
   }
   if (amarillas.length > 0 || ciegasUnicas.length > 0) {
     const causas = [...amarillas];
-    if (ciegasUnicas.length > 0) causas.push({ texto: `No se pudo leer: ${ciegasUnicas.join(', ')}. No es «todo bien».`, href: '/admin/salud-sistema' });
-    return { nivel: 'amarillo', titulo: amarillas.length > 0 ? 'Algo pide tu atención' : 'No se puede confirmar que todo esté bien', causas, ciegas: ciegasUnicas, guardiaHaceMin };
+    if (ciegasUnicas.length > 0) causas.push({ texto: t('pul8.sem_no_se_pudo_leer', { lista: ciegasUnicas.join(', ') }), href: '/admin/salud-sistema' });
+    return { nivel: 'amarillo', titulo: amarillas.length > 0 ? t('pul8.sem_atencion') : t('pul8.sem_no_confirma'), causas, ciegas: ciegasUnicas, guardiaHaceMin };
   }
-  return { nivel: 'verde', titulo: 'Todo en orden', causas: [], ciegas: [], guardiaHaceMin };
+  return { nivel: 'verde', titulo: t('pul8.sem_ok'), causas: [], ciegas: [], guardiaHaceMin };
 }
 
 // ── 2. Tu turno ────────────────────────────────────────────────────────────
@@ -147,11 +149,11 @@ function vencidoAl(i: ItemClasificado, ahoraMs: number): boolean {
 }
 
 /** Pura. Junta lo que espera una decisión, por urgencia, y lo recorta a `MAX_TU_TURNO` filas. Nada se cuenta dos veces. */
-export function armarTuTurno(e: EntradaTuTurno, ahoraMs: number): TuTurno {
+export function armarTuTurno(e: EntradaTuTurno, ahoraMs: number, t: Tr = trAdminInicioEs): TuTurno {
   const candidatas: Array<{ puntaje: number; fila: FilaTuTurno }> = [];
   const ciegas: string[] = [];
 
-  if (e.items === null) ciegas.push('la bandeja de escalaciones');
+  if (e.items === null) ciegas.push(t('pul8.ciega_bandeja'));
   else {
     e.items.forEach((i, n) => {
       const vencido = vencidoAl(i, ahoraMs);
@@ -162,22 +164,22 @@ export function armarTuTurno(e: EntradaTuTurno, ahoraMs: number): TuTurno {
           titulo: i.titulo,
           detalle: i.flota,
           urgencia: vencido || i.severidad === 'S1' || i.severidad === 'S2' ? 'bad' : 'neutral',
-          etiqueta: vencido ? 'Vencido' : i.severidad === 'S2' ? 'Urgente' : 'Pendiente',
+          etiqueta: vencido ? t('pul8.tt_vencido') : i.severidad === 'S2' ? t('pul8.tt_urgente') : t('pul8.tt_pendiente'),
           href: i.href,
-          accion: 'Abrir',
+          accion: t('pul8.tt_abrir'),
         },
       });
     });
   }
 
-  if (e.envios === null) ciegas.push('los envíos por aprobar');
+  if (e.envios === null) ciegas.push(t('pul8.ciega_envios'));
   else {
     if (e.envios.urgentes > 0) {
       candidatas.push({
         puntaje: 2,
         fila: {
-          clave: 'envios-urgentes', titulo: `${plural(e.envios.urgentes, 'envío urgente espera', 'envíos urgentes esperan')} tu aprobación`,
-          detalle: 'Nada sale a un cliente sin tu visto bueno.', urgencia: 'warn', etiqueta: 'Urgente', href: '/admin/aprobaciones', accion: 'Revisar',
+          clave: 'envios-urgentes', titulo: t(e.envios.urgentes === 1 ? 'pul8.tt_envio_urgente_uno' : 'pul8.tt_envio_urgente_otros', { n: e.envios.urgentes }),
+          detalle: t('pul8.tt_nada_sale'), urgencia: 'warn', etiqueta: t('pul8.tt_urgente'), href: '/admin/aprobaciones', accion: t('pul8.tt_revisar'),
         },
       });
     }
@@ -185,20 +187,20 @@ export function armarTuTurno(e: EntradaTuTurno, ahoraMs: number): TuTurno {
       candidatas.push({
         puntaje: 3,
         fila: {
-          clave: 'envios-normales', titulo: `${plural(e.envios.normales, 'envío espera', 'envíos esperan')} tu aprobación`,
-          detalle: 'Nada sale a un cliente sin tu visto bueno.', urgencia: 'neutral', etiqueta: 'Pendiente', href: '/admin/aprobaciones', accion: 'Revisar',
+          clave: 'envios-normales', titulo: t(e.envios.normales === 1 ? 'pul8.tt_envio_uno' : 'pul8.tt_envio_otros', { n: e.envios.normales }),
+          detalle: t('pul8.tt_nada_sale'), urgencia: 'neutral', etiqueta: t('pul8.tt_pendiente'), href: '/admin/aprobaciones', accion: t('pul8.tt_revisar'),
         },
       });
     }
   }
 
-  if (e.frenados === null) ciegas.push('los agentes frenados');
+  if (e.frenados === null) ciegas.push(t('pul8.ciega_frenados'));
   else if (e.frenados > 0) {
     candidatas.push({
       puntaje: 2,
       fila: {
-        clave: 'agentes-frenados', titulo: `${plural(e.frenados, 'agente frenado', 'agentes frenados')} por la bandeja sin atender`,
-        detalle: 'Se reanudan cuando se resuelven las piezas pendientes.', urgencia: 'warn', etiqueta: 'Frenado', href: '/admin/aprobaciones', accion: 'Atender',
+        clave: 'agentes-frenados', titulo: t(e.frenados === 1 ? 'pul8.tt_frenado_uno' : 'pul8.tt_frenado_otros', { n: e.frenados }),
+        detalle: t('pul8.tt_frenado_detalle'), urgencia: 'warn', etiqueta: t('pul8.tt_frenado'), href: '/admin/aprobaciones', accion: t('pul8.tt_atender'),
       },
     });
   }

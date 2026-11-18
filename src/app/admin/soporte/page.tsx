@@ -14,18 +14,18 @@ import {
   type MensajeHilo, type TicketDetalle,
 } from '@/lib/likida/soporte';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { mensajeDeFalla } from '../mensaje-falla';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, numero } from '@/lib/formato';
 import {
-  Aviso, BotonEnlace, CampoSelect, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, StatusChip, Tarjeta, type TonoEstado,
+  Aviso, BotonEnlace, CampoSelect, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, FormaConAviso, StatusChip, Tarjeta,
+  type ResultadoAccion, type TonoEstado,
 } from '../../ui-v2/componentes';
 import type { PropsCifra } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { uniformes } from '../cifras-uniformes';
 import { observadas } from '../sello-observado';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
-import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { HiloTicket } from './hilo';
 import { CajonTicket } from './cajon-ticket';
 import { VistaCola } from './vista-cola';
@@ -36,16 +36,17 @@ import '../sistema.css';
 import '../resumen.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
+import type { TSistema } from '@/lib/i18n/sistema_tr';
 import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /** "hace 3 h" / "hace 2 d" — la edad del ticket contra el reloj del SERVIDOR (`ahoraMs()`), el mismo contra el que se resta el SLA: dos
  *  relojes en la misma fila terminan contándose historias distintas. */
-function edadDe(abiertoEn: string, ahora: number): string {
+function edadDe(abiertoEn: string, ahora: number, ts: TSistema): string {
   const horas = (ahora - new Date(abiertoEn).getTime()) / 3_600_000;
-  if (horas < 1) return 'hace menos de 1 h';
-  if (horas < 48) return `hace ${Math.floor(horas)} h`;
-  return `hace ${Math.floor(horas / 24)} d`;
+  if (horas < 1) return ts('soporte_cola.hace_menos_de_1_h');
+  if (horas < 48) return ts('soporte_cola.hace_h', { n: Math.floor(horas) });
+  return ts('soporte_cola.hace_d', { n: Math.floor(horas / 24) });
 }
 
 /** El reloj de SLA de la fila — mismas tres verdades que /dashboard/soporte: sin SLA no hay reloj, vencido se dice con cuánto, y lo
@@ -124,6 +125,7 @@ export default async function SoportePage({
   searchParams: Promise<{ ticket?: string; vista?: string }>;
 }) {
   const { t: ta } = await getT('admin_flotas');
+  const { t: ts } = await getT('admin_sistema');
   await requireSuperadmin();
   const sp = await searchParams;
   const ahora = ahoraMs();
@@ -154,7 +156,7 @@ export default async function SoportePage({
           : ta('soporte.respuesta_enviada_el_cliente'),
       };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'responder el ticket') };
+      return { error: await mensajeDeFalla(e, 'verbo.sop_responder_ticket') };
     }
   }
 
@@ -168,7 +170,7 @@ export default async function SoportePage({
       revalidatePath('/admin/soporte');
       return { ok: ta('soporte.tomado_queda_a_tu', { estado: r.estado }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'tomar el ticket') };
+      return { error: await mensajeDeFalla(e, 'verbo.sop_tomar_ticket') };
     }
   }
 
@@ -189,7 +191,7 @@ export default async function SoportePage({
           : ta('soporte.de_a_el_cambio', { estadoPrevio: r.estadoPrevio, estado: r.estado }),
       };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'cambiar el estado del ticket') };
+      return { error: await mensajeDeFalla(e, 'verbo.sop_cambiar_estado') };
     }
   }
 
@@ -268,13 +270,13 @@ export default async function SoportePage({
       celda: (t) => (
         <>
           <StatusChip tono={tonoDe(t.estado)}>{pillTicket(t.estado).etiqueta}</StatusChip>
-          <span className="adm-sis-sub">{t.asignadoA ? (t.asignadoNombre ?? 'Tomado') : ta('soporte.sin_tomar')}</span>
+          <span className="adm-sis-sub">{t.asignadoA ? (t.asignadoNombre ?? ts('soporte_cola.tomado')) : ta('soporte.sin_tomar')}</span>
         </>
       ),
     },
-    { id: 'abierto', titulo: ta('soporte.abierto'), corta: true, celda: (t) => <>{fechaMx(t.abiertoEn)}<span className="adm-sis-sub">{edadDe(t.abiertoEn, ahora)}</span></> },
+    { id: 'abierto', titulo: ta('soporte.abierto'), corta: true, celda: (t) => <>{fechaMx(t.abiertoEn)}<span className="adm-sis-sub">{edadDe(t.abiertoEn, ahora, ts)}</span></> },
     {
-      id: 'sla', titulo: 'SLA', alinear: 'der',
+      id: 'sla', titulo: ts('soporte_cola.sla'), alinear: 'der',
       celda: (t) => {
         const sla = slaDe(t, ta);
         return (
@@ -329,9 +331,9 @@ export default async function SoportePage({
               <CajonTicket titulo={detalle.asunto} descripcion={flotaDelDetalle ?? undefined} hrefCerrar={hrefVista(vista)}>
                 <p><StatusChip tono={tonoDe(detalle.estado)}>{pillTicket(detalle.estado).etiqueta}</StatusChip></p>
                 <ul className="adm-sis-lista">
-                  <li><span>Flota</span><span>{flotaDelDetalle}</span></li>
+                  <li><span>{ts('soporte_cola.flota')}</span><span>{flotaDelDetalle}</span></li>
                   <li><span>{ta('soporte.categoria_y_prioridad')}</span><span>{capital(detalle.categoria)} · {capital(detalle.prioridad)}</span></li>
-                  <li><span>Abierto</span><span>{fechaHoraMx(detalle.abiertoEn)}</span></li>
+                  <li><span>{ts('soporte_cola.abierto')}</span><span>{fechaHoraMx(detalle.abiertoEn)}</span></li>
                   <li><span>{ta('soporte.plazo_sla')}</span><span>{detalle.venceEn ? fechaHoraMx(detalle.venceEn) : ta('soporte.sin_sla_pactado')}</span></li>
                   {/* SIN TOMAR no es "en proceso": son dos cosas distintas y se dicen distinto. */}
                   <li><span>{ta('soporte.tomado_por')}</span><span>{detalle.asignadoA ? (detalle.asignadoNombre ?? ta('soporte.alguien_del_equipo')) : ta('soporte.sin_tomar')}</span></li>
@@ -339,7 +341,8 @@ export default async function SoportePage({
                 {detalle.descripcion ? <p className="adm-sis-descripcion">{detalle.descripcion}</p> : null}
                 <HiloTicket
                   mensajes={hilo ?? []}
-                  vacio="Nadie ha escrito en este hilo todavía. Mientras no haya una respuesta pública, la alarma de «sin respuesta» del agente de Éxito sigue encendida, y con razón."
+                  vacio={ts('soporte_cola.hilo_vacio')}
+                  t={ts}
                 />
                 {terminal ? (
                   <Aviso tono="info" titulo={ta('soporte.este_ticket_esta_cerrado')}>
@@ -350,8 +353,8 @@ export default async function SoportePage({
                 <div className="adm-sis-rejilla adm-forma-fina">
                   {terminal ? (
                     <div className="adm-sis-bloque">
-                      <h3 className="adm-sis-titulo">Reabrir</h3>
-                      <FormaConAviso accion={accionEstado} boton="Reabrir el ticket" columnas="md:grid-cols-1">
+                      <h3 className="adm-sis-titulo">{ts('soporte_cola.reabrir')}</h3>
+                      <FormaConAviso accion={accionEstado} boton={ts('soporte_cola.reabrir_el_ticket')} columnas="md:grid-cols-1">
                         <input type="hidden" name="ticket" value={detalle.id} />
                         <input type="hidden" name="estado" value="abierto" />
                         <p className="adm-sis-nota">{ta('soporte.vuelve_a_abierto_borra')}</p>
@@ -359,8 +362,8 @@ export default async function SoportePage({
                     </div>
                   ) : (
                     <div className="adm-sis-bloque">
-                      <h3 className="adm-sis-titulo">Responder</h3>
-                      <FormaConAviso accion={accionResponder} boton="Enviar" columnas="md:grid-cols-1">
+                      <h3 className="adm-sis-titulo">{ts('soporte_cola.responder')}</h3>
+                      <FormaConAviso accion={accionResponder} boton={ts('soporte_cola.enviar')} columnas="md:grid-cols-1">
                         <input type="hidden" name="ticket" value={detalle.id} />
                         <CampoTextarea etiqueta={ta('soporte.mensaje')} name="cuerpo" obligatorio rows={4} maxLength={LARGO_MAX_MENSAJE} placeholder={ta('soporte.que_le_vas_a')}
                           ayuda={ta('soporte.un_mensaje_publico_apaga')} />
@@ -371,10 +374,10 @@ export default async function SoportePage({
                   )}
                   <div className="adm-sis-bloque">
                     <h3 className="adm-sis-titulo">{ta('soporte.tomar_y_mover')}</h3>
-                    <FormaConAviso accion={accionTomar} boton="Tomar el ticket" columnas="md:grid-cols-1">
+                    <FormaConAviso accion={accionTomar} boton={ts('soporte_cola.tomar_el_ticket')} columnas="md:grid-cols-1">
                       <input type="hidden" name="ticket" value={detalle.id} />
                     </FormaConAviso>
-                    <FormaConAviso accion={accionEstado} boton="Cambiar estado" columnas="md:grid-cols-1">
+                    <FormaConAviso accion={accionEstado} boton={ts('soporte_cola.cambiar_estado')} columnas="md:grid-cols-1">
                       <input type="hidden" name="ticket" value={detalle.id} />
                       <CampoSelect etiqueta={ta('soporte.estado')} name="estado" defaultValue={detalle.estado}
                         ayuda={ta('soporte.resuelto_y_cerrado_escriben')}>
@@ -394,7 +397,7 @@ export default async function SoportePage({
                 <p className="adm-sis-nota">
                   {recortado
                     ? ta('soporte.se_listan_los_mas', { TOPE_TICKETS: numero(TOPE_TICKETS), total: numero(total!) })
-                    : ta('soporte.de_todas_las_flotas_2', { length: numero(tickets.length), length2: tickets.length === 1 ? 'ticket' : 'tickets' })}
+                    : ta('soporte.de_todas_las_flotas_2', { length: numero(tickets.length), length2: tickets.length === 1 ? ts('soporte_cola.ticket') : ts('soporte_cola.tickets') })}
                   
                   {ta('soporte.el_reloj_cuenta_contra')}
                 </p>
@@ -402,7 +405,7 @@ export default async function SoportePage({
             />
           </Tarjeta>
 
-          <Disclosure titulo={ta('soporte.que_pasa_cuando_vence')} resumen="Aviso al operador, una sola vez">
+          <Disclosure titulo={ta('soporte.que_pasa_cuando_vence')} resumen={ts('soporte_cola.aviso_una_sola_vez')}>
             <p className="adm-sis-nota">
               
               {ta('soporte.un_ticket_abierto_cuyo')}
