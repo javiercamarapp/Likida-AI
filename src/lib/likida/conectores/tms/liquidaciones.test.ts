@@ -105,7 +105,8 @@ describe('leerLiquidaciones: cuadre y aceptación', () => {
     const tipos = (l.cuerpo.conceptos as Array<{ tipo: string }>).map((c) => c.tipo);
     expect(tipos).toEqual(['percepcion', 'percepcion', 'percepcion', 'deduccion', 'deduccion', 'deduccion']);
     expect(l.cuerpo.periodo).toEqual({ desde: '2026-01-05', hasta: '2026-01-14' });
-    expect(l.cuerpo.claveExterna).toBe('1228-P1228');
+    // A54-DAT-01: la clave sale canonizada en minúsculas (la unicidad de 0370:100 es sensible a la caja).
+    expect(l.cuerpo.claveExterna).toBe('1228-p1228');
   });
 
   it('el cuerpo no lleva nombres de operador: solo número de empleado (y teléfono si hay)', async () => {
@@ -303,7 +304,63 @@ describe('A37-S38-07: dos pólizas distintas con la misma clave externa saneada'
 
   it('bitácoras que no chocan siguen pasando', async () => {
     const r = ok(await leer(tablas(['A1', 'A2'])));
-    expect(r.cuerpos.map((c) => c.clave).sort()).toEqual(['A1-P1', 'A2-P1']);
+    expect(r.cuerpos.map((c) => c.clave).sort()).toEqual(['a1-p1', 'a2-p1']);
     expect(r.rechazadas).toEqual([]);
+  });
+});
+
+// A53-DAT-01 / A54-DAT-01 (CRÍTICO, tercera ronda): `clave_externa` es la ÚNICA defensa contra
+// liquidar dos veces la misma póliza — `liquidacion_externa_clave_unica unique (tenant_id,
+// clave_externa)` (0370:100). Un `unique` de Postgres sobre `text` distingue mayúsculas, así que
+// la clave tiene que llegar CANONIZADA o la restricción no protege nada: el mismo origen que
+// escribe `BIT-MTY-44821` un día y `BIT-Mty-44821` otro produce dos filas, dos liquidaciones al
+// mismo operador y el periodo cuenta el doble.
+//
+// La salida correcta NO es elegir una: es la que el repo ya decidió para colisiones en
+// A37-S38-07 (`liquidaciones.ts:180-186`) — si dos pólizas del origen caen en la misma clave, no
+// se entrega NINGUNA y se dice por qué, porque cuál gana sería adivinar.
+describe('A54-DAT-01: la clave externa canoniza la caja antes de que la unicidad dependa de ella', () => {
+  const DIA = { FechaInicio: '2026-03-02 00:00:00', FechaFin: '2026-03-08 23:59:59' };
+
+  /** Dos renglones idénticos salvo la CAJA de la bitácora/póliza, mismo operador y mismo monto. */
+  function tablasConCajaDistinta(): Tablas {
+    const nomina: Cruda[] = [];
+    let id = 1;
+    for (const bitacora of ['BIT-MTY-44821', 'BIT-Mty-44821']) {
+      nomina.push({
+        ID: id++, Poliza: `P-${bitacora}`, Bitacora: bitacora, OperadorID: 100, ...DIA,
+        ConceptoID: 1, Cargo: 8450.0, Abono: 0,
+      });
+    }
+    return {
+      nomina,
+      operadores: [{ ID: 100, NumeroEmpleado: 'E-0100' }],
+      conceptos: [{ ID: 1, Clave: 'C001', Descripcion: 'Sueldo viaje', Oculto: 'no' }],
+    };
+  }
+
+  it('dos bitácoras que solo difieren en mayúsculas NO salen como dos liquidaciones distintas', async () => {
+    const r = ok(await leer(tablasConCajaDistinta()));
+    const claves = r.cuerpos.map((c) => c.clave);
+    // El fallo que esto reproduce: dos claves distintas ⇒ el `unique` las deja pasar a las dos.
+    expect(new Set(claves).size).toBe(claves.length === 0 ? 0 : 1);
+    expect(r.cuerpos).toHaveLength(0);
+    expect(r.rechazadas).toHaveLength(2);
+    for (const rechazada of r.rechazadas) {
+      expect(rechazada.motivo).toContain('clave externa');
+    }
+  });
+
+  it('la caja no cambia la identidad: la misma póliza en dos cajas produce la misma clave canónica', async () => {
+    const soloUna = (bitacora: string): Tablas => ({
+      nomina: [{ ID: 1, Poliza: `P-${bitacora}`, Bitacora: bitacora, OperadorID: 100, ...DIA, ConceptoID: 1, Cargo: 8450.0, Abono: 0 }],
+      operadores: [{ ID: 100, NumeroEmpleado: 'E-0100' }],
+      conceptos: [{ ID: 1, Clave: 'C001', Descripcion: 'Sueldo viaje', Oculto: 'no' }],
+    });
+    const mayus = ok(await leer(soloUna('BIT-MTY-44821')));
+    const mixta = ok(await leer(soloUna('BIT-Mty-44821')));
+    expect(mayus.cuerpos).toHaveLength(1);
+    expect(mixta.cuerpos).toHaveLength(1);
+    expect(mixta.cuerpos[0].clave).toBe(mayus.cuerpos[0].clave);
   });
 });
