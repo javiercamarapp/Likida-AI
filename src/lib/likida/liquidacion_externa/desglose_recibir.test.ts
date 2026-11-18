@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
+import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja, datoInvalido } from '../errores';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { DESGLOSE_SINTETICO } from './desglose.fixture';
 import type { DesgloseBitacora } from './desglose_contrato';
@@ -386,6 +386,41 @@ describe('recibirDesglose: operador y destinatarios', () => {
     expect(b.liquidaciones).toHaveLength(0);
     expect(b.subidas).toHaveLength(0);
     expect(b.entregas).toHaveLength(0);
+  });
+
+  it('alta automática: operador que NO existe y la flota lo permite ⇒ se da de alta y la bitácora se recibe (sin excepción)', async () => {
+    const b = banco();
+    const altas: string[] = [];
+    b.deps.resolverOperador = async () => { throw datoInvalido('repo.no_encontre_a_ese_operador'); };
+    b.deps.altaOperadorDesdeBitacora = async (_t, numero, nombre) => {
+      altas.push(`${numero}|${nombre}`);
+      return { id: 'op-nuevo', nombre: nombre ?? '', telefono: 'sin-tel:abc', activo: true };
+    };
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r.estado).not.toBe('operador_no_encontrado');
+    expect(altas).toHaveLength(1);
+    expect(b.excepciones.filter((e) => e.tipo === 'operador_no_encontrado')).toHaveLength(0);
+  });
+
+  it('alta automática: la alta devuelve null (flota que no la permite o sin nombre) ⇒ excepción de siempre', async () => {
+    const b = banco();
+    b.deps.resolverOperador = async () => { throw datoInvalido('repo.no_encontre_a_ese_operador'); };
+    b.deps.altaOperadorDesdeBitacora = async () => null;
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r.estado).toBe('operador_no_encontrado');
+    expect(b.excepciones[0]).toMatchObject({ tipo: 'operador_no_encontrado', detalle: { motivo: 'no_existe' } });
+  });
+
+  it('alta automática: NUNCA para un operador de baja ni ambiguo', async () => {
+    for (const falla of [new OperadorDeBaja('baja'), new OperadorAmbiguo('ambiguo')]) {
+      const b = banco();
+      let llamada = false;
+      b.deps.resolverOperador = async () => { throw falla; };
+      b.deps.altaOperadorDesdeBitacora = async () => { llamada = true; return { id: 'x', nombre: 'x', telefono: 'x', activo: true }; };
+      const r = await recibirDesglose(TENANT, desglose(), b.deps);
+      expect(r.estado).toBe('operador_no_encontrado');
+      expect(llamada).toBe(false);
+    }
   });
 
   it('un error que no es de datos al resolver el operador se propaga (no se confunde con "no existe")', async () => {
