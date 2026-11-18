@@ -1,36 +1,51 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-18 (miércoles)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
+rango_pendiente: 2026-09-11 — 2026-11-17 (69 días corridos, incluye
+  ~10 viernes de cuota de diésel, 8+ lunes de ETag del SAT, y el chequeo
+  trimestral de deriva de ley del 01-oct-2026) sin barrer. Sigue
   arrancando en 09-11 para la próxima corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable_hoy — no es viernes; los viernes de
+  sep-oct-nov tampoco se pudieron verificar (mismo bloqueo). Sigue sin
+  verificar desde el 05-sep-2026 (más de 2 meses).
+etag_sat: no_aplica_hoy — no es lunes. Los lunes de este rango tampoco
+  se pudieron verificar.
+deriva_ley_check: PERDIDO — el corte del 01-oct-2026 cayó dentro del
+  bloqueo y nunca se corrió. Próxima ventana: 01-ene-2027.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — bloqueo de política de egreso SIN RESOLVER desde al menos el
+  12-sep-2026 (la corrida de hoy es la continuación de tres corridas
+  consecutivas ya reportadas el 12-sep, 15-sep y 20-sep, que documentaron
+  el mismo corte). Re-probado hoy con dos rutas independientes:
+  - curl directo por HTTPS_PROXY contra sidofqa.segob.gob.mx:443 →
+    "CONNECT tunnel failed, response 403" (connect_rejected, confirmado
+    también en /__agentproxy/status). Control con www.google.com:443 →
+    mismo 403, consistente con una lista de permitidos cerrada y no con
+    una caída puntual del sitio del SIDOF.
+  - WebFetch (infraestructura propia de Anthropic, no el proxy de la
+    sesión) contra el mismo endpoint → "getaddrinfo ENOTFOUND
+    sidofqa.segob.gob.mx": el dominio ni siquiera resuelve desde esta
+    ruta, lo que indica que el entorno lo trata como fuera de los
+    dominios permitidos de la sesión, no como un servidor caído.
+  No se leyó ninguna nota del DOF en esta corrida. No se tocó ninguna
+  ficha de normas/. El rango sin verificar por esta rutina ya cubre
+  69 días, ~10 viernes de cuota de diésel, 8+ lunes de ETag del SAT, y
+  el corte trimestral de deriva de ley del 01-oct-2026 (perdido por
+  completo, siguiente ventana hasta 01-ene-2027).
+  NOTA: desde el 14-nov-2026 esta rutina remota es oficialmente el
+  RESPALDO — la vigilancia primaria corre como cron de producción
+  (`GET /api/cron/vigilancia-normativa`, 13:30 UTC diario,
+  `src/lib/likida/normas/vigilancia/`) con egreso real desde el propio
+  deploy, no desde este entorno. Esta sesión no tiene visibilidad de si
+  ese cron de producción está corriendo con éxito (no hay acceso desde
+  aquí a logs de producción ni a `cron_latido`); sólo constata que el
+  RESPALDO sigue muerto. Requiere intervención humana: permitir
+  sidofqa.segob.gob.mx, sat.gob.mx y diputados.gob.mx (ver
+  references/fuentes.md) en la política de egreso de este entorno
+  programado — o confirmar que el cron de producción cubre el hueco y
+  aceptar que este respaldo quede inoperante.
+</content>
