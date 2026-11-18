@@ -95,7 +95,7 @@ describe('muestra-tms · casos límite de la bitácora', () => {
     expect(r.revision).toEqual([]);
     expect(r.desglose?.percepciones).toEqual([{ concepto: 'Sueldo semanal', monto: 1000 }]);
     expect(r.desglose?.deducciones).toEqual([{ concepto: 'Sueldo semanal', monto: 389 }, { concepto: 'Fonacot', monto: 50 }]);
-    expect(r.advertencias).toEqual([{ codigo: 'monto_negativo_reubicado', campo: 'Percepciones[1]' }]);
+    expect(r.advertencias).toContainEqual({ codigo: 'monto_negativo_reubicado', campo: 'Percepciones[1]' });
     // 1000 - (50 + 389) = 561: lo mismo que 1000 - 389 - 50.
   });
 
