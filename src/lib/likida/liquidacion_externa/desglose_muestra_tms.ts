@@ -117,8 +117,12 @@ export interface ConfigMuestraTms {
 }
 
 export interface AdvertenciaMuestra {
-  codigo: 'campo_desconocido';
-  /** Nombre del campo fuera del contrato (`Poliza`, `Percepciones[].Foo`); nunca su valor. */
+  /**
+   * `campo_desconocido`: campo fuera del contrato. `monto_negativo_reubicado` (18-nov-2026): el renglón venía con monto NEGATIVO y se
+   * pasó al bloque contrario con el importe en positivo (el neto no cambia); `campo` es el renglón (`Percepciones[3]`).
+   */
+  codigo: 'campo_desconocido' | 'monto_negativo_reubicado';
+  /** Nombre del campo fuera del contrato (`Poliza`, `Percepciones[].Foo`) o el renglón reubicado; nunca su valor. */
   campo: string;
 }
 
@@ -469,7 +473,14 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
         return;
       }
       const campoMonto = !hayMonto && haySinonimo ? sinonimo : 'Monto';
-      const m = centavosDeMontoMuestra(r[campoMonto]);
+      // 18-nov-2026 (acuerdo con la fuente): un monto NEGATIVO no se rechaza; equivale al mismo importe en el bloque contrario
+      // (percepción −X = deducción +X; el neto es el mismo). Se declara en `advertencias`, nunca en silencio, y el resto de las reglas
+      // (más de 2 decimales, catálogo, cuadre contra `Neto`) sigue igual sobre el importe ya en positivo.
+      const bruto = r[campoMonto];
+      const negativo = typeof bruto === 'number' && Number.isFinite(bruto) && bruto < 0;
+      const ladoEf: Lado = negativo ? (lado === 'percepcion' ? 'deduccion' : 'percepcion') : lado;
+      if (negativo && advertencias.length < MAX_ADVERTENCIAS_BITACORA) advertencias.push({ codigo: 'monto_negativo_reubicado', campo: donde });
+      const m = centavosDeMontoMuestra(negativo ? -(bruto as number) : bruto);
       if (!m.ok) { motivo(m.codigo, `${donde}.${campoMonto}`, m.detalle); montosMalos = true; return; }
       if (m.centavos === 0) { ignorados.push({ donde, motivo: 'monto en cero' }); return; }
       if (desc === '') { motivo('descripcion_vacia', `${donde}.Descripcion`, 'El renglón no trae descripción.'); montosMalos = true; return; }
@@ -477,11 +488,11 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
       if (c === null) motivo('concepto_desconocido', `${donde}.Descripcion`, 'Descripción que no está en el catálogo de conceptos; revisar (el renglón se conserva).');
       else {
         categorias.push({ donde, categoria: c.categoria });
-        if (c.lado !== 'ambos' && c.lado !== lado) motivo('concepto_lado_inesperado', `${donde}.Descripcion`, `Concepto «${c.categoria}» llega en ${clave}; normalmente va del otro lado.`);
+        if (!negativo && c.lado !== 'ambos' && c.lado !== lado) motivo('concepto_lado_inesperado', `${donde}.Descripcion`, `Concepto «${c.categoria}» llega en ${clave}; normalmente va del otro lado.`);
         if (c.categoria === 'ajuste_redondeo' && m.centavos >= 100) motivo('ajuste_redondeo_excesivo', `${donde}.${campoMonto}`, 'Un ajuste de redondeo («Dif en registro») es de centavos (menos de 1.00); este no lo es: revisar en el origen.');
       }
-      centavosPorBloque[lado] += m.centavos;
-      bloques[lado].push({ concepto: desc, monto: m.centavos / 100 });
+      centavosPorBloque[ladoEf] += m.centavos;
+      bloques[ladoEf].push({ concepto: desc, monto: m.centavos / 100 });
     });
   };
   procesar('Percepciones', 'percepcion');

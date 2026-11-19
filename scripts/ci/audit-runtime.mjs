@@ -7,7 +7,57 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-export function clasificarAuditoriaRuntime(reporte) {
+/**
+ * Avisos aceptados de forma explícita y TEMPORAL (autorizado por el dueño el 18-nov-2026). Cada uno nombra el aviso exacto (GHSA),
+ * por qué se acepta y hasta cuándo. Vencida la fecha, el aviso vuelve a bloquear solo. Un aviso NUEVO nunca queda cubierto: se
+ * compara el GHSA, no el paquete.
+ *
+ * GHSA-fc5q-39xc-vjpf (picomatch): rango `*` y SIN versión corregida publicada. Entra solo por la cadena de `@sentry/nextjs`
+ * (@rollup/plugin-commonjs, @rollup/pluginutils, fdir): herramientas del empaquetado del reporte de errores. Pendiente: subir
+ * @sentry/nextjs a 11.x en un PR aparte.
+ */
+export const AVISOS_ACEPTADOS = [
+  { ghsa: 'GHSA-fc5q-39xc-vjpf', vence: '2026-12-18' },
+];
+
+function avisosVigentes(ahora) {
+  return new Set(AVISOS_ACEPTADOS.filter((a) => ahora < new Date(`${a.vence}T23:59:59Z`)).map((a) => a.ghsa));
+}
+
+/**
+ * Cuenta high/critical que NO estén cubiertos por un aviso aceptado y vigente. Un paquete queda cubierto solo si TODOS sus avisos
+ * directos (via con objeto) son aceptados y todo lo high/critical que arrastra de otros paquetes (via con texto) también está cubierto.
+ * Sin detalle de paquetes no se cubre nada: falla cerrado (devuelve null).
+ */
+function contarSinAceptados(reporte, ahora) {
+  const detalle = reporte?.vulnerabilities;
+  const vigentes = avisosVigentes(ahora);
+  if (!detalle || typeof detalle !== 'object' || Array.isArray(detalle) || vigentes.size === 0) return null;
+  const memo = new Map();
+  const cubierto = (nombre, visitando = new Set()) => {
+    if (memo.has(nombre)) return memo.get(nombre);
+    const v = detalle[nombre];
+    if (!v || !Array.isArray(v.via) || v.via.length === 0 || visitando.has(nombre)) return false;
+    visitando.add(nombre);
+    // Un paquete arrastrado que NO es high/critical no aporta a la severidad de este: no hace falta cubrirlo (el umbral es high).
+    const ok = v.via.every((x) => (typeof x === 'string'
+      ? (detalle[x]?.severity !== 'high' && detalle[x]?.severity !== 'critical') || cubierto(x, visitando)
+      : x && typeof x === 'object' && typeof x.url === 'string' && [...vigentes].some((g) => x.url.endsWith(`/${g}`))));
+    visitando.delete(nombre);
+    memo.set(nombre, ok);
+    return ok;
+  };
+  let high = 0;
+  let critical = 0;
+  for (const [nombre, v] of Object.entries(detalle)) {
+    if (v?.severity !== 'high' && v?.severity !== 'critical') continue;
+    if (cubierto(nombre)) continue;
+    if (v.severity === 'critical') critical += 1; else high += 1;
+  }
+  return { high, critical };
+}
+
+export function clasificarAuditoriaRuntime(reporte, ahora = new Date()) {
   const conteos = reporte?.metadata?.vulnerabilities;
   if (!conteos || typeof conteos !== 'object' || Array.isArray(conteos)) {
     const codigo = reporte?.error?.code ?? reporte?.code ?? 'sin-codigo';
@@ -31,7 +81,13 @@ export function clasificarAuditoriaRuntime(reporte) {
   }
 
   const { high, critical } = conteos;
-  if (high + critical > 0) return { tipo: 'vulnerable', high, critical };
+  if (high + critical > 0) {
+    // Los conteos de npm cuentan PAQUETES; se recalculan sin los cubiertos por un aviso aceptado y vigente.
+    const restante = contarSinAceptados(reporte, ahora);
+    if (restante === null || restante.high + restante.critical > high + critical) return { tipo: 'vulnerable', high, critical };
+    if (restante.high + restante.critical > 0) return { tipo: 'vulnerable', high: restante.high, critical: restante.critical };
+    return { tipo: 'limpia', high: 0, critical: 0 };
+  }
   return { tipo: 'limpia', high: 0, critical: 0 };
 }
 

@@ -49,9 +49,9 @@ describe('muestra-tms · Cargo/Abono como sinónimo de Monto', () => {
   });
 
   it('las reglas actuales de monto siguen sobre el sinónimo: negativo, decimales, cero y nulo', () => {
+    // Negativo (18-nov): ya no se rechaza; se reubica en el bloque contrario con advertencia (ver desglose_muestra_tms.test.ts).
     const neg = conv({ Percepciones: [{ Descripcion: 'Sueldo semanal', Cargo: -1 }], Deducciones: [{ Descripcion: 'Fonacot', Monto: 50 }] });
-    expect(codigos(neg)).toEqual(['monto_negativo']);
-    expect(neg.revision[0].campo).toBe('Percepciones[0].Cargo');
+    expect(neg.advertencias).toEqual([{ codigo: 'monto_negativo_reubicado', campo: 'Percepciones[0]' }]);
     const dec = conv({ Percepciones: [{ Descripcion: 'Sueldo semanal', Monto: 10 }], Deducciones: [{ Descripcion: 'Fonacot', Abono: 1.005 }] });
     expect(codigos(dec)).toEqual(['monto_decimales']);
     const cero = conv({ Percepciones: [{ Descripcion: 'Sueldo semanal', Monto: 10 }, { Descripcion: 'Bono de puntualidad', Cargo: 0 }], Deducciones: [] });

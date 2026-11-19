@@ -77,14 +77,32 @@ describe('muestra-tms · casos límite de la bitácora', () => {
     expect(r.desglose).toMatchObject({ desde: '2026-10-09', hasta: '2026-10-10' });
   });
 
-  it('montos null, negativo, 3 decimales, texto y NaN ⇒ revisión y sin desglose', () => {
-    const casos: Array<[unknown, string]> = [[null, 'monto_nulo'], [-5, 'monto_negativo'], [1500.505, 'monto_decimales'],
+  it('montos null, 3 decimales, texto y NaN ⇒ revisión y sin desglose', () => {
+    const casos: Array<[unknown, string]> = [[null, 'monto_nulo'], [1500.505, 'monto_decimales'],
       ['100.00', 'monto_no_numerico'], [Number.NaN, 'monto_no_numerico'], [Infinity, 'monto_no_numerico'], [1e21, 'monto_excesivo']];
     for (const [monto, codigo] of casos) {
       const r = conv({ Percepciones: [{ Descripcion: 'Sueldo', Monto: monto }], Deducciones: [] });
       expect(codigos(r)).toEqual([codigo]);
       expect(r.desglose).toBeNull();
     }
+  });
+
+  it('monto NEGATIVO (18-nov): se reubica en el bloque contrario en positivo, con advertencia, y el neto no cambia', () => {
+    const r = conv({
+      Percepciones: [{ Descripcion: 'Sueldo semanal', Monto: 1000 }, { Descripcion: 'Sueldo semanal', Monto: -389 }],
+      Deducciones: [{ Descripcion: 'Fonacot', Monto: 50 }],
+    });
+    expect(r.revision).toEqual([]);
+    expect(r.desglose?.percepciones).toEqual([{ concepto: 'Sueldo semanal', monto: 1000 }]);
+    expect(r.desglose?.deducciones).toEqual([{ concepto: 'Sueldo semanal', monto: 389 }, { concepto: 'Fonacot', monto: 50 }]);
+    expect(r.advertencias).toContainEqual({ codigo: 'monto_negativo_reubicado', campo: 'Percepciones[1]' });
+    // 1000 - (50 + 389) = 561: lo mismo que 1000 - 389 - 50.
+  });
+
+  it('un negativo con más de 2 decimales sigue sin redondearse: va a revisión por decimales', () => {
+    const r = conv({ Percepciones: [{ Descripcion: 'Sueldo semanal', Monto: 1000 }, { Descripcion: 'Liq. en contra', Monto: -510.7282 }], Deducciones: [] });
+    expect(codigos(r)).toContain('monto_decimales');
+    expect(r.desglose).toBeNull();
   });
 
   it('descripción desconocida ⇒ el renglón se conserva y la bitácora va a revisión', () => {

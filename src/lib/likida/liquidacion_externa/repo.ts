@@ -373,6 +373,20 @@ export async function resolverOperadorDestino(
 }
 
 /**
+ * Alta de un operador que llegó en una bitácora y no estaba en el padrón (18-nov-2026): activo, sin WhatsApp (marcador `sin-tel:`, 0932) y sin
+ * correo. Devuelve la fila, o `null` si el insert falló (típico: el número de empleado ya lo tiene otro por una carrera).
+ */
+export async function insertarOperadorDesdeBitacora(tenantId: string, nombre: string, numeroEmpleado: string): Promise<OperadorDestino | null> {
+  const { nuevoMarcadorSinTelefono } = await import('@/lib/likida/operador_sin_telefono');
+  const res = await acotada(supabaseAdmin().from('operador')
+    .insert({ tenant_id: tenantId, nombre, telefono: nuevoMarcadorSinTelefono(), numero_empleado: numeroEmpleado })
+    .select('id, nombre, telefono, activo').maybeSingle(), 'liqext.operador_alta');
+  if (res.error || !res.data) return null;
+  const f = res.data as { id: string; nombre: string; telefono: string; activo: boolean };
+  return { id: String(f.id), nombre: String(f.nombre), telefono: String(f.telefono), activo: f.activo === true };
+}
+
+/**
  * Padrón de la flota para resolver al operador por NOMBRE (contrato «muestra-tms», SUPUESTO hasta la especificación oficial).
  * Trae a TODOS los operadores del tenant (activos y de baja) para que una homonimia con alguien de baja también se vea:
  * resolver «único» sobre un padrón recortado sería adivinar. Lectura completa y demostrada (`traerTodo`) o lanza. Solo nombre y

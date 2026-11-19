@@ -38,7 +38,7 @@ import { resolverDestinatarios, resolverRevisores, type MotivoFaltante } from '.
 import { hoyMx } from '@/lib/formato';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import {
-  buscarPorClave, resolverOperadorDestino, resolverViajeIds, insertarLiquidacionExterna, registrarEvento,
+  buscarPorClave, resolverOperadorDestino, insertarOperadorDesdeBitacora, resolverViajeIds, insertarLiquidacionExterna, registrarEvento,
   type LiquidacionExterna, type NuevaLiquidacionExterna, type OperadorDestino, type TipoEvento,
 } from './repo';
 import {
@@ -56,6 +56,13 @@ export interface DependenciasDesglose {
   buscarPorClave: (tenantId: string, clave: string) => Promise<LiquidacionExterna | null>;
   /** Lanza `DatoInvalido` si el operador no existe, está de baja o los datos no coinciden. */
   resolverOperador: (tenantId: string, numeroEmpleado: string) => Promise<OperadorDestino>;
+  /**
+   * Alta automática (18-nov-2026, acuerdo de la reunión del 17): un número de empleado que NO existe en el padrón de la flota se da de
+   * alta con lo que manda la bitácora (número + nombre), sin teléfono ni correo. NUNCA se llama para un operador de baja ni ambiguo.
+   * Devuelve `null` si no corresponde (flota que no lo permite, nombre inservible): entonces sigue la excepción `operador_no_encontrado`.
+   * Con `simular` no escribe nada. Opcional: sin ella (pruebas, otros llamadores) el comportamiento es el de siempre.
+   */
+  altaOperadorDesdeBitacora?: (tenantId: string, numeroEmpleado: string, nombre: string | undefined, simular: boolean) => Promise<OperadorDestino | null>;
   resolverViajeIds: (tenantId: string, folios: string[]) => Promise<string[]>;
   leerContacto: (tenantId: string, operadorId: string) => Promise<ContactoOperador | null>;
   leerCoordinador: (tenantId: string, coordinadorId: string) => Promise<Coordinador | null>;
@@ -88,6 +95,35 @@ export interface DependenciasDesglose {
   leerPolizaProvisional?: (tenantId: string) => Promise<boolean>;
 }
 
+/** Valor que se usa en la vista previa (nada se escribe): un id con forma de uuid que no existe. */
+const OPERADOR_SIMULADO_ID = '00000000-0000-0000-0000-000000000000';
+
+/**
+ * Alta automática del operador que la bitácora trae y la flota no tiene (acuerdo del 17-nov-2026: no se pide correo; lo que llega se toma
+ * como válido). Solo en una flota que entrega por correo (la misma compuerta del alta sin teléfono, 0932). Sin nombre utilizable se rotula
+ * «Operador <número>» (Celinda, 17-nov: lo que manda la bitácora se toma como válido; no se lleva control de operadores). El operador nace activo, SIN teléfono (marcador) y SIN correo: la entrega le abrirá
+ * `operador_sin_correo` hasta que haya contacto. Carrera (dos bitácoras del mismo operador a la vez): si el insert choca, se vuelve a resolver.
+ */
+export async function altaOperadorDesdeBitacoraPorOmision(
+  tenantId: string, numeroEmpleado: string, nombre: string | undefined, simular: boolean,
+): Promise<OperadorDestino | null> {
+  const numero = numeroEmpleado.trim();
+  // Sin nombre utilizable NO se inventa uno: se rotula con el número de empleado («Operador 1234»), que sí es dato de la bitácora.
+  const limpio = (nombre ?? '').trim().replace(/\s+/g, ' ');
+  const nom = limpio.length >= 3 && limpio.length <= 120 ? limpio : `Operador ${numero}`;
+  if (numero === '' || numero.length > 40) return null;
+  const { permiteAltaSinTelefono } = await import('../operador_sin_telefono_canal');
+  if (!(await permiteAltaSinTelefono(tenantId))) return null;
+  if (simular) return { id: OPERADOR_SIMULADO_ID, nombre: nom, telefono: '', activo: true };
+  const data = await insertarOperadorDesdeBitacora(tenantId, nom, numero);
+  if (!data) {
+    // Choque por número de empleado repetido (otra petición lo acaba de crear): se resuelve contra el padrón. Si sigue sin resolverse, excepción.
+    try { return await resolverOperadorDestino(tenantId, { id: null, telefono: null, numeroEmpleado: numero }); } catch { return null; }
+  }
+  logger.info('liqcorreo.operador_alta_desde_bitacora', { tenantId, operadorId: data.id });
+  return data;
+}
+
 export const dependenciasDesglosePorOmision: DependenciasDesglose = {
   ahora: () => new Date(),
   // Sin las migraciones 0785-0787 la lectura no está disponible: se usa el defecto (canal anterior, sin reglas)... salvo bajo
@@ -103,6 +139,7 @@ export const dependenciasDesglosePorOmision: DependenciasDesglose = {
   },
   buscarPorClave,
   resolverOperador: (t, numeroEmpleado) => resolverOperadorDestino(t, { id: null, telefono: null, numeroEmpleado }),
+  altaOperadorDesdeBitacora: altaOperadorDesdeBitacoraPorOmision,
   resolverViajeIds,
   leerContacto: async (t, id) => {
     const l = await leerContactoOperador(t, id);
@@ -367,11 +404,19 @@ export async function recibirDesglose(
     operador = await deps.resolverOperador(tenantId, d.operador.numeroEmpleado);
   } catch (e) {
     if (!(e instanceof DatoInvalido)) throw e;
-    // A37-A1-liquidaciones-12: la excepción distingue al operador DE BAJA (finiquito, reactivar) del que no existe (dar de alta).
-    await deps.abrirExcepcion(tenantId, claveExterna, 'operador_no_encontrado', {
-      bitacora: d.bitacora, motivo: e instanceof OperadorDeBaja ? 'baja' : e instanceof OperadorAmbiguo ? 'ambiguo' : 'no_existe',
-    }, ahora);
-    return { estado: 'operador_no_encontrado', claveExterna };
+    // Solo «no existe»: el de baja y el ambiguo NUNCA se dan de alta solos (finiquito / dato mal del cliente).
+    const noExiste = !(e instanceof OperadorDeBaja) && !(e instanceof OperadorAmbiguo);
+    const alta = noExiste && deps.altaOperadorDesdeBitacora
+      ? await deps.altaOperadorDesdeBitacora(tenantId, d.operador.numeroEmpleado, d.operador.nombre, opciones.simular === true) : null;
+    if (alta) {
+      operador = alta;
+    } else {
+      // A37-A1-liquidaciones-12: la excepción distingue al operador DE BAJA (finiquito, reactivar) del que no existe (dar de alta).
+      await deps.abrirExcepcion(tenantId, claveExterna, 'operador_no_encontrado', {
+        bitacora: d.bitacora, motivo: e instanceof OperadorDeBaja ? 'baja' : e instanceof OperadorAmbiguo ? 'ambiguo' : 'no_existe',
+      }, ahora);
+      return { estado: 'operador_no_encontrado', claveExterna };
+    }
   }
 
   // (4) reglas del contralor y guardas previas al envío (sobre lo que el operador va a ver)
