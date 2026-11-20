@@ -1,36 +1,39 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-20 (viernes)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-11-19 (más de 2 meses, ~50 días hábiles,
+  incluye todos los viernes de cuota de diésel de ese rango, el 1-oct
+  — trimestral de deriva de ley — y cualquier lunes de ETag del SAT) sin
+  barrer. Sigue arrancando en 09-11 para la próxima corrida que tenga
+  acceso.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable — todos los viernes desde el 05-sep-2026
+  siguen sin verificar (mismo bloqueo).
+etag_sat: no_evaluable_hoy — hoy es viernes, no lunes; de cualquier forma
+  el host está bloqueado.
+deriva_ley_check: no_aplica_hoy — no es día 1 de trimestre (ya pasó el
+  01-oct sin poder correr; próxima: 01-ene-2027).
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — persiste el bloqueo de egreso reportado desde el 12-sep-2026.
+  Confirmado hoy por DOS rutas independientes, igual que en corridas
+  anteriores: curl por HTTPS_PROXY → "CONNECT tunnel failed, response
+  403" contra sidofqa.segob.gob.mx y contra www.google.com como control
+  (mismo 403, confirma bloqueo de política general, no caída del SIDOF).
+  WebFetch (infraestructura de Anthropic, no el proxy de la sesión) →
+  "getaddrinfo ENOTFOUND sidofqa.segob.gob.mx" / host fuera de los
+  dominios permitidos de la sesión. No se leyó ninguna nota del DOF. No
+  se tocó ninguna ficha de normas/.
+
+  CAMBIO DE CONTEXTO (14-nov-2026): esta vigilancia ya corre en
+  producción como cron (`GET /api/cron/vigilancia-normativa`, diario
+  13:30 UTC, `src/lib/likida/normas/vigilancia/`), que sí tiene salida a
+  los hosts del DOF/SAT/diputados y manda un correo directo al operador
+  con hallazgos — esa es ahora la vigilancia real. Esta rutina
+  programada (sesión cloud) queda como RESPALDO y seguirá reportando
+  INFRA mientras la política de egreso de este entorno no incluya
+  sidofqa.segob.gob.mx, sat.gob.mx y diputados.gob.mx — eso es esperado,
+  no una alarma nueva. No requiere intervención urgente: el cron de
+  producción es quien cubre el rango 09-11 en adelante.
