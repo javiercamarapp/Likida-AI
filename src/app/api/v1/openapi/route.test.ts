@@ -229,5 +229,18 @@ describe('el POST de desgloses documenta el formato muestra-tms (piloto del webh
     const faltanEnLaProsa = TIPOS_OPERADOR.filter((t) => !String(op.description).includes(t));
     expect(faltanEnLaProsa, `la descripción no nombra estos tipos: ${faltanEnLaProsa.join(', ')}`).toEqual([]);
   });
+
+  it('A56-ARQ-01: la `enum` que publica `BitacoraMuestraTms` es el dominio, no una segunda copia a mano', async () => {
+    // `muestra-tms` es el formato que el piloto integra de verdad. Su `enum` de
+    // `TipoOperador` vivía escrita a mano en `openapi_muestra_tms.ts`, y la
+    // guarda de A53-BE-03 solo cotejaba el OTRO schema (el de `/desgloses`):
+    // de `BitacoraMuestraTms` revisaba los NOMBRES de campo, nunca los VALORES.
+    // Un séptimo tipo entraba al servidor y al CHECK de la base, y este
+    // documento seguía publicando seis — el cliente generado del integrador
+    // rechazaba un valor que la API sí acepta, y `tipoOperador` decide si la
+    // liquidación sale o queda retenida con `tipo_sin_regla`.
+    const d = await doc() as { components: { schemas: Record<string, any> } }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(d.components.schemas.BitacoraMuestraTms.properties.TipoOperador.enum).toEqual([...TIPOS_OPERADOR]);
+  });
 });
 
