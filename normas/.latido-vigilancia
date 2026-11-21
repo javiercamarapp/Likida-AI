@@ -1,36 +1,34 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-21 (sábado)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-11-20 (más de 2 meses sin barrer;
+  sigue arrancando en 09-11 para la próxima corrida que logre conectar)
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable — sin verificar desde el 05-sep (más de 2 meses).
+etag_sat: no_evaluable — HEAD al minisitio también bloqueado (ver abajo).
+deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-ene-2027)
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA, sin cambio frente al último latido (20-sep). Esta rutina remota
+  quedó documentada como RESPALDO el 14-nov-2026 en el propio README de
+  la skill: la política de egreso de este entorno de Anthropic le
+  bloquea el acceso a los hosts, y la vigilancia real corre ahora como
+  cron de producción (`GET /api/cron/vigilancia-normativa`,
+  `src/lib/likida/normas/vigilancia/`), que manda su propio correo al
+  operador y no depende de este latido. Esta corrida solo reconfirma que
+  el bloqueo sigue vigente, sin cambio de naturaleza desde sep-2026: curl
+  directo contra sidofqa.segob.gob.mx/dof/sidof/notas/20-11-2026,
+  …/diarios/porFecha/20-11-2026 y
+  sat.gob.mx/minisitio/NormatividadRMFyRGCE/normatividad_rmf_rgce2026.html
+  — los tres "CONNECT tunnel failed, response 403 (agent proxy: no rule
+  or network setting allows this host)". www.google.com como control
+  también 403 idéntico, confirma que es bloqueo de política general, no
+  caída de los sitios del SIDOF/SAT. No se leyó ninguna nota del DOF, no
+  se tocó ninguna ficha de normas/. El archivo de latido anterior
+  (20-sep) nunca se actualizó entre corridas — solo llegó a master por
+  el merge de una rama ajena (PR #780, 31-oct) — así que el hueco sin
+  barrer por esta vía ya supera los dos meses. No hay nada accionable
+  aquí mientras el cron de producción sea la vía real: no se necesita
+  PR ni aviso por este hallazgo, ya documentado.
