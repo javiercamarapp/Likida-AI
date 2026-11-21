@@ -60,6 +60,7 @@ import {
   MAX_CONCEPTOS, MAX_VIAJES, MAX_PDF_BYTES, MAX_DIAS_PERIODO, MONEDAS, TIPOS_CONCEPTO,
   ESTADOS as ESTADOS_LIQ_EXTERNA,
 } from '@/lib/likida/liquidacion_externa/esquema';
+import { TIPOS_OPERADOR } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -1481,7 +1482,7 @@ function documento(servidor: string) {
           'x-likida-area': 'administracion',
           summary: 'Recibe desgloses de bitácora en JSON (plan B de la entrada del desglose por correo).',
           description:
-            'Área `administracion`. Cuerpo `{ "desgloses": [ … ] }` (1 a 100) o UN desglose suelto. Cada desglose: `bitacora` (obligatoria), `terminal?`, `poliza` (null si aún no existe), `operador { numeroEmpleado, nombre? }`, `unidad?`, `tipoOperador?` (`foraneo`|`local`|`permisionario`), `desde`/`hasta` (AAAA-MM-DD), `dias?`, `percepciones[]` y `deducciones[]` (`{ concepto, monto > 0, vale? }`: el signo lo da el bloque), `neto?` (si lo mandas, es el total que se valida contra los renglones) y `enviadoOrigen?`.\n\n'
+            'Área `administracion`. Cuerpo `{ "desgloses": [ … ] }` (1 a 100) o UN desglose suelto. Cada desglose: `bitacora` (obligatoria), `terminal?`, `poliza` (null si aún no existe), `operador { numeroEmpleado, nombre? }`, `unidad?`, `tipoOperador?` (`foraneo`|`local`|`permisionario`|`rabon`|`posturero`|`cargador`), `desde`/`hasta` (AAAA-MM-DD), `dias?`, `percepciones[]` y `deducciones[]` (`{ concepto, monto > 0, vale? }`: el signo lo da el bloque), `neto?` (si lo mandas, es el total que se valida contra los renglones) y `enviadoOrigen?`.\n\n'
             + 'ESTRICTA Y TODO-O-NADA: un campo desconocido (también un identificador de flota: la flota sale de tu credencial), un renglón en cero o un neto que no cuadra en CUALQUIER elemento es 400 con su índice y no se guarda ninguno.\n\n'
             + 'IDEMPOTENTE: la clave sale de `terminal` + `bitacora`. La misma bitácora con el mismo contenido cuenta en `idempotentes` y no reenvía nada. La misma bitácora con OTRO contenido NO se sobrescribe: sale en `excepciones` con `motivo = correccion_pendiente` y una persona decide si manda la corrección. Una guarda que retiene (neto negativo, sin póliza, concepto prohibido) cuenta en `retenidas`.\n\n'
             + 'CORRECCIÓN DECIDIDA: con `correccion: { motivo }` en el sobre, quien administra manda estas bitácoras como corrección de las ya recibidas: entran como `<clave>-R<n>` (archivo nuevo; el operador las recibe rotuladas «CORRECCIÓN») y la original queda como constancia. Reintentar la misma corrección es idempotente.\n\n'
@@ -1496,7 +1497,7 @@ function documento(servidor: string) {
             poliza: { type: 'string', nullable: true, maxLength: 40 },
             operador: { type: 'object', properties: { numeroEmpleado: { type: 'string', maxLength: 40 }, nombre: { type: 'string', maxLength: 120 } }, required: ['numeroEmpleado'], additionalProperties: false },
             unidad: { type: 'string', maxLength: 40 },
-            tipoOperador: { type: 'string', enum: ['foraneo', 'local', 'permisionario'] },
+            tipoOperador: { type: 'string', enum: [...TIPOS_OPERADOR] },
             desde: { type: 'string', format: 'date' },
             hasta: { type: 'string', format: 'date' },
             dias: { type: 'integer', minimum: 1, maximum: 366 },

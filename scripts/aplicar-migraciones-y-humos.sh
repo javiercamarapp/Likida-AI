@@ -108,6 +108,20 @@ if [ "${INCLUIR_TODAS:-}" = "1" ]; then
   INCLUIR=(--include-all)
 fi
 
+# A57-OP-01 (auditoría 57, CRÍTICO): `supabase db push` contra producción está PROHIBIDO por CT-BAS-08
+# (supabase/APLICAR-EN-PRODUCCION.md): `schema_migrations` de producción mezcla DOS esquemas de versión, así que
+# el push ve ~256 migraciones como «solo locales» y las RE-APLICARÍA — muchas no son idempotentes. El aviso de ese
+# documento nombra este script por su nombre, y aun así el push seguía aquí: el `--dry-run` de abajo LISTA los
+# pendientes pero no detenía nada, y la línea siguiente los aplicaba. Lo que el documento manda es abortar si el
+# dry-run lista pendientes, no «arreglarlo» con --include-all. Se falla cerrado y se dice por qué.
+if [ "${DB_PUSH_AUTORIZADO:-}" != "1" ]; then
+  echo 'ALTO: `supabase db push` está prohibido contra producción (CT-BAS-08).'
+  echo 'Motivo: re-aplicaría ~256 migraciones no idempotentes. Lee supabase/APLICAR-EN-PRODUCCION.md y aplica una por'
+  echo 'una con el procedimiento de ahí (respaldo, migraciones_aplicadas(), sonda /api/health).'
+  echo 'Si de verdad sabes que este push es seguro para ESTA base, repite con DB_PUSH_AUTORIZADO=1.'
+  exit 2
+fi
+
 echo "═══ 1/3 · Aplicando migraciones pendientes (project: $REF, CLI $SUPABASE_CLI_VERSION) ═══"
 echo "--- dry-run: esto es lo que se aplicaría ---"
 npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push --db-url "$SUPABASE_DB_URL" ${INCLUIR[@]+"${INCLUIR[@]}"} --dry-run

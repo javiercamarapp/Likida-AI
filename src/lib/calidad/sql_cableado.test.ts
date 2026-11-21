@@ -29,10 +29,55 @@ describe('pruebas SQL cableadas en CI (CT-CAL-04)', () => {
     expect(obsoletas).toEqual([]);
   });
 
-  it('toda migración >= 0900 la nombra por número alguna prueba de supabase/tests', () => {
+  // A51-PRU-03 — Esto era `t.includes(n)` con `n` = los cuatro dígitos pelados, y
+  // así una migración contaba como probada si ese número aparecía en CUALQUIER
+  // sitio de cualquier prueba SQL: dentro de un teléfono sintético, de una clave
+  // del SAT, de un importe o de un tope de bytes. No es hipotético: el teléfono
+  // `525500801006` de `0801_conductor_sembrar_por_perfil.sql:36` daba por probada
+  // de antemano a la migración **1006**, que no existe todavía. Reproducido: con
+  // `t.includes`, un `1006_*.sql` vacío y sin una sola prueba pasaba 3 de 3.
+  //
+  // Ahora se exige una referencia que solo puede ser deliberada, en una de cuatro
+  // formas —y las cuatro son las que el repo ya usa, no se inventó ninguna:
+  //   1. el nombre del archivo de prueba empieza por el número (`1004_….sql`);
+  //   2. el texto cita el PREFIJO de la migración (`1004_liquidacion_…`);
+  //   3. el texto dice «migración 1004» / «mig. 1004»;
+  //   4. el texto declara una FAMILIA con barras, que es cómo una sola prueba
+  //      cubre varias migraciones hermanas: `-- 0946/0947/0948 (Ola 1 …)` en
+  //      `0946_tenant_buzon_token_y_grants_cerrados.sql:1`, o `-- 0950/0951/0952`
+  //      en `0950_telefono_identidad.sql:2`.
+  // Con esta regla las 42 migraciones >= 0900 de hoy siguen verdes —las cinco que
+  // solo pasaban por subcadena (0947, 0948, 0951, 0952, 0954) lo hacen por la
+  // forma 4, que es legítima— y no hizo falta lista de excepciones.
+  // Sin regex con cuantificador anidado (`detect-unsafe-regex`, y el repo ya tuvo
+  // que arreglar uno): el texto se parte por lo que NO es dígito ni barra, y de
+  // los pedazos resultantes se miran los que llevan barra.
+  const NI_DIGITO_NI_BARRA = /[^\d/]+/;
+
+  /** ¿La prueba `archivo` nombra la migración `n` a propósito? */
+  function nombraLaMigracion(n: string, archivo: string, texto: string): boolean {
+    if (archivo.startsWith(n)) return true;                                   // 1
+    if (new RegExp(`\\b${n}_`).test(texto)) return true;                        // 2
+    if (new RegExp(`(?:migraci[oó]n(?:es)?|mig\\.?|migration)\\s*0*${n}\\b`, 'i').test(texto)) return true; // 3
+    for (const pedazo of texto.split(NI_DIGITO_NI_BARRA)) {                   // 4
+      if (pedazo.includes('/') && pedazo.split('/').includes(n)) return true;
+    }
+    return false;
+  }
+
+  it('toda migración >= 0900 la nombra A PROPÓSITO alguna prueba de supabase/tests', () => {
     const textos = pruebas.map((f) => [f, readFileSync(join(DIR, f), 'utf8')] as const);
     const migraciones = [...new Set(readdirSync(join(RAIZ, 'supabase', 'migrations')).filter((f) => /^\d{4}_.*\.sql$/.test(f)).map((f) => f.slice(0, 4)))].filter((n) => n >= '0900');
-    const sinPrueba = migraciones.filter((n) => !textos.some(([f, t]) => f.startsWith(n) || t.includes(n)));
+    const sinPrueba = migraciones.filter((n) => !textos.some(([f, t]) => nombraLaMigracion(n, f, t)));
     expect(sinPrueba, 'migración nueva sin prueba SQL contra Postgres efímero').toEqual([]);
+  });
+
+  it('A51-PRU-03 · un número suelto dentro de un dato NO cuenta como prueba', () => {
+    // El caso exacto que desarmaba la guarda, fijado para que no vuelva: el
+    // teléfono sintético `525500801006` contiene «1006» y no prueba nada.
+    const semilla = readFileSync(join(DIR, '0801_conductor_sembrar_por_perfil.sql'), 'utf8');
+    expect(semilla, 'cambió la semilla: reelige el ejemplo').toContain('525500801006');
+    expect(semilla.includes('1006'), 'la subcadena sigue ahí, que es el punto').toBe(true);
+    expect(nombraLaMigracion('1006', '0801_conductor_sembrar_por_perfil.sql', semilla)).toBe(false);
   });
 });

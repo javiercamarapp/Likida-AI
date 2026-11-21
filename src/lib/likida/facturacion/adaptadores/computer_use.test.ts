@@ -22,6 +22,13 @@ let capturadoExecutor: ToolExecutor | null = null;
 /** El guion: lo que el "modelo" decide llamar, en orden. */
 let guion: Array<{ tool: string; args: Record<string, unknown> }> = [];
 let textoFinal = '';
+/**
+ * AUDITORÍA 44 (A44-TC-01): lo que truena en `generateWithTools` DESPUÉS de
+ * haber corrido el guion — un `LoopGuardError` al agotar `MAX_VUELTAS` es el
+ * caso real. `null` = el ciclo termina normal, que es lo que esperan las
+ * demás pruebas de este archivo.
+ */
+let lanzarTrasGuion: Error | null = null;
 
 vi.mock('@/lib/llm/openrouter', () => ({
   generateWithTools: vi.fn(async (opts: {
@@ -30,6 +37,7 @@ vi.mock('@/lib/llm/openrouter', () => ({
     capturadoTools = opts.tools;
     capturadoExecutor = opts.toolExecutor;
     for (const paso of guion) await opts.toolExecutor(paso.tool, paso.args);
+    if (lanzarTrasGuion) throw lanzarTrasGuion;
     return {
       finalText: textoFinal, toolCalls: guion.map((g) => ({ toolName: g.tool })),
       model: 'x', tokensIn: 0, tokensOut: 0, cost: 0, costoPorModelo: {},
@@ -102,6 +110,7 @@ const armar = () => new AdaptadorComputerUse({
 beforeEach(() => {
   escrito.length = 0; clicado.length = 0;
   guion = []; textoFinal = ''; capturadoTools = []; capturadoExecutor = null;
+  lanzarTrasGuion = null;
   inventarioFalso = null;
   claimMutation.mockReset().mockResolvedValue({ kind: 'execute', token: 'tok-1' });
   completeMutation.mockReset().mockResolvedValue(undefined);
@@ -152,6 +161,21 @@ describe('el botón de emitir', () => {
 
     expect(r.ok).toBe(false);
     expect(r.emisionSinConfirmar).toBe(true);
+  });
+
+  it('A44-TC-01: si el ciclo del LLM revienta DESPUÉS del clic de emisión, se declara `emisionSinConfirmar`', async () => {
+    // El clic ya ocurrió y el CFDI puede existir. Si la salida de EXCEPCIÓN no
+    // lo declara, `motivoDeBloqueo` dice "No se llegó a intentar en el portal",
+    // se libera el cupo de `control_emision.ts` y el encargado factura a mano:
+    // SEGUNDO CFDI por el mismo consumo, irreversible ante el SAT.
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+    lanzarTrasGuion = new Error('LoopGuardError: se alcanzó el máximo de vueltas');
+
+    const r = await armar().facturar(CAMPOS, 'emitir');
+
+    expect(clicado, 'el clic de emisión SÍ ocurrió').toContain('#facturar');
+    expect(r.ok).toBe(false);
+    expect(r.emisionSinConfirmar, 'el CFDI puede existir: no se puede liberar el cupo').toBe(true);
   });
 
   it('con UUID en la pantalla, se cobra como emitido', async () => {

@@ -1,5 +1,6 @@
 import { TZ_MX, hoyMx, mxn, fechaCorta } from '@/lib/formato';
 import { tierPendiente } from './cobranza_pura';
+import type { ConceptoGasto } from '@/types/likida';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL MOTOR PURO DE LA COBRANZA POR GASTO (0525) — sin I/O.
@@ -131,10 +132,19 @@ export function diasDesde(creadoEn: string, ahora: Date): number {
   return Math.max(0, Math.floor((ahora.getTime() - t) / 86_400_000));
 }
 
-export const ROTULO_CONCEPTO_COBRANZA: Record<string, string> = {
-  diesel: 'Diésel', caseta: 'Casetas', factura: 'Factura', alimentacion: 'Alimentos',
-  hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete', otro: 'Otro gasto',
-};
+/** Los rótulos que lee el CHOFER. Tienen que ser los mismos que imprime el PDF y
+ *  pinta el panel: el contralor y el operador no pueden leer dos palabras para el
+ *  mismo concepto (A42-ARQ-02; ya pasó con `otro: 'Gasto'` en la auditoría 18).
+ *  El tipo es `Record<ConceptoGasto, string>` y no `Record<string, string>` a
+ *  propósito: con el índice abierto faltaba `viaticos` y `tsc` no podía verlo, así
+ *  que la clave cruda en minúscula salía por WhatsApp. */
+const ROTULOS = {
+  diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación',
+  hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete', viaticos: 'Viáticos',
+  otro: 'Otro',
+} satisfies Record<ConceptoGasto, string>;
+
+export const ROTULO_CONCEPTO_COBRANZA: Record<string, string> = ROTULOS;
 
 export interface ItemCobro {
   gastoId: string;

@@ -314,6 +314,33 @@ describe('detalle de una bitácora', () => {
     }
   });
 
+  // A50-PRU-01: `toContain` sobre el HTML entero verifica PRESENCIA, nunca
+  // PERTENENCIA. Intercambiar los renglones bajo sus propios rótulos dejaba la
+  // suite verde, y esto es el recibo que el operador firma. Se parte el HTML
+  // por el rótulo del segundo bloque y se exige que cada cifra esté de SU lado.
+  it('A50-PRU-01: cada renglón cuelga de su propio rótulo (percepción no se pinta bajo Deducciones)', async () => {
+    const html = await panel({ estado: 'ok', detalle: detalleDe() });
+    const corte = html.indexOf('Deducciones');
+    expect(corte, 'el bloque de Deducciones tiene que existir para poder cortar').toBeGreaterThan(-1);
+    const ladoPercepciones = html.slice(0, corte);
+    const ladoDeducciones = html.slice(corte);
+
+    // Las dos percepciones de la fixture, y su importe, van ANTES del rótulo
+    // «Deducciones»; el anticipo y el suyo van DESPUÉS.
+    expect(ladoPercepciones).toContain('Sueldo base');
+    expect(ladoPercepciones).toContain('$3,000.00 MXN');
+    expect(ladoPercepciones).toContain('Taxi aeropuerto');
+    expect(ladoPercepciones).toContain('$200.00 MXN');
+    expect(ladoPercepciones).not.toContain('Anticipo');
+    expect(ladoPercepciones).not.toContain('$600.00 MXN');
+
+    expect(ladoDeducciones).toContain('Anticipo');
+    expect(ladoDeducciones).toContain('$600.00 MXN');
+    expect(ladoDeducciones).not.toContain('Sueldo base');
+    expect(ladoDeducciones).not.toContain('$3,000.00 MXN');
+    expect(ladoDeducciones).not.toContain('Taxi aeropuerto');
+  });
+
   it('A37-A1-liquidaciones-13: un total calculado de los renglones se señala, no se presenta como «de tu sistema»', async () => {
     const calculado = await panel({ estado: 'ok', detalle: detalleDe({ desglose: { ...cabecera(), totalOrigen: 'calculado' } }) });
     expect(calculado).toContain('Neto calculado de los renglones');

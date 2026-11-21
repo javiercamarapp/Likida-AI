@@ -46,12 +46,28 @@ function archivosFuente(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-/** Variables que el código lee de verdad, medidas sobre el árbol de fuentes. */
+/** Variables que el código lee de verdad, medidas sobre el árbol de fuentes.
+ *
+ *  A46-OP-01: durante nueve rondas esto solo miró el literal `process.env.X`,
+ *  y `src/lib/{auth,seguridad}` no lo escribe así: inyecta el entorno como
+ *  parámetro (`fn(env: Record<string, string | undefined> = process.env)`) y
+ *  después lee `env.LA_VARIABLE`. Por ese hueco nueve variables —seis de ellas
+ *  palancas de seguridad— nunca entraron al inventario, mientras `DEPLOY.md`
+ *  afirmaba que la suite lo verifica contra el código. Se miran las dos
+ *  formas: el literal, y `env.X` en los archivos que inyectan el entorno. */
 function leidasPorElCodigo(): Set<string> {
   const out = new Set<string>();
   for (const f of archivosFuente(join(RAIZ, 'src'))) {
-    for (const m of readFileSync(f, 'utf8').matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
       if (!DE_LA_PLATAFORMA.has(m[1])) out.add(m[1]);
+    }
+    // Solo en archivos que de verdad inyectan el entorno por omisión: ahí un
+    // `env.X` en MAYÚSCULAS es una variable de entorno, no una propiedad.
+    if (/=\s*process\.env\b/.test(src)) {
+      for (const m of src.matchAll(/\benv\.([A-Z][A-Z0-9_]{2,})\b/g)) {
+        if (!DE_LA_PLATAFORMA.has(m[1])) out.add(m[1]);
+      }
     }
   }
   return out;

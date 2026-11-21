@@ -54,6 +54,21 @@ export const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   // esta lista: un cron puede fallar nueve días y el único rastro es un issue
   // viejo de Sentry que ya no notifica.
   { nombre: 'ALERTA_EMAIL', consecuencia: 'los fallos de cron no le llegan a nadie por correo' },
+  // ── EL TRANSPORTE DEL CANAL, NO SÓLO SU DESTINO (auditoría 43, A43-OP-01) ──
+  //
+  // Arriba se vigila a DÓNDE va la alerta. Estas dos son lo que la MANDA
+  // (`correo/enviar.ts`), y sin ellas `ALERTA_EMAIL` es una dirección sin
+  // cartero: el arranque decía `ok:true`, `/api/health` seguía contestando 200
+  // y el sistema quedaba sin un solo canal push — el canal que avisa de todo,
+  // incapaz de avisar de sí mismo.
+  //
+  // La dependencia ya estaba escrita para el humano y no para el arranque:
+  // `.env.example:122-123` dice que `ALERTA_EMAIL` «necesita además el correo
+  // de Resend configurado (RESEND_API_KEY + RESEND_EMAIL_DOMAIN)». Misma forma
+  // que las credenciales de Upstash de abajo: media credencial es tan inútil
+  // como ninguna, así que se vigilan las dos por separado.
+  { nombre: 'RESEND_API_KEY', consecuencia: 'el correo de alerta no tiene con qué salir: ALERTA_EMAIL queda como una dirección sin cartero y el sistema se queda sin un solo canal push' },
+  { nombre: 'RESEND_EMAIL_DOMAIN', consecuencia: 'el correo de alerta no tiene remitente verificado y Resend lo rechaza: el sistema se queda sin un solo canal push' },
   // La llave que firma la cookie de flota activa del superadmin (B13). Ya no
   // cae a la service role key: sin ella el selector de flota no firma ni lee,
   // y el sistema arranca igual.

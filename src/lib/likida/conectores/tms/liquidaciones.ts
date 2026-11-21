@@ -110,8 +110,15 @@ function zonaDe(mapeo: MapeoTms): string {
   return (typeof c === 'object' && c.zona) || ZONA_POR_OMISION;
 }
 
+// A54-DAT-01: la clave se CANONIZA (minúsculas) antes de salir. `liquidacion_externa_clave_unica
+// unique (tenant_id, clave_externa)` (0370:100) es la única defensa contra liquidar dos veces la
+// misma póliza, y un `unique` de Postgres sobre `text` distingue mayúsculas: sin esto, el mismo
+// origen que escribe `BIT-MTY-44821` un día y `BIT-Mty-44821` otro produce DOS filas y el operador
+// cobra dos veces. Sanear para la FORMA (caracteres válidos) no es canonizar para la IDENTIDAD.
+// Las dos cajas colapsan en una clave, y de ahí las toma el guardarraíl de colisión de A37-S38-07
+// (:180-186), que no entrega ninguna de las dos en vez de adivinar cuál gana.
 function aClave(bitacora: string, poliza: string): string {
-  return `${bitacora}-${poliza}`.replace(/[^A-Za-z0-9._:/#-]/g, '_').replace(/^[^A-Za-z0-9]+/, '');
+  return `${bitacora}-${poliza}`.replace(/[^A-Za-z0-9._:/#-]/g, '_').replace(/^[^A-Za-z0-9]+/, '').toLowerCase();
 }
 
 /** Lee las tres tablas de la ventana [desde, hasta] (ISO UTC) y arma un cuerpo por póliza. No escribe nada. */

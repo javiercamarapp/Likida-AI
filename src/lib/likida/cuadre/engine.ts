@@ -388,7 +388,7 @@ export const LECTURA_RFA_29_PRORRATEO =
   'la lectura literal del "siempre que" de la regla 2.9 negaría la facilidad a TODO el combustible en efectivo ' +
   'del ejercicio — confírmela con su contador.';
 
-export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
+export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
 // AUDITORÍA 21, CRÍTICO (fiscal): `cfdi_efos_indeterminado` entra a
 // POR_CONFIRMAR (y a SIN_IVA_ACREDITABLE, abajo) por el mismo camino que
 // `cfdi_pendiente`. Desde que la auditoría 9 quitó —con razón— el mapeo
@@ -417,7 +417,27 @@ export const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancela
 // deliberado y no cambia con este hallazgo — LIVA 5-I exige acreditar "en la
 // proporción en que las erogaciones sean deducibles", y la proporción de ESTE
 // ejercicio sigue siendo cero.
-export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'cfdi_efos_indeterminado', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos', 'medio_pago_no_admitido', 'gasto_otro_ejercicio'];
+//
+// AUDITORÍA 43, A43-FIS-02 (ALTO): `cfdi_no_encontrado` entra aquí y sale de
+// NO_DEDUCIBLE_ISR. Es el CUARTO caso del mismo patrón que este bloque ya
+// corrigió tres veces (`cfdi_pendiente` en la 12, `cfdi_efos_indeterminado`
+// en la 21, `gasto_otro_ejercicio` en la 25) y el único que quedaba.
+//
+// El motivo es el que el propio motor ya tenía escrito y no aplicaba acá: el
+// código 602 del servicio del SAT es AMBIGUO. La nota de la diferencia lo
+// dice con todas sus letras —«un UUID, un RFC o un total mal leídos devuelven
+// lo mismo que un comprobante que no existe»— y `intake/sat.ts` documenta el
+// falso positivo como PEOR que el falso negativo. Con eso, declarar «No
+// deducible $1,000.00» en rojo es afirmar una no-deducibilidad que el dato no
+// prueba: basta un dígito mal leído por el OCR del total para que un CFDI
+// perfectamente válido reciba el veredicto más caro del motor.
+//
+// Lo que NO cambia, y es deliberado: sigue fuera de la cubeta deducible,
+// sigue en SIN_IVA_ACREDITABLE (LIVA 5-I: sin CFDI confirmado la proporción
+// de ESTE ejercicio es cero) y sigue bajando la liquidación a revisar. Lo
+// único que cambia es que el motor deja de AFIRMAR lo que no puede probar —
+// la regla del producto, «nunca inventar una cifra», aplicada al veredicto.
+export const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente', 'cfdi_efos_indeterminado', 'consumo_bar', 'ticket_monedero', 'renglones_ajenos', 'medio_pago_no_admitido', 'gasto_otro_ejercicio', 'cfdi_no_encontrado'];
 
 // ── AUDITORÍA 22, FIS-C2 (CRÍTICO): DOS PREGUNTAS, DOS LISTAS ─────────────
 // Esto era UNA lista para dos preguntas distintas —«¿acredita IVA?» y
