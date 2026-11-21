@@ -69,14 +69,36 @@ export function filasDeducibilidad(
     // lado— y el motor no sostiene entera la de un CFDI de diésel cuyo permiso
     // CRE no verificó. El renglón de peaje ya cumple esa regla con tono
     // `condicionado`; éste no la podía cumplir porque el tono no existía.
-    const permisoCreNoVerificado = (liq.diferencias ?? []).some((d) => d.tipo === 'permiso_cre_no_verificable');
-    filas.push(permisoCreNoVerificado
-      ? {
-          label: 'Deducible para ISR — sujeto a permiso CRE vigente',
-          monto: liq.totalDeducible,
-          tono: 'condicionado',
-          pie: 'LISR 27-III y RFA 2026 regla 2.9 exigen que el CFDI de combustible consigne el permiso CRE vigente del proveedor. El sistema no lo valida — confírmelo con su contador.',
-        }
+    const dif = liq.diferencias ?? [];
+    const permisoCreNoVerificado = dif.some((d) => d.tipo === 'permiso_cre_no_verificable');
+    // A57-FIS-02 (auditoría 57, ALTO): el MISMO caso estructural que el permiso
+    // CRE de arriba, y por el mismo motivo. `normas/lisr-28-V.yaml`
+    // (`verificado_fuente_primaria`) dice literal que la alimentación "sólo
+    // será deducible" si se acompaña el comprobante que ampare hospedaje o
+    // transporte, y que amparada SOLO por transporte "sólo procederá cuando el
+    // pago se efectúe mediante tarjeta de crédito de la persona que realiza el
+    // viaje". El motor levanta las dos faltas con `monto: 0` a propósito
+    // (`engine.ts:1707` y `:1743`): no puede afirmar que NO es deducible sin la
+    // contabilidad entera de la flota. Pero entonces el monto se queda en
+    // `totalDeducible` y este renglón lo pintaba VERDE y sin pie — afirmando
+    // deducibilidad justo del dinero cuyo requisito acaba de marcar incumplido.
+    const alimentacionSin28V = dif.some((d) =>
+      d.tipo === 'alimentacion_sin_soporte' || d.tipo === 'alimentacion_transporte_sin_tarjeta_credito');
+
+    // Las razones se acumulan: con las dos presentes, quedarse con una sola le
+    // esconde al contralor la otra mitad de lo que tiene que confirmar.
+    const pies: string[] = [];
+    if (permisoCreNoVerificado) pies.push('LISR 27-III y RFA 2026 regla 2.9 exigen que el CFDI de combustible consigne el permiso CRE vigente del proveedor. El sistema no lo valida — confírmelo con su contador.');
+    if (alimentacionSin28V) pies.push('LISR 28-V condiciona la deducción de la alimentación del viaje a que un comprobante de hospedaje o de transporte la ampare, y si solo la ampara el transporte, a que el pago sea con tarjeta de crédito de quien viaja. Falta ese soporte — confírmelo con su contador.');
+
+    const etiqueta = permisoCreNoVerificado && alimentacionSin28V
+      ? 'Deducible para ISR — sujeto a requisitos de LISR 27-III y 28-V'
+      : permisoCreNoVerificado
+        ? 'Deducible para ISR — sujeto a permiso CRE vigente'
+        : 'Deducible para ISR — sujeto a requisito de LISR 28-V';
+
+    filas.push(pies.length
+      ? { label: etiqueta, monto: liq.totalDeducible, tono: 'condicionado', pie: pies.join(' ') }
       : { label: 'Deducible para ISR', monto: liq.totalDeducible, tono: 'bueno' });
   }
   if (liq.totalPorConfirmar > 0) {
