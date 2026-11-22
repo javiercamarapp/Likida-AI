@@ -11,6 +11,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const d = vi.hoisted(() => ({
   rpc: vi.fn(), enviar: vi.fn(), deleteUser: vi.fn(), updateUser: vi.fn(), insertados: [] as unknown[],
+  /** A58-LEG-01: la cancelación borra el OBJETO del bucket público `avatares`, no solo `avatar_url`. */
+  removeAvatar: vi.fn(),
   solicitud: { titular_ref: '529999900001', tipo: 'cancelacion', titular_user_id: 'u-oficina' } as Record<string, unknown>,
   /** Solicitudes ABIERTAS que ya existen para el mismo titular y tipo (A37-L-11). */
   abiertas: [] as unknown[], filtros: [] as Array<[string, unknown]>,
@@ -29,6 +31,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => {
   return {
     from: () => cadena, rpc: d.rpc,
     auth: { admin: { deleteUser: d.deleteUser, updateUserById: d.updateUser } },
+    storage: { from: () => ({ remove: d.removeAvatar }) },
   };
 } }));
 vi.mock('@/lib/meta/client', async (importar) => ({ ...await importar<typeof import('@/lib/meta/client')>(), enviarRespuestaArco: d.enviar }));
@@ -45,6 +48,7 @@ beforeEach(() => {
   d.enviar.mockResolvedValue({ ok: true });
   d.deleteUser.mockResolvedValue({ error: null });
   d.updateUser.mockResolvedValue({ error: null });
+  d.removeAvatar.mockResolvedValue({ error: null });
 });
 
 describe('ejecutarCancelacionArco — titular que es cuenta de oficina', () => {
@@ -52,6 +56,8 @@ describe('ejecutarCancelacionArco — titular que es cuenta de oficina', () => {
     const r = await ejecutarCancelacionArco('t-1', 's-1');
     expect(r).toEqual({ ok: true, avisada: true });
     expect(d.rpc).toHaveBeenCalledWith('ejecutar_arco_cancelacion', { p_tenant: 't-1', p_solicitud: 's-1' });
+    // A58-LEG-01: el aviso afirma «se quitó tu foto», así que el objeto salió del bucket.
+    expect(d.removeAvatar).toHaveBeenCalledWith(['u-oficina/avatar.jpg', 'u-oficina/avatar.png', 'u-oficina/avatar.webp']);
     expect(d.deleteUser).toHaveBeenCalledWith('u-oficina');
     expect(d.updateUser).not.toHaveBeenCalled();
     const aviso = String(d.enviar.mock.calls[0][1]);
