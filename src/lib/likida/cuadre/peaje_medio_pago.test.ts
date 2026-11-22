@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { cuadrarViaje, type PoliticaGasto } from './engine';
 import type { Gasto } from '@/types/likida';
+import { round2 } from '@/lib/formato';
 
 const politica: PoliticaGasto[] = [{ concepto: 'caseta', topeMonto: 10000 }];
 const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: [] };
@@ -103,8 +104,15 @@ describe('A7: solo los medios electrónicos de la RMF 9.1.8 fr. III acreditan pe
 // afirmado como estímulo que el SAT no reconocería.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('La base del estímulo de peaje descuenta el @Descuento del CFDI', () => {
+  // A58-DAT-01: el `monto` se DERIVA de la base (+16% de IVA) en vez de quedarse
+  // clavado en 1160. Con `monto` fijo, el caso de $120,000 describía un CFDI
+  // imposible —SubTotal 120,000 y Total 1,160— y el motor lo acreditaba igual
+  // porque nada cotejaba las dos cifras. Ahora sí las coteja, así que el
+  // comprobante de la prueba tiene que ser posible. Cada aserción comprueba lo
+  // mismo que antes: que la base del estímulo resta el @Descuento.
   const conDescuento = (subTotal: number, descuento?: number): Gasto => ({
-    id: 'gd', concepto: 'caseta', monto: 1160, subTotal, folio: 'CD', fecha: '2026-05-01',
+    id: 'gd', concepto: 'caseta', monto: round2(Math.max(0, subTotal - (descuento ?? 0)) * 1.16),
+    subTotal, folio: 'CD', fecha: '2026-05-01',
     ocrConfianza: 0.95, cfdiUuid: 'ud', xmlVerificado: true, rfcReceptor: 'REC010101AA1',
     tipoComprobante: 'I', formaPago: '04',
     ...(descuento === undefined ? {} : { descuento }),

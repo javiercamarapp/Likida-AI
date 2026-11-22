@@ -1967,7 +1967,27 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const elegiblePeaje = input.elegiblePeaje === true;
     if (!sinEstimulo && g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente && elegiblePeaje) {
       const baseDelEstimulo = Math.max(0, (g.subTotal as number) - (g.descuento ?? 0));
-      peajeAcreditable += baseDelEstimulo * peajeFactor;
+      // A58-DAT-01 [CRÍTICO]: la base sale del OCR y NADA la cotejaba contra el
+      // total del mismo comprobante. `ocr.ts:57` no le pone `.max()` y la base
+      // solo exige `sub_total >= 0` y `descuento <= sub_total` (0281:44/:57):
+      // ninguna mira `monto`. Un recibo de TAG imprime también el SALDO de la
+      // tarjeta, así que $12,450 de saldo leídos como subtotal de una caseta de
+      // $184 acreditaban $6,225 en el renglón del PDF — 34× la caseta real.
+      // Es el MISMO cotejo que los litros de diésel ya tienen aquí abajo desde
+      // la AUDITORÍA 8, por la misma razón y para el mismo contralor.
+      // Las retenciones se suman porque el total de un CFDI es
+      // `subtotal − descuento + traslados − retenciones`: un comprobante con
+      // retención legítima puede traer `subTotal > monto` sin estar mal leído.
+      const techoDeLaBase = g.monto + (g.ivaRetenido ?? 0) + (g.isrRetenido ?? 0) + 0.01;
+      if (baseDelEstimulo > techoDeLaBase) {
+        diferencias.push({
+          tipo: 'monto_discrepante', concepto: g.concepto, monto: 0,
+          nota: `La base del estímulo de peaje (${mxn(baseDelEstimulo)}) es mayor que el total del comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (${mxn(g.monto)}). Un recibo de TAG imprime también el saldo de la tarjeta y se confunde con el subtotal: no se acredita el estímulo hasta verificar el ticket.`,
+          gastoId: g.id,
+        });
+      } else {
+        peajeAcreditable += baseDelEstimulo * peajeFactor;
+      }
     }
     // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
     // gasolina. Se identifica por la clave de producto del SAT (15101505).
