@@ -1,36 +1,43 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-22 (domingo)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-11-21 (72 días, incluye 11 viernes de
+  cuota de diésel: 11/18/25-sep, 02/09/16/23/30-oct, 06/13/20-nov) sin
+  barrer. Sigue arrancando en 09-11 para la próxima corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
+cuota_diesel: no_evaluable_hoy — hoy no es viernes, y los 11 viernes
+  transcurridos desde el 05-sep tampoco se pudieron verificar (mismo
+  bloqueo).
 etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-ene-2027)
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
+  INFRA — persiste el bloqueo de egreso reportado el 20-sep (tercera
+  corrida consecutiva entonces; esta corrida no tiene forma de contar
+  cuántas más pasaron sin dejar latido entre esa fecha y hoy, 2 meses
+  después). Repetido con curl por HTTPS_PROXY: "CONNECT tunnel failed,
+  response 403" contra sidofqa.segob.gob.mx/dof/sidof/notas/21-11-2026 Y
+  contra www.google.com como control (también 403 — confirma que sigue
+  siendo un rechazo de política de egreso de este entorno, no una caída
+  del SIDOF ni algo específico del dominio). No se leyó ninguna nota del
+  DOF en esta corrida. No se tocó ninguna ficha de normas/. No se abrió
+  PR (sin hallazgos que reportar — el bloqueo es infraestructura, no una
+  lectura "sin cambios").
+  Contexto nuevo desde el 20-sep: el README de la skill (actualizado
+  14-nov-2026) documenta que esta rutina remota quedó de **respaldo**:
+  ahora existe un cron de producción (`GET /api/cron/vigilancia-normativa`,
+  diario 13:30 UTC, código en `src/lib/likida/normas/vigilancia/` —
+  confirmado presente en el árbol de esta corrida) que corre dentro del
+  entorno de la app, no de este entorno de sesión programada, y que SÍ
+  tendría acceso a los hosts. Ese cron solo avisa por correo al operador
+  y nunca toca `normas/` ni `estado_verificacion`, así que no sustituye
+  este archivo. No se pudo confirmar desde esta sesión que el cron de
+  producción esté corriendo o acertando el barrido (sin acceso a
+  `cron_latido.detalle` ni a los correos del operador desde aquí) — solo
+  que el código existe. Requiere intervención humana: permitir
   sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  política de egreso de este entorno programado, o confirmar con el
+  operador que el cron de producción está cubriendo el hueco desde que
+  entró en funciones.
