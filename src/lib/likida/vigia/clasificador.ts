@@ -16,7 +16,7 @@
 // el mensaje lo haga decir o hacer algo distinto de elegir una etiqueta.
 // ═══════════════════════════════════════════════════════════════════════════
 import { limpiarTexto, detectarInyeccion } from './entrada';
-import { clasificarPorReglas } from './intencion';
+import { clasificarPorReglas, esAccionDocumental, SENAL_ACCION_DOCUMENTAL } from './intencion';
 import type { Clasificacion, Intencion } from './tipos';
 
 /** Lo que el modelo puede elegir. `baja` NO está: solo la regla determinista da de baja. */
@@ -37,13 +37,24 @@ export interface ResultadoClasificacion extends Clasificacion {
   textoLimpio: string;
 }
 
+/** Marca (sin cambiar la intención) lo que pide que alguien HAGA algo con un documento: nunca se autoenvía (politica.ts). */
+function marcarAccionDocumental(r: ResultadoClasificacion): ResultadoClasificacion {
+  const toca = [r.intencion, ...r.secundarias].some((i) => i === 'documentos' || i === 'factura_pod');
+  if (!toca || r.senales.includes(SENAL_ACCION_DOCUMENTAL) || !esAccionDocumental(r.textoLimpio)) return r;
+  return { ...r, senales: [...r.senales, SENAL_ACCION_DOCUMENTAL] };
+}
+
 export async function clasificar(textoCrudo: unknown, modelo?: PuertoModelo | null, tenantId: string = ''): Promise<ResultadoClasificacion> {
+  return marcarAccionDocumental(await clasificarBase(textoCrudo, modelo, tenantId));
+}
+
+async function clasificarBase(textoCrudo: unknown, modelo?: PuertoModelo | null, tenantId: string = ''): Promise<ResultadoClasificacion> {
   const textoLimpio = limpiarTexto(textoCrudo);
   const senales: string[] = [];
   if (detectarInyeccion(textoLimpio)) senales.push('inyeccion');
 
   const porReglas = clasificarPorReglas(textoLimpio);
-  if (porReglas) return { ...porReglas, senales: [...senales], textoLimpio };
+  if (porReglas) return { ...porReglas, senales: [...porReglas.senales, ...senales], textoLimpio };
 
   const otro = (clasificador: 'modelo' | 'ninguno', extra: string[] = []): ResultadoClasificacion => ({
     intencion: 'otro', secundarias: [], confianza: 0, clasificador, senales: [...senales, ...extra], textoLimpio,
