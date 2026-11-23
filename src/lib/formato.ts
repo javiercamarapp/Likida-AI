@@ -340,6 +340,23 @@ export function mxnEntero(n: number, idioma: IdiomaFormato = 'es'): string {
   return entero.toLocaleString(LOCALE_FORMATO.es, { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
 }
 
+/**
+ * Pesos COMPLETOS sin decimales y **nunca compactados**: `$3,306,107`. El compacto de `mxnEntero` («$3.3 M») pierde el detalle
+ * que finanzas cuadra, así que esta no comparte ese camino — es la diferencia entera entre las dos y la razón de que exista.
+ *
+ * `null`/`undefined`/no-finito es `'—'`, no `$0`: la regla de la casa es que sin dato NUNCA se pinta un cero que parezca medición.
+ *
+ * A59-ARQ-01: vivía en `src/app/dashboard/inicio-cinco-modelo.ts` con su propio `Intl.NumberFormat` y el locale CABLEADO, así que
+ * la portada de `/dashboard` imprimía la cifra sin el sufijo `MXN` que el panel en inglés sí lleva en todas las demás pantallas.
+ */
+export function mxnCompleto(n: number | null | undefined, idioma: IdiomaFormato = 'es'): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return '—';
+  const r = Math.round(n);
+  const entero = Object.is(r, -0) ? 0 : r;
+  if (idioma === 'en') return `${entero < 0 ? '-' : ''}$${Math.abs(entero).toLocaleString(LOCALE_FORMATO.en)} MXN`;
+  return entero.toLocaleString(LOCALE_FORMATO.es, { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
+}
+
 /** Un entero con separador de millares, sin moneda ni unidad — tokens, conteos. */
 export function numero(n: number, idioma: IdiomaFormato = 'es'): string {
   return n.toLocaleString(LOCALE_FORMATO[idioma]);

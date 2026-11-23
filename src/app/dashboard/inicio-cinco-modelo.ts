@@ -10,14 +10,14 @@ import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 // piezas presentacionales, los componentes de cliente y las pruebas. Regla de la casa: sin dato NUNCA es 0.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const PESOS = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
-
-/** Pesos COMPLETOS sin decimales («$3,306,107»). El compacto («$3.3 M») pierde el detalle que finanzas necesita. `null` = «—». */
-export function pesosCompletos(n: number | null | undefined): string {
-  if (n === null || n === undefined || !Number.isFinite(n)) return '—';
-  const r = Math.round(n);
-  return PESOS.format(Object.is(r, -0) ? 0 : r);
-}
+/**
+ * Pesos COMPLETOS sin decimales («$3,306,107»). El compacto («$3.3 M») pierde el detalle que finanzas necesita. `null` = «—».
+ *
+ * A59-ARQ-01: la implementación VIVE EN `@/lib/formato` (`mxnCompleto`), como el resto del formato de cifras de la casa. Aquí
+ * queda el nombre con el que la portada ya la llamaba. Antes era un `Intl.NumberFormat` propio con `'es-MX'` cableado, que la
+ * guarda de la regla no podía ver y que dejaba la cifra del panel en inglés sin el sufijo `MXN`.
+ */
+export { mxnCompleto as pesosCompletos } from '@/lib/formato';
 
 // ── Estado de la última corrida de cada agente ────────────────────────────
 
