@@ -377,13 +377,40 @@ describe('procesarEntregasCorreo — contenido del correo', () => {
     const l = e.llamadasEnviar[0]!;
     const todo = `${l.asunto}\n${l.parrafos.join('\n')}`;
     expect(l.asunto).toBe('Desglose de pago — bitácora 1228 — 9 al 14 oct');
-    expect(l.parrafos).toHaveLength(3);
+    expect(l.parrafos).toHaveLength(2);
     expect(todo).not.toMatch(/\$/);
     expect(todo).not.toMatch(/\d[.,]\d{2}\b/);
     expect(todo).not.toContain(String(TOTAL_SINTETICO));
     expect(todo.toLowerCase()).not.toContain('flota prueba');
     expect(todo).not.toContain('ejemplo.test');
-    expect(l.op.sobrio).toBe(true);
+    expect(l.op.corporativo).toBeDefined();
+    expect(l.op.sobrio).toBeUndefined();
+  });
+
+  it('corporativo: lleva el logo y la razón social de la flota que entrega leerMarca', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_1' });
+    const logo = { base64: 'QUJD', contentType: 'image/png', nombre: 'cliente.png' };
+    await procesarEntregasCorreo({ ...deps, leerMarca: async () => ({ logo, nombre: 'Flota Prueba SA' }) }, 10);
+    expect(e.llamadasEnviar[0]!.op.corporativo).toEqual({ logoCliente: logo, nombreCliente: 'Flota Prueba SA' });
+  });
+
+  it('si leer la marca falla, el desglose sale igual, solo con el logo de Likida', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_1' });
+    await procesarEntregasCorreo({ ...deps, leerMarca: async () => { throw new Error('storage caído'); } }, 10);
+    expect(e.enviadas).toHaveLength(1);
+    expect(e.llamadasEnviar[0]!.op.corporativo).toEqual({});
+  });
+
+  it('datos y archivo: bitácora, periodo y nombre del adjunto, sin importes', async () => {
+    const { deps } = montar({ ok: true, id: 're_1' });
+    let visto: import('@/lib/correo/plantilla').Correo | null = null;
+    await procesarEntregasCorreo({ ...deps, enviar: async (_p, c) => { visto = c; return { ok: true, id: 're_1' }; } }, 10);
+    const c = visto as unknown as import('@/lib/correo/plantilla').Correo;
+    expect(c.rotulo).toBe('Desglose de pago');
+    expect(c.datos).toEqual([['Bitácora', '1228'], ['Periodo', expect.any(String)]]);
+    expect(c.archivo?.nombre).toBe('desglose-1228.xlsx');
+    expect(c.nota).toBe('Si algo no coincide, responde a este correo.');
+    expect(JSON.stringify(c)).not.toMatch(/\$|\d[.,]\d{2}\b/);
   });
 
   it('el adjunto es el base64 de los MISMOS bytes del Storage, con nombre y tipo de xlsx', async () => {

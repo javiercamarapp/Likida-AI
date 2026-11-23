@@ -14,3 +14,6 @@ export { LOGO_PNG_BASE64 } from '@/lib/marca/logo';
 /** El id con el que el HTML lo referencia: <img src="cid:LOGO_CID">. */
 export const LOGO_CID = 'likida-logo';
 export const LOGO_NOMBRE = 'likida.png';
+
+/** El logo de la flota (cliente) en la plantilla corporativa: <img src="cid:LOGO_CLIENTE_CID">. */
+export const LOGO_CLIENTE_CID = 'cliente-logo';
