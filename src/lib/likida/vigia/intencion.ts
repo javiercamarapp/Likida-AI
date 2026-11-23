@@ -93,6 +93,7 @@ const DATOS_UNIDAD_FLOJA: readonly RegExp[] = [
 ];
 const UBICACION_FLOJA: readonly RegExp[] = [
   /\b(como (vamos|van|andamos))\b/,
+  /\b(estatus|status|actualizacion|actualizado)\b[^.]{0,20}\b(cargas?|cajas?|cajitas?|unidades?|servicios?|viajes?|embarques?)\b/,
 ];
 
 // «Me apoyan con la remisión sellada», «necesitamos el DODA», «falta timbrar»: piden que ALGUIEN HAGA algo con un documento (emitir, timbrar,

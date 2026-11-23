@@ -20,7 +20,7 @@ describe('intención por reglas — habla telegráfica de los grupos', () => {
   });
 
   it('«¿cómo vamos?» es ubicación, siempre con confianza baja (nunca sale solo)', () => {
-    for (const t of ['como vamos con las cargas?', 'Team, cómo van?', 'como andamos con la caja']) {
+    for (const t of ['como vamos con las cargas?', 'Team, cómo van?', 'como andamos con la caja', 'nos ayudan con el estatus de las cargas', 'actualizado de las unidades por favor']) {
       const c = clasificarPorReglas(t);
       expect(c?.intencion, t).toBe('ubicacion');
       expect(c?.confianza, t).toBeLessThan(CONFIANZA_MINIMA_AUTOENVIO);
