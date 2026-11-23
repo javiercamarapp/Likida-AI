@@ -42,7 +42,7 @@ describe('esperaPorFranja', () => {
 });
 
 describe('franjasConHueco', () => {
-  const base = Array.from({ length: 24 }, (_, hora) => ({ hora, peticiones: 30, medianaMin: 3, p90Min: 20, sinRespuesta: 0, pctSobreUmbral: 5 }));
+  const base = [...Array(24).keys()].map((_, hora) => ({ hora, peticiones: 30, medianaMin: 3, p90Min: 20, sinRespuesta: 0, pctSobreUmbral: 5 }));
   it('señala la franja con muchas peticiones y mucha espera, de peor a mejor', () => {
     const f = [...base];
     f[14] = { ...f[14], pctSobreUmbral: 20 };

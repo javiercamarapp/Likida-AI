@@ -55,7 +55,7 @@ export function esperaPorFranja(
     const { m, ms } = msgs[k];
     if (m.rol === 'equipo' && !(opciones.soloRespuestaConDato && esRespuestaVacia(m.texto))) proximo = ms;
   }
-  const esperas: number[][] = Array.from({ length: 24 }, () => []);
+  const esperas: number[][] = [...Array(24).keys()].map(() => []);
   const sin: number[] = new Array(24).fill(0);
   const total: number[] = new Array(24).fill(0);
   msgs.forEach(({ m, ms }, k) => {

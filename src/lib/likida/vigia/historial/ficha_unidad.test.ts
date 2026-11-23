@@ -38,9 +38,9 @@ describe('detectarFicha', () => {
 });
 
 describe('sugerirEquipoPorFicha', () => {
-  const equipo = Array.from({ length: 6 }, () => ({ autorHash: 'eq', texto: FICHA_CAJA }));
-  const charla = Array.from({ length: 40 }, () => ({ autorHash: 'eq', texto: 'ok' }));
-  const clientePocas = [{ autorHash: 'cl', texto: FICHA_CAJA }, ...Array.from({ length: 300 }, () => ({ autorHash: 'cl', texto: 'me confirman' }))];
+  const equipo = [...Array(6).keys()].map(() => ({ autorHash: 'eq', texto: FICHA_CAJA }));
+  const charla = [...Array(40).keys()].map(() => ({ autorHash: 'eq', texto: 'ok' }));
+  const clientePocas = [{ autorHash: 'cl', texto: FICHA_CAJA }, ...[...Array(300).keys()].map(() => ({ autorHash: 'cl', texto: 'me confirman' }))];
 
   it('sugiere a quien escribe fichas seguido y NO al cliente que pegó una', () => {
     expect(sugerirEquipoPorFicha([...equipo, ...charla, ...clientePocas])).toEqual([{ autorHash: 'eq', fichas: 6, mensajes: 46 }]);
@@ -48,7 +48,7 @@ describe('sugerirEquipoPorFicha', () => {
 
   it('exige mínimo de fichas y de porcentaje', () => {
     expect(sugerirEquipoPorFicha(equipo.slice(0, 4))).toEqual([]);
-    expect(sugerirEquipoPorFicha([...equipo, ...Array.from({ length: 1000 }, () => ({ autorHash: 'eq', texto: 'ok' }))])).toEqual([]);
+    expect(sugerirEquipoPorFicha([...equipo, ...[...Array(1000).keys()].map(() => ({ autorHash: 'eq', texto: 'ok' }))])).toEqual([]);
   });
 
   it('sin mensajes, sin sugerencias', () => {
