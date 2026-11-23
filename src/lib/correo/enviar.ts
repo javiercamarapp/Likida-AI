@@ -1,7 +1,7 @@
 import { veredictoSalidasDeFlota } from '@/lib/saas/salidas_flota';
 import { logger } from '@/lib/logger';
-import { armarHtml, armarHtmlSobrio, aTextoPlano, aTextoPlanoSobrio, type Correo } from './plantilla';
-import { LOGO_PNG_BASE64, LOGO_CID, LOGO_NOMBRE } from './logo';
+import { armarHtml, armarHtmlSobrio, armarHtmlCorporativo, aTextoPlano, aTextoPlanoSobrio, aTextoPlanoCorporativo, type Correo } from './plantilla';
+import { LOGO_PNG_BASE64, LOGO_CID, LOGO_NOMBRE, LOGO_CLIENTE_CID } from './logo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ENVÍO DE CORREO — Resend, por HTTP directo.
@@ -139,6 +139,12 @@ export interface OpcionesEnvio {
    */
   sobrio?: boolean;
   /**
+   * Plantilla CORPORATIVA (desglose de pago de la flota): cabecera con el logo de Likida a la izquierda y el de la flota a la
+   * derecha, tarjeta de datos y archivo destacado. Sigue siendo un correo OPERATIVO: sin `List-Unsubscribe` ni pie de campaña.
+   * Ambos logos viajan como adjuntos en línea (`cid:`). Sin `logoCliente`, la cabecera lleva solo el de Likida. Manda sobre `sobrio`.
+   */
+  corporativo?: { logoCliente?: { base64: string; contentType?: string; nombre?: string }; nombreCliente?: string };
+  /**
    * A37-S24-08 (LFPDPPP, minimización): con varios destinatarios, solo el
    * primero va en `to` y el resto en `bcc`, para que en una campaña en frío
    * ningún contacto vea las direcciones de los demás. Defecto: todos en `to`
@@ -192,7 +198,9 @@ export async function enviarCorreo(
   }
 
   const replyTo = op.replyTo && destinatarioValido(op.replyTo) && !/[<>\r\n]/.test(op.replyTo) ? op.replyTo.trim() : null;
-  const sobrio = op.sobrio === true;
+  const corporativo = op.corporativo;
+  const sobrio = op.sobrio === true && !corporativo;
+  const marcaCorp = corporativo ? { logoCliente: !!corporativo.logoCliente, ...(corporativo.nombreCliente ? { nombreCliente: corporativo.nombreCliente } : {}) } : null;
   const adjuntosCorreo = (op.adjuntos ?? []).map((a) => ({
     filename: a.filename,
     content: a.content,
@@ -215,26 +223,32 @@ export async function enviarCorreo(
         to: op.copiasOcultas ? destinos.slice(0, 1) : destinos,
         ...(op.copiasOcultas && destinos.length > 1 ? { bcc: destinos.slice(1) } : {}),
         subject: correo.asunto,
-        html: sobrio ? armarHtmlSobrio(correo) : armarHtml(correo),
+        html: marcaCorp ? armarHtmlCorporativo(correo, marcaCorp) : sobrio ? armarHtmlSobrio(correo) : armarHtml(correo),
         // La parte de texto no es opcional: un correo sin ella puntúa peor en
         // los filtros de spam y hay clientes que solo leen esa.
-        text: sobrio ? aTextoPlanoSobrio(correo) : aTextoPlano(correo),
+        text: marcaCorp ? aTextoPlanoCorporativo(correo, marcaCorp) : sobrio ? aTextoPlanoSobrio(correo) : aTextoPlano(correo),
         ...(replyTo ? { reply_to: replyTo } : {}),
         // EL LOGO VIAJA CON EL CORREO. `content_disposition: 'inline'` + el
         // `content_id` que el HTML referencia como `cid:` — así el logo no
         // depende de que el cliente autorice imágenes externas, que es lo que
         // lo rompió la primera vez. No aparece como adjunto descargable.
-        // Con `sobrio` el logo NO viaja (T-A1-12): solo los adjuntos del llamador.
+        // Con `sobrio` el logo NO viaja (T-A1-12): solo los adjuntos del llamador. Con `corporativo` viajan el de Likida y el de la flota.
         attachments: sobrio ? adjuntosCorreo : [{
           filename: LOGO_NOMBRE,
           content: LOGO_PNG_BASE64,
           content_id: LOGO_CID,
           content_disposition: 'inline',
-        }, ...adjuntosCorreo],
+        }, ...(corporativo?.logoCliente ? [{
+          filename: corporativo.logoCliente.nombre ?? 'cliente.png',
+          content: corporativo.logoCliente.base64,
+          content_type: corporativo.logoCliente.contentType ?? 'image/png',
+          content_id: LOGO_CLIENTE_CID,
+          content_disposition: 'inline',
+        }] : []), ...adjuntosCorreo],
         // CABECERAS DEL MENSAJE — distintas de las del POST arriba (esas son
         // HTTP hacia Resend; estas viajan DENTRO del correo hacia el cliente
         // del destinatario). Solo van si el llamador trae la liga de baja.
-        ...(op.listaBajaUrl && !sobrio ? {
+        ...(op.listaBajaUrl && !sobrio && !corporativo ? {
           headers: {
             'List-Unsubscribe': `<${op.listaBajaUrl}>`,
             'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',

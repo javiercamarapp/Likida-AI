@@ -45,7 +45,7 @@ import { trCorreo } from './tr';
 import { LANG_HTML, type Idioma } from '@/lib/i18n/idioma';
 
 import { appUrl } from '@/lib/env';
-import { LOGO_CID } from './logo';
+import { LOGO_CID, LOGO_CLIENTE_CID } from './logo';
 
 /**
  * La URL pública de la app, para los enlaces y para el logo enlazado.
@@ -149,6 +149,10 @@ export interface Correo {
    *  Va en un bloque aparte para que no se lea como parte del cuerpo. */
   nota?: string;
   tono?: TonoCorreo;
+  /** Micro-rótulo sobre el título (solo plantilla corporativa): «DESGLOSE DE PAGO». */
+  rotulo?: string;
+  /** El archivo que va adjunto, destacado en su propio bloque (solo plantilla corporativa). */
+  archivo?: { nombre: string; detalle?: string };
   /** Por qué le llegó este correo. Va al pie. */
   porQueLoRecibes: string;
   /** El idioma del DESTINATARIO (marco del correo: rótulos, pie, `<html lang>`). Sin él, español. */
@@ -426,4 +430,117 @@ ${c.datos.map(([k, v]) => `        <tr>
 </table>
 </body>
 </html>`;
+}
+
+
+// ── PLANTILLA CORPORATIVA (correo operativo con la marca de la flota) ────────
+//
+// Para lo que la flota le manda a su gente (el desglose de pago del operador): cabecera con el logo de Likida a la
+// izquierda y el de la flota a la derecha, un solo título, una tarjeta de datos y el archivo adjunto destacado.
+//
+//   · SIN `List-Unsubscribe`, sin botón de campaña ni liga de baja: es un correo operativo, no marketing.
+//   · Los logos viajan INCRUSTADOS (`cid:`), nunca enlazados: un cliente que bloquea imágenes externas no los rompe.
+//   · El logo de la flota es opcional. Sin él, la cabecera lleva solo el de Likida (no queda un hueco ni una imagen rota).
+//   · `color-scheme: light`: el modo oscuro de algunos clientes invierte fondos y deja un logo negro sobre negro.
+//   · Los textos son DATOS (folios, periodos, nombre del archivo, razón social): todo pasa por `esc`.
+
+export interface MarcaCorreo {
+  /** ¿Viaja el logo de la flota como adjunto en línea (`cid:LOGO_CLIENTE_CID`)? */
+  logoCliente: boolean;
+  /** Razón social de la flota: texto alterno del logo (si el cliente no pinta imágenes, se lee el nombre). */
+  nombreCliente?: string;
+}
+
+const AZUL_ARCHIVO = { fondo: '#e9f3ec', tinta: '#1d6f42' } as const; // el verde de «Excel», para reconocer el adjunto de un vistazo
+
+export function armarHtmlCorporativo(c: Correo, marca: MarcaCorreo): string {
+  const nombreCliente = (marca.nombreCliente ?? '').trim();
+  const logoLikida = `<img src="cid:${LOGO_CID}" alt="LIKIDA" height="22" style="display:block;height:22px;width:auto;border:0;outline:none;text-decoration:none;font-family:${DISPLAY};font-size:15px;line-height:22px;letter-spacing:0.28em;font-weight:600;color:${C.tinta};">`;
+  const logoCliente = marca.logoCliente
+    ? `<img src="cid:${LOGO_CLIENTE_CID}" alt="${esc(nombreCliente)}" height="26" style="display:block;height:26px;width:auto;border:0;outline:none;text-decoration:none;font-family:${DISPLAY};font-size:14px;line-height:26px;font-weight:600;color:${C.tinta};">`
+    : '';
+  const rotulo = c.rotulo
+    ? `<p style="margin:0 0 10px 0;font-family:${SANS};font-size:11px;line-height:16px;letter-spacing:0.12em;text-transform:uppercase;font-weight:600;color:${C.faint};">${esc(c.rotulo)}</p>`
+    : '';
+  const parrafos = c.parrafos
+    .map((p) => `<p style="margin:0 0 14px 0;font-family:${SANS};font-size:15px;line-height:24px;color:#3f3f46;">${esc(p)}</p>`)
+    .join('\n        ');
+  const datos = c.datos?.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:6px 0 20px 0;border-collapse:separate;border:1px solid ${C.linea};border-radius:10px;background-color:${C.lienzo};">
+${c.datos.map(([k, v], i) => `          <tr>
+            <td style="padding:12px 16px;${i > 0 ? `border-top:1px solid ${C.linea};` : ''}font-family:${SANS};font-size:13px;line-height:18px;color:${C.faint};">${esc(k)}</td>
+            <td align="right" style="padding:12px 16px;${i > 0 ? `border-top:1px solid ${C.linea};` : ''}font-family:${SANS};font-size:14px;line-height:20px;font-weight:600;color:${C.tinta};">${esc(v)}</td>
+          </tr>`).join('\n')}
+        </table>`
+    : '';
+  const archivo = c.archivo
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 20px 0;border-collapse:separate;border:1px solid ${C.linea};border-radius:10px;background-color:${C.papel};">
+          <tr>
+            <td width="56" style="padding:14px 0 14px 16px;" valign="middle"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" width="40" height="40" style="width:40px;height:40px;border-radius:8px;background-color:${AZUL_ARCHIVO.fondo};font-family:${SANS};font-size:10px;line-height:40px;letter-spacing:0.08em;font-weight:700;color:${AZUL_ARCHIVO.tinta};">XLSX</td></tr></table></td>
+            <td style="padding:14px 16px 14px 12px;" valign="middle">
+              <p style="margin:0;font-family:${SANS};font-size:14px;line-height:20px;font-weight:600;color:${C.tinta};word-break:break-all;">${esc(c.archivo.nombre)}</p>
+              ${c.archivo.detalle ? `<p style="margin:2px 0 0 0;font-family:${SANS};font-size:12px;line-height:18px;color:${C.faint};">${esc(c.archivo.detalle)}</p>` : ''}
+            </td>
+          </tr>
+        </table>`
+    : '';
+  const nota = c.nota
+    ? `<p style="margin:0 0 4px 0;padding:2px 0 2px 12px;border-left:3px solid ${C.linea};font-family:${SANS};font-size:13px;line-height:20px;color:${C.muted};">${esc(c.nota)}</p>`
+    : '';
+  return `<!doctype html>
+<html lang="${LANG_HTML[c.idioma ?? 'es']}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>${esc(c.asunto)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:${C.g1};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">${esc(c.avance)}</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:${C.g1};">
+  <tr><td align="center" style="padding:32px 16px;">
+    <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" align="center"><tr><td><![endif]-->
+    <div style="max-width:600px;margin:0 auto;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;background-color:${C.papel};border:1px solid ${C.linea};border-radius:14px;">
+      <tr><td style="padding:24px 32px;border-bottom:1px solid ${C.linea};">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
+          <td align="left" valign="middle">${logoLikida}</td>
+          <td align="right" valign="middle">${logoCliente}</td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:32px 32px 8px 32px;">
+        ${rotulo}
+        <h1 style="margin:0 0 16px 0;font-family:${DISPLAY};font-size:22px;line-height:30px;font-weight:600;color:${C.tinta};">${esc(c.titulo)}</h1>
+        ${parrafos}
+        ${datos}
+        ${archivo}
+        ${nota}
+      </td></tr>
+      <tr><td style="padding:20px 32px 28px 32px;">
+        <p style="margin:0;padding-top:16px;border-top:1px solid ${C.linea};font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">${esc(c.porQueLoRecibes)}</p>
+        <p style="margin:6px 0 0 0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">Enviado con Likida &middot; Liquidaci&oacute;n de viajes para flotas de carga</p>
+      </td></tr>
+    </table>
+    </div>
+    <!--[if mso]></td></tr></table><![endif]-->
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
+
+export function aTextoPlanoCorporativo(c: Correo, marca: MarcaCorreo): string {
+  const cliente = (marca.nombreCliente ?? '').trim();
+  const lineas = [cliente ? `LIKIDA  ·  ${cliente}` : 'LIKIDA', ''];
+  if (c.rotulo) lineas.push(c.rotulo.toUpperCase(), '');
+  lineas.push(c.titulo, '', ...c.parrafos);
+  if (c.datos?.length) {
+    lineas.push('');
+    for (const [k, v] of c.datos) lineas.push(`${k}: ${v}`);
+  }
+  if (c.archivo) lineas.push('', `Adjunto: ${c.archivo.nombre}${c.archivo.detalle ? ` (${c.archivo.detalle})` : ''}`);
+  if (c.nota) lineas.push('', c.nota);
+  lineas.push('', '—', c.porQueLoRecibes);
+  return lineas.join('\n');
 }
