@@ -74,6 +74,21 @@ export interface ConfigSinAtender {
   noche: { desdeHora: number; hastaHora: number };
   /** OPCIONAL. Apagado por omisión: sin él la antigüedad son minutos corridos. Con él, antiguedadMin cuenta solo minutos dentro del horario. */
   horarioAtencion?: HorarioAtencion;
+  /**
+   * OPCIONAL (medido en 5 grupos reales; todo apagado por omisión = comportamiento anterior). Minutos que debe llevar esperando el
+   * PRIMER mensaje del hilo para que la insistencia cuente. 0 (default) = la insistencia avisa al segundo mensaje, aunque el equipo
+   * ya esté contestando; con 5-10 solo avisa una repregunta que de verdad quedó sin atender. 0-120.
+   */
+  insistenciaEsperaMin?: number;
+  /** OPCIONAL. `true` = un acuse del equipo («enterado», «reviso», «en un momento») NO cierra el pendiente: hay que dar el dato. Default false. */
+  acusesVaciosNoCierran?: boolean;
+  /**
+   * OPCIONAL. Un «gracias/ok» del cliente solo cierra el hilo si llegó al menos estos minutos después del último mensaje abierto.
+   * 0 (default) = cierra siempre (un «gracias» pegado a la petición la borraba: ver RESULTADOS). 0-240.
+   */
+  cortesiaCierraTrasMin?: number;
+  /** OPCIONAL. `true` = un hilo sin ninguna petición (listas reenviadas, avisos del cliente) no alerta por espera. Default false. */
+  soloPeticiones?: boolean;
   /** Tope de alertas por chat. Default 3. */
   maxAlertasPorChat: number;
   /** Largo maximo de vistaPrevia. 0 (default) => vistaPrevia siempre null. La pantalla pasa 160; el correo NUNCA la usa. */
