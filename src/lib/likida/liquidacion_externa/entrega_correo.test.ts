@@ -406,7 +406,7 @@ describe('procesarEntregasCorreo — contenido del correo', () => {
     let visto: import('@/lib/correo/plantilla').Correo | null = null;
     await procesarEntregasCorreo({ ...deps, enviar: async (_p, c) => { visto = c; return { ok: true, id: 're_1' }; } }, 10);
     const c = visto as unknown as import('@/lib/correo/plantilla').Correo;
-    expect(c.rotulo).toBe('Desglose de pago');
+    expect(c.rotulo).toBe('Liquidación de viaje');
     expect(c.datos).toEqual([['Bitácora', '1228'], ['Periodo', expect.any(String)]]);
     expect(c.archivo?.nombre).toBe('desglose-1228.xlsx');
     expect(c.nota).toBe('Si algo no coincide, responde a este correo.');
@@ -511,6 +511,17 @@ describe('A37-A1-02: el correo de una corrección se rotula CORRECCIÓN', () => 
     const n = armarCorreoDesglose({ claveExterna: 'BIT-T01-1228', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' }).correo;
     expect(n.asunto).not.toMatch(/CORRECCIÓN/);
     expect(n.parrafos.join(' ')).not.toMatch(/CORRECCIÓN/);
+  });
+});
+
+describe('correo del desglose: la etiqueta superior no repite el título', () => {
+  it('ni en el envío normal ni en la corrección', () => {
+    for (const clave of ['BIT-T01-1228', 'BIT-T01-1228-R1']) {
+      const c = armarCorreoDesglose({ claveExterna: clave, bitacora: '1228', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' }).correo;
+      expect(c.rotulo).toBeTruthy();
+      expect(c.rotulo?.toLowerCase()).not.toBe(c.titulo.toLowerCase());
+      expect(c.titulo.toLowerCase()).not.toContain(String(c.rotulo).toLowerCase());
+    }
   });
 });
 
