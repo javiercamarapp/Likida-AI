@@ -4465,20 +4465,36 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       });
     }
 
-    // La consulta corre SÓLO en este caso —texto que parece cierre y con
-    // alguna hora—, no en cada mensaje. `pareceCierre` implica `cierreSolicitado`
-    // (pidioCerrar la incluye), así que si llegamos aquí con ella en true,
-    // `timestampCierreMs` ya quedó validado arriba. Esta guardia distingue un
-    // cierre atrasado; las barreras posteriores siguen siendo fail-closed
-    // ante lecturas dudosas.
-    if (pareceCierre(msg.text) && timestampCierreMs !== null) {
+    // La consulta corre SÓLO en este caso —texto que pide cierre y con alguna
+    // hora—, no en cada mensaje. `timestampCierreMs` ya quedó validado arriba
+    // para `cierreSolicitado`, así que si llegamos aquí es non-null. Esta
+    // guardia distingue un cierre atrasado; las barreras posteriores siguen
+    // siendo fail-closed ante lecturas dudosas.
+    //
+    // ── AUDITORÍA 59 · A59-AGEN-01 (CRÍTICO): PREGUNTA `cierreSolicitado`,
+    //    NO `pareceCierre` ──────────────────────────────────────────────────
+    //
+    // Preguntaba `pareceCierre`, que está anclada en `^` y es estrecha A
+    // PROPÓSITO por ser el freno del cierre EN CEROS. Pero quien AUTORIZA el
+    // cierre es `pidioCerrar` (abajo, `cierrePedidoPorTexto`), ancha también a
+    // propósito. Entre las dos había una brecha, y lo que caía en ella cerraba
+    // el viaje nuevo sin pasar por aquí: «ok jefe, ya terminé», «mándame mi
+    // liquidación», «ciérrala por favor», «no traigo más tickets», «ya estuvo»
+    // y «es mi último ticket» dan `pareceCierre=false` y `pidioCerrar=true`.
+    // El daño es el que esta guardia existe para evitar y que su propio
+    // comentario de arriba describe —liquidación en ceros, irreversible por
+    // 0036/0037, y los tickets del regreso a huérfanos—, así que el conjunto
+    // protegido tiene que ser el MISMO que el conjunto que autoriza.
+    if (cierreSolicitado && timestampCierreMs !== null) {
       const abiertoDesde = await viajeAbiertoDesdeMs(op.tenantId, viajeId);
       if (abiertoDesde != null && timestampCierreMs < abiertoDesde) {
         logger.warn('cierre.mensaje_de_viaje_anterior', {
           viaje: viajeId, tenant: op.tenantId,
           mensajeMs: timestampCierreMs, viajeDesdeMs: abiertoDesde,
         });
-        await say('Ese *listo* era de tu viaje anterior, que ya quedó cerrado 👍. Éste es un viaje nuevo: mándame sus comprobantes y escribe *listo* cuando termines con él.');
+        // Sin comillas sobre una palabra que el operador pudo no haber dicho:
+        // ahora esto se dispara también con «mándame mi liquidación».
+        await say('Ese mensaje era de tu viaje anterior, que ya quedó cerrado 👍. Éste es un viaje nuevo: mándame sus comprobantes y escribe *listo* cuando termines con él.');
         return;
       }
     }
