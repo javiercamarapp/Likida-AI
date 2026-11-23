@@ -231,6 +231,7 @@ export const CATALOGO_CONCEPTOS_MUESTRA: readonly Concepto[] = [
   { categoria: 'ajuste_redondeo', lado: 'ambos', patron: /^dif en registro$/ },
   { categoria: 'viaticos', lado: 'percepcion', patron: /^boletos autobus$/ },
   { categoria: 'domingo_laborado', lado: 'percepcion', patron: /^domingo laborado$/ },
+  { categoria: 'festivo_laborado', lado: 'percepcion', patron: /^(dia )?festivos? laborados?$/ },
   { categoria: 'hora_extra', lado: 'percepcion', patron: /^horas? extras?$/ },
   { categoria: 'otros', lado: 'percepcion', patron: /^otros$/ },
   { categoria: 'imss', lado: 'deduccion', patron: /^imss$/ },

@@ -8,7 +8,7 @@ import { aplicarRenombres } from './desglose_reglas';
 const PERCEPCIONES = [
   ['BOLETOS AUTOBUS', 'viaticos'], ['Bono Aut.', 'bono'], ['Bono C.D', 'bono'], ['Bono E.C', 'bono'], ['Bono E.M', 'bono'], ['Bono E.S', 'bono'],
   ['Bono HAZMAT', 'bono'], ['Bono Mes', 'bono'], ['Bono MNLD', 'bono'], ['Bono Pos', 'bono'], ['Bono PR', 'bono'], ['Bono R.L', 'bono'],
-  ['Bono Rec.', 'bono'], ['Bono Termo', 'bono'], ['Bono U.I', 'bono'], ['Bono x Vuelta', 'bono'], ['DOMINGO LABORADO', 'domingo_laborado'],
+  ['Bono Rec.', 'bono'], ['Bono Termo', 'bono'], ['Bono U.I', 'bono'], ['Bono x Vuelta', 'bono'], ['DOMINGO LABORADO', 'domingo_laborado'], ['FESTIVO LABORADO', 'festivo_laborado'],
   ['HORA EXTRA', 'hora_extra'], ['Otros', 'otros'], ['SUELDO BLINDADO', 'sueldo'], ['SUELDO GARANTIZADO', 'sueldo'], ['Sueldo Semanal', 'sueldo'],
   ['Sueldo x Vuelta', 'sueldo'], ['TAXI', 'viaticos'], ['Viatico', 'viaticos'], ['Viaticos', 'viaticos'],
 ] as const;
