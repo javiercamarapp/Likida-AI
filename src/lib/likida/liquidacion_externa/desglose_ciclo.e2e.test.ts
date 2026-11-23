@@ -317,7 +317,7 @@ async function evento(tipo: 'email.delivered' | 'email.bounced' | 'email.complai
 /** Relee el adjunto como Excel: celdas con valor y la lista de las que traen fórmula. */
 function releer(bytes: Uint8Array | Buffer) {
   const libro = XLSX.read(bytes, { type: 'buffer', cellFormula: true });
-  const hoja = libro.Sheets['Desglose'];
+  const hoja = libro.Sheets['Formato'];
   const formulas = Object.keys(hoja).filter((k) => !k.startsWith('!') && (hoja[k] as XLSX.CellObject).f !== undefined);
   return { hoja, formulas, val: (ref: string) => hoja[ref]?.v as unknown };
 }
@@ -381,10 +381,10 @@ describe('E2E del desglose: bitácora → desglose → correo (dobles)', () => {
 
       const x = releer(e.adjunto!.bytes);
       expect(x.formulas).toEqual([]);
-      expect(x.val('A20')).toBe(F.esperado.percepciones);
-      expect(x.val('C20')).toBe(F.esperado.deducciones);
-      expect(x.val('G7')).toBe(F.esperado.neto);
-      expect(centavos(x.val('A20') as number) - centavos(x.val('C20') as number)).toBe(centavos(x.val('G7') as number));
+      expect(x.val('B17')).toBe(F.esperado.percepciones);
+      expect(x.val('G17')).toBe(F.esperado.deducciones);
+      expect(x.val('H19')).toBe(F.esperado.neto);
+      expect(centavos(x.val('B17') as number) - centavos(x.val('G17') as number)).toBe(centavos(x.val('H19') as number));
     }
     // una llave de idempotencia por destinatario, estable y distinta
     expect(new Set(envios.map((e) => e.llave)).size).toBe(4);
@@ -489,7 +489,7 @@ describe('E2E del desglose: webhook de Resend → pantalla → reenvío', () => 
     expect(nuevo.para).toBe('operador.corregido@ejemplo.test');
     expect(nuevo.llave).toBe(llaveIdempotencia({ liquidacionExternaId: ok.id, generacion: 2, rol: 'operador' }));
     expect(nuevo.llave).not.toBe(envios.find((e) => e.para === 'operador@ejemplo.test')?.llave);
-    expect(releer(nuevo.adjunto!.bytes).val('G7')).toBe(F.esperado.neto);
+    expect(releer(nuevo.adjunto!.bytes).val('H19')).toBe(F.esperado.neto);
 
     expect((await evento('email.delivered', nuevo.resendId)).cuerpo).toMatchObject({ entregaCorreo: 'aplicada' });
     expect(entregaDe(ok.id, 'operador', 2).estado).toBe('entregada');
@@ -551,9 +551,9 @@ describe.skipIf(!RUTA_REAL)('desglose real (solo local, fuera del repo)', () => 
     expect(envios).toHaveLength(4);
     const x = releer(envios[0].adjunto!.bytes);
     expect(x.formulas).toEqual([]);
-    expect(centavos(x.val('A20') as number)).toBe(centavos(real.esperado.percepciones));
-    expect(centavos(x.val('C20') as number)).toBe(centavos(real.esperado.deducciones));
-    expect(centavos(x.val('G7') as number)).toBe(centavos(real.esperado.neto));
+    expect(centavos(x.val('B17') as number)).toBe(centavos(real.esperado.percepciones));
+    expect(centavos(x.val('G17') as number)).toBe(centavos(real.esperado.deducciones));
+    expect(centavos(x.val('H19') as number)).toBe(centavos(real.esperado.neto));
     // los renglones del Excel suman lo mismo que los totales (la suma sale de los importes, no del cálculo del Excel)
     expect(sumaCentavos(real.percepciones) - sumaCentavos(real.deducciones)).toBe(centavos(real.esperado.neto));
 

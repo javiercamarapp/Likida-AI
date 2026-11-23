@@ -11,14 +11,14 @@ import { crearZip } from '../buzon/zip_escribir';
 // datos => mismos bytes (la fecha del zip es fija).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type TipoBorde = 'thin' | 'dotted' | 'medium';
+export type TipoBorde = 'thin' | 'dotted' | 'dashed' | 'medium';
 export interface EstiloCelda {
   fuente?: { nombre?: string; tam?: number; negrita?: boolean; cursiva?: boolean; color?: string };
   /** Relleno sólido, RRGGBB. */
   relleno?: string;
-  borde?: { izq?: TipoBorde; der?: TipoBorde; arr?: TipoBorde; aba?: TipoBorde };
+  borde?: { izq?: TipoBorde; der?: TipoBorde; arr?: TipoBorde; aba?: TipoBorde; /** RRGGBB; por defecto negro. */ color?: string };
   /** 'contable' = _-"$"* #,##0.00_-; 'texto' = @; por defecto General. */
-  formato?: 'contable' | 'texto' | 'general';
+  formato?: 'contable' | 'texto' | 'general' | 'fechaLarga' | 'dias';
   alineacion?: { h?: 'left' | 'center' | 'right'; v?: 'top' | 'center' | 'bottom'; ajustar?: boolean };
 }
 export interface CeldaXlsx {
@@ -44,6 +44,8 @@ export interface OpcionesLibro {
   orientacion?: 'landscape' | 'portrait';
   ajustarAnchoPagina?: boolean;
   areaImpresion?: AreaImpresion;
+  /** Zoom de la hoja en %, p. ej. 90. */
+  zoom?: number;
 }
 
 const FECHA_FIJA = new Date(Date.UTC(2026, 0, 1, 0, 0, 0));
@@ -51,6 +53,10 @@ const MAX_FILAS = 1_048_576;
 const MAX_COLS = 16_384;
 const FMT_CONTABLE = '_-"$"* #,##0.00_-;\\-"$"* #,##0.00_-;_-"$"* "-"??_-;_-@_-';
 const ID_FMT_CONTABLE = 164;
+const FMT_FECHA_LARGA = '[$-F800]dddd\\,\\ mmmm\\ dd\\,\\ yyyy';
+const ID_FMT_FECHA_LARGA = 165;
+const FMT_DIAS = '0\\ "días"';
+const ID_FMT_DIAS = 166;
 
 /** Escapa XML y elimina caracteres no válidos en XML 1.0 (control salvo tab/LF/CR). */
 export function escaparXml(s: string): string {
@@ -121,10 +127,11 @@ function construirEstilos(estilos: Readonly<Record<string, EstiloCelda>>): Tabla
     }
     let borderId = 0;
     if (e.borde) {
-      const l = (tag: string, t?: TipoBorde) => t ? `<${tag} style="${t}"><color rgb="FF000000"/></${tag}>` : `<${tag}/>`;
+      const cb = color(e.borde.color, '000000');
+      const l = (tag: string, t?: TipoBorde) => t ? `<${tag} style="${t}"><color rgb="${cb}"/></${tag}>` : `<${tag}/>`;
       borderId = unico(bordes, `<border>${l('left', e.borde.izq)}${l('right', e.borde.der)}${l('top', e.borde.arr)}${l('bottom', e.borde.aba)}<diagonal/></border>`);
     }
-    const numFmtId = e.formato === 'contable' ? ID_FMT_CONTABLE : e.formato === 'texto' ? 49 : 0;
+    const numFmtId = e.formato === 'contable' ? ID_FMT_CONTABLE : e.formato === 'fechaLarga' ? ID_FMT_FECHA_LARGA : e.formato === 'dias' ? ID_FMT_DIAS : e.formato === 'texto' ? 49 : 0;
     const al = e.alineacion
       ? `<alignment${e.alineacion.h ? ` horizontal="${e.alineacion.h}"` : ''}${e.alineacion.v ? ` vertical="${e.alineacion.v}"` : ''}${e.alineacion.ajustar ? ' wrapText="1"' : ''}/>`
       : '';
@@ -138,7 +145,7 @@ function construirEstilos(estilos: Readonly<Record<string, EstiloCelda>>): Tabla
 
   const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-    `<numFmts count="1"><numFmt numFmtId="${ID_FMT_CONTABLE}" formatCode="${escaparXml(FMT_CONTABLE)}"/></numFmts>` +
+    `<numFmts count="3"><numFmt numFmtId="${ID_FMT_CONTABLE}" formatCode="${escaparXml(FMT_CONTABLE)}"/><numFmt numFmtId="${ID_FMT_FECHA_LARGA}" formatCode="${escaparXml(FMT_FECHA_LARGA)}"/><numFmt numFmtId="${ID_FMT_DIAS}" formatCode="${escaparXml(FMT_DIAS)}"/></numFmts>` +
     `<fonts count="${fuentes.length}">${fuentes.join('')}</fonts>` +
     `<fills count="${rellenos.length}">${rellenos.join('')}</fills>` +
     `<borders count="${bordes.length}">${bordes.join('')}</borders>` +
@@ -183,7 +190,7 @@ function construirHoja(o: OpcionesLibro, indice: Map<string, number>): string {
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
     (ajustar ? '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' : '') +
-    '<sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews>' +
+    `<sheetViews><sheetView workbookViewId="0" showGridLines="0"${o.zoom ? ` zoomScale="${o.zoom}" zoomScaleNormal="${o.zoom}"` : ''}/></sheetViews>` +
     '<sheetFormatPr defaultRowHeight="15"/>' +
     (cols.length ? `<cols>${cols.join('')}</cols>` : '') +
     `<sheetData>${filas.join('')}</sheetData>` +
