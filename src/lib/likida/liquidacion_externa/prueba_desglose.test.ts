@@ -27,7 +27,7 @@ describe('enviarPruebaDesglose (contrato, sin red)', () => {
     expect(op.adjuntos[0]!.filename).toBe('desglose-B-0001.xlsx');
     expect(op.adjuntos[0]!.contentType).toContain('spreadsheetml.sheet');
     const libro = XLSX.read(Buffer.from(op.adjuntos[0]!.content, 'base64'), { type: 'buffer' });
-    const hoja = libro.Sheets['Desglose']!;
+    const hoja = libro.Sheets['Formato']!;
     const celdas = Object.values(hoja).filter((c): c is XLSX.CellObject => typeof c === 'object' && c !== null && 'v' in (c as object));
     expect(celdas.some((c) => c.f)).toBe(false);
     expect(celdas.some((c) => c.v === DESGLOSE_SINTETICO.esperado.neto)).toBe(true);
