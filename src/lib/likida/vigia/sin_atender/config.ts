@@ -25,6 +25,10 @@ export const CONFIG_SIN_ATENDER_POR_OMISION: ConfigSinAtender = Object.freeze({
   noche: Object.freeze({ ...NOCHE_POR_OMISION }),
   maxAlertasPorChat: 3,
   vistaPreviaMax: 0,
+  insistenciaEsperaMin: 0,
+  acusesVaciosNoCierran: false,
+  cortesiaCierraTrasMin: 0,
+  soloPeticiones: false,
 });
 
 const esEntero = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
@@ -81,6 +85,10 @@ export function normalizarConfigSinAtender(entrada: Partial<ConfigSinAtender> | 
   const insistenciaVentanaMin = entero('insistenciaVentanaMin', 'La ventana de insistencia', 1, MAX_VENTANA_MIN);
   const maxAlertasPorChat = entero('maxAlertasPorChat', 'El tope de alertas por chat', 1, 20);
   const vistaPreviaMax = entero('vistaPreviaMax', 'El largo de la vista previa', 0, MAX_VISTA_PREVIA);
+  const insistenciaEsperaMin = entero('insistenciaEsperaMin', 'La espera mínima para contar una insistencia', 0, 120);
+  const cortesiaCierraTrasMin = entero('cortesiaCierraTrasMin', 'La espera para que un «gracias» cierre el hilo', 0, 240);
+  const acusesVaciosNoCierran = e.acusesVaciosNoCierran === true;
+  const soloPeticiones = e.soloPeticiones === true;
 
   let ventanaRespuestaMin: number | null = D.ventanaRespuestaMin;
   if (e.ventanaRespuestaMin === null) ventanaRespuestaMin = null;
@@ -128,7 +136,7 @@ export function normalizarConfigSinAtender(entrada: Partial<ConfigSinAtender> | 
     config: {
       umbralMin, umbralCriticoMin, umbralUrgenteMin, insistenciaMin, insistenciaVentanaMin,
       palabrasUrgentes, palabrasClave, equipoHashes: hashes, ventanaRespuestaMin, zona, festivos, noche,
-      maxAlertasPorChat, vistaPreviaMax,
+      maxAlertasPorChat, vistaPreviaMax, insistenciaEsperaMin, acusesVaciosNoCierran, cortesiaCierraTrasMin, soloPeticiones,
       ...(horarioAtencion ? { horarioAtencion } : {}),
     },
     avisos,
@@ -153,6 +161,8 @@ export function validarConfigSinAtender(entrada: unknown): { ok: true; valor: Co
     rango('insistenciaVentanaMin', 'La ventana de insistencia', 1, MAX_VENTANA_MIN),
     rango('maxAlertasPorChat', 'El tope de alertas por chat', 1, 20),
     rango('vistaPreviaMax', 'El largo de la vista previa', 0, MAX_VISTA_PREVIA),
+    rango('insistenciaEsperaMin', 'La espera mínima para contar una insistencia', 0, 120),
+    rango('cortesiaCierraTrasMin', 'La espera para que un «gracias» cierre el hilo', 0, 240),
   ].find((x) => x !== null);
   if (errores) return { ok: false, error: errores };
   if (e.ventanaRespuestaMin !== undefined && e.ventanaRespuestaMin !== null && (!esEntero(e.ventanaRespuestaMin) || e.ventanaRespuestaMin < 1 || e.ventanaRespuestaMin > MAX_VENTANA_MIN)) {

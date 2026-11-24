@@ -34,7 +34,7 @@ import type { Correo } from '@/lib/correo/plantilla';
 import { aInstanteMx } from '../peajes/formatos';
 import { esPolizaProvisional, MARCA_POLIZA_PROVISIONAL } from './poliza_provisional';
 import { bitacoraVisible } from './desglose_contrato';
-import { leerPorId, registrarEvento, transicionar, type TipoEvento } from './repo';
+import { leerLogoCliente, leerPorId, leerRazonSocial, registrarEvento, transicionar, type TipoEvento } from './repo';
 import {
   abrirExcepcion, firmarXlsx, leerConfigCorreo, leerDesglose, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
   CONFIG_CORREO_POR_DEFECTO, responderAEfectivo,
@@ -83,6 +83,11 @@ export interface ContextoLiquidacion {
   bitacora?: string;
 }
 
+export interface MarcaFlotaCorreo {
+  logo?: { base64: string; contentType: string; nombre: string };
+  nombre?: string;
+}
+
 export interface DependenciasEntregaCorreo {
   ahora: () => Date;
   enviar: EnvioCorreoPuerto;
@@ -90,6 +95,8 @@ export interface DependenciasEntregaCorreo {
   reclamar: (limite: number, ahora: Date) => Promise<EntregaCorreo[]>;
   leerContexto: (tenantId: string, liquidacionId: string) => Promise<ContextoLiquidacion | null>;
   descargarXlsx: (tenantId: string, ruta: string) => Promise<Uint8Array>;
+  /** La marca de la flota para la cabecera del correo (logo y razón social). Opcional: sin ella, el correo lleva solo el logo de Likida. */
+  leerMarca?: (tenantId: string) => Promise<MarcaFlotaCorreo>;
   marcarEnviada: (tenantId: string, id: string, claimToken: string, resendId: string, ahora: Date) => Promise<boolean>;
   marcarFallida: (tenantId: string, id: string, claimToken: string | null, error: string) => Promise<boolean>;
   reprogramar: (tenantId: string, id: string, claimToken: string, intentos: number, proximo: Date, error: string | null) => Promise<boolean>;
@@ -193,10 +200,11 @@ export function armarCorreoDesglose(ctx: ContextoLiquidacion, revision?: Revisio
   const provisional = ctx.polizaProvisional === true;
   const asunto = `${revision ? '[Revisión] ' : ''}${revision?.retenidoMotivo ? 'RETENIDO — ' : ''}${provisional ? `${MARCA_POLIZA_PROVISIONAL.toUpperCase()} — ` : ''}${esCorreccion ? 'CORRECCIÓN — ' : ''}Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
   const seguro = bitacora.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60) || 'bitacora';
+  const nombreAdjunto = `desglose-${seguro}.xlsx`;
   if (revision) {
     const depto = revision.departamento ? ` (${revision.departamento})` : '';
     return {
-      nombreAdjunto: `desglose-${seguro}.xlsx`,
+      nombreAdjunto,
       correo: {
         asunto,
         avance: revision.retenidoMotivo ? 'Desglose RETENIDO: revisión pendiente.' : 'Copia de revisión del desglose de pago.',
@@ -210,12 +218,15 @@ export function armarCorreoDesglose(ctx: ContextoLiquidacion, revision?: Revisio
           'Va adjunto el Excel tal como lo ve el operador.',
           ...(revision.retenidoMotivo ? ['Revísalo en el panel del agente de liquidación: ahí se decide si se libera o se corrige en el origen.'] : []),
         ],
+        rotulo: revision.retenidoMotivo ? 'Revisión · retenido' : 'Revisión previa al envío',
+        datos: [['Bitácora', bitacora], ['Periodo', rango]],
+        archivo: { nombre: nombreAdjunto, detalle: 'Excel · tal como lo ve el operador' },
         porQueLoRecibes: `Recibes este correo como revisor${depto} durante el primer mes del envío de desgloses.`,
       },
     };
   }
   return {
-    nombreAdjunto: `desglose-${seguro}.xlsx`,
+    nombreAdjunto,
     correo: {
       asunto,
       avance: esCorreccion ? 'CORRECCIÓN: desglose de pago adjunto.' : 'Desglose de pago adjunto.',
@@ -224,9 +235,12 @@ export function armarCorreoDesglose(ctx: ContextoLiquidacion, revision?: Revisio
         ...(provisional ? ['PÓLIZA PROVISIONAL: este desglose se envía sin la póliza definitiva y fue revisado por una persona.'] : []),
         ...(esCorreccion ? ['CORRECCIÓN: este desglose reemplaza al que se envió antes de esta bitácora; el anterior ya no es válido.'] : []),
         `Va adjunto el desglose de pago de la bitácora ${bitacora}.`,
-        'El detalle está en el archivo de Excel.',
-        'Si algo no coincide, responde a este correo.',
+        'El detalle de percepciones y deducciones está en el archivo de Excel.',
       ],
+      rotulo: esCorreccion ? 'Liquidación de viaje · corrección' : 'Liquidación de viaje',
+      datos: [['Bitácora', bitacora], ['Periodo', rango]],
+      archivo: { nombre: nombreAdjunto, detalle: 'Excel · percepciones y deducciones' },
+      nota: 'Si algo no coincide, responde a este correo.',
       porQueLoRecibes: 'Recibes este correo como destinatario del desglose de pago.',
     },
   };
@@ -244,6 +258,19 @@ const esTransitorio = (status: number | undefined): boolean =>
 const esDeConfiguracion = (status: number | undefined): boolean => status === 401 || status === 403;
 
 // ── Dependencias reales ─────────────────────────────────────────────────────
+
+const TTL_MARCA_MS = 10 * 60_000;
+const cacheMarca = new Map<string, { hasta: number; marca: MarcaFlotaCorreo }>();
+
+/** Logo y razón social de la flota, con caché de 10 min: una tanda de 40 entregas no baja el mismo logo 40 veces. */
+async function leerMarcaConCache(tenantId: string): Promise<MarcaFlotaCorreo> {
+  const hit = cacheMarca.get(tenantId);
+  if (hit && hit.hasta > Date.now()) return hit.marca;
+  const [logo, nombre] = await Promise.all([leerLogoCliente(tenantId), leerRazonSocial(tenantId).catch(() => null)]);
+  const marca: MarcaFlotaCorreo = { ...(logo ? { logo } : {}), ...(nombre ? { nombre } : {}) };
+  cacheMarca.set(tenantId, { hasta: Date.now() + TTL_MARCA_MS, marca });
+  return marca;
+}
 
 export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
   return {
@@ -273,6 +300,7 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
       } catch { /* sin encabezado: se usa la clave */ }
       return { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta, retenidaMotivo, ...(polizaProvisional ? { polizaProvisional } : {}), ...(bitacora ? { bitacora } : {}) };
     },
+    leerMarca: leerMarcaConCache,
     descargarXlsx: async (tenantId, ruta) => {
       // La URL firmada se pide con el módulo que valida que la ruta sea de la flota; se descarga con tope de tiempo.
       const url = await firmarXlsx(tenantId, ruta, 120);
@@ -428,11 +456,14 @@ async function procesarUna(
     }
     : undefined;
   const { correo, nombreAdjunto } = armarCorreoDesglose(ctx, revision);
+  // La marca es un adorno: si no se pudo leer, el desglose sale igual con el logo de Likida solamente.
+  const marca: MarcaFlotaCorreo = deps.leerMarca ? await deps.leerMarca(e.tenantId).catch(() => ({})) : {};
   const res = await deps.enviar(e.correo, correo, {
     idempotencyKey: llaveIdempotencia(e),
     tenantId: e.tenantId,
+    dominioEnvio: 'liquidaciones',
     adjuntos: [{ filename: nombreAdjunto, content: Buffer.from(bytes).toString('base64'), contentType: TIPO_XLSX_CORREO }],
-    sobrio: true,
+    corporativo: { ...(marca.logo ? { logoCliente: marca.logo } : {}), ...(marca.nombre ? { nombreCliente: marca.nombre } : {}) },
     ...(config.remitenteNombre ? { remitenteNombre: config.remitenteNombre } : {}),
     ...(responderA ? { replyTo: responderA } : {}),
   });

@@ -133,6 +133,33 @@ export async function firmarPdfExterno(ruta: string, ttlSegundos: number, descar
   return res.data.signedUrl;
 }
 
+/** El logo de la flota para sus correos vive por CONVENCIÓN en `<tenant>/marca/logo-cliente.png` (bucket privado, sin migración). */
+export const rutaLogoCliente = (tenantId: string): string => `${tenantId}/marca/logo-cliente.png`;
+const TOPE_LOGO_BYTES = 300 * 1024;
+
+/**
+ * Lee el logo de la flota. `null` si no existe, pesa de más o no es PNG/JPEG: el correo sale igual, solo con el logo de Likida.
+ * Jamás lanza: una marca no puede impedir que llegue un desglose de pago.
+ */
+export async function leerLogoCliente(tenantId: string): Promise<{ base64: string; contentType: string; nombre: string } | null> {
+  try {
+    // Reusa la firma ya existente (misma frontera de datos): sin objeto, la descarga da 404 y el resultado es `null`.
+    const url = await firmarPdfExterno(rutaLogoCliente(tenantId), 60);
+    const r = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+    if (!r.ok) return null;
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > TOPE_LOGO_BYTES) return null;
+    const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+    const jpg = bytes[0] === 0xff && bytes[1] === 0xd8;
+    if (!png && !jpg) return null;
+    let binario = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binario += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return { base64: btoa(binario), contentType: png ? 'image/png' : 'image/jpeg', nombre: png ? 'cliente.png' : 'cliente.jpg' };
+  } catch {
+    return null;
+  }
+}
+
 /** La razón social de la flota, para el encabezado del PDF que Likida genera.
  *  Un nombre NUNCA se inventa: si no se pudo leer (o no está capturado),
  *  `null`, y el PDF lleva «Likida». */

@@ -228,4 +228,9 @@ export interface DepsVigia {
    * sin el puerto (pruebas) no se consulta.
    */
   enStandBy?: (tenantId: string) => Promise<boolean>;
+  /**
+   * Modo sombra de `decidirAccion` (sombra.ts): ¿registrar la decisión en el evento `borrador` de esta flota? Solo anota, nunca actúa.
+   * Cableado real: `VIGIA_SOMBRA_DECISION` (deps.ts). Sin el puerto, apagado.
+   */
+  decisionSombra?: (tenantId: string) => boolean;
 }

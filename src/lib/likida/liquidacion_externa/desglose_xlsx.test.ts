@@ -18,7 +18,7 @@ function datosDe(f: DesgloseFixture): DatosDesglose {
   };
 }
 const leer = (b: Uint8Array) => XLSX.read(b, { type: 'array' });
-const hoja = (b: Uint8Array) => leer(b).Sheets['Desglose'];
+const hoja = (b: Uint8Array) => leer(b).Sheets['Formato'];
 const val = (h: XLSX.WorkSheet, ref: string) => h[ref]?.v;
 
 /** Extrae una parte del zip (entradas deflate) para inspeccionar el XML. */
@@ -37,56 +37,69 @@ function parte(bytes: Uint8Array, nombre: string): string {
 describe('generarDesgloseXlsx (fixture sintético)', () => {
   const bytes = generarDesgloseXlsx(datosDe(DESGLOSE_SINTETICO));
   const h = hoja(bytes);
-  // Sin marca: fila 1 = Operador; grupo en fila 6, cabeceras 7, cuerpo desde la 8.
-  it('encabezado: operador, fechas largas y días', () => {
-    expect(val(h, 'A1')).toBe('Operador:');
-    expect(val(h, 'B1')).toBe('Operador Ejemplo Uno');
-    expect(val(h, 'B3')).toBe('viernes, 9 de octubre de 2026');
-    expect(val(h, 'B4')).toBe('miércoles, 14 de octubre de 2026');
-    expect(val(h, 'G4')).toBe('6 días');
-    expect(val(h, 'B2')).toBe('0001');
-    expect(val(h, 'D2')).toBe('B-0001');
+  // Formato del cliente: operador/unidad/bitácora en la fila 2, fechas y días en la 4, bloques desde la 6, cuerpo desde la 8.
+  it('encabezado: operador, unidad, bitácora, fechas (serial de Excel con formato de fecha larga) y días', () => {
+    expect(val(h, 'B2')).toBe('Operador:');
+    expect(val(h, 'C2')).toBe('Operador Ejemplo Uno');
+    expect(val(h, 'G2')).toBe('Unidad:');
+    expect(val(h, 'H2')).toBe('0001');
+    expect(val(h, 'J2')).toBe('Bitacora:');
+    expect(val(h, 'K2')).toBe('B-0001');
+    expect(val(h, 'B4')).toBe('De:');
+    expect(val(h, 'C4')).toBe(46304); // 2026-10-09
+    expect(val(h, 'G4')).toBe('A:');
+    expect(val(h, 'H4')).toBe(46309); // 2026-10-14
+    expect(val(h, 'K4')).toBe(6);
+    const x = parte(bytes, 'xl/styles.xml');
+    expect(x).toContain('dddd');
+    expect(x).toContain('días');
   });
   it('cabeceras de bloque y de columna', () => {
-    expect(val(h, 'A6')).toBe('Percepción');
-    expect(val(h, 'C6')).toBe('Deducción');
-    expect([val(h, 'A7'), val(h, 'B7'), val(h, 'C7'), val(h, 'D7'), val(h, 'E7')]).toEqual(['Monto', 'Concepto', 'Monto', 'Concepto', 'No Vale']);
+    expect(val(h, 'B6')).toBe('Percepción');
+    expect(val(h, 'G6')).toBe('Deducción');
+    expect([val(h, 'B7'), val(h, 'C7'), val(h, 'G7'), val(h, 'H7'), val(h, 'K7')]).toEqual(['Monto', 'Concepto', 'Monto', 'Concepto', 'No Vale']);
   });
   it('percepción #1 y deducción #3 con No Vale como texto', () => {
-    expect(val(h, 'A8')).toBe(4000);
-    expect(val(h, 'B8')).toBe('Sueldo');
-    expect(val(h, 'E10')).toBe('100001');
-    expect(typeof val(h, 'E10')).toBe('string');
-    expect(val(h, 'D10')).toBe('Anticipo Ciudad Ejemplo');
-    expect(val(h, 'C10')).toBe(1000);
+    expect(val(h, 'B8')).toBe(4000);
+    expect(val(h, 'C8')).toBe('Sueldo');
+    expect(val(h, 'K10')).toBe('100001');
+    expect(typeof val(h, 'K10')).toBe('string');
+    expect(val(h, 'H10')).toBe('Anticipo Ciudad Ejemplo');
+    expect(val(h, 'G10')).toBe(1000);
   });
   it('totales y neto = los de la fuente, como número', () => {
-    expect(val(h, 'A20')).toBe(9850.5);
-    expect(val(h, 'C20')).toBe(5000.5);
-    expect(val(h, 'G7')).toBe(4850);
-    expect(val(h, 'G6')).toBe('Total');
+    expect(val(h, 'B17')).toBe(9850.5);
+    expect(val(h, 'G17')).toBe(5000.5);
+    expect(val(h, 'H19')).toBe(4850);
+    expect(val(h, 'G19')).toBe('Total');
   });
-  it('0 fórmulas y hoja Desglose, horizontal ajustada a una página', () => {
-    expect(leer(bytes).SheetNames).toEqual(['Desglose']);
+  it('0 fórmulas, hoja «Formato», vertical, a una página de ancho y con el aspecto del cliente', () => {
+    expect(leer(bytes).SheetNames).toEqual(['Formato']);
     const x = parte(bytes, 'xl/worksheets/sheet1.xml');
     expect(x.includes('<f>') || x.includes('<f ')).toBe(false);
-    expect(x).toContain('orientation="landscape"');
+    expect(x).toContain('orientation="portrait"');
     expect(x).toContain('fitToPage="1"');
+    expect(x).toContain('zoomScale="90"');
+    const st = parte(bytes, 'xl/styles.xml');
+    expect(st).toContain('FF002060'); // azul marino de las cabeceras
+    expect(st).toContain('FFF2F2F2'); // gris de las celdas
+    expect(st).toContain('style="dashed"');
+    expect(st).toContain('name val="Aptos"');
   });
-  it('mínimo 12 filas de cuerpo; con 14 conceptos se amplía a 14', () => {
+  it('mínimo 9 filas de cuerpo; con 14 conceptos se amplía y el total baja', () => {
     const f = datosDe(DESGLOSE_SINTETICO);
-    expect(val(h, 'A19')).toBeUndefined(); // 8 + 12 = fila 20 es el total; la 19 es la última del cuerpo (vacía)
+    expect(val(h, 'B16')).toBeUndefined(); // última fila del cuerpo (vacía); el total está en la 17
     const muchos: DatosDesglose = { ...f, percepciones: Array.from({ length: 14 }, (_, i) => ({ concepto: `C${i}`, monto: 1 })), totalPercepciones: 14 };
     const h2 = hoja(generarDesgloseXlsx(muchos));
-    expect(val(h2, 'B21')).toBe('C13');
-    expect(val(h2, 'A22')).toBe(14);
+    expect(val(h2, 'C21')).toBe('C13');
+    expect(val(h2, 'B22')).toBe(14);
   });
   it('ningún texto contiene Likida ni razón social; sin marca por defecto', () => {
     const ss = JSON.stringify(XLSX.utils.sheet_to_json(h, { header: 1 }));
     expect(ss).not.toMatch(/likida/i);
     const todo = ['xl/worksheets/sheet1.xml', 'xl/workbook.xml'].map((p) => parte(bytes, p)).join('');
     expect(todo).not.toMatch(/likida/i);
-    expect(val(h, 'A1')).toBe('Operador:');
+    expect(val(h, 'B2')).toBe('Operador:');
   });
   it('determinista: mismos datos, mismos bytes', () => {
     const otra = generarDesgloseXlsx(datosDe(DESGLOSE_SINTETICO));
@@ -96,24 +109,24 @@ describe('generarDesgloseXlsx (fixture sintético)', () => {
     const f = datosDe(DESGLOSE_SINTETICO);
     const conViaje: DatosDesglose = { ...f, percepciones: [{ concepto: 'Pago de viaje', monto: 5500.5 }, ...f.percepciones.slice(2)] };
     const h2 = hoja(generarDesgloseXlsx(conViaje));
-    expect(val(h2, 'B8')).toBe('Pago de viaje');
-    expect(val(h2, 'A8')).toBe(5500.5);
+    expect(val(h2, 'C8')).toBe('Pago de viaje');
+    expect(val(h2, 'B8')).toBe(5500.5);
   });
   it('sin totales de la fuente se suman en centavos (sin error de coma flotante)', () => {
     const h2 = hoja(generarDesgloseXlsx({ operador: 'X', desde: '2026-10-09', hasta: '2026-10-09', percepciones: [{ concepto: 'a', monto: 0.1 }, { concepto: 'b', monto: 0.2 }], deducciones: [] }));
-    expect(val(h2, 'A20')).toBe(0.3);
-    expect(val(h2, 'G7')).toBe(0.3);
-    expect(val(h2, 'G4')).toBe('1 días');
+    expect(val(h2, 'B17')).toBe(0.3);
+    expect(val(h2, 'H19')).toBe(0.3);
+    expect(val(h2, 'K4')).toBe(1);
   });
   it('días por defecto hasta−desde+1', () => {
     const f = { ...datosDe(DESGLOSE_SINTETICO), dias: undefined };
-    expect(val(hoja(generarDesgloseXlsx(f)), 'G4')).toBe('6 días');
+    expect(val(hoja(generarDesgloseXlsx(f)), 'K4')).toBe(6);
   });
   it('texto con = queda literal y marca opcional se escribe solo si se pasa', () => {
     const h2 = hoja(generarDesgloseXlsx({ operador: '=CMD()', desde: '2026-10-09', hasta: '2026-10-09', percepciones: [], deducciones: [], marca: 'Marca Prueba' }));
-    expect(val(h2, 'A1')).toBe('Marca Prueba');
-    expect(val(h2, 'B2')).toBe('=CMD()');
-    expect(h2['B2'].f).toBeUndefined();
+    expect(Object.values(h2).some((c) => (c as { v?: unknown }).v === 'Marca Prueba')).toBe(true);
+    expect(val(h2, 'C2')).toBe('=CMD()');
+    expect(h2['C2'].f).toBeUndefined();
   });
   it('escrito a tmp pesa < 10 KB y se abre con XLSX.readFile', () => {
     const dir = mkdtempSync(join(tmpdir(), 'desglose-'));
@@ -123,7 +136,7 @@ describe('generarDesgloseXlsx (fixture sintético)', () => {
       writeFileSync(p, bytes);
       const escrito = readFileSync(p);
       expect(escrito.length).toBeLessThan(10_240);
-      expect(XLSX.readFile(p).SheetNames).toEqual(['Desglose']);
+      expect(XLSX.readFile(p).SheetNames).toEqual(['Formato']);
       expect(escrito.length).toBe(bytes.length);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
@@ -150,11 +163,10 @@ describe.skipIf(!REAL)('local-only: desglose real', () => {
   it('sale con los totales esperados', () => {
     const f = JSON.parse(readFileSync(REAL as string, 'utf8')) as DesgloseFixture;
     const h = hoja(generarDesgloseXlsx(datosDe(f)));
-    const filas = Math.max(12, f.percepciones.length, f.deducciones.length);
-    expect(val(h, `A${8 + filas}`)).toBe(f.esperado.percepciones);
-    expect(val(h, `C${8 + filas}`)).toBe(f.esperado.deducciones);
-    expect(val(h, 'G7')).toBe(f.esperado.neto);
-    expect(val(h, 'G4')).toBe(`${f.dias} días`);
-    expect(val(h, 'B3')).toBe(fechaLarga(f.desde));
+    const filas = Math.max(9, f.percepciones.length, f.deducciones.length);
+    expect(val(h, `B${8 + filas}`)).toBe(f.esperado.percepciones);
+    expect(val(h, `G${8 + filas}`)).toBe(f.esperado.deducciones);
+    expect(val(h, `H${10 + filas}`)).toBe(f.esperado.neto);
+    expect(val(h, 'K4')).toBe(f.dias);
   });
 });

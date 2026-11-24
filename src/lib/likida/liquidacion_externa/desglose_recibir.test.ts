@@ -981,7 +981,7 @@ describe('A1-02: una corrección -R<n> reemplaza a la original', () => {
 });
 
 describe('1003 · Folio: el número que ve el operador', () => {
-  const celdaBitacora = (bytes: Uint8Array) => XLSX.read(bytes, { type: 'array' }).Sheets['Desglose']['D2']?.v;
+  const celdaBitacora = (bytes: Uint8Array) => XLSX.read(bytes, { type: 'array' }).Sheets['Formato']['K2']?.v;
 
   it('con Folio: el Excel muestra el folio, el encabezado lo guarda y la clave sigue siendo la bitácora', async () => {
     const b = banco();

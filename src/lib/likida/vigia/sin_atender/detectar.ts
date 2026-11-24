@@ -53,7 +53,7 @@ export function resumenPorChat(alertas: readonly AlertaSinAtender[]): { chatId: 
 /** Un chat. `ahoraMs` es el reloj; `chat.fotoMs` (si viene) manda para medir antigüedad. */
 export function detectarSinAtenderChat(chat: ChatEntrada, config: ConfigSinAtender, ahoraMs: number): { alertas: AlertaSinAtender[]; ignorados: number; mensajesAnalizados: number; descartados: number; sinEquipo: boolean } {
   const { mensajes, descartados } = prepararMensajes(chat.mensajes, config.equipoHashes);
-  const seg = segmentarHilos(mensajes, config.ventanaRespuestaMin, { urgentes: compilarPalabras(config.palabrasUrgentes), clave: compilarPalabras(config.palabrasClave) });
+  const seg = segmentarHilos(mensajes, config.ventanaRespuestaMin, { urgentes: compilarPalabras(config.palabrasUrgentes), clave: compilarPalabras(config.palabrasClave) }, { acusesVaciosNoCierran: config.acusesVaciosNoCierran === true, cortesiaCierraTrasMin: config.cortesiaCierraTrasMin ?? 0 });
   const base = { ignorados: seg.ignorados, mensajesAnalizados: mensajes.length, descartados, sinEquipo: mensajes.length > 0 && !seg.hayEquipo };
   if (!seg.hayEquipo) return { alertas: [], ...base };
 

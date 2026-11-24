@@ -208,7 +208,7 @@ describe('sin los campos nuevos todo se comporta como hoy', () => {
     expect(Buffer.from(generarDesgloseXlsx({ ...base }))).not.toEqual(Buffer.from(generarDesgloseXlsx({ ...base, numeroLiquidacion: '1228', numeroPago: '10' })));
   });
 
-  it('el Excel con números los muestra en el encabezado', () => {
+  it('el Excel con números los muestra debajo de la caja Total', () => {
     const bytes = generarDesgloseXlsx({
       operador: 'Operador Ejemplo Uno', unidad: '0001', bitacora: 'B-0001', numeroLiquidacion: '1228', numeroPago: '10',
       desde: '2026-10-09', hasta: '2026-10-14', percepciones: [{ concepto: 'Sueldo', monto: 100 }], deducciones: [],
@@ -216,7 +216,7 @@ describe('sin los campos nuevos todo se comporta como hoy', () => {
     const hoja = XLSX.read(bytes, { type: 'array' });
     const ws = hoja.Sheets[hoja.SheetNames[0]!]!;
     const valores = Object.entries(ws).filter(([k]) => !k.startsWith('!')).map(([, c]) => String((c as { v: unknown }).v));
-    expect(valores).toEqual(expect.arrayContaining(['Liquidación:', '1228', 'Pago:', '10']));
+    expect(valores).toEqual(expect.arrayContaining(['Liquidación: 1228   ·   Pago: 10']));
   });
 });
 
