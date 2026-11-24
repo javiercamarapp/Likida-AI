@@ -49,6 +49,7 @@ import { decidirEnvio } from './politica';
 import { claveCorreo, debeRespaldarPorCorreo, hashCorreo, reintentarCorreosVencidos, respaldarPorCorreo, unirDestinatarios } from './respaldo_correo';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
 import { elegirRespuestaRapida } from './respuestas_rapidas';
+import { evaluarDecisionSombra, type DecisionSombra } from './sombra';
 import type { ContextoAvisosFlota, DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
 import { configParaCliente, INTENCIONES_DE_DATO, INTENCIONES_DESDE_0798 } from './tipos';
 import type {
@@ -402,9 +403,17 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   // Otra pasada (reintento, carrera) ya redactó la respuesta de este mensaje.
   if (!saliente.creado) return;
   if (borrador.origen === 'respuesta_rapida' && respuestaRapida) await repo.usarRespuestaRapida(tenantId, respuestaRapida.id).catch(() => {});
+  // Modo sombra (apagado por omisión): solo anota lo que `decidirAccion` sugeriría. No altera texto, prioridad ni envío.
+  let sombra: DecisionSombra | undefined;
+  if (deps.decisionSombra?.(tenantId) === true) {
+    sombra = evaluarDecisionSombra({
+      texto: c.texto, datosDisponibles: Object.keys(borrador.respaldo ?? {}),
+      contexto: { emisor: 'cliente', canal: 'whatsapp', borrador: borrador.texto },
+    });
+  }
   await repo.evento(tenantId, {
     conversacionId: conv.id, tipo: 'borrador',
-    detalle: { intencion: cl.intencion, riesgo: borrador.riesgo, decision: decision.motivo, faltantes: borrador.faltantes, tareas: borrador.tareas, origen: borrador.origen, ...(respuestaRapida ? { respuestaRapidaId: respuestaRapida.id } : {}) },
+    detalle: { intencion: cl.intencion, riesgo: borrador.riesgo, decision: decision.motivo, faltantes: borrador.faltantes, tareas: borrador.tareas, origen: borrador.origen, ...(respuestaRapida ? { respuestaRapidaId: respuestaRapida.id } : {}), ...(sombra ? { sombra } : {}) },
   });
 
   // ── Lo que falta o lo que pide humano: ESCALA (spec: «consultará y escala») ─
