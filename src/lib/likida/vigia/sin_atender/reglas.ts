@@ -33,6 +33,8 @@ export function evaluarHilo(items: readonly ItemAbierto[], critico: boolean, con
   const antiguedadMin = config.horarioAtencion
     ? minutosEnHorario(desdeMs, fotoMs, config.horarioAtencion, config.zona, config.festivos)
     : Math.max(0, Math.floor((fotoMs - desdeMs) / 60_000));
+  // Opcional: un hilo sin ninguna petición (listas reenviadas, avisos del cliente) no es «sin atender».
+  if (config.soloPeticiones && !items.some((i) => i.peticion || i.pregunta || i.urgente || i.clave)) return null;
   const urgencia = items.some((i) => i.urgente);
   const clave = items.some((i) => i.clave);
   const preguntas = items.filter((i) => i.pregunta).length;
@@ -41,7 +43,8 @@ export function evaluarHilo(items: readonly ItemAbierto[], critico: boolean, con
   const umbralAplicadoMin = urgencia || clave ? Math.min(base, config.umbralUrgenteMin) : base;
 
   const espera = antiguedadMin >= umbralAplicadoMin;
-  const insiste = hayInsistencia(items, config.insistenciaMin, config.insistenciaVentanaMin);
+  // Opcional: la repregunta cuenta solo si el primer mensaje ya lleva `insistenciaEsperaMin` esperando (0 = al segundo mensaje, como antes).
+  const insiste = antiguedadMin >= (config.insistenciaEsperaMin ?? 0) && hayInsistencia(items, config.insistenciaMin, config.insistenciaVentanaMin);
   if (!espera && !insiste) return null;
 
   const motivos: MotivoSinAtender[] = [];

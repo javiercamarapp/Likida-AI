@@ -47,6 +47,8 @@ export interface Prioridad {
 const URGENCIA: readonly RegExp[] = [
   /\b(asap|a s a p)\b/,
   /\b(urgente|urgentisimo|urgentisima|de urgencia)\b/,
+  // «me urge», «nos urgen los datos», «urge el sello»: el grupo escribe el verbo, no el adjetivo (medido: ~20-35 por chat, ninguna regla lo veía).
+  /\b(urge|urgen)\b/,
   /\b(lo antes posible|cuanto antes|de inmediato|inmediatamente|ya mismo|ahorita mismo|para ya)\b/,
   /^(ya )+ya$/, // «ya ya»
 ];
@@ -54,7 +56,7 @@ const URGENCIA: readonly RegExp[] = [
 const YA_EXCLAMADO = /(^|[\s¡])ya\s*!+\s*$/i;
 
 // El apremio se niega expresamente: «ASAP no hace falta», «sin prisa».
-const APREMIO_NEGADO = /\b(no (hace falta|es urgente|corre prisa|hay prisa|urge)|sin prisa|sin urgencia|no urge)\b/;
+const APREMIO_NEGADO = /\b(no (hace falta|es urgente|corre prisa|hay prisa|urge|(me |nos )?urgen?)|sin prisa|sin urgencia|no urge)\b/;
 
 const PALABRAS_CORTESIA = new Set([
   'gracias', 'muchas', 'mil', 'ok', 'okay', 'okey', 'enterado', 'enterada', 'vale', 'listo', 'lista',

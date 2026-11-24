@@ -81,7 +81,31 @@ const DATOS_UNIDAD: readonly RegExp[] = [
   /\b(nombre|datos) (del|de el) (operador|chofer|conductor|piloto)\b/,
   /\b(datos|informacion) (de la|de mi|del|de el|de) (unidad|caja|camion|tracto|tractocamion|remolque)\b/,
   /\b(caja|unidad|operador|chofer|conductor) asignad[oa]\b/,
+  // Plurales y diminutivos del habla de los grupos: «datos de las unidades», «los datos de las cajitas de hoy».
+  /\b(datos|informacion)\b[^.]{0,14}\b(unidades|cajas|cajitas|cajita|camiones|tractos|remolques|termos|thermos|operadores|choferes)\b/,
 ];
+
+// Lo que el grupo escribe telegráfico, sin sustantivo: «¿tenemos datos?», «me apoyan con los datos», «¿cómo vamos?». Se reconoce
+// con confianza 0.8 (< CONFIANZA_MINIMA_AUTOENVIO): el borrador sale a aprobación de una persona, nunca solo.
+const DATOS_UNIDAD_FLOJA: readonly RegExp[] = [
+  /\b(tenemos|faltan|falta|ya hay) (los )?datos\b/,
+  /\b(me|nos) (ayudan|apoyan|comparten|pasan|mandan|envian|confirman|compartes|pasas|mandas) (con )?(los |sus |el )?datos\b/,
+];
+const UBICACION_FLOJA: readonly RegExp[] = [
+  /\b(como (vamos|van|andamos))\b/,
+  /\b(estatus|status|actualizacion|actualizado)\b[^.]{0,20}\b(cargas?|cajas?|cajitas?|unidades?|servicios?|viajes?|embarques?)\b/,
+];
+
+// «Me apoyan con la remisión sellada», «necesitamos el DODA», «falta timbrar»: piden que ALGUIEN HAGA algo con un documento (emitir, timbrar,
+// sellar, corregir), no que se les diga su estado. El agente solo informa estados: estas peticiones llevan la señal `accion_documental`,
+// que hace que la política (politica.ts) nunca las autoenvíe. La intención no cambia.
+const ACCION_DOCUMENTAL: readonly RegExp[] = [
+  /\b(ccp|timbrad[oa]s?|timbrar|timbre|timbren|doda|sellad[oa]s?|sellar|sellen|firmad[oa]s?|firmar|firmen|corregir|corrijan|emitir|emitan|relanzar|relancen|reexpedir)\b/,
+];
+export const SENAL_ACCION_DOCUMENTAL = 'accion_documental';
+export function esAccionDocumental(texto: string): boolean {
+  return coincide(normalizar(texto ?? ''), ACCION_DOCUMENTAL);
+}
 
 // Saludos y acuses cortos: se comparan como FRASE (hasta una palabra extra: «hola María»),
 // no con una regex —así no hay cuantificadores anidados que vigilar.
@@ -136,6 +160,12 @@ export function clasificarPorReglas(texto: string): Clasificacion | null {
       intencion: datos[0], secundarias: datos.slice(1), confianza: datos.length === 1 ? 0.9 : 0.85,
       clasificador: 'reglas', senales: [],
     };
+  }
+  const floja = datos.length === 0
+    ? ([['datos_unidad', DATOS_UNIDAD_FLOJA], ['ubicacion', UBICACION_FLOJA]] as const).find(([, reglas]) => coincide(n, reglas))
+    : undefined;
+  if (floja) {
+    return { intencion: floja[0], secundarias: [], confianza: 0.8, clasificador: 'reglas', senales: [] };
   }
   if (esSaludo(n)) {
     return { intencion: 'saludo', secundarias: [], confianza: 0.9, clasificador: 'reglas', senales: [] };
