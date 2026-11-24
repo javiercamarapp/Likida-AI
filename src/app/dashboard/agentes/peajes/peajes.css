@@ -14,6 +14,7 @@
 .rv-pj-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .rv-pj-lista__fila { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: var(--t-small, 12px); }
 .rv-pj-fijo { flex: none; }
+.rv-pj-nowrap { white-space: nowrap; }
 .rv-pj-corto { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-pj-der { margin-left: auto; }
 .rv-pj-conteo { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-micro, 11px); color: var(--muted); }

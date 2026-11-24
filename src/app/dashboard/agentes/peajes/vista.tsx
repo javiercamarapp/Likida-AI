@@ -15,6 +15,8 @@ import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
 import { BotonAnular, type AccionAnular } from './anular-desglose';
 import { DeclararPeriodo, type AccionPeriodo } from './declarar-periodo';
 import { RevisionCobros, type EstadoRevisionCobros } from './revision-cobros';
+import { DatosFaltantes } from './datos-faltantes';
+import type { ResultadoDatosFaltantes } from '@/lib/likida/peajes/datos_faltantes';
 // SOLO tipo y constante pura: el módulo importa el perfil (servidor) y no debe entrar al bundle de la vista.
 import type { SuperficiePeajes } from '@/lib/likida/peajes/superficie_perfil';
 import { Cifra, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
@@ -57,7 +59,7 @@ const SUPERFICIE_TODA: SuperficiePeajes = { estimulo: true, cfdiYTickets: true, 
 export function VistaAgentePeajes({
   conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora,
   desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, evidenciaGps, verificacion, importarDesglose, conciliarDesglose,
-  anularDesglose, puedeAnular = false, declararPeriodo, periodoOficial = null, notificaciones, revisionCobros, superficie = SUPERFICIE_TODA, tr = TR_ES,
+  anularDesglose, puedeAnular = false, declararPeriodo, periodoOficial = null, notificaciones, revisionCobros, datosFaltantes, superficie = SUPERFICIE_TODA, tr = TR_ES,
 }: {
   conciliacion: ConciliacionConsolidado | null;
   // FE-10: `ColaPorConciliar`, no `LineaPorConciliar[]` a secas — sin el
@@ -96,6 +98,8 @@ export function VistaAgentePeajes({
   /** T-A2-27: tarjetas y KPIs de la revisión de cobros del archivo abierto, ya calculados por la página.
    *  Sin la prop se pinta el estado vacío («sube el archivo del proveedor»). Un fallo aquí no toca el resto. */
   revisionCobros?: EstadoRevisionCobros;
+  /** «Datos que faltan»: `undefined` = no se pide (no se pinta); `null` = no se pudo calcular (el panel lo dice). */
+  datosFaltantes?: ResultadoDatosFaltantes | null;
   /** T-A2-31: qué partes del stand-by se pintan. Sin la prop (sin perfil) se pinta todo; con perfil `cinco_agentes` ninguna. */
   superficie?: SuperficiePeajes; tr?: TrAgentes;
 }) {
@@ -355,6 +359,9 @@ export function VistaAgentePeajes({
 
       {/* ── T-A2-27: la revisión de cobros del archivo abierto, justo debajo de su detalle ── */}
       <RevisionCobros tr={tr} estado={revisionCobros ?? { tipo: 'sin_archivo' }} />
+
+      {/* ── Qué datos faltan para conciliar y reclamar (catálogo + últimos archivos; no lee correos) ── */}
+      {datosFaltantes !== undefined && <DatosFaltantes tr={tr} datos={datosFaltantes} />}
 
       {/* ── El estímulo de peaje: cada renglón dice lo que su ficha sostiene ── */}
       {superficie.estimulo && (

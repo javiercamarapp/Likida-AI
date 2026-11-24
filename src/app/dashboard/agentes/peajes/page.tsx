@@ -28,6 +28,8 @@ import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx } from '@/lib/formato';
 import { estadoRevisionCobros } from './revision-cobros';
+import { leerDatosFaltantes } from '@/lib/likida/peajes/datos_faltantes';
+import { listarTags, listarCasetas, lineasDeDesglose } from '@/lib/likida/peajes/datos';
 import type { EstadoImportar } from './subir-desglose';
 import type { EstadoConciliar } from './conciliar-desglose';
 import type { EstadoAnular } from './anular-desglose';
@@ -98,6 +100,12 @@ export default async function PaginaAgentePeajes({
   const desgloseSel = desglosesProveedor?.find((d) => d.desgloseId === sp.desglose)
     ?? desglosesProveedor?.[0]
     ?? null;
+  // «Datos que faltan»: compone los lectores del catálogo y de los renglones de los archivos que la pantalla ya lista. Un fallo
+  // se pinta como «no se pudo calcular» (null), nunca como «nada falta».
+  const datosFaltantesPendiente = safe(() => leerDatosFaltantes(
+    tenantId, desglosesProveedor?.map((d) => d.desgloseId) ?? null,
+    { listarTags, listarCasetas: (t) => listarCasetas(t, false), listarTarifas, lineasDeDesglose },
+  ));
   // FE-33: las dos lecturas de abajo solo dependen de `desgloseSel` — nada
   // de la segunda depende del resultado de la primera —, así que van en
   // paralelo en vez de en serie.
@@ -129,6 +137,7 @@ export default async function PaginaAgentePeajes({
         safe(() => listarDecisionesCandidatos(tenantId, desgloseSel.desgloseId)),
       ])
     : [null, null, null, null, null, null, null, null];
+  const datosFaltantes = await datosFaltantesPendiente;
   const revisionCobros = estadoRevisionCobros({
     reporte: reporteCobros, hayDesglose: desgloseSel !== null,
     reclamos: reclamosFlota, tarifas: tarifasFlota, vinculos: vinculosSel, decisiones: decisionesSel, hoy: hoyMx(),
@@ -378,6 +387,7 @@ export default async function PaginaAgentePeajes({
       evidenciaGps={evidenciaSel}
       verificacion={verificacionSel}
       revisionCobros={revisionCobros}
+      datosFaltantes={datosFaltantes}
       superficie={superficie}
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
