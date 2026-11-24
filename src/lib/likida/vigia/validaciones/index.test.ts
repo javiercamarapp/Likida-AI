@@ -73,7 +73,7 @@ describe('validarFicha', () => {
     const c = clonar(contextoBase());
     c.destinatario = { id: 'otro', verificado: false };
     const texto = JSON.stringify(validarFicha(f, c, CONFIG_PRUEBA));
-    for (const dato of ['ZZZ999', 'AAA123', 'BBB456', 'LIC-0001', 'Operador Uno', '5550001111', 'GAF-1']) expect(texto).not.toContain(dato);
+    for (const dato of ['ZZZ999', 'AAA123', 'BBB456', 'LIC-0001', 'Operador Uno', '2899900011', 'GAF-1']) expect(texto).not.toContain(dato);
   });
   it('destinatario no autorizado con datos del operador: P01', () => {
     const c = clonar(contextoBase());

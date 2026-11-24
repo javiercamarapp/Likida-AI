@@ -11,7 +11,7 @@ export function fichaBase(): FichaValidable {
     caja: { linea: 'LIN', numero: 'XX-2150', placas: 'AAA123', estado: 'ZZ', tipo: 'seca' },
     unidad: { eco: 'T-10', placa: 'BBB456', tag: 'TAG-1' },
     operador: {
-      nombre: 'Operador Uno Apellido Dos', licencia: 'LIC-0001', vigenciaLicencia: '2027-06-30', celular: '5550001111',
+      nombre: 'Operador Uno Apellido Dos', licencia: 'LIC-0001', vigenciaLicencia: '2027-06-30', celular: '2899900011',
       estado: 'disponible', gafete: 'GAF-1',
     },
     blindado: false,
