@@ -559,8 +559,20 @@ async function enviarSaliente(e: EntradaEnviarSaliente, deps: DepsVigia): Promis
   if (r.ok) {
     await repo.marcarEnviado(e.tenantId, e.mensajeId, { via: r.via, wamid: r.id, ahora });
     // A39-S59-01: lo que se contestó llega hasta que se REDACTÓ el mensaje; lo que el cliente escribió después sigue sin responder.
-    const redactado = await repo.mensaje(e.tenantId, e.mensajeId).catch(() => null);
-    await repo.marcarRespondida(e.tenantId, e.conversacionId, ahora, redactado?.createdAt);
+    // A60-OP-01: un ERROR al leerlo no es «no hubo nada después». Sin corte, `marcarRespondida` apaga el reloj del SLA, la
+    // insistencia y la escalera SIN condición, así que una base caída apagaba la alarma de «sin respuesta» en silencio. Se dice
+    // y no se toca el reloj: una alarma que suena de más se atiende; una que no suena, no. Lo único que se pierde en ese camino
+    // degradado es la marca de `ultima_salida_en`, y el evento `enviado` de abajo deja constancia de que el texto sí salió.
+    let corteLeido = true;
+    const redactado = await repo.mensaje(e.tenantId, e.mensajeId).catch((err) => {
+      corteLeido = false;
+      logger.error('vigia.corte_de_respuesta_no_leido', {
+        tenant: e.tenantId, mensaje: e.mensajeId, conversacion: e.conversacionId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    });
+    if (corteLeido) await repo.marcarRespondida(e.tenantId, e.conversacionId, ahora, redactado?.createdAt);
     if (!e.contacto.avisoPrivacidadEn) await repo.marcarAvisoPrivacidad(e.tenantId, e.contacto.id, ahora);
     await repo.evento(e.tenantId, { conversacionId: e.conversacionId, tipo: e.autoenviado ? 'autoenviado' : 'enviado', detalle: { via: r.via, ventana: r.ventana } });
     // Los archivos son un EXTRA: que fallen no deshace el texto que ya salió (queda a la vista del gerente).
