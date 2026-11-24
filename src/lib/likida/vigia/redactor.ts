@@ -85,10 +85,25 @@ const HITOS: Record<TipoHitoViaje, string> = {
   llegada_descarga: 'llegada a destino', salida_descarga: 'fin de la descarga',
 };
 
-/** Texto de WhatsApp que viaja en una plantilla: sin saltos, sin tabuladores, sin 4 espacios seguidos. */
+/**
+ * Texto de WhatsApp que viaja en una plantilla: sin saltos, sin tabuladores, sin 4 espacios seguidos.
+ *
+ * A60-AGEN-01: el recorte NO parte una liga, por la misma razón que `recortarSinPartirLigas` (abajo) no la parte —
+ * una URL de Maps cortada sigue siendo válida y apunta a OTRO LUGAR, así que el cliente tocaría un pin que no es su
+ * unidad y lo creería suyo. Antes era un `slice` ciego y este camino (plantilla, fuera de la ventana de 24 h) es
+ * justo el que manda la liga de la posición medida.
+ */
 export function aLineaPlantilla(texto: string, tope = 300): string {
   const t = texto.replace(/[\r\n\t]+/g, ' | ').replace(/ {2,}/g, ' ').replace(/ \| (\| )+/g, ' | ').trim();
-  return t.length > tope ? `${t.slice(0, tope - 1)}…` : t;
+  if (t.length <= tope) return t;
+  let corte = tope - 1;
+  for (const m of t.matchAll(new RegExp(LIGA.source, 'g'))) {
+    const ini = m.index ?? 0;
+    if (ini < corte && ini + m[0].length > corte) { corte = ini; break; }
+  }
+  const resto = t.slice(0, corte).replace(/[\s|:(]+$/, '');
+  // Si lo que queda termina en una liga COMPLETA, la «…» va separada: pegada, pasaría a ser parte de la liga.
+  return /https?:\/\/\S*$/.test(resto) ? `${resto} …` : `${resto}…`;
 }
 
 function etiquetaViaje(e: Pick<EstatusViaje, 'folio' | 'origen' | 'destino'>): string {
