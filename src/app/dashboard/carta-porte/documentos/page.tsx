@@ -17,6 +17,7 @@ import { estadoConexionTms } from '@/lib/likida/carta_porte_docs/tms_puerto';
 import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
 import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
+import { medicionDeRevisor } from '@/lib/likida/carta_porte_docs/mis_casos';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { procesarDocumento, recibirDocumento } from '@/lib/likida/carta_porte_docs/servicio';
 import { sufijoTenant } from '../../sufijo';
@@ -72,7 +73,7 @@ async function cargarAsignacion(tenantId: string, ids: string[]): Promise<Pick<D
   }
 }
 
-async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
+async function cargarDatos(tenantId: string, userId: string | null): Promise<DatosDocumentos | null> {
   try {
     const desde = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString();
     const [lista0, pendientesViejos, perfiles, clientes, buzon, configs] = await Promise.all([
@@ -100,7 +101,8 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const sinConexion = Object.keys(envios).length > 0 ? estadoConexionTms(await salidaDeFlota(tenantId)) === 'por_conectar' : false;
     const asignacion = await cargarAsignacion(tenantId, lista.filas.map((d) => d.id));
     return {
-      filas: lista.filas, total: lista.total, envios, ...(sinConexion ? { sinConexion: true } : {}), ...asignacion,
+      filas: lista.filas, total: lista.total, envios, leidoEn: new Date().toISOString(),
+      ...(userId ? { medicionRevisor: medicionDeRevisor(recientes, correcciones, userId) } : {}), ...(sinConexion ? { sinConexion: true } : {}), ...asignacion,
       linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones, ventana.total), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,
@@ -128,7 +130,7 @@ export default async function PaginaDocumentos({
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   // Una base que no contesta NO se pinta como bandeja vacía.
-  const [datos, restringido] = await Promise.all([cargarDatos(tenantId), flotaBajoPerfil(tenantId)]);
+  const [datos, restringido] = await Promise.all([cargarDatos(tenantId, userId), flotaBajoPerfil(tenantId)]);
 
   async function subir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
