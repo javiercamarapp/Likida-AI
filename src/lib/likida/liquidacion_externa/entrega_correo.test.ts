@@ -184,6 +184,13 @@ describe('procesarEntregasCorreo — las seis ramas de ResultadoEnvio', () => {
     expect(b?.op.idempotencyKey).toMatch(/:archivo$/);
   });
 
+  it('todo desglose pide el dominio de envío dedicado y no lleva baja de campaña', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_1' });
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar[0]?.op.dominioEnvio).toBe('liquidaciones');
+    expect(e.llamadasEnviar[0]?.op.listaBajaUrl).toBeUndefined();
+  });
+
   it('rechazo local sin status (destinatario no válido) ⇒ fallida sin reintento', async () => {
     const { e, deps } = montar({ ok: false, motivo: 'rechazado', detalle: 'Sin destinatarios válidos.' });
     await procesarEntregasCorreo(deps, 10);

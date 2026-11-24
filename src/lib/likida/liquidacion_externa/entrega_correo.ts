@@ -461,6 +461,7 @@ async function procesarUna(
   const res = await deps.enviar(e.correo, correo, {
     idempotencyKey: llaveIdempotencia(e),
     tenantId: e.tenantId,
+    dominioEnvio: 'liquidaciones',
     adjuntos: [{ filename: nombreAdjunto, content: Buffer.from(bytes).toString('base64'), contentType: TIPO_XLSX_CORREO }],
     corporativo: { ...(marca.logo ? { logoCliente: marca.logo } : {}), ...(marca.nombre ? { nombreCliente: marca.nombre } : {}) },
     ...(config.remitenteNombre ? { remitenteNombre: config.remitenteNombre } : {}),

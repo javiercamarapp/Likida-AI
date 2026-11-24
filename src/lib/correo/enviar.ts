@@ -65,10 +65,14 @@ export function correoConfigurado(): boolean {
  * la reputación de envío, de modo que un correo marcado como spam no arrastre
  * la entregabilidad del dominio principal.
  */
-function remitente(local = 'avisos', nombre = 'Likida'): string | null {
-  const dominio = process.env.RESEND_EMAIL_DOMAIN;
+function remitente(local?: string, nombre = 'Likida', dominioEnvio?: 'liquidaciones'): string | null {
+  // Dominio DEDICADO del flujo de desgloses (opcional): reputación propia, separada de las campañas en frío. Solo lo
+  // activa quien pide `dominioEnvio: 'liquidaciones'` Y define la variable; en cualquier otro caso, el global de siempre.
+  const dedicado = dominioEnvio === 'liquidaciones' ? process.env.RESEND_EMAIL_DOMAIN_LIQUIDACIONES?.trim() : undefined;
+  const dominio = dedicado || process.env.RESEND_EMAIL_DOMAIN;
   if (!dominio) return null;
-  return `${nombre} <${local}@${dominio}>`;
+  // Con dominio dedicado la parte local por omisión es `desgloses`; sin él, `avisos` como siempre.
+  return `${nombre} <${local ?? (dedicado ? 'desgloses' : 'avisos')}@${dominio}>`;
 }
 
 /**
@@ -98,6 +102,12 @@ export interface OpcionesEnvio {
    * legibilidad para quien recibe, no un canal nuevo que verificar.
    */
   remitenteLocal?: string;
+  /**
+   * Dominio de envío DEDICADO para el flujo transaccional de desgloses de liquidación. Con `'liquidaciones'` y la
+   * variable `RESEND_EMAIL_DOMAIN_LIQUIDACIONES` definida, el remitente sale de ese dominio (parte local por omisión
+   * `desgloses`); sin la variable se usa `RESEND_EMAIL_DOMAIN` exactamente como antes. Ningún otro flujo lo pasa.
+   */
+  dominioEnvio?: 'liquidaciones';
   /**
    * AUDITORÍA FABLE CICLO 5 (c5-3): la llave de idempotencia que Resend
    * deduplica de su lado. Un timeout de red es AMBIGUO — el POST pudo haber
@@ -175,7 +185,7 @@ export async function enviarCorreo(
     }
   }
   const llave = process.env.RESEND_API_KEY;
-  const from = remitente(op.remitenteLocal, sanearNombreRemitente(op.remitenteNombre) ?? undefined);
+  const from = remitente(op.remitenteLocal, sanearNombreRemitente(op.remitenteNombre) ?? undefined, op.dominioEnvio);
   if (!llave || !from) {
     // A nivel `info`, no `error`: en un entorno sin correo configurado —el de
     // desarrollo, el de pruebas— esto es lo esperado, y sacarlo como error
