@@ -4,12 +4,15 @@ import { envPuesta } from '@/lib/env';
 import { moduloEnStandBy } from '@/lib/auth/perfil_tenant';
 import { crearRepoVigia } from './repo';
 import { crearModeloClasificador, crearModeloPulidor } from './modelo';
+import { sombraActiva } from './sombra';
 import type { DepsVigia, PuertoAvisosCron } from './puertos';
 
 /**
  * `LIKIDA_VIGIA_MODELO=no` apaga el clasificador por modelo (quedan solo las reglas).
  * `LIKIDA_VIGIA_DATOS_UNIDAD=si` declara que la migración 0798 ya está en la base (apagado por omisión: la intención
  * «datos de la unidad» se degrada a `otro` para no violar el CHECK de `vigia_mensaje.intencion`).
+ * `VIGIA_SOMBRA_DECISION=si` (o lista de ids de flota) registra lo que `decidirAccion` sugeriría en el evento `borrador`,
+ * sin actuar (apagado por omisión; ver sombra.ts).
  * `LIKIDA_VIGIA_PULIR=si` enciende el pulido de redacción (apagado por omisión: el
  * borrador determinista ya sale con datos reales; pulirlo solo cambia el tono).
  */
@@ -18,6 +21,7 @@ export function crearDepsVigia(extra: { avisos?: PuertoAvisosCron | null } = {})
   const pulir = envPuesta('LIKIDA_VIGIA_PULIR') && String(process.env.LIKIDA_VIGIA_PULIR).trim().toLowerCase() === 'si';
   const datosUnidad = envPuesta('LIKIDA_VIGIA_DATOS_UNIDAD') && String(process.env.LIKIDA_VIGIA_DATOS_UNIDAD).trim().toLowerCase() === 'si';
   return {
+    decisionSombra: (tenantId: string) => sombraActiva(process.env.VIGIA_SOMBRA_DECISION, tenantId),
     repo: crearRepoVigia(),
     // T-A4-21: sin puerto real de avisos todavía (accesos de la flota al resolver/entrega), la pasada de avisos no corre.
     avisos: extra.avisos ?? null,
