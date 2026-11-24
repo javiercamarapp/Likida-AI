@@ -2,6 +2,7 @@
 // DIÁLOGOS DORADOS (sintéticos) — conversaciones tipo de un grupo de servicio al cliente de un transportista, con lo que el sistema
 // tiene confirmado y la acción que el agente debe tomar. Todo el texto es inventado y genérico («caja 12», «planta A»); cualquier
 // parecido con un cliente real es casualidad. Los ids D01-D67 siguen la numeración de la síntesis (no son contiguos).
+// D68-D72 cubren el borrador final de la ficha (ficha_borrador.ts): faltantes sin rellenar, caja a un dígito y datos del operador a un solicitante sin verificar.
 //
 // Cada diálogo: mensajes con hora local, `ahora`, datos confirmados (`datos`), contexto extra y lo ESPERADO. Cuando el sistema no
 // tiene el dato, lo esperado es `pedir_dato_a_persona` con los campos que faltan: el agente nunca los inventa.
@@ -207,6 +208,21 @@ export const DIALOGOS_DORADOS: readonly DialogoDorado[] = [
     esperado: { accion: 'escalar_gerente', nivelAviso: 'N2', tiposContienen: ['estatus_cruce'], escalamiento: { nivel: 'N2', motivos: ['dinero_o_penalizacion'] }, nuncaContiene: ['No habrá cargo / el falso es de X / se cobra X'] } },
   { id: 'D67', titulo: 'Estado de cada caja en el catálogo de 6 estados', mensajes: [c('09:30', 'ayuda con status de cada caja que ya está en embarcador')], datos: ['estatusPlanta'],
     esperado: { accion: 'responder_con_datos', nivelAviso: null, tiposContienen: ['estatus_planta_ingreso'], plantillaId: 'estatus_planta' } },
+  // ── Borrador final de la ficha de unidad (ver ficha_borrador.ts) ───────────────────────────────────────────────────────
+  { id: 'D68', titulo: 'Ficha pedida sin economico ni placa de la unidad: se pide a una persona, no se rellena', mensajes: [c('05:10', 'me pasas los datos de la unidad? cita 11')],
+    datos: FICHA_COMPLETA.filter((x) => x !== 'eco' && x !== 'placaTracto'),
+    esperado: { accion: 'pedir_dato_a_persona', nivelAviso: 'N1', camposFaltantes: ['eco', 'placaTracto'], plantillaId: 'ficha_unidad', envioParcial: true } },
+  { id: 'D69', titulo: 'Ficha pedida sin operador asignado: solo se piden los datos de la persona', mensajes: [c('05:20', 'datos de la unidad por favor')],
+    datos: FICHA_COMPLETA.filter((x) => x !== 'operadorNombre'),
+    esperado: { accion: 'pedir_dato_a_persona', nivelAviso: 'N1', camposFaltantes: ['operadorNombre'], plantillaId: 'ficha_unidad', envioParcial: true } },
+  { id: 'D70', titulo: 'Ficha pedida sin cita registrada: no se supone la hora', mensajes: [c('05:30', 'datos de la unidad de hoy?')],
+    datos: FICHA_COMPLETA.filter((x) => x !== 'cita'),
+    esperado: { accion: 'pedir_dato_a_persona', nivelAviso: 'N1', camposFaltantes: ['cita'], plantillaId: 'ficha_unidad', envioParcial: true } },
+  { id: 'D71', titulo: 'Caja con un digito distinto en la ficha: se retiene y avisa al encargado', mensajes: [c('04:20', 'datos de la unidad de hoy, caja 215')], datos: [...FICHA_COMPLETA], contexto: { discrepancias: ['V2'] },
+    esperado: { accion: 'avisar_encargado', nivelAviso: 'N1', tiposContienen: ['ficha_unidad'], motivoContiene: 'V2' } },
+  { id: 'D72', titulo: 'Un solicitante sin verificar pide licencia y celular del operador en la ficha', mensajes: [c('15:10', 'pasame licencia y celular del operador de la caja 12')], datos: ['operadorNombre'], contexto: { solicitanteVerificado: false },
+    hilo: { solicitanteNoAutorizado: true },
+    esperado: { accion: 'solo_registrar', nivelAviso: 'N2', tiposContienen: ['datos_operador'], escalamiento: { nivel: 'N2', motivos: ['seguridad_o_custodia'], rutas: ['seguridad'] } } },
 ];
 
 /** Diálogos de la síntesis que son disparos del sistema (sin mensaje del cliente): se prueban en `dialogos_dorados.test.ts` con el módulo que los genera. */
