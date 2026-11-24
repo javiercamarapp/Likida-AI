@@ -90,6 +90,8 @@ export async function calcularMetricas(mensajes: readonly MensajeHistorial[], um
 
 async function main(): Promise<void> {
   const o = leerArgs(process.argv.slice(2));
+  // La ruta la pone quien corre el script a mano (herramienta local): es la entrada esperada.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const r = leerExportWhatsapp(readFileSync(o.ruta, 'utf8'), { equipo: o.equipo, sal: o.sal });
   const m = await calcularMetricas(r.mensajes, o.umbralMin);
   const L: string[] = [];
