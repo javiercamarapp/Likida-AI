@@ -186,6 +186,11 @@ export function calcularEstimacion(e: EntradaCalculadora): ResultadoCalculadora 
       estimuloMesMxn: pesos(subtotal * FACTOR_PEAJE),
       estimuloAnioMxn: pesos(subtotal * FACTOR_PEAJE * 12),
       condiciones: [
+        // A61-FIS-01 — las dos primeras son de ELEGIBILIDAD (LIF 2026 art. 20 ap. A
+        // fr. V) y faltaban: sin ellas la cifra se afirma a una flota privada cuyo
+        // estímulo es $0. Mismo criterio que `CONDICIONES_ESTIMULO_PEAJE` del PDF.
+        'Solo para quien se dedica EXCLUSIVAMENTE al transporte terrestre de carga, pasaje o turismo: una flota privada que mueve su propia mercancía no califica.',
+        'Con ingresos anuales menores a 300 millones de pesos y sin ser parte relacionada (LISR art. 179).',
         'Aplica en la Red Nacional de Autopistas de Cuota (término fiscal — no cualquier caseta).',
         'Pagado con medios electrónicos (TAG / tarjeta), no en efectivo.',
         'Requiere la bitácora de casetas conciliada — la que casi nadie arma es dinero que casi nadie acredita.',

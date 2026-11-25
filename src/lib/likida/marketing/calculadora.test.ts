@@ -38,6 +38,25 @@ describe('calcularEstimacion — peaje (pesos sí, con condiciones a la vista)',
     expect(condiciones).toContain('bitácora');
     expect(condiciones).toContain('electrónicos');
   });
+
+  // A61-FIS-01 — el bloque imprimía SOLO las tres condiciones de arriba, que son
+  // las de forma de pago y comprobación. Las dos de ELEGIBILIDAD de la fr. V
+  // —dedicación exclusiva al autotransporte e ingresos menores a $300 millones sin
+  // ser parte relacionada— no aparecían en ninguna parte de la superficie pública,
+  // y sin ellas la cifra se le afirma a una flota privada cuyo estímulo es $0. La
+  // ficha `normas/lif-2026-20-A.yaml` lo nombra en su `consecuencia_comercial`.
+  // El PDF (`acreditable.ts`, CONDICIONES_ESTIMULO_PEAJE) y la card del panel ya
+  // imprimían las cuatro: el producto sabía decirlo, la calculadora no.
+  it('A61-FIS-01: el bloque también imprime las dos condiciones de ELEGIBILIDAD de la fr. V', () => {
+    const r = calcularEstimacion({
+      litrosDieselMes: null, gastoDieselMesMxn: null, precioLitro: null,
+      gastoCasetasMesMxn: 50_000, unidades: null, hoy: HOY_VIVA,
+    });
+    const condiciones = 'condiciones' in r.peaje ? r.peaje.condiciones.join(' ') : '';
+    expect(condiciones).toContain('EXCLUSIVAMENTE');
+    expect(condiciones).toContain('300 millones');
+    expect(condiciones).toContain('179');
+  });
 });
 
 describe('calcularEstimacion — diésel (litros primero, pesos solo con cuota viva)', () => {
