@@ -261,6 +261,10 @@ export const CATALOGO_CONCEPTOS_MUESTRA: readonly Concepto[] = [
   { categoria: 'prestamo', lado: 'deduccion', patron: /^prestamos?$/ },
   { categoria: 'aviso_descuento', lado: 'deduccion', patron: /^aviso( de)? descuento$/ },
   { categoria: 'gastos_viaje', lado: 'deduccion', patron: /^gastos de viaje$/ },
+  // 25-nov-2026 (primera corrida real): la nómina del cliente escribe este concepto de tres formas («Liq. en Contra», «Liq en Contra»,
+  // «Liq en contra»); `claveConcepto` las deja iguales. Saldo en contra del operador de una liquidación anterior: deducción.
+  { categoria: 'liquidacion_en_contra', lado: 'deduccion', patron: /^liq(uidacion)? en contra$/ },
+  { categoria: 'pension_alimenticia', lado: 'deduccion', patron: /^pension alimenticia$/ },
 ];
 
 /** Forma sin puntuación: «Bono E.C» ⇒ «bono e c», «DEV.INFONAVIT» ⇒ «dev infonavit». */

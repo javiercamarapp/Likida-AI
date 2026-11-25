@@ -16,6 +16,8 @@ const DEDUCCIONES = [
   ['Anticipo Nomina', 'anticipo'], ['Anticipo Operador', 'anticipo'], ['Aviso Descuento', 'aviso_descuento'], ['Credito Infonavit', 'infonavit'],
   ['DEV.INFONAVIT', 'infonavit'], ['Fonacot', 'fonacot'], ['Gastos de Viaje', 'gastos_viaje'], ['IMSS', 'imss'], ['Infonavit', 'infonavit'],
   ['ISPT', 'ispt'], ['Prestamo', 'prestamo'],
+  ['Liq. en Contra', 'liquidacion_en_contra'], ['Liq en Contra', 'liquidacion_en_contra'], ['Liq en contra', 'liquidacion_en_contra'],
+  ['Pension Alimenticia', 'pension_alimenticia'], ['Pensión alimenticia', 'pension_alimenticia'],
 ] as const;
 
 const base = { ...BITACORA_MUESTRA, Operador: 'Operador Ficticio Uno' };
