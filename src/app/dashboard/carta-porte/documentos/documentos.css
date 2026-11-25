@@ -39,3 +39,21 @@ form:has(.rv-doc__zona input[type="file"]:required:invalid) button[type="submit"
 .rv-nd { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; cursor: not-allowed; }
 .rv-nd__rotulo { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px dashed #bfbfc2; border-radius: 8px; color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; }
 .rv-nd__motivo { font-size: 12px; color: var(--muted); line-height: 1.3; }
+
+/* «Mis casos»: la medición de la persona y sus casos con el estado por campo. */
+.rv-doc__cifras { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+@media (max-width: 1023px) { .rv-doc__cifras { grid-template-columns: minmax(0, 1fr); } }
+.rv-doc__cifra { display: grid; gap: 2px; align-content: start; }
+.rv-doc__cifra dt { font-size: var(--t-small); color: var(--muted); }
+.rv-doc__cifra dd { margin: 0; }
+.rv-doc__cifra-valor { font-size: var(--t-h3, 20px); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rv-doc__cifra[data-medible="no"] .rv-doc__cifra-valor { color: var(--faint); }
+.rv-doc__lista-casos { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.rv-doc__caso { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rv-doc__caso-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.rv-doc__marcas { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; font-size: var(--t-small); font-variant-numeric: tabular-nums; }
+.rv-doc__marcas [data-tono="ok"] { color: var(--ok); }
+.rv-doc__marcas [data-tono="warn"] { color: var(--warn); }
+.rv-doc__marcas [data-tono="bad"] { color: var(--bad); }
+.rv-doc__detalles [data-tono="bad"] { color: var(--bad); }
+.rv-doc__detalles [data-tono="warn"] { color: var(--warn); }

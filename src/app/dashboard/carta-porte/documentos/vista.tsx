@@ -6,10 +6,12 @@ import { TriangleAlert, Upload, Download, RotateCcw, Layers, Inbox } from 'lucid
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
+import { misCasos, type MedicionRevisor } from '@/lib/likida/carta_porte_docs/mis_casos';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, FormaAccion, type AccionDoc } from './forma_accion';
+import { MisCasos } from './mis_casos';
 import {
   AvisoCompacto, Aviso, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, CamposSistema, Disclosure, EstadoError, EstadoVacio,
   FiltroOpciones, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
@@ -94,6 +96,10 @@ export interface DatosDocumentos {
   asignados?: Record<string, string>;
   revisores?: Array<{ id: string; nombre: string }>;
   asignacionActiva?: boolean;
+  /** SU medición de revisión (de los documentos que aprobó la persona de la sesión); ausente = no se pudo calcular. */
+  medicionRevisor?: MedicionRevisor;
+  /** Momento de la lectura (ISO), para la antigüedad de cada caso: el render no lee el reloj. */
+  leidoEn?: string;
   total: number;
   metricas: MetricasAgente;
   perfiles: PerfilVista[];
@@ -150,6 +156,11 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
       ) : (
         <>
           {/* La bandeja es el bloque principal (Rovaq: tira → tabla de cargas → zona de soltar); la zona de subir va después. */}
+          {soloMios && datos.asignacionActiva === true && usuarioId !== null && (
+            <MisCasos tr={tr} sufijo={sufijo} clientes={datos.clientes} parcial={datos.metricas.parcial}
+              medicion={datos.medicionRevisor ?? null}
+              casos={datos.leidoEn ? misCasos(datos.filas, datos.asignados ?? {}, usuarioId, new Date(datos.leidoEn)) : []} />
+          )}
           <Bandeja tr={tr} datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
           {acciones.subir ? <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} metricas={datos.metricas} /> : <NotaMetricas tr={tr} m={datos.metricas} />}
           <Canales tr={tr} buzon={datos.buzon} acciones={acciones} />
