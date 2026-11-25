@@ -47,6 +47,9 @@
 //     si no viene, `Abono`. «Viene» = presente y distinto de null. Si vienen `Monto` y el sinónimo con valores DISTINTOS ⇒ revisión
 //     `monto_ambiguo` (no se adivina, no se suma). El signo lo da el bloque, nunca el nombre del campo. `Abono` en Percepciones o
 //     `Cargo` en Deducciones NO son sinónimos (se avisan como campo desconocido). Negativo/cero/decimales siguen las reglas de arriba.
+//   · REFERENCIA (25-nov-2026, acuerdo con la fuente): cada renglón puede traer `Referencia` (texto, número o null) = el número de
+//     vale. Se guarda como `vale` del renglón (sin asteriscos ni espacios). null/vacío = sin vale. Si no se puede usar (otro tipo o
+//     más de 40 caracteres) el renglón se conserva SIN vale y se avisa `referencia_descartada` con la ruta; nunca cambia la aceptación.
 //   · Campos extra desconocidos NO cambian la aceptación (se ignoran), pero se AVISAN en `advertencias` (código `campo_desconocido`,
 //     solo el nombre del campo, jamás su valor; sin duplicados; máximo `MAX_ADVERTENCIAS_BITACORA`). Envoltorio configurable: arreglo directo, `{ data: [...] }` (o la ruta que se
 //     indique) o ambos (`auto`).
@@ -121,7 +124,7 @@ export interface AdvertenciaMuestra {
    * `campo_desconocido`: campo fuera del contrato. `monto_negativo_reubicado` (18-nov-2026): el renglón venía con monto NEGATIVO y se
    * pasó al bloque contrario con el importe en positivo (el neto no cambia); `campo` es el renglón (`Percepciones[3]`).
    */
-  codigo: 'campo_desconocido' | 'monto_negativo_reubicado';
+  codigo: 'campo_desconocido' | 'monto_negativo_reubicado' | 'referencia_descartada';
   /** Nombre del campo fuera del contrato (`Poliza`, `Percepciones[].Foo`) o el renglón reubicado; nunca su valor. */
   campo: string;
 }
@@ -136,6 +139,25 @@ const CAMPOS_BITACORA_CONOCIDOS: ReadonlySet<string> = new Set([
 ]);
 const CAMPOS_FECHA_CONOCIDOS: ReadonlySet<string> = new Set(['Inicia', 'Termina']);
 const SINONIMO_MONTO = { Percepciones: 'Cargo', Deducciones: 'Abono' } as const;
+
+/** Máximo del vale una vez limpio: el mismo tope que `limpiarVale` en `desglose_contrato.ts`. */
+const MAX_LARGO_VALE = 40;
+
+/**
+ * `Referencia` de un renglón ⇒ vale. Texto o número entero no negativo; se quitan asteriscos, espacios y caracteres de control.
+ * null/ausente/vacío ⇒ sin vale (no es error). Otro tipo o más de 40 caracteres ⇒ sin vale y `descartada` (se avisa, no se rechaza).
+ */
+export function valeDeReferencia(v: unknown): { vale?: string; descartada: boolean } {
+  if (v === null || v === undefined) return { descartada: false };
+  let t: string;
+  if (typeof v === 'string') t = v;
+  else if (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0) t = String(v);
+  else return { descartada: true };
+  const limpio = t.replace(/[\u0000-\u001f\u007f*\s]/g, '');
+  if (limpio === '') return { descartada: false };
+  if (limpio.length > MAX_LARGO_VALE) return { descartada: true };
+  return { vale: limpio, descartada: false };
+}
 
 /** Nombres de campo fuera del contrato en una bitácora. Solo nombres (recortados y sin caracteres de control), sin duplicados, con tope. */
 export function advertenciasDeCampos(raw: Record<string, unknown>): AdvertenciaMuestra[] {
@@ -153,7 +175,7 @@ export function advertenciasDeCampos(raw: Record<string, unknown>): AdvertenciaM
   for (const bloque of ['Percepciones', 'Deducciones'] as const) {
     const lista = raw[bloque];
     if (!Array.isArray(lista)) continue;
-    const permitidos = new Set(['Descripcion', 'Monto', SINONIMO_MONTO[bloque]]);
+    const permitidos = new Set(['Descripcion', 'Monto', 'Referencia', SINONIMO_MONTO[bloque]]);
     for (const r of lista) if (esObjeto(r)) for (const k of Object.keys(r)) if (!permitidos.has(k)) avisar(`${bloque}[].${k}`);
   }
   return salida;
@@ -493,7 +515,9 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
         if (c.categoria === 'ajuste_redondeo' && m.centavos >= 100) motivo('ajuste_redondeo_excesivo', `${donde}.${campoMonto}`, 'Un ajuste de redondeo («Dif en registro») es de centavos (menos de 1.00); este no lo es: revisar en el origen.');
       }
       centavosPorBloque[ladoEf] += m.centavos;
-      bloques[ladoEf].push({ concepto: desc, monto: m.centavos / 100 });
+      const ref = valeDeReferencia(r.Referencia);
+      if (ref.descartada && advertencias.length < MAX_ADVERTENCIAS_BITACORA) advertencias.push({ codigo: 'referencia_descartada', campo: `${donde}.Referencia` });
+      bloques[ladoEf].push({ concepto: desc, monto: m.centavos / 100, ...(ref.vale !== undefined ? { vale: ref.vale } : {}) });
     });
   };
   procesar('Percepciones', 'percepcion');
