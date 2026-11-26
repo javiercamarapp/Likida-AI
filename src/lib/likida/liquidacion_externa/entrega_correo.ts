@@ -36,7 +36,7 @@ import { esPolizaProvisional, MARCA_POLIZA_PROVISIONAL } from './poliza_provisio
 import { bitacoraVisible } from './desglose_contrato';
 import { leerLogoCliente, leerPorId, leerRazonSocial, registrarEvento, transicionar, type TipoEvento } from './repo';
 import {
-  abrirExcepcion, firmarXlsx, leerConfigCorreo, leerDesglose, leerNombreOperador, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
+  abrirExcepcion, firmarXlsx, leerConfigCorreo, leerContactoOperador, leerDesglose, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
   CONFIG_CORREO_POR_DEFECTO, responderAEfectivo,
   type ConfigCorreo, type EntregaCorreo, type TipoExcepcion,
 } from './repo_correo';
@@ -311,7 +311,8 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
         if (d.ok && esPolizaProvisional(d.valor?.poliza)) polizaProvisional = true;
       } catch { /* sin encabezado: se usa la clave */ }
       // El nombre solo nombra el adjunto: si no se puede leer, el desglose sale igual con `desglose-<bitácora>.xlsx`.
-      const operadorNombre = l.operadorId ? await leerNombreOperador(tenantId, l.operadorId).catch(() => null) : null;
+      const contacto = l.operadorId ? await leerContactoOperador(tenantId, l.operadorId).catch(() => null) : null;
+      const operadorNombre = contacto?.ok ? contacto.valor?.nombre : undefined;
       return {
         claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta, retenidaMotivo,
         ...(polizaProvisional ? { polizaProvisional } : {}), ...(bitacora ? { bitacora } : {}), ...(operadorNombre ? { operadorNombre } : {}),
