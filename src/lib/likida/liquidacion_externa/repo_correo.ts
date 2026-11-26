@@ -392,6 +392,17 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
 
 // ── Contacto del operador y coordinadores ───────────────────────────────────
 
+/** Nombre del operador tal como está en el padrón (para nombrar el adjunto). `null` si no existe o no se pudo leer. */
+export async function leerNombreOperador(tenantId: string, operadorId: string): Promise<string | null> {
+  const res = await acotada(supabaseAdmin().from('operador')
+    .select('nombre')
+    .eq('tenant_id', tenantId).eq('id', operadorId).maybeSingle(), 'liqcorreo.operador_nombre');
+  const l = leer(res as unknown as { data: Fila | null; error: ErrorPg }, 'liqcorreo.operador_nombre');
+  if (!l.ok || !l.valor) return null;
+  const n = l.valor.nombre;
+  return typeof n === 'string' && n.trim() !== '' ? n.trim() : null;
+}
+
 export async function leerContactoOperador(tenantId: string, operadorId: string): Promise<Lectura<ContactoOperador | null>> {
   const res = await acotada(supabaseAdmin().from('operador')
     .select('id, correo, correo_rebotado_en, coordinador_id')
