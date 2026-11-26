@@ -107,7 +107,11 @@ export function modoPrimerMesVigente(c: Pick<ConfigCorreo, 'revisores' | 'primer
   return c.primerMesHasta !== null && c.revisores.length > 0 && hoy <= c.primerMesHasta;
 }
 
-export interface ContactoOperador { operadorId: string; correo: string | null; correoRebotadoEn: string | null; coordinadorId: string | null }
+export interface ContactoOperador {
+  operadorId: string; correo: string | null; correoRebotadoEn: string | null; coordinadorId: string | null;
+  /** Nombre del padrón: nombra el adjunto del desglose (26-nov-2026). Ausente si no viene. */
+  nombre?: string;
+}
 export interface Coordinador { id: string; nombre: string | null; correo: string; activo: boolean }
 
 export interface MetaDesglose {
@@ -394,7 +398,7 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
 
 export async function leerContactoOperador(tenantId: string, operadorId: string): Promise<Lectura<ContactoOperador | null>> {
   const res = await acotada(supabaseAdmin().from('operador')
-    .select('id, correo, correo_rebotado_en, coordinador_id')
+    .select('id, nombre, correo, correo_rebotado_en, coordinador_id')
     .eq('tenant_id', tenantId).eq('id', operadorId).maybeSingle(), 'liqcorreo.operador_leer');
   const l = leer(res as unknown as { data: Fila | null; error: ErrorPg }, 'liqcorreo.operador_leer');
   if (!l.ok) return l;
@@ -406,6 +410,7 @@ export async function leerContactoOperador(tenantId: string, operadorId: string)
       correo: (r.correo as string | null) ?? null,
       correoRebotadoEn: (r.correo_rebotado_en as string | null) ?? null,
       coordinadorId: (r.coordinador_id as string | null) ?? null,
+      ...(typeof r.nombre === 'string' && r.nombre.trim() !== '' ? { nombre: r.nombre.trim() } : {}),
     } : null,
   };
 }
