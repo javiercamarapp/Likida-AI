@@ -340,6 +340,23 @@ export function mxnEntero(n: number, idioma: IdiomaFormato = 'es'): string {
   return entero.toLocaleString(LOCALE_FORMATO.es, { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
 }
 
+/**
+ * Pesos COMPLETOS sin decimales y **nunca compactados**: `$3,306,107`. El compacto de `mxnEntero` («$3.3 M») pierde el detalle
+ * que finanzas cuadra, así que esta no comparte ese camino — es la diferencia entera entre las dos y la razón de que exista.
+ *
+ * `null`/`undefined`/no-finito es `'—'`, no `$0`: la regla de la casa es que sin dato NUNCA se pinta un cero que parezca medición.
+ *
+ * A59-ARQ-01: vivía en `src/app/dashboard/inicio-cinco-modelo.ts` con su propio `Intl.NumberFormat` y el locale CABLEADO, así que
+ * la portada de `/dashboard` imprimía la cifra sin el sufijo `MXN` que el panel en inglés sí lleva en todas las demás pantallas.
+ */
+export function mxnCompleto(n: number | null | undefined, idioma: IdiomaFormato = 'es'): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return '—';
+  const r = Math.round(n);
+  const entero = Object.is(r, -0) ? 0 : r;
+  if (idioma === 'en') return `${entero < 0 ? '-' : ''}$${Math.abs(entero).toLocaleString(LOCALE_FORMATO.en)} MXN`;
+  return entero.toLocaleString(LOCALE_FORMATO.es, { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
+}
+
 /** Un entero con separador de millares, sin moneda ni unidad — tokens, conteos. */
 export function numero(n: number, idioma: IdiomaFormato = 'es'): string {
   return n.toLocaleString(LOCALE_FORMATO[idioma]);
@@ -615,4 +632,26 @@ export function parsearImporteMx(texto: string): number {
   if (normal === '') return NaN;
   const n = Number(normal);
   return Number.isFinite(n) ? n : NaN;
+}
+
+/**
+ * Una COORDENADA tecleada: el mismo rigor que un importe, pero con signo.
+ *
+ * `parsearImporteMx` rechaza el `-` a propósito —es un parser de dinero, y su
+ * contrato lo dice: «Sin signo»— y eso es correcto para dinero. Pero México
+ * entero está al oeste de Greenwich: toda longitud del país es NEGATIVA. Leer
+ * `lat`/`lng` con el parser de dinero devuelve NaN para cualquier coordenada
+ * mexicana, y el formulario que la captura se vuelve imposible de guardar.
+ *
+ * Acepta un `-` al frente y delega el resto en `parsearImporteMx`, para que la
+ * magnitud se lea con exactamente las mismas reglas (y la misma negativa a
+ * adivinar lo ambiguo). Devuelve NaN si no es un número claro; quien llama ya
+ * rechaza NaN y acota el rango.
+ */
+export function parsearCoordenadaMx(texto: string): number {
+  const t = String(texto).trim();
+  const negativa = t.startsWith('-');
+  const magnitud = parsearImporteMx(negativa ? t.slice(1) : t);
+  if (!Number.isFinite(magnitud)) return NaN;
+  return negativa ? -magnitud : magnitud;
 }

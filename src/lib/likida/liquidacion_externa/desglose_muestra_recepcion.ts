@@ -112,8 +112,18 @@ export type PreparadoMuestra =
   | { ok: true; desgloses: DesgloseBitacora[]; /** Posición en el lote de cada desglose de `desgloses` (misma longitud y orden). */ indices: number[]; revisiones: RevisionMuestra[]; /** Avisos por posición en el lote (solo las que tienen alguno). */ advertencias: Map<number, AdvertenciaMuestra[]> }
   | { ok: false; mensaje: string };
 
-/** Valida el sobre y convierte cada bitácora. Nunca lanza por datos malos de una bitácora: la manda a revisión. */
-export function prepararMuestraTms(cuerpo: Record<string, unknown>, padron: PadronOperadores | undefined): PreparadoMuestra {
+/** El sobre válido: las bitácoras crudas, ya con los topes comprobados. */
+export type SobreMuestra = { ok: true; crudas: unknown[] } | { ok: false; mensaje: string };
+
+/**
+ * SOLO las puertas del sobre, las que devuelven 400: mezcla con el contrato interno, bitácora suelta con marcas del sobre, campos
+ * desconocidos, versión no soportada, `bitacoras` que no es lista o viene vacía, y los dos topes (100 bitácoras, 100 renglones por
+ * bloque). No mira el padrón ni convierte nada.
+ *
+ * Está separada de `prepararMuestraTms` porque el encabezado de este archivo promete «400 y no se procesa NADA», y la ruta necesita
+ * poder comprobar el sobre ANTES de dar de alta operadores —el alta ESCRIBE en `operador`— (A62-BAK-01).
+ */
+export function validarSobreMuestraTms(cuerpo: Record<string, unknown>): SobreMuestra {
   if ('desgloses' in cuerpo || 'correccion' in cuerpo) {
     return { ok: false, mensaje: 'El cuerpo mezcla el formato `muestra-tms` con el contrato interno de desgloses; manda uno solo.' };
   }
@@ -146,6 +156,14 @@ export function prepararMuestraTms(cuerpo: Record<string, unknown>, padron: Padr
       }
     }
   }
+  return { ok: true, crudas };
+}
+
+/** Valida el sobre y convierte cada bitácora. Nunca lanza por datos malos de una bitácora: la manda a revisión. */
+export function prepararMuestraTms(cuerpo: Record<string, unknown>, padron: PadronOperadores | undefined): PreparadoMuestra {
+  const sobre = validarSobreMuestraTms(cuerpo);
+  if (!sobre.ok) return sobre;
+  const crudas = sobre.crudas;
 
   const resultados: ResultadoBitacoraMuestra[] = crudas.map((f) => convertirBitacoraMuestra(f, { ...(padron ? { padron } : {}) }));
 

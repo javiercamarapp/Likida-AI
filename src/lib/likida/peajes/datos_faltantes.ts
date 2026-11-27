@@ -240,10 +240,14 @@ export function calcularDatosFaltantes(e: EntradaDatosFaltantes, archivos: numbe
 
   // (d2) Cruce sin tarifa aplicable — cada renglón contra el tarifario por caseta, clase (si viene) y vigencia (si hay fecha).
   if (!L.ok) filas.push(noMedible('cruce_sin_tarifa', L.falta));
+  // A61-PRU-01 — el catálogo es insumo de `resolverCaseta`, que decide la llave con la
+  // que se busca la tarifa: sin él, un cruce que llega con el alias no se resuelve y se
+  // contaba como faltante aunque su tarifa exista. (d1) ya caía a «no medible» aquí.
+  else if (!e.casetas.ok) filas.push(noMedible('cruce_sin_tarifa', e.casetas.falta));
   else if (!e.tarifas.ok) filas.push(noMedible('cruce_sin_tarifa', e.tarifas.falta));
   else if (L.datos.length === 0) filas.push(sinDatos('cruce_sin_tarifa', FUENTE_ARCHIVOS));
   else {
-    const catalogo: CasetaCatalogo[] = e.casetas.ok ? e.casetas.datos.map((c) => ({ id: c.id, nombre: c.nombre, nombreNorm: c.nombreNorm, alias: [...c.alias], lat: c.lat, lng: c.lng, radioM: c.radioM })) : [];
+    const catalogo: CasetaCatalogo[] = e.casetas.datos.map((c) => ({ id: c.id, nombre: c.nombre, nombreNorm: c.nombreNorm, alias: [...c.alias], lat: c.lat, lng: c.lng, radioM: c.radioM }));
     const conNombre = L.datos.filter((l) => limpio(l.caseta) !== '');
     if (conNombre.length === 0) filas.push(sinDatos('cruce_sin_tarifa', 'el nombre de la caseta en los cruces recibidos'));
     else {

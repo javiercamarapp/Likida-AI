@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   motivoFaltante, planearCobroGasto, armarMensajeGastos, parametrosPlantillaGastos, validarConfigGasto,
   calcularEfectividad, cupoRestante, diasDesde, inicioDelDiaMx, CONFIG_GASTO_DEFAULT, MAX_ITEMS_MENSAJE,
+  ROTULO_CONCEPTO_COBRANZA,
   type GastoDeOperador, type ConfigGasto, type ContactoMedible,
 } from './cobranza_gasto_pura';
+import { etiquetaConcepto } from '../cuadre/engine';
+import { CONCEPTOS_VIGILABLES } from '../reglas/catalogo';
 
 const AHORA = new Date('2026-10-02T16:00:00Z');
 const hace = (dias: number) => new Date(AHORA.getTime() - dias * 86_400_000).toISOString();
@@ -107,7 +110,7 @@ describe('el mensaje fusionado y la plantilla de respaldo', () => {
     expect(t).toContain('Te faltan comprobantes de 2 gastos');
     expect(t).toContain('· Diésel $1,200.00');
     expect(t).toContain('(viaje F-1042): falta la factura (CFDI)');
-    expect(t).toContain('· Casetas $85.50');
+    expect(t).toContain('· Caseta $85.50'); // A42-ARQ-02: era 'Casetas', que es lo que el panel NO dice
     expect(t).toContain('falta la foto del ticket');
     expect(t).toContain('Hazlo hoy.');
     expect(t).toContain('— Tráfico Norte');
@@ -188,5 +191,63 @@ describe('calcularEfectividad', () => {
     expect(e.tasa).toBeNull();
     expect(e.medianaHoras).toBeNull();
     expect(calcularEfectividad([]).avisos).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A42-ARQ-02 · EL RÓTULO QUE EL CHOFER LEE TIENE QUE SER EL QUE LEE EL CONTRALOR.
+//
+// `ROTULO_CONCEPTO_COBRANZA` es el mapa que arma el texto de WhatsApp. Nació
+// como copia y divergió: decía 'Casetas'/'Alimentos'/'Otro gasto' donde el
+// motor, el PDF y el panel dicen 'Caseta'/'Alimentación'/'Otro', y NO tenía
+// `viaticos`, así que un gasto de viáticos salía con la clave CRUDA en
+// minúscula («· viaticos $450.00») en un mensaje con la marca encima.
+//
+// Estaba tipado `Record<string, string>`, que es lo que dejó pasar el hueco:
+// `tsc` no puede exigir las 9 claves de un índice abierto. Ahora es
+// `Record<ConceptoGasto, string>` y el compilador es el que lo sostiene.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A42-ARQ-02 · los rótulos de la cobranza dicen lo MISMO que el motor', () => {
+  // Los 9 rótulos canónicos: los mismos que imprime el PDF y los mismos que
+  // pinta el panel. `diesel` se queda en 'Diésel' a propósito: `etiquetaConcepto`
+  // sin `ocrExtra` devuelve 'Combustible' (no sabe el producto impreso), pero el
+  // mapa del motor —el que copian el panel y la gráfica— dice 'Diésel'.
+  const CANONICOS: Record<string, string> = {
+    diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación',
+    hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete', viaticos: 'Viáticos',
+    otro: 'Otro',
+  };
+
+  it('cubre los 9 conceptos del dominio, sin hueco', () => {
+    for (const c of CONCEPTOS_VIGILABLES) {
+      expect(ROTULO_CONCEPTO_COBRANZA[c], `falta el rótulo de "${c}"`).toBeTruthy();
+    }
+    expect(Object.keys(ROTULO_CONCEPTO_COBRANZA).sort()).toEqual([...CONCEPTOS_VIGILABLES].sort());
+  });
+
+  it('y le pone a cada uno la etiqueta canónica', () => {
+    for (const c of CONCEPTOS_VIGILABLES) {
+      expect(ROTULO_CONCEPTO_COBRANZA[c], `"${c}" difiere del rótulo canónico`).toBe(CANONICOS[c]);
+    }
+  });
+
+  it('los canónicos NO se separan del motor (si el motor cambia, esto cae)', () => {
+    // Prueba cruzada: para todo lo que no es diésel, la función del motor y el
+    // literal de arriba tienen que coincidir. Así el literal no puede derivar.
+    for (const c of CONCEPTOS_VIGILABLES.filter((x) => x !== 'diesel')) {
+      expect(etiquetaConcepto(c), `el motor y el rótulo canónico de "${c}" se separaron`).toBe(CANONICOS[c]);
+    }
+  });
+
+  it('un gasto de viáticos sin foto NO sale con la clave cruda en el mensaje al chofer', () => {
+    const items = planearCobroGasto(
+      [gasto('g-v', { imagenUrl: null, concepto: 'viaticos', monto: 450, fecha: '2026-10-12' })],
+      CFG, new Map(), AHORA,
+    ).paraContactar[0].items;
+    const t = armarMensajeGastos(items, 'Tráfico Norte', '');
+    expect(t).toContain('· Viáticos $450.00');
+    expect(t, 'la clave cruda en minúscula llegó al chofer').not.toContain('viaticos');
+    // y el mismo rótulo en los 3 parámetros de la plantilla de respaldo
+    expect(parametrosPlantillaGastos('Juan', items)[2]).toContain('Viáticos');
   });
 });

@@ -118,7 +118,11 @@ export const ARTICULOS: Articulo[] = [
       {
         t: 'ul',
         items: [
-          'Que el peaje sea de la Red Nacional de Autopistas de Cuota. Es un término fiscal con lista propia: no toda caseta del país entra, y hay puentes de cuota sobre carretera libre que sí.',
+          // FIS-46-01b: `normas/red-nacional-autopistas.yaml` (verificado contra fuente primaria) dice que NO existe
+          // definición legal de la Red y que prácticamente toda plaza de cuota cae dentro: lo que filtra no es la
+          // geografía, es el medio de pago y la trazabilidad. Mandar al contralor a buscar una lista blanca lo invita
+          // a NO acreditar casetas que sí entran. Anclado en `articulos_red_nacional.test.ts`.
+          'Que el peaje sea de la Red Nacional de Autopistas de Cuota. En la práctica casi toda plaza de cuota del país entra: lo que decide no es por dónde pasaste, sino las dos condiciones que siguen.',
           'Que se pague con medios electrónicos (TAG, tarjeta). El efectivo no deja el rastro que la regla exige.',
           'Que exista la bitácora: qué unidad cruzó, cuándo, por dónde, contra qué CFDI. Esta es la condición que casi ninguna flota cumple.',
         ],
@@ -127,7 +131,10 @@ export const ARTICULOS: Articulo[] = [
         t: 'cita',
         texto:
           'La bitácora que casi nadie arma es dinero que casi nadie acredita.',
-        fuente: 'RMF 2026, regla 9.1.8, fracción II',
+        // A46-FIS-01: esta frase es de la casa, no de la fracción II. Atribuirla
+        // a la regla la publicaba como texto normativo en un <blockquote>. El
+        // fundamento real de la bitácora sigue declarado en `fundamento`.
+        fuente: 'Likida: la tercera condición, en una línea',
       },
       { t: 'h2', texto: 'Por qué casi nadie lo cobra' },
       {
@@ -178,7 +185,11 @@ export const ARTICULOS: Articulo[] = [
       {
         t: 'cita',
         texto: 'La cuota aplicable es la disminuida que publica el DOF, con los ajustes que correspondan. Usar la cuota entera es un error de cálculo.',
-        fuente: 'Criterio sobre LIF y acuerdos del DOF (ficha verificada del corpus de Likida)',
+        // A46-FIS-01: la paráfrasis es fiel a `contenido_esencial`, pero
+        // `normas/criterio-1-LIF-PI.yaml` tiene `texto_vigente: null` y
+        // `estado_verificacion: evidencia_corroborante` — llamarla «ficha
+        // verificada» afirmaba una verificación que la ficha no tiene.
+        fuente: 'Likida, parafraseando el criterio 1/LIF/PI; su texto aún no está transcrito en el corpus',
       },
       { t: 'h2', texto: 'Qué hacemos distinto' },
       {

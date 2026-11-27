@@ -118,6 +118,22 @@ describe('(d) casetas y cruces sin tarifa', () => {
     const e = { ...sana(), tarifas: falla('el tarifario') };
     for (const id of ['caseta_sin_tarifa', 'cruce_sin_tarifa'] as const) expect(fila(e, id)).toMatchObject({ estado: 'no_medible', casos: null, falta: 'el tarifario' });
   });
+  // A61-PRU-01 — el catálogo de casetas es insumo de `resolverCaseta`, que decide la
+  // llave con la que (d2) busca la tarifa. Si el catálogo no se pudo leer, un cruce que
+  // llega con el ALIAS de la caseta no se resuelve y se cuenta como «sin tarifa
+  // aplicable» aunque su tarifa exista. La fila hermana (d1) ya cae a «no medible» con
+  // el catálogo caído; esta se medía igual y afirmaba una cifra sobre una fuente
+  // ilegible — la regla #1 de la casa («nunca inventar una cifra») al revés.
+  it('catálogo de casetas ilegible: la fila de cruces tampoco se mide, ni con la tarifa presente', () => {
+    const e: EntradaDatosFaltantes = {
+      ...sana(),
+      casetas: falla('el catálogo de casetas'),
+      tarifas: ok([tarifa('caseta norte', 5)]),
+      lineas: ok([linea(0, { caseta: 'CN Km 12' })]),
+    };
+    expect(fila(e, 'cruce_sin_tarifa')).toMatchObject({ estado: 'no_medible', casos: null, falta: 'el catálogo de casetas' });
+    expect(fila(e, 'caseta_sin_tarifa')).toMatchObject({ estado: 'no_medible', casos: null, falta: 'el catálogo de casetas' });
+  });
 });
 
 describe('(e) fecha vacía y (f) clase desconocida', () => {

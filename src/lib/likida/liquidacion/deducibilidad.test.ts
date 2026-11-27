@@ -94,3 +94,63 @@ describe('filasDeducibilidad — no publica un desglose que no cuadra', () => {
     })).toBeNull();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A57-FIS-02 (auditoría 57, ALTO): "Deducible para ISR" EN VERDE cuando el
+// motor acaba de registrar que un requisito LITERAL de LISR 28-V no se cumple.
+//
+// La ficha `normas/lisr-28-V.yaml` está `verificado_fuente_primaria` y su texto
+// dice, literal, que los gastos de alimentación "sólo serán deducibles [...]
+// cuando el contribuyente acompañe el comprobante fiscal [...] que ampare el
+// hospedaje o transporte", y que si sólo se acompaña el transporte "la
+// deducción [...] sólo procederá cuando el pago se efectúe mediante tarjeta de
+// crédito de la persona que realiza el viaje".
+//
+// El motor levanta esas dos faltas (`engine.ts:1707` y `:1743`) con `monto: 0`
+// a propósito: no puede AFIRMAR que no es deducible sin ver la contabilidad
+// entera de la flota. Correcto. Pero el monto se queda dentro de
+// `totalDeducible`, y el renglón salía con `tono: 'bueno'` — VERDE en el PDF
+// (`pdf.ts:355`) y sin pie (`:369`) — afirmando deducibilidad justo del dinero
+// cuyo requisito el motor marcó como incumplido.
+//
+// Es el MISMO caso estructural que `permiso_cre_no_verificable`, que la
+// auditoría 9 ya resolvió degradando el tono a `condicionado`. Esta prueba
+// extiende esa regla ya decidida a los dos motivos de 28-V.
+// ═══════════════════════════════════════════════════════════════════════════
+const conDif = (d: number, tipos: string[]) => ({
+  ...liq(d, 0, 0),
+  diferencias: tipos.map((tipo) => ({ tipo, concepto: 'alimentacion', monto: 0, nota: '' })),
+});
+
+describe('filasDeducibilidad — no afirma en verde lo que el motor marcó incumplido (A57-FIS-02)', () => {
+  it('alimentacion_sin_soporte degrada el tono y explica LISR 28-V', () => {
+    const f = filasDeducibilidad(conDif(5000, ['alimentacion_sin_soporte']) as never)!;
+    expect(f[0].tono).toBe('condicionado');
+    expect(f[0].tono).not.toBe('bueno');
+    expect(f[0].label).toMatch(/28-V/);
+    expect(f[0].pie).toMatch(/28-V/);
+    expect(f[0].monto).toBe(5000);
+  });
+
+  it('alimentacion_transporte_sin_tarjeta_credito hace lo mismo y cita la tarjeta', () => {
+    const f = filasDeducibilidad(conDif(3200, ['alimentacion_transporte_sin_tarjeta_credito']) as never)!;
+    expect(f[0].tono).toBe('condicionado');
+    expect(f[0].pie).toMatch(/tarjeta de crédito/);
+  });
+
+  it('sin ninguna de las dos faltas el renglón sigue en verde y sin pie', () => {
+    // El guardarraíl del guardarraíl: si esto se pusiera `condicionado` siempre,
+    // el renglón dejaría de distinguir y la degradación no diría nada.
+    const f = filasDeducibilidad(conDif(5000, ['otra_cosa_cualquiera']) as never)!;
+    expect(f[0].tono).toBe('bueno');
+    expect(f[0].label).toBe('Deducible para ISR');
+    expect(f[0].pie).toBeUndefined();
+  });
+
+  it('con CRE y 28-V a la vez, el pie trae LAS DOS razones y ninguna se pierde', () => {
+    const f = filasDeducibilidad(conDif(8000, ['permiso_cre_no_verificable', 'alimentacion_sin_soporte']) as never)!;
+    expect(f[0].tono).toBe('condicionado');
+    expect(f[0].pie).toMatch(/CRE/);
+    expect(f[0].pie).toMatch(/28-V/);
+  });
+});

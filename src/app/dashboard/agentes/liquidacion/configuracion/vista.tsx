@@ -3,6 +3,7 @@ import '../liquidacion.css';
 
 // SOLO tipos y constantes: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ConfigCorreo, CanalEntrega, Revisor } from '@/lib/likida/liquidacion_externa/repo_correo';
+import type { TipoOperadorDesglose } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import { hoyMx } from '@/lib/formato';
 import {
   AvisoCompacto, Boton, BotonEnlace, Casilla, CampoFecha, CampoSelect, CampoTexto, CampoTextarea, Fieldset, Icono, Tarjeta,
@@ -23,14 +24,24 @@ export const canales = (tx: TAgentes = TR_ES.t): ReadonlyArray<{ valor: CanalEnt
   { valor: 'whatsapp', etiqueta: 'WhatsApp' },
 ]);
 export const CANALES = canales();
-export const tiposOperador = (tx: TAgentes = TR_ES.t): ReadonlyArray<{ valor: string; etiqueta: string }> => ([
-  { valor: 'foraneo', etiqueta: tx('rest.foraneos') },
-  { valor: 'local', etiqueta: tx('rest.locales') },
-  { valor: 'permisionario', etiqueta: tx('rest.permisionarios') },
-  { valor: 'rabon', etiqueta: tx('rest.rabones') },
-  { valor: 'posturero', etiqueta: tx('rest.posturero') },
-  { valor: 'cargador', etiqueta: tx('rest.cargadores') },
-]);
+// A56-ARQ-01: el rótulo de cada tipo, indexado por el DOMINIO. El
+// `Record<TipoOperadorDesglose, …>` es el que obliga: si `desglose_contrato.ts`
+// gana un séptimo tipo, aquí falta una clave y `tsc` lo dice en esta línea. La
+// lista a mano que estaba antes no podía: era `valor: string`, índice abierto, y
+// el POST de `:147` descartaba en silencio el tipo que no estuviera escrito
+// aquí — la bitácora quedaba retenida con `tipo_sin_regla` y no había casilla
+// para habilitarlo. El import es SOLO de tipo: no entra nada al bundle de la vista.
+const ETIQUETA_TIPO_OPERADOR: Record<TipoOperadorDesglose, (tx: TAgentes) => string> = {
+  foraneo: (tx) => tx('rest.foraneos'),
+  local: (tx) => tx('rest.locales'),
+  permisionario: (tx) => tx('rest.permisionarios'),
+  rabon: (tx) => tx('rest.rabones'),
+  posturero: (tx) => tx('rest.posturero'),
+  cargador: (tx) => tx('rest.cargadores'),
+};
+
+export const tiposOperador = (tx: TAgentes = TR_ES.t): ReadonlyArray<{ valor: TipoOperadorDesglose; etiqueta: string }> =>
+  (Object.keys(ETIQUETA_TIPO_OPERADOR) as TipoOperadorDesglose[]).map((valor) => ({ valor, etiqueta: ETIQUETA_TIPO_OPERADOR[valor](tx) }));
 export const TIPOS_OPERADOR = tiposOperador();
 
 /** Misma regla que las CHECK de la migración 0785. */

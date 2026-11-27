@@ -60,7 +60,7 @@ LLAVE="${SUPABASE_SERVICE_ROLE_KEY:-}"
 leer_env_local() {
   local clave="$1"
   if [ -n "${!clave:-}" ]; then printf '%s' "${!clave}"; return; fi
-  [ -f .env.local ] || return
+  [ -f .env.local ] || return 0
   sed -n "s/^${clave}=//p" .env.local | head -n1 | sed "s/^['\"]//;s/['\"]$//"
 }
 

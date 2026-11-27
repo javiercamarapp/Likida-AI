@@ -54,6 +54,7 @@ import { DesgloseEnConflicto, abrirExcepcion, listarExcepciones, resolverExcepci
 import { claveDeBitacora, claveDeLiquidacion } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import {
   cerrarRevisionesResueltas, esFormatoMuestraTms, muestraTmsHabilitada, prepararMuestraTms, registrarRevisionesMuestra, resumenRevisiones, SISTEMA_ORIGEN_MUESTRA_TMS,
+  validarSobreMuestraTms,
 } from '@/lib/likida/liquidacion_externa/desglose_muestra_recepcion';
 
 export const runtime = 'nodejs';
@@ -156,6 +157,11 @@ async function procesar(req: Request): Promise<Response> {
       if (!hab.ok) {
         return errorApi('sin_permiso', 'Este formato de entrega todavía no está habilitado para tu flota. Usa el contrato de desgloses vigente o pide que lo activen.');
       }
+      // A62-BAK-01: el sobre se valida ANTES del alta. El alta ESCRIBE filas en `operador` y este contrato promete «400 y no se
+      // procesa NADA» (`desglose_muestra_recepcion.ts`, encabezado), así que validar después dejaba personas dadas de alta en el
+      // padrón del cliente en una petición rechazada. Las puertas del sobre no necesitan el padrón.
+      const sobre = validarSobreMuestraTms(cuerpo.cuerpo);
+      if (!sobre.ok) return errorApi('parametro_invalido', sobre.mensaje);
       // Acuerdo del 17-nov: lo que la fuente manda es válido; el número de empleado sin alta se da de alta antes de resolver.
       const padron = await completarPadronConAltas(acceso.tenantId, cuerpo.cuerpo, await leerPadronOperadores(acceso.tenantId), { simular }, {
         permite: permiteAltaSinTelefono, insertar: insertarOperadorDesdeBitacora,

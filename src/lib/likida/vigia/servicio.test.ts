@@ -672,6 +672,33 @@ describe('toma de control humana', () => {
     expect(conv.ultimaSalidaEn).not.toBeNull();
   });
 
+  // A60-OP-01: `.catch(() => null)` sobre la lectura del redactado convertía un error de base en «no hubo corte», y sin corte
+  // `marcarRespondida` apaga el reloj del SLA, la insistencia y la escalera SIN condición. La alarma de «sin respuesta» se
+  // apagaba sola, en silencio, justo cuando la base está mal.
+  it('A60-OP-01: si no se puede LEER el mensaje redactado, el reloj del SLA no se apaga', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    const [borrador] = repo.salientes();
+    // El cliente escribe otra cosa MIENTRAS el borrador espera al gerente: ese mensaje sigue sin responder.
+    await atenderMensajeCliente(msg('Y necesito la factura', { timestampMs: AHORA.getTime() + 120_000 }), deps);
+    // Falla SOLO la lectura de después del envío (la que fija el corte): antes de enviar, `atenderDecisionVigia` lee el
+    // borrador y esa lectura tiene que seguir funcionando o no se probaría nada.
+    const leer = repo.mensaje.bind(repo);
+    vi.spyOn(repo, 'mensaje').mockImplementation(async (t: string, id: string) => {
+      if (alCliente.length > 0) throw new Error('base caída');
+      return leer(t, id);
+    });
+    await atenderDecisionVigia(cuentaGerente, `vig_ok:${borrador.id}`, deps);
+    // El texto SÍ sale (un fallo de lectura no deshace lo que ya viajó a WhatsApp)...
+    expect(alCliente).toHaveLength(1);
+    // ...pero el reloj, la insistencia y la escalera siguen corriendo: no se sabe si quedó algo sin responder.
+    const conv = [...repo.conversaciones.values()][0];
+    expect(conv.sinRespuestaDesde).not.toBeNull();
+    expect(conv.entradasSinRespuesta).toBeGreaterThan(0);
+  });
+
   it('A39-S59-01: si no llegó nada después del borrador, aprobar sí apaga el reloj (comportamiento de siempre)', async () => {
     const { repo } = escenario();
     repo.estatus.agregar(T1, CLIENTE_A, estatus());

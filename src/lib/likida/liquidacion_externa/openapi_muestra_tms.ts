@@ -4,6 +4,8 @@
 // DOCUMENTACIÓN de la API, no de interfaz; la ruta solo las integra. La prueba `openapi/route.test.ts` fija que el documento las trae.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { TIPOS_OPERADOR } from './desglose_contrato';
+
 export const DESCRIPCION_MUESTRA_TMS =
   'RESULTADO POR BITÁCORA: la respuesta trae `resultados`, una entrada por bitácora con su `estado` (`recibida`, `retenida`, `idempotente`, `correccion_pendiente`, `en_revision`, `no_guardada`). Regla del integrador: entregada = `recibida`, `retenida`, `idempotente` o `correccion_pendiente`; lo demás se corrige y se reenvía con el mismo identificador. Los campos anteriores no cambian.\n\n'
   + 'MODO SIMULACIÓN: con la cabecera `Likida-Simular: si` se valida y se responden los mismos `resultados` (y `simulada: true`) SIN escribir nada: ni liquidaciones, ni archivos, ni entregas, ni excepciones ni revisiones. Siempre 200. Cualquier otro valor distinto de `si`/`no` es 400.\n\n'
@@ -19,7 +21,7 @@ export const ESQUEMAS_MUESTRA_TMS = {
       BitacoraID: { oneOf: [{ type: 'integer', minimum: 1 }, { type: 'string', pattern: '^[A-Za-z0-9._-]{1,40}$' }], description: 'Identificador ÚNICO por flota, que no se reutiliza ni cambia. Es la llave de idempotencia (`BIT-<BitacoraID>`).' },
       Operador: { type: 'string', description: 'Nombre del operador. Sin `NumeroEmpleado`, se cruza por nombre exacto (sin acentos, mayúsculas ni puntuación; el orden de las palabras cuenta).' },
       NumeroEmpleado: { oneOf: [{ type: 'string', maxLength: 40 }, { type: 'integer', minimum: 0 }], description: 'Manda sobre el nombre. Si además viene `Operador` y no coincide con el del padrón, la bitácora queda en revisión.' },
-      TipoOperador: { type: 'string', enum: ['local', 'foraneo', 'permisionario', 'rabon', 'posturero', 'cargador'], description: 'Se aceptan mayúsculas y acentos («Foráneo», «Rabón»). Solo foráneo y local reciben la liquidación por correo mientras la flota no habilite los demás; el resto queda retenido (tipo_sin_regla). Va en cada bitácora, no en el padrón.' },
+      TipoOperador: { type: 'string', enum: [...TIPOS_OPERADOR], description: 'Se aceptan mayúsculas y acentos («Foráneo», «Rabón»). Solo foráneo y local reciben la liquidación por correo mientras la flota no habilite los demás; el resto queda retenido (tipo_sin_regla). Va en cada bitácora, no en el padrón.' },
       Poliza: { type: 'string', nullable: true, maxLength: 40 },
       NumeroPago: { type: 'string', pattern: '^[A-Za-z0-9._/-]{1,40}$' },
       Neto: { type: 'number', description: 'Hasta 2 decimales; si viene y no cuadra con Percepciones − Deducciones, la bitácora queda en revisión.' },

@@ -13,6 +13,7 @@ import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador, Diferencia } from '@/types/likida';
 import type { CodigoPendiente } from './intake/emparejar';
 import { violaIndice } from './pg_errores';
+import { EXTENSIONES_AVATAR } from '@/lib/perfil/avatar_huerfanos';
 import {
   declararUmbralPeaje, declararFacilidad15,
   regimenElegiblePorClave, REGIMENES_ELEGIBLES_15,
@@ -2031,7 +2032,7 @@ export async function ejecutarOposicionArco(
 
 export async function ejecutarCancelacionArco(
   tenantId: string, solicitudId: string,
-): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string; errorEntregas?: string; errorEvidencia?: string }> {
+): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string; errorEntregas?: string; errorEvidencia?: string; errorAvatar?: string }> {
   const { data: sol, error: errLee } = await acotada(supabaseAdmin()
     .from('solicitud_arco').select('titular_ref, tipo, titular_user_id, operador_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
     'ejecutarCancelacionArco.leer');
@@ -2084,9 +2085,37 @@ export async function ejecutarCancelacionArco(
     errorEvidencia = await anonimizarEvidenciaReglasDeOperador(tenantId, operadorId, nombreOperador);
     if (errorEvidencia) logger.error('arco.evidencia_reglas_no_anonimizada', { tenant: tenantId, err: errorEvidencia });
   }
+  // A58-LEG-01 [CRÍTICO]: la RPC pone `app_user.avatar_url = null` (0902:327) y
+  // nada más — Storage no tiene columnas. Pero el bucket `avatares` se creó
+  // PÚBLICO (0046:18) y la ruta se deriva del uuid, no de la columna
+  // (`<userId>/avatar.<ext>`), así que sin borrar el OBJETO el aviso de aquí
+  // abajo —y la `resolucion` que queda como constancia en `solicitud_arco`
+  // (0902:335)— afirman «se quitó tu teléfono y tu foto» sobre una cara que
+  // sigue descargable SIN SESIÓN. Se borran las tres extensiones porque la ruta
+  // las lleva y `avatar_url` ya no dice cuál era. Va ANTES del aviso y su fallo
+  // se DICE en `errorAvatar`, igual que `errorAuth` (0442) y `errorEntregas`
+  // (A36-R03-03): no se afirma un borrado que no ocurrió.
+  let errorAvatar: string | undefined;
+  if (titularUserId) {
+    // No es una consulta de datos (es Storage): no lleva `acotada`, igual que el
+    // cliente de Auth Admin de aquí abajo.
+    try {
+      // El bucket se toma UNA vez en un alias, como el cliente de Auth Admin de
+      // aquí abajo: `tope_consulta.test.ts` cuenta `await supabaseAdmin()` crudo
+      // porque eso sería una CONSULTA sin `acotada()`, y esto es Storage.
+      const bucketAvatares = supabaseAdmin().storage.from('avatares');
+      const { error: errFoto } = await bucketAvatares
+        .remove(EXTENSIONES_AVATAR.map((e) => `${titularUserId}/avatar.${e}`));
+      if (errFoto) errorAvatar = errFoto.message;
+    } catch (e) {
+      errorAvatar = e instanceof Error ? e.message : String(e);
+    }
+    if (errorAvatar) logger.error('arco.avatar_no_borrado', { tenant: tenantId, usuario: titularUserId, err: errorAvatar });
+  }
   const conEntregas = {
     ...(errorEntregas ? { errorEntregas } : {}),
     ...(errorEvidencia ? { errorEvidencia } : {}),
+    ...(errorAvatar ? { errorAvatar } : {}),
   };
 
   // 0442 (cuenta de oficina): la RPC ya seudonimizó la fila y la dio de baja; el

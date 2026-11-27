@@ -111,6 +111,15 @@ export const LLAVES_EXTRA_SEGURAS = new Set([
   // reconstruir un comprobante que ya existe ante el SAT. `extraSeguro` la
   // descartaba entera y el evento llegaba sin con qué buscar.
   'uuid', 'uuidFiscal', 'uuidCfdi', 'folioFiscal',
+  // AUDITORÍA 45, A45-OP-01: por el MISMO motivo que el folio fiscal de la 22,
+  // el id de la liquidación identifica un DOCUMENTO, no a una persona, y es la
+  // llave con la que se reconstruye un fallo del camino del dinero. Faltaba, y
+  // se notaba donde más duele: `liquidacion_externa/acuse.ts:63` y
+  // `revision.ts:542` mandan SOLO `{ liquidacion, err }`, y como `err` es texto
+  // libre y queda fuera a propósito, el evento llegaba a Sentry con `extra`
+  // borrado ENTERO y un `fingerprint` sin tenant — un único issue global para
+  // todas las flotas, que notifica una vez y no dice cuál liquidación falló.
+  'liquidacion', 'liquidacionId', 'liqId',
 ]);
 
 // Mismo carve-out que `CLAVES_NO_PII` en logger.ts, y por el mismo motivo: el

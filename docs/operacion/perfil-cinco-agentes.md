@@ -82,11 +82,21 @@ cualquier flota: con 20 o más filas de perfil atoradas podrían tapar a una flo
 Inventario completo, generado del sistema de archivos y no a mano:
 
 ```bash
-node scripts/perfil/matriz-superficies.mjs                              # tabla markdown: permitido | negado | NO CLASIFICADO
-node scripts/perfil/matriz-superficies.mjs | grep -c "NO CLASIFICADO"   # debe dar 0
+npx vitest run src/lib/auth/perfil_matriz.test.ts   # 28 pruebas; falla si algo queda NO CLASIFICADO
 ```
 
-La prueba `src/lib/auth/perfil_matriz.test.ts` falla si queda algo `NO CLASIFICADO`.
+**La verificación es esa prueba, no un `grep`.** El script no se puede correr con
+`node` a secas: importa `src/lib/auth/visibilidad.ts`, que a su vez importa
+`./roles` sin extensión, así que `node scripts/perfil/matriz-superficies.mjs`
+muere con `ERR_MODULE_NOT_FOUND`. Y como `cmd | grep -c "NO CLASIFICADO"`
+cuenta sobre una salida vacía, **imprimía `0`, que es justo el valor que este
+documento declaraba correcto**: un verde falso (A50-OP-03). La prueba sí carga
+el script y sí recorre la matriz.
+
+Para VER la tabla en markdown hace falta un runner que entienda TypeScript
+(`npx tsx scripts/perfil/matriz-superficies.mjs`, 289 filas). `tsx` **no está en
+`package.json`**: `npx` lo baja de la red, así que ese comando no corre en un CI
+sin salida a internet. Lo que la compuerta exige es la prueba de arriba.
 
 ## Aplicar y revertir (lo ejecuta quien opera la plataforma)
 
@@ -130,8 +140,9 @@ Seguridad de los scripts de cambio (`aplicar-` y `revertir-`):
    `src/app/dashboard/perfil_acciones.test.ts`.
 3. Para una API o un cron, agrega el recurso a `API_PERFIL_CINCO_AGENTES` / `CRONS_PERFIL_CINCO_AGENTES` y
    actualiza `src/app/api/perfil_inventario.test.ts`.
-4. Corre la matriz (`node scripts/perfil/matriz-superficies.mjs | grep -c "NO CLASIFICADO"` debe dar 0) tras cada
-   integración de un frente que añada rutas, recursos `/v1` o crons.
+4. Corre la matriz (`npx vitest run src/lib/auth/perfil_matriz.test.ts`) tras cada integración de un frente que
+   añada rutas, recursos `/v1` o crons. No uses `node … | grep -c`: el script no arranca con `node` y el `grep`
+   sobre la salida vacía da 0, el valor que parece correcto (A50-OP-03).
 5. Corre `src/lib/auth/perfil_*.test.ts`, `src/app/dashboard/perfil_*.test.ts*` y `src/app/api/perfil_*.test.ts`.
 
 ## Si la lectura del perfil falla (decisión de T-PER-08)

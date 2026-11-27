@@ -385,6 +385,11 @@ jobs:
           node scripts/ci/supabase-preflight.mjs backup
           npx --yes "supabase@${SUPABASE_CLI_VERSION}" link --project-ref "$SUPABASE_PROJECT_REF"
           node scripts/ci/supabase-preflight.mjs preflight # 0335_preflight_retencion_indices.sql
+          # A57-OP-01 (auditoría 57, CRÍTICO): CT-BAS-08 prohíbe `db push` contra PRODUCCIÓN
+          # (supabase/APLICAR-EN-PRODUCCION.md, que nombra este job): `schema_migrations` mezcla dos
+          # esquemas de versión, así que el push vería ~256 migraciones como «solo locales» y las
+          # re-aplicaría — muchas no son idempotentes. El dry-run de abajo las LISTA y no aborta.
+          [ "${DB_PUSH_AUTORIZADO:-}" = "1" ] || { echo "::error::db push está prohibido contra producción (CT-BAS-08, ver supabase/APLICAR-EN-PRODUCCION.md): re-aplicaría ~256 migraciones no idempotentes. Aplica una por una con el procedimiento de ese documento."; exit 1; }
           npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push --dry-run
           npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push
 

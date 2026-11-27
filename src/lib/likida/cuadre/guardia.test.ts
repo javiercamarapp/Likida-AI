@@ -83,6 +83,19 @@ describe('guardiaCifras', () => {
   it('guardar_liquidacion CON error: no afirma el cierre', async () => {
     const r = await guardiaCifras('sobró 999', [tc('guardar_liquidacion', new Error('boom'))], 't', 'v');
     expect(r.reply).not.toContain('Listo, cuadré');
+    // A42-PR-01: prohibir UNA frase no alcanzaba. El producto afirma el cierre con
+    // DOS textos distintos, y el de `:139` —el de fail-closed sin snapshot— no
+    // contiene 'Listo, cuadré'. Quitando `&& !t.error` de `guardia.ts:55` el chofer
+    // recibía «Ya cerré tu liquidación ✅. Te mando el PDF.» con la tabla
+    // `liquidacion` vacía y el viaje todavía `abierto`, y estas 84 pruebas seguían
+    // verdes. Se afirma lo mismo que la prueba hermana de `:93`: ningún cierre, de
+    // ninguna de las dos formas, y ninguna cifra.
+    expect(r.reply).not.toContain('Ya cerré');
+    // Y lo que SÍ debe decir: el encabezado de «solo calculé», no el de cierre.
+    // (Aquí no se puede prohibir ✅ ni cifras como hace `:93`: este caso sí trae
+    // el cuadre —«• Cuadra exacto ✅»—, y está bien que lo traiga. Lo que no
+    // puede aparecer es la afirmación de que el viaje quedó cerrado.)
+    expect(r.reply).toContain('Este es el cuadre de tu viaje');
   });
 
   // ── AUDITORÍA 28, TC-A1 (ampliación de AG-3) ──────────────────────────────

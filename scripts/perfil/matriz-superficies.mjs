@@ -17,7 +17,11 @@
 // tiene evidencia sale `NO CLASIFICADO` — en runtime ya se niega (falla cerrado),
 // pero el inventario debe saberlo para forzar a alguien a clasificarlo.
 //
-// Uso:  node scripts/perfil/matriz-superficies.mjs        → tabla markdown a stdout
+// Uso:  npx tsx scripts/perfil/matriz-superficies.mjs    → tabla markdown a stdout
+//       (NO con `node` a secas: este archivo importa `visibilidad.ts`, que importa
+//        `./roles` sin extensión, y node muere con ERR_MODULE_NOT_FOUND. La
+//        verificación que la compuerta exige es `src/lib/auth/perfil_matriz.test.ts`,
+//        que sí carga este módulo. Ver A50-OP-03.)
 // Solo lectura: no toca el repo ni la red. (Node ≥ 22.18 importa el .ts sin transpilar.)
 // ═══════════════════════════════════════════════════════════════════════════
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';

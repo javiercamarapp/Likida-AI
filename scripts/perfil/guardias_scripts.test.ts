@@ -166,3 +166,32 @@ describe('A37-S04-10: respaldo-storage.sh no acepta una lista de buckets que omi
     expect(r.stderr).not.toMatch(/omite/);
   });
 });
+
+// A51-OP-03 / A52-OP-02 — `[ -f .env.local ] || return` devuelve el estado del test que falló (1), y bajo
+// `set -euo pipefail` eso mata el script DENTRO de la sustitución de `URL="${URL:-$(leer_env_local …)}"`,
+// o sea ANTES de sus propios `echo "ERROR: falta …"`. El comando canónico de DEPLOY.md:139 salía con
+// exit 1 y CERO líneas: quien lo corría sin credenciales no sabía qué le faltaba. Ninguna prueba lo veía
+// porque el ayudante `respaldo()` de arriba SIEMPRE inyecta las dos variables.
+describe('A51-OP-03: sin credenciales, respaldo-storage.sh dice qué falta en vez de morir mudo', () => {
+  function sinCredenciales(extra: Record<string, string> = {}) {
+    const dir = mkdtempSync(join(tmpdir(), 'respaldo-mudo-')); dirs.push(dir);
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    writeFileSync(join(dir, 'scripts/respaldo-storage.sh'), readFileSync('scripts/respaldo-storage.sh'));
+    writeFileSync(join(dir, 'scripts/respaldo-buckets.txt'), 'comprobantes\n');
+    // Sin `.env.local` en `dir`: es justo el caso que dispara el `return` pelado.
+    const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '', ...extra };
+    return spawnSync('bash', [join(dir, 'scripts/respaldo-storage.sh'), join(dir, 'salida')], { cwd: dir, encoding: 'utf8', timeout: 15_000, env });
+  }
+
+  it('sale con 2 y nombra la variable que falta, no con 1 y en silencio', () => {
+    const r = sinCredenciales();
+    expect(r.stderr).toContain('ERROR: falta NEXT_PUBLIC_SUPABASE_URL.');
+    expect(r.status).toBe(2);
+  });
+
+  it('con la URL puesta, la que se reclama es la llave de servicio', () => {
+    const r = sinCredenciales({ NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9' });
+    expect(r.stderr).toContain('ERROR: falta SUPABASE_SERVICE_ROLE_KEY.');
+    expect(r.status).toBe(2);
+  });
+});
